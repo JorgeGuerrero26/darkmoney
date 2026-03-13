@@ -1,0 +1,471 @@
+DarkMoney
+Diccionario de datos – versión colaborativa
+Esquema PostgreSQL / Supabase orientado a finanzas personales y compartidas
+Incluye workspaces personales, workspaces compartidos, cuentas colaborativas, créditos, deudas, suscripciones y actividad compartida.
+Resumen funcional
+• Cada usuario trabaja con un workspace personal.
+• Un workspace shared permite que varios usuarios vean las mismas cuentas, movimientos y presupuestos.
+• La pertenencia y los permisos se resuelven con workspace_members.
+• notifications es personal; activity_log es compartido por workspace.
+
+1. Principios del modelo colaborativo
+Cada usuario debe tener un workspace personal; el trigger trg_profiles_bootstrap_workspace lo crea automáticamente cuando se inserta el perfil.
+Las cuentas, categorías, presupuestos, obligaciones, suscripciones y movimientos pertenecen a un workspace. Esto habilita finanzas personales y compartidas en el mismo sistema.
+Las acciones colaborativas se resuelven por membresía del workspace. Dos usuarios pueden ver la misma cuenta compartida si ambos pertenecen al workspace correspondiente.
+Las notificaciones siguen siendo personales. El sistema puede generar una notificación por usuario cuando en un workspace compartido ocurre un gasto, una cuota o un vencimiento.
+El activity_log sirve como feed y auditoría ligera. Permite mostrar qué usuario registró un gasto o modificó una cuenta compartida.
+Para exponer esta base directamente desde Supabase al frontend, todavía falta definir políticas RLS basadas en workspace_members.
+Nota de migración. En las tablas colaborativas el antiguo user_id se renombra a created_by_user_id. La propiedad lógica pasa a estar en workspace_id.
+
+
+2. Tipos enumerados
+Los siguientes tipos controlan valores válidos en columnas clave. Ayudan a mantener consistencia funcional y simplifican reglas de negocio.
+account_type
+Tipo de cuenta financiera.
+Valor	Descripción
+cash	Efectivo
+bank	Cuenta bancaria
+savings	Cuenta de ahorros
+credit_card	Tarjeta de crédito
+investment	Cuenta de inversión
+loan_wallet	Cartera de préstamos
+other	Otro tipo
+
+party_type
+Tipo de contraparte.
+Valor	Descripción
+person	Persona
+company	Empresa
+merchant	Comercio / vendedor
+service	Proveedor de servicio
+bank	Banco
+other	Otro
+
+category_kind
+Tipo de categoría.
+Valor	Descripción
+expense	Categoría de gasto
+income	Categoría de ingreso
+both	Aplica a ambos
+
+movement_type
+Tipo de movimiento financiero.
+Valor	Descripción
+expense	Gasto
+income	Ingreso
+transfer	Transferencia entre cuentas
+subscription_payment	Pago de suscripción
+obligation_opening	Apertura de crédito o deuda
+obligation_payment	Pago ligado a crédito o deuda
+refund	Reembolso
+adjustment	Ajuste manual
+
+movement_status
+Estado operativo del movimiento.
+Valor	Descripción
+planned	Planeado
+pending	Pendiente
+posted	Aplicado / confirmado
+voided	Anulado
+
+obligation_direction
+Sentido económico de la obligación.
+Valor	Descripción
+receivable	Me deben dinero
+payable	Yo debo dinero
+
+obligation_origin_type
+Origen del crédito o deuda.
+Valor	Descripción
+cash_loan	Préstamo de dinero
+sale_financed	Venta a cuotas
+purchase_financed	Compra a cuotas
+manual	Registro manual
+
+obligation_status
+Estado del crédito o deuda.
+Valor	Descripción
+draft	Borrador
+active	Activo
+paid	Liquidado
+cancelled	Cancelado
+defaulted	Incumplido
+
+obligation_event_type
+Tipo de evento dentro de una obligación.
+Valor	Descripción
+opening	Apertura del monto original
+payment	Pago / abono
+interest	Interés
+fee	Cargo adicional
+discount	Descuento
+adjustment	Ajuste
+writeoff	Condonación / castigo
+
+subscription_frequency
+Frecuencia de una suscripción.
+Valor	Descripción
+daily	Diaria
+weekly	Semanal
+monthly	Mensual
+quarterly	Trimestral
+yearly	Anual
+custom	Personalizada
+
+subscription_status
+Estado de la suscripción.
+Valor	Descripción
+active	Activa
+paused	Pausada
+cancelled	Cancelada
+
+subscription_occurrence_status
+Estado del vencimiento puntual de una suscripción.
+Valor	Descripción
+scheduled	Programada
+paid	Pagada
+skipped	Omitida
+cancelled	Cancelada
+overdue	Vencida
+
+notification_channel
+Canal de notificación.
+Valor	Descripción
+in_app	Dentro de la aplicación
+push	Push móvil / navegador
+email	Correo
+
+notification_status
+Estado de la notificación.
+Valor	Descripción
+pending	Pendiente
+sent	Enviada
+read	Leída
+failed	Fallida
+
+workspace_kind
+Tipo de espacio financiero.
+Valor	Descripción
+personal	Workspace personal del usuario
+shared	Workspace compartido entre varios miembros
+
+workspace_role
+Rol del miembro dentro del workspace.
+Valor	Descripción
+owner	Propietario
+admin	Administrador
+member	Miembro con edición
+viewer	Solo lectura
+
+workspace_invitation_status
+Estado de la invitación a un workspace.
+Valor	Descripción
+pending	Pendiente
+accepted	Aceptada
+declined	Rechazada
+expired	Expirada
+revoked	Revocada
+
+
+
+3. Diccionario de tablas
+En esta sección se describen las tablas principales del esquema colaborativo. Las tablas de Supabase Auth no se documentan aquí, salvo referencias funcionales a auth.users.
+profiles
+Perfil del usuario autenticado. Mantiene preferencias generales como moneda base y zona horaria.
+Campo	Tipo	Nulo	Descripción
+id	uuid	No	Identificador del usuario. FK a auth.users(id).
+full_name	text	Sí	Nombre completo del usuario.
+base_currency_code	char(3)	No	Moneda base del usuario.
+timezone	text	No	Zona horaria preferida, por ejemplo America/Lima.
+created_at	timestamptz	No	Fecha de creación del perfil.
+updated_at	timestamptz	No	Fecha de última actualización del perfil.
+
+currencies
+Catálogo de monedas disponibles para cuentas, presupuestos, suscripciones y obligaciones.
+Campo	Tipo	Nulo	Descripción
+code	char(3)	No	Código ISO de moneda, por ejemplo PEN o USD.
+name	text	No	Nombre de la moneda.
+symbol	text	No	Símbolo visible de la moneda.
+decimals	smallint	No	Cantidad de decimales soportados.
+is_active	boolean	No	Indica si la moneda puede seguir usándose.
+created_at	timestamptz	No	Fecha de creación del registro.
+
+workspaces
+Espacio financiero lógico. Puede ser personal o compartido. Todas las cuentas y movimientos operan dentro de un workspace.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador del workspace.
+owner_user_id	uuid	No	Usuario creador / propietario principal del workspace.
+name	text	No	Nombre visible del workspace, por ejemplo “Jorge Personal” o “Jorge + Ana”.
+kind	workspace_kind	No	Tipo de workspace: personal o shared.
+base_currency_code	char(3)	Sí	Moneda base preferida para resúmenes del workspace.
+description	text	Sí	Descripción funcional del espacio.
+is_archived	boolean	No	Indica si el workspace está archivado.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+workspace_members
+Relación de pertenencia entre usuarios y workspaces, con rol y marca de workspace por defecto.
+Campo	Tipo	Nulo	Descripción
+workspace_id	bigint	No	Workspace al que pertenece el usuario.
+user_id	uuid	No	Usuario miembro.
+role	workspace_role	No	Rol del usuario dentro del workspace.
+is_default_workspace	boolean	No	Marca el workspace por defecto del usuario.
+joined_at	timestamptz	No	Fecha de incorporación al workspace.
+created_at	timestamptz	No	Fecha de creación de la membresía.
+updated_at	timestamptz	No	Fecha de actualización de la membresía.
+
+workspace_invitations
+Invitaciones pendientes o históricas para sumar más miembros a un workspace compartido.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la invitación.
+workspace_id	bigint	No	Workspace al que se invita.
+invited_email	text	No	Correo del usuario invitado.
+invited_by_user_id	uuid	No	Usuario que envió la invitación.
+role	workspace_role	No	Rol sugerido para el invitado al aceptar.
+status	workspace_invitation_status	No	Estado de la invitación.
+note	text	Sí	Mensaje o nota adicional.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+accounts
+Cuentas financieras del sistema. A partir del modelo colaborativo cada cuenta pertenece a un workspace, no a un usuario aislado.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la cuenta.
+workspace_id	bigint	No	Workspace dueño de la cuenta.
+created_by_user_id	uuid	Sí	Usuario que creó originalmente la cuenta.
+updated_by_user_id	uuid	Sí	Último usuario que modificó la cuenta.
+name	text	No	Nombre de la cuenta.
+type	account_type	No	Tipo de cuenta.
+currency_code	char(3)	No	Moneda de la cuenta.
+opening_balance	numeric(14,2)	No	Saldo inicial registrado.
+include_in_net_worth	boolean	No	Define si participa en patrimonio neto.
+color	text	Sí	Color visual de la cuenta.
+icon	text	Sí	Ícono visual de la cuenta.
+notes	text	Sí	Notas libres.
+sort_order	integer	No	Orden de visualización.
+is_archived	boolean	No	Cuenta archivada o activa.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+counterparties
+Personas, empresas, bancos o servicios vinculados a movimientos, deudas, créditos y suscripciones.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la contraparte.
+workspace_id	bigint	No	Workspace al que pertenece el catálogo.
+created_by_user_id	uuid	Sí	Usuario creador del registro.
+updated_by_user_id	uuid	Sí	Último usuario que lo editó.
+name	text	No	Nombre de la contraparte.
+type	party_type	No	Tipo de contraparte.
+phone	text	Sí	Teléfono de contacto.
+email	text	Sí	Correo de contacto.
+document_number	text	Sí	Documento o identificador externo.
+notes	text	Sí	Observaciones.
+is_archived	boolean	No	Registro archivado o activo.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+categories
+Categorías de ingresos y gastos por workspace. Permiten jerarquía mediante parent_id.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la categoría.
+workspace_id	bigint	No	Workspace propietario de la categoría.
+created_by_user_id	uuid	Sí	Usuario creador.
+updated_by_user_id	uuid	Sí	Último usuario editor.
+name	text	No	Nombre de la categoría.
+kind	category_kind	No	Tipo de categoría: gasto, ingreso o ambos.
+parent_id	bigint	Sí	Categoría padre para subcategorías.
+color	text	Sí	Color visual.
+icon	text	Sí	Ícono visual.
+sort_order	integer	No	Orden de visualización.
+is_system	boolean	No	Indica si viene del sistema o fue creada por usuario.
+is_active	boolean	No	Estado activo/inactivo.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+budgets
+Presupuestos por periodo. Pueden asociarse a una categoría, a una cuenta concreta o a ambos.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador del presupuesto.
+workspace_id	bigint	No	Workspace al que pertenece.
+created_by_user_id	uuid	Sí	Usuario creador.
+updated_by_user_id	uuid	Sí	Último usuario editor.
+name	text	No	Nombre del presupuesto.
+period_start	date	No	Fecha inicial del periodo.
+period_end	date	No	Fecha final del periodo.
+currency_code	char(3)	No	Moneda del presupuesto.
+category_id	bigint	Sí	Categoría restringida para el control.
+account_id	bigint	Sí	Cuenta opcional a controlar.
+limit_amount	numeric(14,2)	No	Monto máximo permitido.
+rollover_enabled	boolean	No	Permite trasladar saldo al siguiente periodo.
+alert_percent	numeric(5,2)	No	Porcentaje para alertas.
+notes	text	Sí	Notas del presupuesto.
+is_active	boolean	No	Estado del presupuesto.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+obligations
+Tabla central para créditos y deudas. Soporta préstamos en efectivo, ventas a cuotas y compras financiadas.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la obligación.
+workspace_id	bigint	No	Workspace dueño del crédito o deuda.
+created_by_user_id	uuid	Sí	Usuario creador del registro.
+updated_by_user_id	uuid	Sí	Último usuario editor.
+direction	obligation_direction	No	Indica si me deben o yo debo.
+origin_type	obligation_origin_type	No	Origen del crédito o deuda.
+status	obligation_status	No	Estado actual.
+title	text	No	Nombre del crédito o deuda.
+counterparty_id	bigint	No	Persona o entidad relacionada.
+settlement_account_id	bigint	Sí	Cuenta usada para entradas o salidas de pagos.
+currency_code	char(3)	No	Moneda principal.
+principal_amount	numeric(14,2)	No	Monto base de la obligación.
+start_date	date	No	Fecha de inicio.
+due_date	date	Sí	Fecha objetivo de cierre.
+installment_amount	numeric(14,2)	Sí	Monto sugerido por cuota.
+installment_count	integer	Sí	Cantidad planificada de cuotas.
+interest_rate	numeric(8,4)	Sí	Tasa de interés opcional.
+description	text	Sí	Descripción funcional.
+notes	text	Sí	Notas libres.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+obligation_events
+Detalle histórico de eventos sobre una obligación: apertura, pagos, intereses, descuentos y ajustes.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador del evento.
+obligation_id	bigint	No	Obligación afectada.
+event_type	obligation_event_type	No	Tipo de evento.
+event_date	date	No	Fecha del evento.
+amount	numeric(14,2)	No	Monto del evento.
+installment_no	integer	Sí	Número de cuota al que corresponde.
+description	text	Sí	Descripción corta.
+notes	text	Sí	Notas ampliadas.
+movement_id	bigint	Sí	Movimiento financiero asociado, si existiera.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+subscriptions
+Definición de suscripciones o pagos recurrentes. Puede manejar proveedor, cuenta de pago, categoría y próxima fecha de vencimiento.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la suscripción.
+workspace_id	bigint	No	Workspace al que pertenece.
+created_by_user_id	uuid	Sí	Usuario creador.
+updated_by_user_id	uuid	Sí	Último usuario editor.
+name	text	No	Nombre visible de la suscripción.
+vendor_party_id	bigint	Sí	Proveedor o contraparte.
+account_id	bigint	Sí	Cuenta desde la cual se paga.
+category_id	bigint	Sí	Categoría contable del pago.
+currency_code	char(3)	No	Moneda de la suscripción.
+amount	numeric(14,2)	No	Monto esperado.
+frequency	subscription_frequency	No	Frecuencia principal.
+interval_count	integer	No	Intervalo multiplicador de frecuencia.
+day_of_month	smallint	Sí	Día del mes para recurrencias mensuales.
+day_of_week	smallint	Sí	Día de la semana para recurrencias semanales.
+start_date	date	No	Fecha de inicio.
+next_due_date	date	No	Próximo vencimiento calculado.
+end_date	date	Sí	Fecha final opcional.
+status	subscription_status	No	Estado de la suscripción.
+auto_create_movement	boolean	No	Permite generar movimiento automático.
+remind_days_before	integer	No	Anticipación de recordatorio.
+description	text	Sí	Descripción.
+notes	text	Sí	Notas.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+subscription_occurrences
+Detalle puntual por vencimiento de suscripciones. Ideal para calendario, alertas y control de pagos individuales.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la ocurrencia.
+subscription_id	bigint	No	Suscripción madre.
+due_date	date	No	Fecha de vencimiento de la ocurrencia.
+expected_amount	numeric(14,2)	No	Monto esperado para esa fecha.
+status	subscription_occurrence_status	No	Estado de la ocurrencia.
+movement_id	bigint	Sí	Movimiento pagado relacionado.
+paid_at	timestamptz	Sí	Fecha/hora de pago efectivo.
+notes	text	Sí	Notas del caso puntual.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+movements
+Libro mayor operativo del sistema. Todo lo que afecta saldos pasa por aquí: gastos, ingresos, transferencias, pagos de suscripciones y pagos de obligaciones.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador del movimiento.
+workspace_id	bigint	No	Workspace al que pertenece el movimiento.
+created_by_user_id	uuid	Sí	Usuario que registró el movimiento.
+updated_by_user_id	uuid	Sí	Último usuario que lo modificó.
+movement_type	movement_type	No	Tipo de movimiento.
+status	movement_status	No	Estado operativo.
+occurred_at	timestamptz	No	Fecha y hora efectiva del movimiento.
+description	text	No	Descripción corta.
+notes	text	Sí	Observaciones ampliadas.
+source_account_id	bigint	Sí	Cuenta origen para salidas o transferencias.
+source_amount	numeric(14,2)	Sí	Monto salido de la cuenta origen.
+destination_account_id	bigint	Sí	Cuenta destino para ingresos o transferencias.
+destination_amount	numeric(14,2)	Sí	Monto ingresado a la cuenta destino.
+fx_rate	numeric(18,8)	Sí	Tipo de cambio aplicado cuando hay monedas distintas.
+category_id	bigint	Sí	Categoría contable asociada.
+counterparty_id	bigint	Sí	Contraparte relacionada.
+obligation_id	bigint	Sí	Obligación relacionada.
+subscription_id	bigint	Sí	Suscripción relacionada.
+metadata	jsonb	No	Datos adicionales en formato JSON.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+notification_preferences
+Preferencias personales de notificación. Se mantienen por usuario, no por workspace.
+Campo	Tipo	Nulo	Descripción
+user_id	uuid	No	Usuario dueño de las preferencias.
+in_app_enabled	boolean	No	Permite notificaciones dentro de la app.
+push_enabled	boolean	No	Permite notificaciones push.
+email_enabled	boolean	No	Permite correos de alerta.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+notifications
+Bandeja de notificaciones por usuario. Puede apuntar a entidades de un workspace, pero el destinatario siempre es un usuario concreto.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador de la notificación.
+user_id	uuid	No	Usuario destinatario.
+channel	notification_channel	No	Canal de envío.
+status	notification_status	No	Estado de la notificación.
+title	text	No	Título visible.
+body	text	No	Contenido o mensaje.
+scheduled_for	timestamptz	No	Fecha/hora programada para envío.
+sent_at	timestamptz	Sí	Fecha/hora de envío real.
+read_at	timestamptz	Sí	Fecha/hora de lectura.
+related_entity_type	text	Sí	Tipo de entidad relacionada.
+related_entity_id	bigint	Sí	ID de la entidad relacionada.
+payload	jsonb	No	Información adicional JSON.
+created_at	timestamptz	No	Fecha de creación.
+updated_at	timestamptz	No	Fecha de actualización.
+
+activity_log
+Historial compartido de acciones dentro de un workspace. Sirve para feed colaborativo, auditoría ligera y avisos como “alguien hizo un gasto en la cuenta compartida”.
+Campo	Tipo	Nulo	Descripción
+id	bigint	No	Identificador del evento.
+workspace_id	bigint	No	Workspace donde ocurrió la acción.
+actor_user_id	uuid	Sí	Usuario que ejecutó la acción.
+entity_type	text	No	Tipo de entidad afectada, por ejemplo movement o account.
+entity_id	bigint	Sí	ID de la entidad afectada.
+action	text	No	Acción resumida, por ejemplo created, updated o paid.
+description	text	No	Descripción legible para feed o auditoría.
+payload	jsonb	No	Metadatos estructurados.
+created_at	timestamptz	No	Fecha de creación del evento.
+
+4. Vistas de apoyo
+Las vistas se usan para lectura, tableros y resúmenes sin duplicar lógica de negocio en el frontend.
+Vista	Descripción
+v_user_workspaces	Lista los workspaces a los que pertenece cada usuario, con rol y marca de workspace por defecto.
+v_account_balances	Calcula el saldo actual por cuenta usando opening_balance + entradas - salidas.
+v_obligation_summary	Resume principal, pagos, extras, descuentos, saldo pendiente y porcentaje de avance de cada obligación.
+v_budget_progress	Calcula gasto ejecutado, saldo remanente y porcentaje usado de cada presupuesto.
+v_subscription_upcoming	Lista vencimientos próximos o vencidos de suscripciones con cuenta, categoría y proveedor.
+v_workspace_balances	Totaliza saldos por workspace y moneda, útil para tableros y resumen general.
+
+5. Reglas funcionales recomendadas
+Un usuario puede pertenecer a varios workspaces: el personal y uno o más compartidos.
+Una cuenta compartida se implementa como una cuenta dentro de un workspace shared.
+Si ambos miembros pertenecen al mismo workspace, ambos deben ver movimientos, presupuestos y suscripciones de ese workspace.
+Los créditos y deudas pueden ser personales o compartidos según el workspace al que pertenezcan.
+Las notificaciones por gasto compartido deben generarse por usuario destinatario en notifications, pero tomando como evento base activity_log y/o movements.
+La seguridad de acceso debe cerrarse con políticas RLS basadas en workspace_members y no solo en created_by_user_id.
+Siguiente paso sugerido. Crear políticas RLS y funciones SQL críticas para encapsular reglas de negocio.
