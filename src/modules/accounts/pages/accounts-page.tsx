@@ -114,6 +114,21 @@ const iconOptions = [
   { value: "banknote", label: "Banknote", description: "Caja, fondos o categoria libre." },
 ] as const;
 
+const editorColorSwatches = [
+  "#1b6a58",
+  "#2d9076",
+  "#4566d6",
+  "#6f82f1",
+  "#b48b34",
+  "#d39d3a",
+  "#8f3e3e",
+  "#c55f5f",
+  "#8366f2",
+  "#9c7dff",
+  "#c46a31",
+  "#6b7280",
+] as const;
+
 const currencyOptions = [
   { code: "PEN", label: "Sol peruano", region: "Peru", symbol: "S/" },
   { code: "USD", label: "Dolar estadounidense", region: "Estados Unidos", symbol: "$" },
@@ -269,41 +284,56 @@ function usePickerPanel(isOpen: boolean, onClose: () => void) {
 
 function getPickerTriggerStyle(isOpen: boolean) {
   return {
-    borderColor: "rgba(255, 255, 255, 0.12)",
-    backgroundColor: isOpen ? "#1a202a" : "#161c25",
-    boxShadow: isOpen ? "0 0 0 1px rgba(142, 165, 255, 0.16)" : "none",
+    borderColor: isOpen ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.08)",
+    background: isOpen
+      ? "linear-gradient(180deg, rgba(15, 22, 34, 0.98), rgba(10, 16, 27, 0.98))"
+      : "linear-gradient(180deg, rgba(12, 18, 28, 0.96), rgba(9, 14, 22, 0.96))",
+    boxShadow: isOpen
+      ? "0 0 0 4px rgba(107, 228, 197, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
+      : "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
   };
 }
 
 const pickerPanelStyle = {
-  borderColor: "rgba(255, 255, 255, 0.12)",
-  backgroundColor: "#141922",
+  borderColor: "rgba(255, 255, 255, 0.1)",
+  background:
+    "linear-gradient(180deg, rgba(10, 15, 24, 0.98) 0%, rgba(8, 12, 20, 0.98) 100%)",
 };
 
 const pickerSearchInputStyle = {
-  borderColor: "rgba(255, 255, 255, 0.1)",
-  backgroundColor: "#1a202a",
+  borderColor: "rgba(255, 255, 255, 0.08)",
+  background:
+    "linear-gradient(180deg, rgba(17, 25, 39, 0.95), rgba(13, 20, 31, 0.95))",
 };
 
 function getPickerOptionStyle(isSelected: boolean) {
   return {
-    borderColor: isSelected ? "rgba(142, 165, 255, 0.34)" : "rgba(255, 255, 255, 0.04)",
-    backgroundColor: isSelected ? "#1c2531" : "#161c25",
+    borderColor: isSelected ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.04)",
+    background: isSelected
+      ? "linear-gradient(180deg, rgba(18, 31, 41, 0.98), rgba(12, 22, 33, 0.98))"
+      : "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
+    boxShadow: isSelected ? "0 12px 30px rgba(0, 0, 0, 0.18)" : "none",
   };
 }
 
 const pickerEmptyStateStyle = {
   borderColor: "rgba(255, 255, 255, 0.08)",
-  backgroundColor: "#161c25",
+  background:
+    "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
 };
 
 const accountFieldClassName =
-  "w-full rounded-2xl border border-white/10 bg-[#161c25] px-4 text-sm text-ink outline-none transition placeholder:text-storm hover:border-white/14 focus:border-white/20 focus:bg-[#1a202a]";
+  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 
 const accountTextInputClassName = `${accountFieldClassName} h-16`;
 const accountPickerTriggerClassName = `${accountFieldClassName} flex h-16 items-center justify-between gap-3 text-left`;
 const accountPickerSearchInputClassName =
-  "w-full rounded-2xl border border-white/10 bg-[#1a202a] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm focus:border-white/20";
+  "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+const editorPanelClassName =
+  "glass-panel-soft relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
+const accountFieldLabelClassName =
+  "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
+const accountFieldHintClassName = "mt-2 text-xs leading-6 text-storm/75";
 
 const ACCOUNT_EDITOR_DRAFT_STORAGE_KEY = "darkmoney-account-editor-draft";
 const ACCOUNT_EDITOR_DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
@@ -393,11 +423,19 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
         style={getPickerTriggerStyle(isOpen)}
         type="button"
       >
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-ink">
-            {selectedCurrency
-              ? `${selectedCurrency.code} - ${selectedCurrency.label}`
-              : "Selecciona una moneda"}
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            {selectedCurrency?.symbol ?? "?"}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-ink">
+              {selectedCurrency ? selectedCurrency.code : "Selecciona una moneda"}
+            </span>
+            <span className="mt-1 block truncate text-xs text-storm">
+              {selectedCurrency
+                ? `${selectedCurrency.label} · ${selectedCurrency.region}`
+                : "Elige la divisa base de la cuenta"}
+            </span>
           </span>
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
@@ -405,7 +443,7 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
 
       {isOpen ? (
         <div
-          className="animate-fade-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[28px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -428,7 +466,7 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
 
                 return (
                   <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
                       isSelected
                         ? "text-ink"
                         : "text-storm hover:text-ink"
@@ -441,14 +479,17 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
                     style={getPickerOptionStyle(isSelected)}
                     type="button"
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">
-                        {option.code} <span className="text-storm">- {option.symbol}</span>
-                      </p>
-                      <p className="mt-1 truncate text-xs text-storm">
-                        {option.label} - {option.region}
-                      </p>
-                    </div>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink">
+                        {option.symbol}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-medium text-ink">{option.code}</span>
+                        <span className="mt-1 block truncate text-xs text-storm">
+                          {option.label} · {option.region}
+                        </span>
+                      </span>
+                    </span>
                     {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
                   </button>
                 );
@@ -518,6 +559,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-ink">{selectedType.label}</span>
+            <span className="mt-1 block truncate text-xs text-storm">{selectedType.description}</span>
           </span>
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
@@ -525,7 +567,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
 
       {isOpen ? (
         <div
-          className="animate-fade-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[28px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -549,7 +591,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
 
                 return (
                   <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
                       isSelected ? "text-ink" : "text-storm hover:text-ink"
                     }`}
                     key={option.value}
@@ -648,6 +690,7 @@ function AccountIconSelect({
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-ink">{selectedIcon.label}</span>
+            <span className="mt-1 block truncate text-xs text-storm">{selectedIcon.description}</span>
           </span>
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
@@ -655,7 +698,7 @@ function AccountIconSelect({
 
       {isOpen ? (
         <div
-          className="animate-fade-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[28px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -679,7 +722,7 @@ function AccountIconSelect({
 
                 return (
                   <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
                       isSelected ? "text-ink" : "text-storm hover:text-ink"
                     }`}
                     key={option.value}
@@ -742,6 +785,623 @@ function AccountsLoadingSkeleton() {
         ))}
       </section>
     </>
+  );
+}
+
+type AccountEditorDialogProps = {
+  baseCurrencyCode: string;
+  closeEditor: () => void;
+  errorMessage: string;
+  formState: AccountFormState;
+  handleAccountTypeChange: (type: string) => void;
+  handleArchiveToggle: (account: AccountSummary) => Promise<void> | void;
+  handleDeleteAccount: () => Promise<void> | void;
+  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void> | void;
+  isCreateMode: boolean;
+  isSaving: boolean;
+  selectedAccount: AccountSummary | null;
+  updateFormState: <Field extends keyof AccountFormState>(
+    field: Field,
+    value: AccountFormState[Field],
+  ) => void;
+};
+
+function AccountEditorDialog({
+  baseCurrencyCode,
+  closeEditor,
+  errorMessage,
+  formState,
+  handleAccountTypeChange,
+  handleArchiveToggle,
+  handleDeleteAccount,
+  handleSubmit,
+  isCreateMode,
+  isSaving,
+  selectedAccount,
+  updateFormState,
+}: AccountEditorDialogProps) {
+  const previewType = getTypePreset(formState.type);
+  const previewCurrencyCode = formState.currencyCode || baseCurrencyCode;
+  const previewCurrency = buildCurrencyLabel(previewCurrencyCode);
+  const parsedPreviewOpeningBalance = Number(formState.openingBalance);
+  const previewOpeningBalance = Number.isFinite(parsedPreviewOpeningBalance)
+    ? parsedPreviewOpeningBalance
+    : 0;
+  const previewAccountName = formState.name.trim() || "Cuenta sin nombre";
+  const previewIconOption = getIconOption(formState.icon || previewType.icon);
+  const PreviewAccountIcon = getAccountIcon(previewIconOption.value, formState.type);
+
+  return (
+    <div
+      aria-modal="true"
+      className="animate-fade-in fixed inset-0 z-40 bg-black/62 backdrop-blur-xl"
+      onClick={closeEditor}
+      role="dialog"
+    >
+      <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
+        <div
+          className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[980px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <div
+              className="absolute -left-20 top-12 h-64 w-64 rounded-full blur-3xl animate-soft-pulse"
+              style={{ backgroundColor: `${formState.color}2b` }}
+            />
+            <div
+              className="absolute right-0 top-0 h-48 w-48 rounded-full blur-3xl animate-soft-pulse [animation-delay:240ms]"
+              style={{ backgroundColor: "rgba(142, 165, 255, 0.14)" }}
+            />
+            <div
+              className="absolute bottom-0 left-1/2 h-40 w-56 -translate-x-1/2 blur-3xl animate-soft-pulse [animation-delay:420ms]"
+              style={{ backgroundColor: "rgba(215, 190, 123, 0.12)" }}
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
+          </div>
+
+          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="max-w-2xl space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                    {isCreateMode ? "nueva cuenta" : "editar cuenta"}
+                  </span>
+                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-storm/75">
+                    Se refleja en el dashboard al guardar
+                  </span>
+                </div>
+                <div>
+                  <h2 className="font-display text-3xl font-semibold text-ink sm:text-[2.7rem]">
+                    {isCreateMode ? "Crear cuenta" : selectedAccount?.name ?? "Cuenta"}
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
+                    {isCreateMode
+                      ? "Configura una cuenta real con una identidad visual clara, saldo inicial y moneda base para que se integre al workspace desde el primer momento."
+                      : "Ajusta la presentacion y la configuracion financiera de esta cuenta sin perder el contexto de su saldo y actividad actual."}
+                  </p>
+                </div>
+              </div>
+              <button
+                aria-label="Cerrar editor de cuenta"
+                className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:-translate-y-0.5 hover:bg-white/[0.08] hover:text-ink"
+                onClick={closeEditor}
+                type="button"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              className="mt-6 flex flex-1 flex-col"
+              onSubmit={(event) => void handleSubmit(event)}
+            >
+              <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                <div className="space-y-6">
+                  <section className={editorPanelClassName}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                          Identidad
+                        </p>
+                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
+                          Base de la cuenta
+                        </h3>
+                        <p className="mt-2 max-w-xl text-sm leading-7 text-storm">
+                          Define como se vera esta cuenta en tarjetas, filtros y reportes.
+                        </p>
+                      </div>
+                      <div className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                        <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/75">
+                          Tipo sugerido
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-ink">{previewType.label}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 space-y-5">
+                      <label className="block">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={accountFieldLabelClassName}>Nombre</span>
+                          <span className="text-xs text-storm/65">
+                            Visible en dashboard y movimientos
+                          </span>
+                        </div>
+                        <input
+                          className={`${accountTextInputClassName} mt-3`}
+                          onChange={(event) => updateFormState("name", event.target.value)}
+                          placeholder="Ej. Cuenta principal"
+                          type="text"
+                          value={formState.name}
+                        />
+                        <p className={accountFieldHintClassName}>
+                          Usa un nombre corto y facil de reconocer, por ejemplo “Cuenta principal”
+                          o “Caja operativa”.
+                        </p>
+                      </label>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block space-y-3">
+                          <span className={accountFieldLabelClassName}>Tipo</span>
+                          <AccountTypeSelect
+                            onChange={handleAccountTypeChange}
+                            value={formState.type}
+                          />
+                          <p className="text-xs leading-6 text-storm/75">
+                            El tipo propone un icono y color iniciales para acelerar el setup.
+                          </p>
+                        </label>
+
+                        <label className="block space-y-3">
+                          <span className={accountFieldLabelClassName}>Moneda</span>
+                          <CurrencySelect
+                            onChange={(currencyCode) =>
+                              updateFormState("currencyCode", currencyCode)
+                            }
+                            value={formState.currencyCode}
+                          />
+                          <p className="text-xs leading-6 text-storm/75">
+                            Se usara para el saldo inicial y para mostrar el balance principal.
+                          </p>
+                        </label>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={editorPanelClassName}>
+                    <div>
+                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                        Finanzas
+                      </p>
+                      <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
+                        Saldo de arranque
+                      </h3>
+                      <p className="mt-2 max-w-xl text-sm leading-7 text-storm">
+                        Este valor actua como punto de partida para el historial de movimientos.
+                      </p>
+                    </div>
+
+                    <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                      <label className="block">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={accountFieldLabelClassName}>Saldo inicial</span>
+                          <span className="text-xs text-storm/65">
+                            {previewCurrency?.code ?? baseCurrencyCode}
+                          </span>
+                        </div>
+                        <input
+                          className={`${accountTextInputClassName} mt-3`}
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            updateFormState("openingBalance", event.target.value)
+                          }
+                          placeholder="0.00"
+                          type="text"
+                          value={formState.openingBalance}
+                        />
+                        <p className={accountFieldHintClassName}>
+                          Acepta decimales y puede ser 0 si la cuenta empieza vacia.
+                        </p>
+                      </label>
+
+                      <div className="rounded-[28px] border border-white/8 bg-[#0c1320]/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                        <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          Preview financiero
+                        </p>
+                        <p className="mt-4 font-display text-3xl font-semibold text-ink">
+                          {formatCurrency(
+                            previewOpeningBalance,
+                            previewCurrency?.code ?? baseCurrencyCode,
+                          )}
+                        </p>
+                        <p className="mt-2 text-sm text-storm">
+                          {previewCurrency
+                            ? `${previewCurrency.label} · ${previewCurrency.region}`
+                            : "Sin moneda seleccionada"}
+                        </p>
+                        <div className="mt-4 h-px bg-white/8" />
+                        <p className="mt-4 text-xs leading-6 text-storm/75">
+                          El dashboard tomara este monto como base y luego le sumara o restara los
+                          movimientos reales.
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div className="space-y-6">
+                  <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 sm:p-6">
+                    <div
+                      className="absolute -right-10 top-0 h-28 w-28 rounded-full blur-3xl animate-soft-pulse"
+                      style={{ backgroundColor: `${formState.color}3d` }}
+                    />
+                    <div className="relative">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
+                          Live preview
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
+                          {formState.includeInNetWorth
+                            ? "Incluida en patrimonio"
+                            : "Fuera de patrimonio"}
+                        </span>
+                      </div>
+
+                      <div className="mt-6 flex items-start gap-4">
+                        <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
+                          <div
+                            className="absolute inset-0 rounded-[26px] opacity-80 blur-2xl"
+                            style={{ backgroundColor: `${formState.color}5f` }}
+                          />
+                          <div
+                            className="relative flex h-full w-full items-center justify-center rounded-[26px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
+                            style={{
+                              background: `linear-gradient(160deg, ${formState.color}, rgba(8, 13, 20, 0.72))`,
+                            }}
+                          >
+                            <PreviewAccountIcon className="h-8 w-8" />
+                          </div>
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Vista previa
+                          </p>
+                          <h3 className="mt-2 break-words font-display text-3xl font-semibold text-ink">
+                            {previewAccountName}
+                          </h3>
+                          <p className="mt-2 text-sm leading-7 text-storm">
+                            {previewType.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                          {previewType.label}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                          {previewCurrency?.code ?? baseCurrencyCode}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                          {previewIconOption.label}
+                        </span>
+                      </div>
+
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Saldo inicial
+                          </p>
+                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                            {formatCurrency(
+                              previewOpeningBalance,
+                              previewCurrency?.code ?? baseCurrencyCode,
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Estado patrimonio
+                          </p>
+                          <p className="mt-3 text-sm font-medium text-ink">
+                            {formState.includeInNetWorth
+                              ? "Incluida en el net worth"
+                              : "Excluida del net worth"}
+                          </p>
+                          <p className="mt-2 text-xs leading-6 text-storm/75">
+                            {formState.includeInNetWorth
+                              ? "Aportara al resumen general del workspace."
+                              : "Quedara fuera del calculo patrimonial."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={editorPanelClassName}>
+                    <div>
+                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                        Visual
+                      </p>
+                      <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
+                        Icono y color
+                      </h3>
+                      <p className="mt-2 text-sm leading-7 text-storm">
+                        Dale una identidad limpia para reconocerla mas rapido en toda la app.
+                      </p>
+                    </div>
+
+                    <div className="mt-6 space-y-5">
+                      <label className="block space-y-3">
+                        <span className={accountFieldLabelClassName}>Icono</span>
+                        <AccountIconSelect
+                          accountType={formState.type}
+                          color={formState.color}
+                          onChange={(icon) => updateFormState("icon", icon)}
+                          value={formState.icon}
+                        />
+                        <p className="text-xs leading-6 text-storm/75">
+                          Puedes mantener el sugerido o elegir uno mas representativo.
+                        </p>
+                      </label>
+
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={accountFieldLabelClassName}>Color principal</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-storm/80">
+                            {formState.color.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-6">
+                          {editorColorSwatches.map((swatch) => {
+                            const isSelected = swatch.toLowerCase() === formState.color.toLowerCase();
+
+                            return (
+                              <button
+                                className={`group relative h-12 rounded-[18px] border transition duration-200 ${
+                                  isSelected
+                                    ? "scale-[1.02] border-white/30"
+                                    : "border-white/10 hover:-translate-y-0.5 hover:border-white/20"
+                                }`}
+                                key={swatch}
+                                onClick={() => updateFormState("color", swatch)}
+                                style={{
+                                  background: `linear-gradient(135deg, ${swatch}, ${swatch}88)`,
+                                }}
+                                type="button"
+                              >
+                                <span className="absolute inset-[3px] rounded-[14px] border border-white/15" />
+                                {isSelected ? (
+                                  <Check className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                          <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 px-4 py-4">
+                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                              Aplicacion
+                            </p>
+                            <div
+                              className="mt-3 h-12 rounded-[18px] border border-white/10"
+                              style={{
+                                background: `linear-gradient(135deg, ${formState.color}, rgba(9, 13, 20, 0.7))`,
+                              }}
+                            />
+                          </div>
+
+                          <label className="block">
+                            <span className="mb-3 block text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                              Custom
+                            </span>
+                            <input
+                              className={`${accountFieldClassName} h-16 cursor-pointer p-2`}
+                              onChange={(event) => updateFormState("color", event.target.value)}
+                              type="color"
+                              value={formState.color}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={editorPanelClassName}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                          Patrimonio
+                        </p>
+                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
+                          Impacto en el resumen general
+                        </h3>
+                        <p className="mt-2 text-sm leading-7 text-storm">
+                          Decide si esta cuenta suma al patrimonio neto del workspace.
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                          formState.includeInNetWorth
+                            ? "border-pine/25 bg-pine/10 text-pine"
+                            : "border-white/10 bg-white/[0.04] text-storm"
+                        }`}
+                      >
+                        {formState.includeInNetWorth ? "Activa" : "Desactivada"}
+                      </span>
+                    </div>
+
+                    <button
+                      aria-checked={formState.includeInNetWorth}
+                      className={`mt-6 flex w-full items-center justify-between gap-4 rounded-[28px] border px-5 py-5 text-left transition duration-200 ${
+                        formState.includeInNetWorth
+                          ? "border-pine/20 bg-pine/[0.08] hover:bg-pine/[0.1]"
+                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                      }`}
+                      onClick={() =>
+                        updateFormState("includeInNetWorth", !formState.includeInNetWorth)
+                      }
+                      role="switch"
+                      type="button"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink">
+                          {formState.includeInNetWorth
+                            ? "La cuenta se incluye en patrimonio"
+                            : "La cuenta queda fuera de patrimonio"}
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-storm">
+                          Activalo para que el balance de esta cuenta entre en el net worth del
+                          workspace. Si es una cuenta auxiliar o temporal, puedes dejarla fuera.
+                        </p>
+                      </div>
+                      <span
+                        className={`relative h-7 w-14 shrink-0 rounded-full border transition ${
+                          formState.includeInNetWorth
+                            ? "border-pine/30 bg-pine/20"
+                            : "border-white/12 bg-white/[0.05]"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-[0_6px_18px_rgba(0,0,0,0.28)] transition duration-200 ${
+                            formState.includeInNetWorth ? "left-8" : "left-1"
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </section>
+
+                  {selectedAccount ? (
+                    <section className={editorPanelClassName}>
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+                          Contexto actual
+                        </p>
+                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
+                          Datos de la cuenta
+                        </h3>
+                      </div>
+
+                      <div className="mt-6 grid gap-3">
+                        <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 p-4">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Balance actual
+                          </p>
+                          <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                            {formatCurrency(
+                              selectedAccount.currentBalance,
+                              selectedAccount.currencyCode,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 p-4">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Ultima actividad
+                          </p>
+                          <p className="mt-3 text-sm font-medium text-ink">
+                            {formatDateTime(selectedAccount.lastActivity)}
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+              </div>
+
+              {errorMessage ? (
+                <div className="mt-6">
+                  <DataState
+                    description={errorMessage}
+                    title="No pudimos guardar la cuenta"
+                    tone="error"
+                  />
+                </div>
+              ) : null}
+
+              <div className="mt-8 border-t border-white/10 pt-5 sm:pt-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <p className="max-w-xl text-sm leading-7 text-storm">
+                    {isCreateMode
+                      ? "La cuenta se creara en este workspace y el dashboard se refrescara en segundo plano."
+                      : "Los cambios visuales y financieros se aplicaran inmediatamente en esta cuenta real."}
+                  </p>
+
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                    <Button
+                      className="min-w-[140px] justify-center"
+                      disabled={isSaving}
+                      onClick={closeEditor}
+                      type="button"
+                      variant="ghost"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      className="min-w-[180px] justify-center shadow-[0_18px_50px_rgba(245,247,251,0.12)]"
+                      disabled={isSaving}
+                      type="submit"
+                    >
+                      {isSaving ? (
+                        <>
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : isCreateMode ? (
+                        "Crear cuenta"
+                      ) : (
+                        "Guardar cambios"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {selectedAccount ? (
+                  <div className="mt-6 grid gap-3">
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        className="justify-center"
+                        disabled={isSaving}
+                        onClick={() => void handleArchiveToggle(selectedAccount)}
+                        type="button"
+                        variant="secondary"
+                      >
+                        {selectedAccount.isArchived ? (
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Archive className="mr-2 h-4 w-4" />
+                        )}
+                        {selectedAccount.isArchived ? "Reactivar cuenta" : "Archivar cuenta"}
+                      </Button>
+
+                      <Button
+                        className="justify-center bg-rosewood/14 text-rosewood ring-1 ring-rosewood/20 hover:bg-rosewood/20 hover:brightness-100"
+                        disabled={isSaving || !selectedAccount.isArchived}
+                        onClick={() => void handleDeleteAccount()}
+                        type="button"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar permanente
+                      </Button>
+                    </div>
+
+                    {!selectedAccount.isArchived ? (
+                      <div className="rounded-[24px] border border-gold/18 bg-gold/10 p-4 text-sm leading-7 text-storm">
+                        <Sparkles className="mb-3 h-4 w-4 text-gold" />
+                        Para proteger el historial financiero, primero archiva la cuenta y luego
+                        decide si necesitas eliminarla permanentemente.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1293,240 +1953,20 @@ export function AccountsPage() {
       </div>
 
       {isEditorOpen ? (
-        <div
-          aria-modal="true"
-          className="animate-fade-in fixed inset-0 z-40 bg-black/52 backdrop-blur-md"
-          onClick={closeEditor}
-          role="dialog"
-        >
-          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
-            <div
-              className="glass-panel-strong relative max-h-[calc(100vh-2rem)] w-full max-w-[760px] overflow-hidden rounded-[34px]"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex max-h-[calc(100vh-2rem)] flex-col overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-storm/80">
-                    {editorMode === "create" ? "nueva cuenta" : "editar cuenta"}
-                  </p>
-                  <h2 className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {editorMode === "create" ? "Crear cuenta" : selectedAccount?.name ?? "Cuenta"}
-                  </h2>
-                  <p className="mt-2 text-sm leading-7 text-storm">
-                    {editorMode === "create"
-                      ? "Registra una cuenta real en este workspace. Al guardar se refrescara el dashboard en segundo plano."
-                      : "Actualiza los datos visuales y financieros de la cuenta seleccionada."}
-                  </p>
-                </div>
-                <button
-                  className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:bg-white/[0.08] hover:text-ink"
-                  onClick={closeEditor}
-                  type="button"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <form
-                className="mt-8 flex flex-1 flex-col"
-                onSubmit={(event) => void handleSubmit(event)}
-              >
-                <div className="space-y-5">
-                  <div className="glass-panel-soft rounded-[28px] p-5">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className="flex h-14 w-14 items-center justify-center rounded-3xl text-white shadow-lg"
-                        style={{ backgroundColor: formState.color }}
-                      >
-                        {(() => {
-                          const PreviewIcon = getAccountIcon(formState.icon, formState.type);
-                          return <PreviewIcon className="h-6 w-6" />;
-                        })()}
-                      </div>
-                      <div>
-                        <p className="font-medium text-ink">{formState.name || "Cuenta sin nombre"}</p>
-                        <p className="mt-1 text-sm text-storm">
-                          {formState.type} - {formState.currencyCode || snapshot.workspace.baseCurrencyCode}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium text-ink">Nombre</span>
-                    <input
-                      className={accountTextInputClassName}
-                      onChange={(event) => updateFormState("name", event.target.value)}
-                      placeholder="Ej. Cuenta principal"
-                      type="text"
-                      value={formState.name}
-                    />
-                  </label>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium text-ink">Tipo</span>
-                      <AccountTypeSelect
-                        onChange={handleAccountTypeChange}
-                        value={formState.type}
-                      />
-                    </label>
-
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium text-ink">Moneda</span>
-                      <CurrencySelect
-                        onChange={(currencyCode) => updateFormState("currencyCode", currencyCode)}
-                        value={formState.currencyCode}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium text-ink">Saldo inicial</span>
-                      <input
-                        className={accountTextInputClassName}
-                        inputMode="decimal"
-                        onChange={(event) => updateFormState("openingBalance", event.target.value)}
-                        placeholder="0.00"
-                        type="text"
-                        value={formState.openingBalance}
-                      />
-                    </label>
-
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium text-ink">Icono</span>
-                      <AccountIconSelect
-                        accountType={formState.type}
-                        color={formState.color}
-                        onChange={(icon) => updateFormState("icon", icon)}
-                        value={formState.icon}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium text-ink">Color</span>
-                      <input
-                        className={`${accountFieldClassName} h-16 p-2`}
-                        onChange={(event) => updateFormState("color", event.target.value)}
-                        type="color"
-                        value={formState.color}
-                      />
-                    </label>
-
-                    <label className="glass-panel-soft flex items-center justify-between gap-3 rounded-[26px] px-4 py-4">
-                      <div>
-                        <p className="text-sm font-medium text-ink">Incluir en patrimonio</p>
-                        <p className="mt-1 text-sm text-storm">
-                          Si la activas, esta cuenta se suma al patrimonio neto general.
-                        </p>
-                      </div>
-                      <input
-                        checked={formState.includeInNetWorth}
-                        className="h-5 w-5 rounded border-ink/10 text-pine"
-                        onChange={(event) => updateFormState("includeInNetWorth", event.target.checked)}
-                        type="checkbox"
-                      />
-                    </label>
-                  </div>
-
-                  {selectedAccount ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="glass-panel-soft rounded-[24px] p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-storm">Balance actual</p>
-                        <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                          {formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}
-                        </p>
-                      </div>
-                      <div className="glass-panel-soft rounded-[24px] p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultima actividad</p>
-                        <p className="mt-3 text-sm font-medium text-ink">
-                          {formatDateTime(selectedAccount.lastActivity)}
-                        </p>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {errorMessage ? (
-                    <DataState
-                      description={errorMessage}
-                      title="No pudimos guardar la cuenta"
-                      tone="error"
-                    />
-                  ) : null}
-                </div>
-
-                <div className="mt-8 space-y-4 border-t border-white/10 pt-5">
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      disabled={isSaving}
-                      type="submit"
-                    >
-                      {isSaving ? (
-                        <>
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          Guardando...
-                        </>
-                      ) : editorMode === "create" ? (
-                        "Crear cuenta"
-                      ) : (
-                        "Guardar cambios"
-                      )}
-                    </Button>
-                    <Button
-                      disabled={isSaving}
-                      onClick={closeEditor}
-                      type="button"
-                      variant="ghost"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-
-                  {selectedAccount ? (
-                    <div className="grid gap-3">
-                      <Button
-                        className="justify-start"
-                        disabled={isSaving}
-                        onClick={() => void handleArchiveToggle(selectedAccount)}
-                        type="button"
-                        variant="secondary"
-                      >
-                        {selectedAccount.isArchived ? (
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Archive className="mr-2 h-4 w-4" />
-                        )}
-                        {selectedAccount.isArchived ? "Reactivar cuenta" : "Archivar cuenta"}
-                      </Button>
-
-                      <Button
-                        className="justify-start bg-rosewood/14 text-rosewood ring-1 ring-rosewood/20 hover:bg-rosewood/20 hover:brightness-100"
-                        disabled={isSaving || !selectedAccount.isArchived}
-                        onClick={() => void handleDeleteAccount()}
-                        type="button"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar permanente
-                      </Button>
-
-                      {!selectedAccount.isArchived ? (
-                        <div className="rounded-[22px] border border-gold/18 bg-gold/10 p-4 text-sm leading-7 text-storm">
-                          <Sparkles className="mb-3 h-4 w-4 text-gold" />
-                          Para proteger el historial financiero, primero archiva la cuenta y luego
-                          decide si necesitas eliminarla permanentemente.
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </form>
-            </div>
-          </div>
-          </div>
-        </div>
+        <AccountEditorDialog
+          baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+          closeEditor={closeEditor}
+          errorMessage={errorMessage}
+          formState={formState}
+          handleAccountTypeChange={handleAccountTypeChange}
+          handleArchiveToggle={handleArchiveToggle}
+          handleDeleteAccount={handleDeleteAccount}
+          handleSubmit={handleSubmit}
+          isCreateMode={editorMode === "create"}
+          isSaving={isSaving}
+          selectedAccount={selectedAccount}
+          updateFormState={updateFormState}
+        />
       ) : null}
     </>
   );
