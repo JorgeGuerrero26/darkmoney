@@ -1,5 +1,5 @@
 import { ArrowRight, CheckCircle2, Eye, LoaderCircle, LogIn, MailCheck, Shield } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { BrandBanner } from "../../../components/ui/brand-logo";
@@ -9,6 +9,7 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { useAcceptObligationShareMutation, useObligationShareInviteDetailsQuery } from "../../../services/queries/workspace-data";
 import { useAuth } from "../../auth/auth-context";
+import { clearPendingInvite, savePendingInvite } from "../../auth/invite-resume";
 
 function normalizeEmail(email?: string | null) {
   return email?.trim().toLowerCase() ?? "";
@@ -48,6 +49,29 @@ export function ObligationShareInvitePage() {
     }
   }, [invite]);
 
+  useEffect(() => {
+    if (!token) {
+      clearPendingInvite();
+      return;
+    }
+
+    if (inviteQuery.isError || (inviteQuery.isFetched && !invite)) {
+      clearPendingInvite();
+      return;
+    }
+
+    if (isAlreadyAccepted) {
+      clearPendingInvite();
+      return;
+    }
+
+    savePendingInvite({
+      kind: "obligation",
+      path: location.pathname,
+      token,
+    });
+  }, [invite, inviteQuery.isError, inviteQuery.isFetched, isAlreadyAccepted, location.pathname, token]);
+
   async function handleAccept() {
     if (!token) {
       return;
@@ -57,6 +81,7 @@ export function ObligationShareInvitePage() {
 
     try {
       await acceptMutation.mutateAsync(token);
+      clearPendingInvite();
       navigate("/app/obligations", { replace: true });
     } catch (error) {
       setFeedback({

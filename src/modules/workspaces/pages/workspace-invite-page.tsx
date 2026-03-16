@@ -1,5 +1,5 @@
 import { ArrowRight, CheckCircle2, LoaderCircle, LogIn, MailCheck, Shield, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { BrandBanner } from "../../../components/ui/brand-logo";
@@ -11,6 +11,7 @@ import {
 } from "../../../services/queries/workspace-data";
 import { useWorkspaceStore } from "../../../stores/workspace-store";
 import { useAuth } from "../../auth/auth-context";
+import { clearPendingInvite, savePendingInvite } from "../../auth/invite-resume";
 
 function normalizeEmail(email?: string | null) {
   return email?.trim().toLowerCase() ?? "";
@@ -72,6 +73,29 @@ export function WorkspaceInvitePage() {
     return getInvitationStatusLabel(invite.invitation.status);
   }, [invite]);
 
+  useEffect(() => {
+    if (!token) {
+      clearPendingInvite();
+      return;
+    }
+
+    if (inviteQuery.isError || (inviteQuery.isFetched && !invite)) {
+      clearPendingInvite();
+      return;
+    }
+
+    if (isAlreadyAccepted) {
+      clearPendingInvite();
+      return;
+    }
+
+    savePendingInvite({
+      kind: "workspace",
+      path: location.pathname,
+      token,
+    });
+  }, [invite, inviteQuery.isError, inviteQuery.isFetched, isAlreadyAccepted, location.pathname, token]);
+
   async function handleAccept() {
     if (!token) {
       return;
@@ -81,6 +105,7 @@ export function WorkspaceInvitePage() {
 
     try {
       const result = await acceptMutation.mutateAsync(token);
+      clearPendingInvite();
       setActiveWorkspaceId(result.workspaceId);
       navigate("/app/settings", { replace: true });
     } catch (error) {
