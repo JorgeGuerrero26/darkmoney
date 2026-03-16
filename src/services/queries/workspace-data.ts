@@ -809,22 +809,6 @@ function getClient() {
   return supabase;
 }
 
-async function buildFunctionInvokeOptions(body: Record<string, unknown> = {}) {
-  const client = getClient();
-  const {
-    data: { session },
-  } = await client.auth.getSession();
-
-  return {
-    body,
-    headers: session?.access_token
-      ? {
-          Authorization: `Bearer ${session.access_token}`,
-        }
-      : undefined,
-  };
-}
-
 async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
   const client = getClient();
   const {
@@ -858,6 +842,43 @@ async function invokeAuthenticatedFunction<T>(functionName: string, body: Record
     const errorMessage =
       responseBody && typeof responseBody === "object" && "error" in responseBody
         ? String((responseBody as { error?: unknown }).error ?? "")
+        : "";
+
+    throw new Error(
+      errorMessage || `La Edge Function ${functionName} respondio ${response.status}.`,
+    );
+  }
+
+  return responseBody as T;
+}
+
+async function invokePublicFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase no esta configurado correctamente en el frontend.");
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: supabaseAnonKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const errorMessage =
+      responseBody && typeof responseBody === "object"
+        ? "error" in responseBody
+          ? String((responseBody as { error?: unknown }).error ?? "")
+          : "message" in responseBody
+            ? String((responseBody as { message?: unknown }).message ?? "")
+            : ""
         : "";
 
     throw new Error(
@@ -1276,15 +1297,10 @@ async function createWorkspaceInvitation(input: WorkspaceInvitationMutationInput
 }
 
 async function fetchWorkspaceInvitationDetails(token: string) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const data = await invokePublicFunction<WorkspaceInvitationDetailsFunctionResponse>(
     "get-workspace-invite",
-    await buildFunctionInvokeOptions({ token }),
+    { token },
   );
-
-  if (error) {
-    throw error;
-  }
 
   const response = (data ?? {}) as WorkspaceInvitationDetailsFunctionResponse;
 
@@ -1966,15 +1982,10 @@ async function fetchObligationShares(workspaceId: number) {
 }
 
 async function fetchObligationShareInviteDetails(token: string) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const data = await invokePublicFunction<ObligationShareInviteDetailsFunctionResponse>(
     "get-obligation-share-invite",
-    await buildFunctionInvokeOptions({ token }),
+    { token },
   );
-
-  if (error) {
-    throw error;
-  }
 
   const response = (data ?? {}) as ObligationShareInviteDetailsFunctionResponse;
 

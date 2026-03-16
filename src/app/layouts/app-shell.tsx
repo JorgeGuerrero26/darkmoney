@@ -412,7 +412,7 @@ export function AppShell() {
                 )}
                 <div className={isSidebarCollapsed ? "hidden" : "min-w-0 max-w-[13rem]"}>
                   <p className="text-[0.68rem] uppercase tracking-[0.28em] text-storm/72">
-                    Workspace OS
+                    Dark Money
                   </p>
                   <p className="mt-2 text-sm leading-7 text-storm">
                     Finanzas personales y compartidas en un solo sistema.

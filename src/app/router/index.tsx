@@ -1,28 +1,43 @@
+import type { ComponentType } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import { AppShell } from "../layouts/app-shell";
 import { AuthShell } from "../layouts/auth-shell";
-import { DashboardPage } from "../../modules/dashboard/pages/dashboard-page";
-import { AccountsPage } from "../../modules/accounts/pages/accounts-page";
-import { MovementsPage } from "../../modules/movements/pages/movements-page";
-import { ObligationsPage } from "../../modules/obligations/pages/obligations-page";
-import { ObligationShareInvitePage } from "../../modules/obligations/pages/obligation-share-invite-page";
-import { ContactsPage } from "../../modules/contacts/pages/contacts-page";
-import { CategoriesPage } from "../../modules/categories/pages/categories-page";
-import { BudgetsPage } from "../../modules/budgets/pages/budgets-page";
-import { SubscriptionsPage } from "../../modules/subscriptions/pages/subscriptions-page";
-import { NotificationsPage } from "../../modules/notifications/pages/notifications-page";
-import { SettingsPage } from "../../modules/settings/pages/settings-page";
-import { LoginPage } from "../../modules/auth/pages/login-page";
-import { RegisterPage } from "../../modules/auth/pages/register-page";
-import { RecoveryPage } from "../../modules/auth/pages/recovery-page";
-import { OnboardingPage } from "../../modules/auth/pages/onboarding-page";
-import { WorkspaceInvitePage } from "../../modules/workspaces/pages/workspace-invite-page";
-import { NotFoundPage } from "../../modules/shared/pages/not-found-page";
 import { RouteErrorPage } from "../../modules/shared/pages/route-error-page";
 import { HomeRedirect } from "../guards/home-redirect";
 import { PublicOnly } from "../guards/public-only";
 import { RequireAuth } from "../guards/require-auth";
+
+function lazyRoute<TModule extends Record<string, unknown>, TKey extends keyof TModule>(
+  importer: () => Promise<TModule>,
+  exportName: TKey,
+) {
+  return async () => {
+    const module = await importer();
+
+    return {
+      Component: module[exportName] as ComponentType,
+    };
+  };
+}
+
+function lazyProtectedRoute<TModule extends Record<string, unknown>, TKey extends keyof TModule>(
+  importer: () => Promise<TModule>,
+  exportName: TKey,
+) {
+  return async () => {
+    const module = await importer();
+    const Component = module[exportName] as ComponentType;
+
+    return {
+      Component: () => (
+        <RequireAuth>
+          <Component />
+        </RequireAuth>
+      ),
+    };
+  };
+}
 
 export const router = createBrowserRouter([
   {
@@ -41,34 +56,53 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "login",
-        element: <LoginPage />,
+        lazy: lazyRoute(() => import("../../modules/auth/pages/login-page"), "LoginPage"),
       },
       {
         path: "register",
-        element: <RegisterPage />,
+        lazy: lazyRoute(() => import("../../modules/auth/pages/register-page"), "RegisterPage"),
       },
       {
         path: "recovery",
-        element: <RecoveryPage />,
+        lazy: lazyRoute(() => import("../../modules/auth/pages/recovery-page"), "RecoveryPage"),
       },
     ],
   },
   {
     path: "/share/obligations/:token",
-    element: <ObligationShareInvitePage />,
+    lazy: lazyRoute(
+      () => import("../../modules/obligations/pages/obligation-share-invite-page"),
+      "ObligationShareInvitePage",
+    ),
     errorElement: <RouteErrorPage />,
   },
   {
     path: "/share/workspaces/:token",
-    element: <WorkspaceInvitePage />,
+    lazy: lazyRoute(
+      () => import("../../modules/workspaces/pages/workspace-invite-page"),
+      "WorkspaceInvitePage",
+    ),
     errorElement: <RouteErrorPage />,
   },
   {
+    path: "/auth/reset-password",
+    element: <AuthShell />,
+    errorElement: <RouteErrorPage />,
+    children: [
+      {
+        index: true,
+        lazy: lazyRoute(
+          () => import("../../modules/auth/pages/reset-password-page"),
+          "ResetPasswordPage",
+        ),
+      },
+    ],
+  },
+  {
     path: "/onboarding",
-    element: (
-      <RequireAuth>
-        <OnboardingPage />
-      </RequireAuth>
+    lazy: lazyProtectedRoute(
+      () => import("../../modules/auth/pages/onboarding-page"),
+      "OnboardingPage",
     ),
     errorElement: <RouteErrorPage />,
   },
@@ -83,48 +117,54 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <DashboardPage />,
+        lazy: lazyRoute(() => import("../../modules/dashboard/pages/dashboard-page"), "DashboardPage"),
       },
       {
         path: "accounts",
-        element: <AccountsPage />,
+        lazy: lazyRoute(() => import("../../modules/accounts/pages/accounts-page"), "AccountsPage"),
       },
       {
         path: "movements",
-        element: <MovementsPage />,
+        lazy: lazyRoute(() => import("../../modules/movements/pages/movements-page"), "MovementsPage"),
       },
       {
         path: "contacts",
-        element: <ContactsPage />,
+        lazy: lazyRoute(() => import("../../modules/contacts/pages/contacts-page"), "ContactsPage"),
       },
       {
         path: "categories",
-        element: <CategoriesPage />,
+        lazy: lazyRoute(() => import("../../modules/categories/pages/categories-page"), "CategoriesPage"),
       },
       {
         path: "budgets",
-        element: <BudgetsPage />,
+        lazy: lazyRoute(() => import("../../modules/budgets/pages/budgets-page"), "BudgetsPage"),
       },
       {
         path: "obligations",
-        element: <ObligationsPage />,
+        lazy: lazyRoute(() => import("../../modules/obligations/pages/obligations-page"), "ObligationsPage"),
       },
       {
         path: "subscriptions",
-        element: <SubscriptionsPage />,
+        lazy: lazyRoute(
+          () => import("../../modules/subscriptions/pages/subscriptions-page"),
+          "SubscriptionsPage",
+        ),
       },
       {
         path: "notifications",
-        element: <NotificationsPage />,
+        lazy: lazyRoute(
+          () => import("../../modules/notifications/pages/notifications-page"),
+          "NotificationsPage",
+        ),
       },
       {
         path: "settings",
-        element: <SettingsPage />,
+        lazy: lazyRoute(() => import("../../modules/settings/pages/settings-page"), "SettingsPage"),
       },
     ],
   },
   {
     path: "*",
-    element: <NotFoundPage />,
+    lazy: lazyRoute(() => import("../../modules/shared/pages/not-found-page"), "NotFoundPage"),
   },
 ]);

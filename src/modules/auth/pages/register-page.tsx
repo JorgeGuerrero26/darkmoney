@@ -51,8 +51,7 @@ export function RegisterPage() {
         <p className="text-xs uppercase tracking-[0.24em] text-storm">registro</p>
         <h2 className="font-display text-4xl font-semibold text-ink">Crea tu workspace financiero.</h2>
         <p className="text-sm leading-7 text-storm">
-          El scaffold ya contempla onboarding, workspace personal y crecimiento hacia espacios
-          compartidos.
+          Crea tu cuenta para organizar tus finanzas personales y abrir espacios compartidos cuando lo necesites.
         </p>
       </div>
 

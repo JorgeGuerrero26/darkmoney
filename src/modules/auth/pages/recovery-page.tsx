@@ -21,7 +21,9 @@ export function RecoveryPage() {
 
     try {
       await resetPassword(email);
-      setSuccessMessage("Te enviamos un correo para recuperar el acceso.");
+      setSuccessMessage(
+        "Te enviamos un correo con un enlace seguro para cambiar tu contrasena.",
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo enviar el correo.";
       setErrorMessage(message);
@@ -36,7 +38,7 @@ export function RecoveryPage() {
         <p className="text-xs uppercase tracking-[0.24em] text-storm">recuperacion</p>
         <h2 className="font-display text-4xl font-semibold text-ink">Recupera tu acceso.</h2>
         <p className="text-sm leading-7 text-storm">
-          El flujo visual esta listo para conectarse al reset de password de Supabase.
+          Escribe tu correo y te enviaremos un enlace para crear una nueva contrasena.
         </p>
       </div>
 

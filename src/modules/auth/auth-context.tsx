@@ -41,6 +41,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>;
   resetPassword: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   saveProfile: (input: SaveProfileInput) => Promise<void>;
 };
@@ -299,11 +300,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/login`,
+      redirectTo: `${window.location.origin}/auth/reset-password`,
     });
 
     if (error) {
       throw error;
+    }
+  }
+
+  async function updatePassword(password: string) {
+    if (!supabase) {
+      throw new Error("Supabase no esta configurado.");
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      password,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data.user) {
+      setUser(data.user);
     }
   }
 
@@ -372,6 +391,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     signIn,
     signUp,
     resetPassword,
+    updatePassword,
     signOut,
     saveProfile,
   };

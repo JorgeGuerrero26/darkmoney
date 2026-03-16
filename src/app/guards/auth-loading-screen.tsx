@@ -8,7 +8,7 @@ export function AuthLoadingScreen() {
           className="mx-auto h-24 w-24 rounded-[28px]"
           imageClassName="scale-[1.02] object-[center_48%]"
         />
-        <p className="mt-5 text-xs uppercase tracking-[0.28em] text-storm">Workspace OS</p>
+        <p className="mt-5 text-xs uppercase tracking-[0.28em] text-storm">Dark Money</p>
         <h1 className="mt-4 font-display text-3xl font-semibold">Sincronizando sesion</h1>
         <p className="mt-3 text-sm leading-7 text-storm">
           Estamos validando tu acceso y preparando tu contexto financiero.

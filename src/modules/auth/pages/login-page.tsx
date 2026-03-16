@@ -40,8 +40,7 @@ export function LoginPage() {
         <p className="text-xs uppercase tracking-[0.24em] text-storm">acceso</p>
         <h2 className="font-display text-4xl font-semibold text-ink">Entra a tu dinero compartido.</h2>
         <p className="text-sm leading-7 text-storm">
-          Inicia sesion con tu correo y password. Si Supabase esta bien configurado, entraras a tu
-          espacio real.
+          Inicia sesion con tu correo y contrasena para entrar a tu espacio personal o compartido.
         </p>
       </div>
 
