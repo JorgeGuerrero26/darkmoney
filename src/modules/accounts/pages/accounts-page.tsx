@@ -26,6 +26,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
@@ -1544,6 +1545,10 @@ export function AccountsPage() {
   const updateAccountMutation = useUpdateAccountMutation(activeWorkspace?.id, user?.id);
   const archiveAccountMutation = useArchiveAccountMutation(activeWorkspace?.id, user?.id);
   const deleteAccountMutation = useDeleteAccountMutation(activeWorkspace?.id, user?.id);
+  useSuccessToast(feedbackMessage, {
+    clear: () => setFeedbackMessage(""),
+    title: "Cambios aplicados",
+  });
 
   const selectedAccount =
     selectedAccountId !== null
@@ -1958,14 +1963,6 @@ export function AccountsPage() {
             tone="error"
           />
         ) : null}
-        {feedbackMessage ? (
-          <DataState
-            description={feedbackMessage}
-            title="Cambios aplicados"
-            tone="success"
-          />
-        ) : null}
-
         {visibleAccounts.length === 0 ? (
           <DataState
             action={<Button onClick={openCreateEditor}>Crear primera cuenta</Button>}

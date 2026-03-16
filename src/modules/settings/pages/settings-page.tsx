@@ -9,6 +9,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel, formatWorkspaceRoleLabel } from "../../../lib/formatting/labels";
 import { useAuth } from "../../auth/auth-context";
@@ -409,6 +410,14 @@ export function SettingsPage() {
   const [invitedRole, setInvitedRole] = useState<Exclude<WorkspaceRole, "owner">>("member");
   const [invitationNote, setInvitationNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useSuccessToast(feedbackMessage, {
+    clear: () => setFeedbackMessage(""),
+    title: "Configuracion actualizada",
+  });
+  useSuccessToast(workspaceFeedbackMessage, {
+    clear: () => setWorkspaceFeedbackMessage(""),
+    title: "Workspace colaborativo actualizado",
+  });
   const currencyOptions = useMemo(() => {
     if (!baseCurrencyCode.trim()) {
       return profileCurrencyOptions;
@@ -647,6 +656,13 @@ export function SettingsPage() {
         appUrl: window.location.origin,
       });
 
+      if (!result.alreadyMember && !result.emailSent) {
+        setWorkspaceErrorMessage(
+          `La invitacion quedo lista para ${result.invitedDisplayName ?? result.invitedEmail}, pero el correo automatico aun no esta configurado.`,
+        );
+        return;
+      }
+
       setIsInviteMemberOpen(false);
       setInvitedEmail("");
       setInvitedRole("member");
@@ -654,9 +670,7 @@ export function SettingsPage() {
       setWorkspaceFeedbackMessage(
         result.alreadyMember
           ? `${result.invitedDisplayName ?? result.invitedEmail} ya pertenece a este workspace.`
-          : result.emailSent
-            ? `Le enviamos una invitacion por correo a ${result.invitedDisplayName ?? result.invitedEmail}.`
-            : `La invitacion quedo lista para ${result.invitedDisplayName ?? result.invitedEmail}, pero el correo automatico aun no esta configurado.`,
+          : `Le enviamos una invitacion por correo a ${result.invitedDisplayName ?? result.invitedEmail}.`,
       );
     } catch (error) {
       setWorkspaceErrorMessage(
@@ -818,24 +832,10 @@ export function SettingsPage() {
             title="No pudimos guardar los cambios"
           />
         ) : null}
-        {feedbackMessage ? (
-          <FormFeedbackBanner
-            description={feedbackMessage}
-            title="Configuracion actualizada"
-            tone="success"
-          />
-        ) : null}
         {workspaceErrorMessage ? (
           <FormFeedbackBanner
             description={workspaceErrorMessage}
             title="No pudimos completar el flujo colaborativo"
-          />
-        ) : null}
-        {workspaceFeedbackMessage ? (
-          <FormFeedbackBanner
-            description={workspaceFeedbackMessage}
-            title="Workspace colaborativo actualizado"
-            tone="success"
           />
         ) : null}
         <SurfaceCard

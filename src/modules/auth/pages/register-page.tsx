@@ -4,6 +4,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useAuth } from "../auth-context";
 
 export function RegisterPage() {
@@ -15,6 +16,10 @@ export function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useSuccessToast(successMessage, {
+    clear: () => setSuccessMessage(""),
+    title: "Cuenta creada",
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,13 +99,6 @@ export function RegisterPage() {
           <FormFeedbackBanner
             description={errorMessage}
             title="No pudimos crear tu cuenta"
-          />
-        ) : null}
-        {successMessage ? (
-          <FormFeedbackBanner
-            description={successMessage}
-            title="Cuenta creada"
-            tone="success"
           />
         ) : null}
         {!isConfigured ? (

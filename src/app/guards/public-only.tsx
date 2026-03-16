@@ -1,11 +1,16 @@
 import type { PropsWithChildren } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../modules/auth/auth-context";
+import { resolvePostAuthPath } from "../../modules/auth/invite-resume";
 import { AuthLoadingScreen } from "./auth-loading-screen";
 
 export function PublicOnly({ children }: PropsWithChildren) {
   const { isLoading, user } = useAuth();
+  const location = useLocation();
+  const redirectTarget = resolvePostAuthPath(
+    new URLSearchParams(location.search).get("next"),
+  );
 
   if (isLoading) {
     return <AuthLoadingScreen />;
@@ -14,7 +19,7 @@ export function PublicOnly({ children }: PropsWithChildren) {
   if (user) {
     return (
       <Navigate
-        to="/app"
+        to={redirectTarget}
         replace
       />
     );

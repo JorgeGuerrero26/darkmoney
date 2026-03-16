@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useAuth } from "../auth-context";
 
 export function RecoveryPage() {
@@ -12,6 +13,10 @@ export function RecoveryPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useSuccessToast(successMessage, {
+    clear: () => setSuccessMessage(""),
+    title: "Correo enviado",
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,13 +66,6 @@ export function RecoveryPage() {
           <FormFeedbackBanner
             description={errorMessage}
             title="No pudimos enviar el enlace"
-          />
-        ) : null}
-        {successMessage ? (
-          <FormFeedbackBanner
-            description={successMessage}
-            title="Correo enviado"
-            tone="success"
           />
         ) : null}
         <Button

@@ -281,9 +281,9 @@ export function NotificationsPage() {
                           className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
                           to={notification.href}
                         >
-                          Ir al modulo
+                          {notification.kind === "invite" ? "Abrir invitacion" : "Ir al modulo"}
                         </Link>
-                        {notification.status !== "read" ? (
+                        {notification.status !== "read" && notification.kind !== "invite" ? (
                           <Button
                             disabled={isUpdatingReadState}
                             onClick={() => void handleMarkOneRead(notification.id, notification.databaseId)}

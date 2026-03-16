@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useAuth } from "../auth-context";
 
 export function OnboardingPage() {
@@ -16,6 +17,10 @@ export function OnboardingPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useSuccessToast(successMessage, {
+    clear: () => setSuccessMessage(""),
+    title: "Perfil listo",
+  });
 
   useEffect(() => {
     if (!profile) {
@@ -158,14 +163,6 @@ export function OnboardingPage() {
                   className="w-full"
                   description={errorMessage}
                   title="No pudimos guardar tu perfil"
-                />
-              ) : null}
-              {successMessage ? (
-                <FormFeedbackBanner
-                  className="w-full"
-                  description={successMessage}
-                  title="Perfil listo"
-                  tone="success"
                 />
               ) : null}
               <Button

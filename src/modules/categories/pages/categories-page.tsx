@@ -40,6 +40,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import type { CategoryKind, CategoryOverview } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
@@ -697,6 +698,9 @@ export function CategoriesPage() {
   const deleteMutation = useDeleteCategoryMutation(activeWorkspace?.id, user?.id);
 
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  useSuccessToast(feedback, {
+    clear: () => setFeedback(null),
+  });
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [showInactive, setShowInactive] = useState(false);

@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
+
 const PENDING_INVITE_STORAGE_KEY = "darkmoney.pending-invite";
 const PENDING_INVITE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const PENDING_INVITE_EVENT_NAME = "darkmoney:pending-invite-change";
 
 export type PendingInvite = {
   kind: "obligation" | "workspace";
@@ -14,6 +17,22 @@ function canUseStorage() {
 
 function isSafePath(path: string) {
   return path.startsWith("/") && !path.startsWith("//");
+}
+
+export function isInvitePath(path?: string | null) {
+  if (typeof path !== "string" || !isSafePath(path)) {
+    return false;
+  }
+
+  return path.startsWith("/share/obligations/") || path.startsWith("/share/workspaces/");
+}
+
+function notifyPendingInviteChange() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(PENDING_INVITE_EVENT_NAME));
 }
 
 export function readPendingInvite() {
@@ -58,6 +77,14 @@ export function readPendingInvite() {
   }
 }
 
+export function resolvePostAuthPath(nextPath?: string | null) {
+  if (typeof nextPath === "string" && isSafePath(nextPath)) {
+    return nextPath;
+  }
+
+  return "/app";
+}
+
 export function savePendingInvite(invite: Omit<PendingInvite, "savedAt">) {
   if (!canUseStorage() || !isSafePath(invite.path)) {
     return;
@@ -70,6 +97,7 @@ export function savePendingInvite(invite: Omit<PendingInvite, "savedAt">) {
       savedAt: new Date().toISOString(),
     } satisfies PendingInvite),
   );
+  notifyPendingInviteChange();
 }
 
 export function clearPendingInvite() {
@@ -78,4 +106,27 @@ export function clearPendingInvite() {
   }
 
   window.localStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
+  notifyPendingInviteChange();
+}
+
+export function usePendingInvite() {
+  const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(() => readPendingInvite());
+
+  useEffect(() => {
+    function syncPendingInvite() {
+      setPendingInvite(readPendingInvite());
+    }
+
+    syncPendingInvite();
+
+    window.addEventListener("storage", syncPendingInvite);
+    window.addEventListener(PENDING_INVITE_EVENT_NAME, syncPendingInvite);
+
+    return () => {
+      window.removeEventListener("storage", syncPendingInvite);
+      window.removeEventListener(PENDING_INVITE_EVENT_NAME, syncPendingInvite);
+    };
+  }, []);
+
+  return pendingInvite;
 }

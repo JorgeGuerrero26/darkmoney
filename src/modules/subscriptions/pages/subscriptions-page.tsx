@@ -27,6 +27,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -881,6 +882,9 @@ export function SubscriptionsPage() {
   const updateMutation = useUpdateSubscriptionMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteSubscriptionMutation(activeWorkspace?.id, user?.id);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  useSuccessToast(feedback, {
+    clear: () => setFeedback(null),
+  });
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);

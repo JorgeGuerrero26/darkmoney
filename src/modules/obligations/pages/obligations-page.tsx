@@ -34,6 +34,7 @@ import { PageHeader } from "../../../components/ui/page-header";
 import { ProgressBar } from "../../../components/ui/progress-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -2572,6 +2573,9 @@ export function ObligationsPage() {
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  useSuccessToast(pageFeedback, {
+    clear: () => setPageFeedback(null),
+  });
   const [shareTargetId, setShareTargetId] = useState<number | null>(null);
   const [formState, setFormState] = useState<ObligationFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
@@ -3670,7 +3674,7 @@ export function ObligationsPage() {
         title="Creditos y deudas"
       />
 
-      {pageFeedback ? (
+      {pageFeedback?.tone === "error" ? (
         <DataState
           description={pageFeedback.description}
           title={pageFeedback.title}

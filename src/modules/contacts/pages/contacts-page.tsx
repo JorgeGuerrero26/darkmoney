@@ -23,6 +23,7 @@ import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -462,6 +463,9 @@ export function ContactsPage() {
   const archiveMutation = useArchiveCounterpartyMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteCounterpartyMutation(activeWorkspace?.id, user?.id);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  useSuccessToast(feedback, {
+    clear: () => setFeedback(null),
+  });
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [showArchived, setShowArchived] = useState(false);

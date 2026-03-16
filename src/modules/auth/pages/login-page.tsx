@@ -1,11 +1,11 @@
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { useAuth } from "../auth-context";
-import { clearPendingInvite, readPendingInvite } from "../invite-resume";
+import { isInvitePath, resolvePostAuthPath } from "../invite-resume";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -16,11 +16,8 @@ export function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const nextPath = searchParams.get("next");
-  const pendingInvite = useMemo(() => readPendingInvite(), []);
-  const resolvedNextPath =
-    nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
-      ? nextPath
-      : pendingInvite?.path ?? "/app";
+  const resolvedNextPath = resolvePostAuthPath(nextPath);
+  const isInviteLogin = isInvitePath(nextPath);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +26,6 @@ export function LoginPage() {
 
     try {
       await signIn(email, password);
-      clearPendingInvite();
       navigate(resolvedNextPath, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo iniciar sesion.";
@@ -49,9 +45,9 @@ export function LoginPage() {
         </p>
       </div>
 
-      {pendingInvite ? (
+      {isInviteLogin ? (
         <FormFeedbackBanner
-          description="Despues de iniciar sesion te devolveremos a la invitacion que dejaste pendiente, sin necesidad de volver al correo."
+          description="Despues de iniciar sesion te devolveremos a esta invitacion para que puedas revisarla y aceptarla."
           title="Tienes una invitacion pendiente"
           tone="info"
         />

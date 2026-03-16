@@ -33,6 +33,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatMovementStatusLabel, formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -1542,6 +1543,10 @@ export function MovementsPage() {
   const deleteMovementMutation = useDeleteMovementMutation(activeWorkspace?.id, user?.id);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(activeWorkspace?.id, user?.id);
   const deleteAttachmentRecordMutation = useDeleteAttachmentRecordMutation(activeWorkspace?.id, user?.id);
+  useSuccessToast(feedbackMessage, {
+    clear: () => setFeedbackMessage(""),
+    title: "Cambios aplicados",
+  });
 
   const selectedMovement =
     selectedMovementId !== null
@@ -1996,9 +2001,12 @@ export function MovementsPage() {
             await uploadReceiptForMovement(createdMovementId, pendingReceiptFile);
             setFeedbackMessage("Movimiento creado y comprobante guardado correctamente.");
           } catch (attachmentError) {
-            setFeedbackMessage("Movimiento creado, pero no pudimos subir el comprobante.");
+            setFeedbackMessage("Movimiento creado correctamente.");
             setErrorMessage(
-              getQueryErrorMessage(attachmentError, "No pudimos subir el comprobante del movimiento."),
+              `${getQueryErrorMessage(
+                attachmentError,
+                "No pudimos subir el comprobante del movimiento.",
+              )} El movimiento si quedo guardado.`,
             );
           }
         } else {
@@ -2093,14 +2101,6 @@ export function MovementsPage() {
             tone="error"
           />
         ) : null}
-        {feedbackMessage ? (
-          <DataState
-            description={feedbackMessage}
-            title="Cambios aplicados"
-            tone="success"
-          />
-        ) : null}
-
         <SurfaceCard
           action={<Filter className="h-5 w-5 text-gold" />}
           className="relative z-30 overflow-visible"

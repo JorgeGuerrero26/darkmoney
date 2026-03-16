@@ -21,6 +21,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
@@ -1044,6 +1045,9 @@ export function BudgetsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showCurrentOnly, setShowCurrentOnly] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  useSuccessToast(pageFeedback, {
+    clear: () => setPageFeedback(null),
+  });
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -1543,7 +1547,7 @@ export function BudgetsPage() {
         </p>
       </PageHeader>
 
-      {pageFeedback ? (
+      {pageFeedback?.tone === "error" ? (
         <FormFeedbackBanner
           description={pageFeedback.description}
           tone={pageFeedback.tone}

@@ -143,6 +143,14 @@
   .animate-fade-in {
     animation: fade-in 220ms ease-out;
   }
+
+  .animate-toast-out {
+    animation: toast-out 220ms ease-in forwards;
+  }
+
+  .animate-toast-progress {
+    animation: toast-progress linear forwards;
+  }
 }
 
 @keyframes shimmer-slide {
@@ -183,5 +191,27 @@
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
   }
 }

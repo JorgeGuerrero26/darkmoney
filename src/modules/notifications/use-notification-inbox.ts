@@ -10,6 +10,8 @@ import type {
   ObligationSummary,
   SubscriptionSummary,
 } from "../../types/domain";
+import type { PendingInvite } from "../auth/invite-resume";
+import { usePendingInvite } from "../auth/invite-resume";
 
 const SMART_NOTIFICATION_READS_STORAGE_KEY = "darkmoney.notifications.smartReads";
 
@@ -339,6 +341,36 @@ function buildSmartNotifications(
   return notifications;
 }
 
+function buildPendingInviteNotifications(
+  pendingInvite: PendingInvite | null,
+): InboxNotification[] {
+  if (!pendingInvite) {
+    return [];
+  }
+
+  const isWorkspaceInvite = pendingInvite.kind === "workspace";
+
+  return [
+    {
+      id: `smart:invite:${pendingInvite.kind}:${pendingInvite.token}`,
+      source: "smart",
+      title: isWorkspaceInvite
+        ? "Tienes un workspace pendiente por aceptar"
+        : "Tienes una invitacion pendiente por aceptar",
+      body: isWorkspaceInvite
+        ? "Retoma la invitacion compartida y confirma tu acceso al workspace sin volver al correo."
+        : "Retoma el credito o deuda compartido y confirma el acceso desde la invitacion que dejaste pendiente.",
+      status: "pending",
+      scheduledFor: pendingInvite.savedAt,
+      kind: "invite",
+      channel: "in_app",
+      readAt: null,
+      tone: "info",
+      href: pendingInvite.path,
+    },
+  ];
+}
+
 export function useNotificationInbox({
   databaseNotifications,
   snapshot,
@@ -351,6 +383,7 @@ export function useNotificationInbox({
   const [smartReadMap, setSmartReadMap] = useState<SmartNotificationReadMap>(
     readSmartNotificationReadMap,
   );
+  const pendingInvite = usePendingInvite();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -364,18 +397,22 @@ export function useNotificationInbox({
   }, [smartReadMap]);
 
   const smartNotifications = useMemo(
-    () => buildSmartNotifications(snapshot, workspaceName),
-    [snapshot, workspaceName],
+    () => [
+      ...buildPendingInviteNotifications(pendingInvite),
+      ...buildSmartNotifications(snapshot, workspaceName),
+    ],
+    [pendingInvite, snapshot, workspaceName],
   );
 
   const mergedNotifications = useMemo(() => {
     const databaseItems = buildDatabaseNotifications(databaseNotifications);
     const smartItems = smartNotifications.map<InboxNotification>((notification) => {
-      const readAt = smartReadMap[notification.id] ?? null;
+      const isInviteNotification = notification.kind === "invite";
+      const readAt = isInviteNotification ? null : smartReadMap[notification.id] ?? null;
 
       return {
         ...notification,
-        status: readAt ? "read" : "pending",
+        status: isInviteNotification ? "pending" : readAt ? "read" : "pending",
         readAt,
       };
     });
@@ -394,8 +431,10 @@ export function useNotificationInbox({
   function markSmartNotificationsAsRead(ids?: string[]) {
     const targetIds =
       ids?.length
-        ? ids
-        : smartNotifications.map((notification) => notification.id);
+        ? ids.filter((id) => !id.startsWith("smart:invite:"))
+        : smartNotifications
+            .filter((notification) => notification.kind !== "invite")
+            .map((notification) => notification.id);
 
     if (!targetIds.length) {
       return;
