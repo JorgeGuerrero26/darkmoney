@@ -35,6 +35,7 @@ import { ProgressBar } from "../../../components/ui/progress-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -691,6 +692,16 @@ function getStatusOption(status: ObligationStatus) {
 
 function getDirectionLabel(direction: ObligationDirection) {
   return direction === "receivable" ? "Me deben" : "Yo debo";
+}
+
+function getSharedDirectionLabel(direction: ObligationDirection) {
+  return direction === "receivable" ? "Credito compartido" : "Deuda compartida";
+}
+
+function getSharedDirectionDescription(direction: ObligationDirection) {
+  return direction === "receivable"
+    ? "Al propietario de este registro aun le deben pagar."
+    : "El propietario de este registro aun debe pagar.";
 }
 
 function getDirectionTone(direction: ObligationDirection) {
@@ -2888,7 +2899,7 @@ export function ObligationsPage() {
       obligationId,
       invitedEmail,
       message: formInput.message.trim() || null,
-      appUrl: window.location.origin,
+      appUrl: getPublicAppUrl(),
     } satisfies ObligationShareInviteInput);
   }
 
@@ -3880,7 +3891,7 @@ export function ObligationsPage() {
                       <div className="flex items-center gap-2">
                         <ArrowUpCircle className="h-4 w-4 text-pine" />
                         <p className="text-xs uppercase tracking-[0.18em] text-pine/90">
-                          Compartidos por cobrar
+                          Creditos compartidos
                         </p>
                       </div>
                       <p className="mt-3 font-display text-3xl font-semibold text-ink">
@@ -3889,9 +3900,12 @@ export function ObligationsPage() {
                       <p className="mt-3 text-sm leading-7 text-storm">
                         {sharedReceivables}{" "}
                         {sharedReceivables === 1
-                          ? "registro compartido por cobrar"
-                          : "registros compartidos por cobrar"}
+                          ? "credito compartido"
+                          : "creditos compartidos"}
                         .
+                      </p>
+                      <p className="text-sm text-storm/80">
+                        Al propietario aun le deben pagar este monto.
                       </p>
                       <p className="text-sm text-storm/80">
                         Principal actual: {sharedReceivablePrincipalDisplay}
@@ -3906,7 +3920,7 @@ export function ObligationsPage() {
                       <div className="flex items-center gap-2">
                         <ArrowDownCircle className="h-4 w-4 text-rosewood" />
                         <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">
-                          Compartidos por pagar
+                          Deudas compartidas
                         </p>
                       </div>
                       <p className="mt-3 font-display text-3xl font-semibold text-ink">
@@ -3915,9 +3929,12 @@ export function ObligationsPage() {
                       <p className="mt-3 text-sm leading-7 text-storm">
                         {sharedPayables}{" "}
                         {sharedPayables === 1
-                          ? "registro compartido por pagar"
-                          : "registros compartidos por pagar"}
+                          ? "deuda compartida"
+                          : "deudas compartidas"}
                         .
+                      </p>
+                      <p className="text-sm text-storm/80">
+                        El propietario aun debe pagar este monto.
                       </p>
                       <p className="text-sm text-storm/80">
                         Principal actual: {sharedPayablePrincipalDisplay}
@@ -4367,6 +4384,10 @@ export function ObligationsPage() {
                         tone="info"
                       />
                       <StatusBadge
+                        status={getSharedDirectionLabel(obligation.direction)}
+                        tone={getDirectionTone(obligation.direction)}
+                      />
+                      <StatusBadge
                         status={statusOption.label}
                         tone={getStatusTone(obligation.status)}
                       />
@@ -4401,6 +4422,9 @@ export function ObligationsPage() {
                         </div>
                         <p className="mt-3 text-sm leading-7 text-storm">
                           Compartida por {obligation.share.ownerDisplayName ?? "otro usuario"}.
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-storm/85">
+                          {getSharedDirectionDescription(obligation.direction)}
                         </p>
                         {obligation.description ? (
                           <p className="mt-3 text-sm leading-7 text-storm">{obligation.description}</p>

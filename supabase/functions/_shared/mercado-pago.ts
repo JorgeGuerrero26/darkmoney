@@ -80,23 +80,51 @@ export function getMercadoPagoWebhookSecret() {
 }
 
 export function resolveAppUrl(request: Request, explicitAppUrl?: string | null) {
-  if (explicitAppUrl && /^https?:\/\//i.test(explicitAppUrl)) {
-    return explicitAppUrl.replace(/\/$/, "");
+  const normalizeCandidate = (value?: string | null) => {
+    if (!value || !/^https?:\/\//i.test(value)) {
+      return null;
+    }
+
+    try {
+      const url = new URL(value);
+      const hostname = url.hostname.trim().toLowerCase();
+      const isLocalhost =
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname === "::1" ||
+        hostname.endsWith(".localhost");
+
+      if (url.protocol !== "https:" || isLocalhost) {
+        return null;
+      }
+
+      return value.replace(/\/$/, "");
+    } catch {
+      return null;
+    }
+  };
+
+  const configuredAppUrl = normalizeCandidate(Deno.env.get("APP_URL"));
+
+  if (configuredAppUrl) {
+    return configuredAppUrl;
   }
 
-  const originHeader = request.headers.get("origin");
+  const normalizedExplicitAppUrl = normalizeCandidate(explicitAppUrl);
 
-  if (originHeader && /^https?:\/\//i.test(originHeader)) {
-    return originHeader.replace(/\/$/, "");
+  if (normalizedExplicitAppUrl) {
+    return normalizedExplicitAppUrl;
   }
 
-  const configuredAppUrl = Deno.env.get("APP_URL");
+  const normalizedOriginHeader = normalizeCandidate(request.headers.get("origin"));
 
-  if (configuredAppUrl && /^https?:\/\//i.test(configuredAppUrl)) {
-    return configuredAppUrl.replace(/\/$/, "");
+  if (normalizedOriginHeader) {
+    return normalizedOriginHeader;
   }
 
-  throw new Error("No pudimos resolver APP_URL para el retorno de Mercado Pago.");
+  throw new Error(
+    "No pudimos resolver una APP_URL publica y segura para Mercado Pago. Configura APP_URL con una URL https real, por ejemplo https://darkmoney.company.",
+  );
 }
 
 export async function getAuthenticatedUser(request: Request) {

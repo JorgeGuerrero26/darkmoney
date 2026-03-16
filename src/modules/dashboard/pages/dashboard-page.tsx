@@ -3407,25 +3407,31 @@ export function DashboardPage() {
                 </p>
               </div>
               <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-pine">Compartidos por cobrar</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-pine">Creditos compartidos</p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedReceivableDisplay.amount, sharedReceivableDisplay.currencyCode)}
                 </p>
                 <p className="mt-2 text-sm text-storm">
                   {sharedReceivableObligations.length}{" "}
-                  {sharedReceivableObligations.length === 1 ? "registro" : "registros"} en solo lectura.
+                  {sharedReceivableObligations.length === 1 ? "credito" : "creditos"} en solo lectura.
+                </p>
+                <p className="mt-2 text-sm text-storm/85">
+                  Al propietario de estos registros aun le deben pagar.
                 </p>
               </div>
               <div className="rounded-[24px] border border-rosewood/18 bg-rosewood/10 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-rosewood">
-                  Compartidos por pagar
+                  Deudas compartidas
                 </p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedPayableDisplay.amount, sharedPayableDisplay.currencyCode)}
                 </p>
                 <p className="mt-2 text-sm text-storm">
                   {sharedPayableObligations.length}{" "}
-                  {sharedPayableObligations.length === 1 ? "registro" : "registros"} en solo lectura.
+                  {sharedPayableObligations.length === 1 ? "deuda" : "deudas"} en solo lectura.
+                </p>
+                <p className="mt-2 text-sm text-storm/85">
+                  El propietario de estos registros aun debe pagar.
                 </p>
               </div>
             </div>

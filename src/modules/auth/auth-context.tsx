@@ -2,6 +2,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { PropsWithChildren } from "react";
 
+import { getPublicAppUrl } from "../../lib/app-url";
 import { supabase, isSupabaseConfigured } from "../../services/supabase/client";
 
 type ProfileRow = {
@@ -252,6 +253,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       email: input.email,
       password: input.password,
       options: {
+        emailRedirectTo: `${getPublicAppUrl()}/auth/login`,
         data: {
           full_name: input.fullName,
         },
@@ -300,7 +302,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${getPublicAppUrl()}/auth/reset-password`,
     });
 
     if (error) {

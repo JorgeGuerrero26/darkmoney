@@ -10,6 +10,7 @@ import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel, formatWorkspaceRoleLabel } from "../../../lib/formatting/labels";
 import { useAuth } from "../../auth/auth-context";
@@ -570,7 +571,7 @@ export function SettingsPage() {
 
     try {
       const response = await startProCheckoutMutation.mutateAsync({
-        appUrl: window.location.origin,
+        appUrl: getPublicAppUrl(),
         workspaceId: activeWorkspace?.id ?? null,
       });
 
@@ -653,7 +654,7 @@ export function SettingsPage() {
         invitedEmail,
         role: invitedRole,
         note: invitationNote,
-        appUrl: window.location.origin,
+        appUrl: getPublicAppUrl(),
       });
 
       if (!result.alreadyMember && !result.emailSent) {
