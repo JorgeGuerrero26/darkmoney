@@ -194,6 +194,12 @@ function buildInviteEmail(input: {
 }
 
 Deno.serve(async (request) => {
+  console.log("create-obligation-share-invite request received", {
+    method: request.method,
+    origin: request.headers.get("origin"),
+    hasAuthorization: Boolean(request.headers.get("authorization")),
+  });
+
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -202,13 +208,27 @@ Deno.serve(async (request) => {
     return jsonResponse({ ok: false, error: "Metodo no permitido." }, { status: 405 });
   }
 
+  let debugContext: Record<string, unknown> = {};
+
   try {
     const user = await getAuthenticatedUser(request);
+    console.log("create-obligation-share-invite auth ok", {
+      userId: user.id,
+      userEmail: user.email ?? null,
+    });
     const body = await request.json().catch(() => ({}));
     const workspaceId = Number(body?.workspaceId);
     const obligationId = Number(body?.obligationId);
     const invitedEmail = normalizeEmail(body?.invitedEmail);
     const message = getOptionalText(body?.message);
+    debugContext = {
+      userId: user.id,
+      userEmail: user.email ?? null,
+      workspaceId,
+      obligationId,
+      invitedEmail,
+      hasMessage: Boolean(message),
+    };
 
     if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
       return jsonResponse({ ok: false, error: "No encontramos el workspace de este registro." });
@@ -427,6 +447,12 @@ Deno.serve(async (request) => {
       invitedDisplayName: invitedUser.full_name,
     });
   } catch (error) {
+    console.error("create-obligation-share-invite failed", {
+      ...debugContext,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack ?? null : null,
+    });
+
     return jsonResponse({
       ok: false,
       error:

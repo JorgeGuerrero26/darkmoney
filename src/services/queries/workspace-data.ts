@@ -809,6 +809,22 @@ function getClient() {
   return supabase;
 }
 
+async function buildFunctionInvokeOptions(body: Record<string, unknown> = {}) {
+  const client = getClient();
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+
+  return {
+    body,
+    headers: session?.access_token
+      ? {
+          Authorization: `Bearer ${session.access_token}`,
+        }
+      : undefined,
+  };
+}
+
 function toNumber(value: NumericLike) {
   if (typeof value === "number") {
     return value;
@@ -1153,13 +1169,14 @@ async function fetchWorkspaces(userId: string, profile?: AppProfile | null) {
 
 async function createSharedWorkspace(input: SharedWorkspaceMutationInput) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("create-shared-workspace", {
-    body: {
+  const { data, error } = await client.functions.invoke(
+    "create-shared-workspace",
+    await buildFunctionInvokeOptions({
       name: input.name,
       description: input.description ?? null,
       baseCurrencyCode: input.baseCurrencyCode ?? null,
-    },
-  });
+    }),
+  );
 
   if (error) {
     throw error;
@@ -1176,9 +1193,10 @@ async function createSharedWorkspace(input: SharedWorkspaceMutationInput) {
 
 async function fetchWorkspaceCollaboration(workspaceId: number) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("get-workspace-collaboration", {
-    body: { workspaceId },
-  });
+  const { data, error } = await client.functions.invoke(
+    "get-workspace-collaboration",
+    await buildFunctionInvokeOptions({ workspaceId }),
+  );
 
   if (error) {
     throw error;
@@ -1201,15 +1219,16 @@ async function fetchWorkspaceCollaboration(workspaceId: number) {
 
 async function createWorkspaceInvitation(input: WorkspaceInvitationMutationInput) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("create-workspace-invitation", {
-    body: {
+  const { data, error } = await client.functions.invoke(
+    "create-workspace-invitation",
+    await buildFunctionInvokeOptions({
       workspaceId: input.workspaceId,
       invitedEmail: input.invitedEmail,
       role: input.role,
       note: input.note ?? null,
       appUrl: input.appUrl ?? null,
-    },
-  });
+    }),
+  );
 
   if (error) {
     throw error;
@@ -1236,9 +1255,10 @@ async function createWorkspaceInvitation(input: WorkspaceInvitationMutationInput
 
 async function fetchWorkspaceInvitationDetails(token: string) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("get-workspace-invite", {
-    body: { token },
-  });
+  const { data, error } = await client.functions.invoke(
+    "get-workspace-invite",
+    await buildFunctionInvokeOptions({ token }),
+  );
 
   if (error) {
     throw error;
@@ -1255,9 +1275,10 @@ async function fetchWorkspaceInvitationDetails(token: string) {
 
 async function acceptWorkspaceInvitation(token: string) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("accept-workspace-invite", {
-    body: { token },
-  });
+  const { data, error } = await client.functions.invoke(
+    "accept-workspace-invite",
+    await buildFunctionInvokeOptions({ token }),
+  );
 
   if (error) {
     throw error;
@@ -1931,9 +1952,10 @@ async function fetchObligationShares(workspaceId: number) {
 
 async function fetchObligationShareInviteDetails(token: string) {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("get-obligation-share-invite", {
-    body: { token },
-  });
+  const { data, error } = await client.functions.invoke(
+    "get-obligation-share-invite",
+    await buildFunctionInvokeOptions({ token }),
+  );
 
   if (error) {
     throw error;
@@ -1950,9 +1972,10 @@ async function fetchObligationShareInviteDetails(token: string) {
 
 async function fetchSharedObligations() {
   const client = getClient();
-  const { data, error } = await client.functions.invoke("list-shared-obligations", {
-    body: {},
-  });
+  const { data, error } = await client.functions.invoke(
+    "list-shared-obligations",
+    await buildFunctionInvokeOptions({}),
+  );
 
   if (error) {
     throw error;
@@ -2465,13 +2488,14 @@ export function useStartProCheckoutMutation(userId?: string) {
   return useMutation({
     mutationFn: async (input: StartProCheckoutInput) => {
       const client = getClient();
-      const { data, error } = await client.functions.invoke("create-pro-checkout", {
-        body: {
+      const { data, error } = await client.functions.invoke(
+        "create-pro-checkout",
+        await buildFunctionInvokeOptions({
           provider: "mercado_pago",
           appUrl: input.appUrl,
           workspaceId: input.workspaceId ?? null,
-        },
-      });
+        }),
+      );
 
       if (error) {
         throw error;
@@ -2509,11 +2533,12 @@ export function useCancelProSubscriptionMutation(userId?: string) {
   return useMutation({
     mutationFn: async () => {
       const client = getClient();
-      const { data, error } = await client.functions.invoke("cancel-pro-subscription", {
-        body: {
+      const { data, error } = await client.functions.invoke(
+        "cancel-pro-subscription",
+        await buildFunctionInvokeOptions({
           provider: "mercado_pago",
-        },
-      });
+        }),
+      );
 
       if (error) {
         throw error;
@@ -2539,15 +2564,16 @@ export function useCreateObligationShareInviteMutation(workspaceId?: number, use
   return useMutation({
     mutationFn: async (input: ObligationShareInviteInput) => {
       const client = getClient();
-      const { data, error } = await client.functions.invoke("create-obligation-share-invite", {
-        body: {
+      const { data, error } = await client.functions.invoke(
+        "create-obligation-share-invite",
+        await buildFunctionInvokeOptions({
           workspaceId: input.workspaceId,
           obligationId: input.obligationId,
           invitedEmail: input.invitedEmail,
           message: input.message ?? null,
           appUrl: input.appUrl ?? null,
-        },
-      });
+        }),
+      );
 
       if (error) {
         throw error;
@@ -2596,9 +2622,10 @@ export function useAcceptObligationShareMutation(userId?: string) {
   return useMutation({
     mutationFn: async (token: string) => {
       const client = getClient();
-      const { data, error } = await client.functions.invoke("accept-obligation-share", {
-        body: { token },
-      });
+      const { data, error } = await client.functions.invoke(
+        "accept-obligation-share",
+        await buildFunctionInvokeOptions({ token }),
+      );
 
       if (error) {
         throw error;
