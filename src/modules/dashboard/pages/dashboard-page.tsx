@@ -27,6 +27,7 @@ import {
 } from "../../../lib/formatting/money";
 import {
   getQueryErrorMessage,
+  useSharedObligationsQuery,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import type {
@@ -2014,7 +2015,9 @@ export function DashboardPage() {
     workspaces,
   } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  const sharedObligationsQuery = useSharedObligationsQuery(user?.id);
   const snapshot = snapshotQuery.data;
+  const sharedObligations = sharedObligationsQuery.data ?? [];
 
   const [comparisonPreset, setComparisonPreset] = useState<ComparisonPreset>("month");
   const [topCount, setTopCount] = useState<number>(8);
@@ -2050,6 +2053,7 @@ export function DashboardPage() {
           baseCurrencyCode,
           ...(snapshot?.accounts ?? []).map((account) => account.currencyCode),
           ...(snapshot?.obligations ?? []).map((obligation) => obligation.currencyCode),
+          ...sharedObligations.map((obligation) => obligation.currencyCode),
           ...(snapshot?.subscriptions ?? []).map((subscription) => subscription.currencyCode),
         ].map((currencyCode) => normalizeCurrencyCode(currencyCode)),
       ),
@@ -2091,7 +2095,7 @@ export function DashboardPage() {
             ? "base del workspace"
             : "conversion global",
     }));
-  }, [baseCurrencyCode, exchangeRateMap, snapshot?.accounts, snapshot?.obligations, snapshot?.subscriptions]);
+  }, [baseCurrencyCode, exchangeRateMap, sharedObligations, snapshot?.accounts, snapshot?.obligations, snapshot?.subscriptions]);
   const defaultDashboardCurrencyCode =
     dashboardCurrencyOptions.find((option) => option.value === "PEN")?.value ??
     dashboardCurrencyOptions[0]?.value ??
@@ -2344,6 +2348,45 @@ export function DashboardPage() {
       pendingAmountInBaseCurrency: convertedPendingAmount ?? null,
     };
   });
+  const displaySharedObligations = sharedObligations.map((obligation) => {
+    const convertedPrincipalAmount = convertDashboardAmount({
+      amount: obligation.principalAmount,
+      currencyCode: obligation.currencyCode,
+      amountInBaseCurrency: obligation.principalAmountInBaseCurrency,
+      baseCurrencyCode,
+      targetCurrencyCode: displayCurrencyCode,
+      exchangeRateMap,
+    });
+    const convertedCurrentPrincipalAmount = convertDashboardAmount({
+      amount: obligation.currentPrincipalAmount ?? obligation.principalAmount,
+      currencyCode: obligation.currencyCode,
+      amountInBaseCurrency:
+        obligation.currentPrincipalAmountInBaseCurrency ?? obligation.principalAmountInBaseCurrency,
+      baseCurrencyCode,
+      targetCurrencyCode: displayCurrencyCode,
+      exchangeRateMap,
+    });
+    const convertedPendingAmount = convertDashboardAmount({
+      amount: obligation.pendingAmount,
+      currencyCode: obligation.currencyCode,
+      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
+      baseCurrencyCode,
+      targetCurrencyCode: displayCurrencyCode,
+      exchangeRateMap,
+    });
+
+    return {
+      ...obligation,
+      currencyCode: displayCurrencyCode,
+      principalAmount: convertedPrincipalAmount ?? obligation.principalAmount,
+      principalAmountInBaseCurrency: convertedPrincipalAmount ?? null,
+      currentPrincipalAmount:
+        convertedCurrentPrincipalAmount ?? obligation.currentPrincipalAmount ?? obligation.principalAmount,
+      currentPrincipalAmountInBaseCurrency: convertedCurrentPrincipalAmount ?? null,
+      pendingAmount: convertedPendingAmount ?? obligation.pendingAmount,
+      pendingAmountInBaseCurrency: convertedPendingAmount ?? null,
+    };
+  });
   const displaySubscriptions = snapshot.subscriptions.map((subscription) => {
     const convertedAmount = convertDashboardAmount({
       amount: subscription.amount,
@@ -2439,6 +2482,45 @@ export function DashboardPage() {
         amount: obligation.pendingAmount,
         amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
       })),
+    displayCurrencyCode,
+  );
+  const sharedPrincipalDisplay = resolveAggregateAmountDisplay(
+    displaySharedObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.currentPrincipalAmount ?? obligation.principalAmount,
+      amountInBaseCurrency:
+        obligation.currentPrincipalAmountInBaseCurrency ?? obligation.principalAmountInBaseCurrency,
+    })),
+    displayCurrencyCode,
+  );
+  const sharedPendingDisplay = resolveAggregateAmountDisplay(
+    displaySharedObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.pendingAmount,
+      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
+    })),
+    displayCurrencyCode,
+  );
+  const sharedReceivableObligations = displaySharedObligations.filter(
+    (obligation) => obligation.direction === "receivable",
+  );
+  const sharedPayableObligations = displaySharedObligations.filter(
+    (obligation) => obligation.direction === "payable",
+  );
+  const sharedReceivableDisplay = resolveAggregateAmountDisplay(
+    sharedReceivableObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.pendingAmount,
+      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
+    })),
+    displayCurrencyCode,
+  );
+  const sharedPayableDisplay = resolveAggregateAmountDisplay(
+    sharedPayableObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.pendingAmount,
+      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
+    })),
     displayCurrencyCode,
   );
 
@@ -3267,6 +3349,88 @@ export function DashboardPage() {
             </p>
           </div>
         </section>
+      ) : null}
+
+      {isWidgetVisible("overview_kpis") &&
+      effectiveDashboardMode === "advanced" &&
+      (sharedObligationsQuery.isLoading ||
+        sharedObligationsQuery.error ||
+        displaySharedObligations.length > 0) ? (
+        <SurfaceCard
+          action={
+            <StatusBadge
+              status={
+                sharedObligationsQuery.isLoading
+                  ? "Cargando..."
+                  : sharedObligationsQuery.error
+                    ? "Con incidencia"
+                    : `${displaySharedObligations.length} compartidos`
+              }
+              tone="info"
+            />
+          }
+          description="Lectura separada de los creditos y deudas compartidos contigo en modo solo lectura. No se mezclan con los KPIs del workspace."
+          title="Cartera compartida contigo"
+        >
+          {sharedObligationsQuery.isLoading ? (
+            <DataState
+              description="Estamos trayendo los registros que otros usuarios compartieron contigo."
+              title="Cargando cartera compartida"
+            />
+          ) : sharedObligationsQuery.error ? (
+            <DataState
+              description={getQueryErrorMessage(
+                sharedObligationsQuery.error,
+                "No pudimos cargar la cartera compartida contigo.",
+              )}
+              title="No pudimos abrir los compartidos"
+              tone="error"
+            />
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-4">
+              <div className="glass-panel-soft rounded-[24px] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal compartido</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedPrincipalDisplay.amount, sharedPrincipalDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  Base actual de {displaySharedObligations.length} registros en seguimiento.
+                </p>
+              </div>
+              <div className="glass-panel-soft rounded-[24px] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendiente compartido</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedPendingDisplay.amount, sharedPendingDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  Exposicion viva que ves aparte de tu cartera propia.
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-pine">Compartidos por cobrar</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedReceivableDisplay.amount, sharedReceivableDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  {sharedReceivableObligations.length}{" "}
+                  {sharedReceivableObligations.length === 1 ? "registro" : "registros"} en solo lectura.
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-rosewood/18 bg-rosewood/10 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-rosewood">
+                  Compartidos por pagar
+                </p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedPayableDisplay.amount, sharedPayableDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  {sharedPayableObligations.length}{" "}
+                  {sharedPayableObligations.length === 1 ? "registro" : "registros"} en solo lectura.
+                </p>
+              </div>
+            </div>
+          )}
+        </SurfaceCard>
       ) : null}
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (

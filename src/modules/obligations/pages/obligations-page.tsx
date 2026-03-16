@@ -2939,6 +2939,44 @@ export function ObligationsPage() {
     "principal",
     baseCurrencyCode,
   );
+  const sharedReceivableObligations = sharedObligations.filter(
+    (obligation) => obligation.direction === "receivable",
+  );
+  const sharedPayableObligations = sharedObligations.filter(
+    (obligation) => obligation.direction === "payable",
+  );
+  const sharedReceivables = sharedReceivableObligations.length;
+  const sharedPayables = sharedPayableObligations.length;
+  const sharedPrincipalDisplay = getObligationAmountDisplay(
+    sharedObligations,
+    "principal",
+    baseCurrencyCode,
+  );
+  const sharedPendingDisplay = getObligationAmountDisplay(
+    sharedObligations,
+    "pending",
+    baseCurrencyCode,
+  );
+  const sharedReceivablePendingDisplay = getObligationAmountDisplay(
+    sharedReceivableObligations,
+    "pending",
+    baseCurrencyCode,
+  );
+  const sharedReceivablePrincipalDisplay = getObligationAmountDisplay(
+    sharedReceivableObligations,
+    "principal",
+    baseCurrencyCode,
+  );
+  const sharedPayablePendingDisplay = getObligationAmountDisplay(
+    sharedPayableObligations,
+    "pending",
+    baseCurrencyCode,
+  );
+  const sharedPayablePrincipalDisplay = getObligationAmountDisplay(
+    sharedPayableObligations,
+    "principal",
+    baseCurrencyCode,
+  );
   const filteredObligations = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase();
 
@@ -3687,6 +3725,14 @@ export function ObligationsPage() {
         description="Resumen general de la cartera activa del workspace."
         title="Balance de cartera"
       >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="text-sm leading-7 text-storm">
+            Estos montos corresponden a tu workspace activo. Los registros compartidos contigo se
+            muestran aparte para no mezclarlos con tu cartera propia.
+          </p>
+          <StatusBadge status="Workspace activo" tone="neutral" />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-4">
           <div className="glass-panel-soft rounded-[26px] p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal total</p>
@@ -3747,6 +3793,142 @@ export function ObligationsPage() {
               <StatusBadge status="Por pagar" tone="danger" />
             </div>
           </div>
+        </div>
+
+        <div className="mt-5 rounded-[28px] border border-[#7aa2ff]/18 bg-[#7aa2ff]/[0.06] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-[#9fb9ff]" />
+                <p className="text-xs uppercase tracking-[0.18em] text-[#c8d8ff]">
+                  Compartidos contigo
+                </p>
+              </div>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                Esta lectura es solo informativa y en modo solo lectura. No entra en los totales
+                del workspace activo.
+              </p>
+            </div>
+            <StatusBadge
+              status={
+                sharedObligationsQuery.isLoading
+                  ? "Cargando..."
+                  : sharedObligationsQuery.error
+                    ? "Con incidencia"
+                    : `${sharedObligations.length} compartidos`
+              }
+              tone="info"
+            />
+          </div>
+
+          {sharedObligationsQuery.isLoading ? (
+            <div className="mt-4 rounded-[24px] border border-white/10 bg-black/10 p-4">
+              <p className="text-sm font-medium text-ink">Buscando cartera compartida</p>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                Estamos revisando los creditos y deudas que otros usuarios te compartieron.
+              </p>
+            </div>
+          ) : sharedObligationsQuery.error ? (
+            <div className="mt-4 rounded-[24px] border border-rosewood/18 bg-rosewood/[0.08] p-4">
+              <p className="text-sm font-medium text-ink">No pudimos abrir los compartidos</p>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                {getQueryErrorMessage(
+                  sharedObligationsQuery.error,
+                  "Intentalo otra vez en unos segundos.",
+                )}
+              </p>
+            </div>
+          ) : sharedObligations.length === 0 ? (
+            <div className="mt-4 rounded-[24px] border border-white/10 bg-black/10 p-4">
+              <p className="text-sm font-medium text-ink">Aun no tienes registros compartidos</p>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                Cuando otra persona te comparta un credito o deuda aceptado, aqui veras el resumen
+                total sin confundirlo con tu cartera propia.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="glass-panel-soft rounded-[26px] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">
+                    Principal compartido
+                  </p>
+                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {sharedPrincipalDisplay}
+                  </p>
+                  <p className="mt-2 text-sm text-storm">
+                    Base actual de {sharedObligations.length} registros en seguimiento.
+                  </p>
+                </div>
+                <div className="glass-panel-soft rounded-[26px] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">
+                    Pendiente compartido
+                  </p>
+                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {sharedPendingDisplay}
+                  </p>
+                  <p className="mt-2 text-sm text-storm">
+                    Saldo vivo de los accesos compartidos contigo.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[26px] border border-pine/14 bg-pine/[0.06] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ArrowUpCircle className="h-4 w-4 text-pine" />
+                        <p className="text-xs uppercase tracking-[0.18em] text-pine/90">
+                          Compartidos por cobrar
+                        </p>
+                      </div>
+                      <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                        {sharedReceivablePendingDisplay}
+                      </p>
+                      <p className="mt-3 text-sm leading-7 text-storm">
+                        {sharedReceivables}{" "}
+                        {sharedReceivables === 1
+                          ? "registro compartido por cobrar"
+                          : "registros compartidos por cobrar"}
+                        .
+                      </p>
+                      <p className="text-sm text-storm/80">
+                        Principal actual: {sharedReceivablePrincipalDisplay}
+                      </p>
+                    </div>
+                    <StatusBadge status="Solo lectura" tone="success" />
+                  </div>
+                </div>
+                <div className="rounded-[26px] border border-rosewood/16 bg-rosewood/[0.06] p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ArrowDownCircle className="h-4 w-4 text-rosewood" />
+                        <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">
+                          Compartidos por pagar
+                        </p>
+                      </div>
+                      <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                        {sharedPayablePendingDisplay}
+                      </p>
+                      <p className="mt-3 text-sm leading-7 text-storm">
+                        {sharedPayables}{" "}
+                        {sharedPayables === 1
+                          ? "registro compartido por pagar"
+                          : "registros compartidos por pagar"}
+                        .
+                      </p>
+                      <p className="text-sm text-storm/80">
+                        Principal actual: {sharedPayablePrincipalDisplay}
+                      </p>
+                    </div>
+                    <StatusBadge status="Solo lectura" tone="danger" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </SurfaceCard>
 
