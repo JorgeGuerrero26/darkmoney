@@ -1,6 +1,8 @@
 import {
   Bell,
   BriefcaseBusiness,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CreditCard,
@@ -9,17 +11,27 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  PiggyBank,
+  Search,
   Settings,
+  Shapes,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import { BrandLogo } from "../../components/ui/brand-logo";
 import { Button } from "../../components/ui/button";
 import { DataState } from "../../components/ui/data-state";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { useAuth } from "../../modules/auth/auth-context";
+import {
+  QuickMovementDialog,
+  type QuickMovementKind,
+} from "../../modules/movements/components/quick-movement-dialog";
+import { useNotificationInbox } from "../../modules/notifications/use-notification-inbox";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
@@ -29,11 +41,15 @@ import {
 } from "../../services/queries/workspace-data";
 import { isSupabaseConfigured } from "../../services/supabase/client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
+import type { Workspace } from "../../types/domain";
 
 const navigation = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid },
   { to: "/app/accounts", label: "Cuentas", icon: Wallet },
   { to: "/app/movements", label: "Movimientos", icon: Gauge },
+  { to: "/app/categories", label: "Categorias", icon: Shapes },
+  { to: "/app/budgets", label: "Presupuestos", icon: PiggyBank },
+  { to: "/app/contacts", label: "Contactos", icon: Users },
   { to: "/app/obligations", label: "Creditos y deudas", icon: HandCoins },
   { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
   { to: "/app/notifications", label: "Notificaciones", icon: Bell },
@@ -92,8 +108,192 @@ function IdentityAvatar({
   );
 }
 
+function getWorkspaceKindLabel(kind: Workspace["kind"]) {
+  return kind === "shared" ? "Compartido" : "Personal";
+}
+
+function getWorkspaceRoleLabel(role: Workspace["role"]) {
+  switch (role) {
+    case "owner":
+      return "Propietario";
+    case "admin":
+      return "Administrador";
+    case "viewer":
+      return "Solo lectura";
+    default:
+      return "Miembro";
+  }
+}
+
+function getWorkspaceAccentColor(kind: Workspace["kind"]) {
+  return kind === "shared" ? "#4566d6" : "#1b6a58";
+}
+
+function useWorkspacePickerPanel(isOpen: boolean, onClose: () => void) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen, onClose]);
+
+  return containerRef;
+}
+
+function WorkspacePicker({
+  activeWorkspaceId,
+  disabled = false,
+  isLoading,
+  onChange,
+  workspaces,
+}: {
+  activeWorkspaceId: number | null;
+  disabled?: boolean;
+  isLoading: boolean;
+  onChange: (workspaceId: number) => void;
+  workspaces: Workspace[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useWorkspacePickerPanel(isOpen, () => setIsOpen(false));
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
+    [activeWorkspaceId, workspaces],
+  );
+  const filteredWorkspaces = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return workspaces;
+    }
+
+    return workspaces.filter((workspace) =>
+      `${workspace.name} ${workspace.kind} ${workspace.role} ${workspace.baseCurrencyCode}`
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [query, workspaces]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setQuery("");
+    }
+  }, [isOpen]);
+
+  return (
+    <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
+      <button
+        className={`flex min-h-[5.1rem] w-full items-start justify-between gap-3 rounded-[24px] border border-white/10 bg-[#101725] px-4 py-3.5 text-left text-ink shadow-[0_20px_45px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] transition duration-200 hover:border-white/14 hover:bg-[#131c2b] ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        disabled={disabled}
+        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        type="button"
+      >
+        <span className="flex min-w-0 items-start gap-3">
+          <span
+            className="mt-0.5 flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+            style={{
+              backgroundColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}22` : undefined,
+              borderColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}55` : undefined,
+              color: selectedWorkspace ? "#fff" : undefined,
+            }}
+          >
+            {selectedWorkspace ? buildInitials(selectedWorkspace.name, "WS") : "WS"}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block whitespace-normal text-sm font-semibold leading-6 text-ink">
+              {selectedWorkspace?.name ?? (isLoading ? "Preparando..." : "Sin workspace")}
+            </span>
+            <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
+              {selectedWorkspace
+                ? `${getWorkspaceKindLabel(selectedWorkspace.kind)} · ${getWorkspaceRoleLabel(selectedWorkspace.role)} · Base ${selectedWorkspace.baseCurrencyCode}`
+                : "Cambia rapido entre espacios personales y compartidos."}
+            </span>
+          </span>
+        </span>
+        <ChevronDown className={`mt-2 h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen ? (
+        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#0a111b] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.62)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+            <input
+              autoFocus
+              className="w-full rounded-[22px] border border-white/10 bg-[#111a28] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar workspace..."
+              type="text"
+              value={query}
+            />
+          </div>
+
+          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
+            {filteredWorkspaces.length ? (
+              filteredWorkspaces.map((workspace) => {
+                const isSelected = workspace.id === activeWorkspaceId;
+                const accentColor = getWorkspaceAccentColor(workspace.kind);
+
+                return (
+                  <button
+                    className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0f1826] px-4 py-3.5 text-left transition duration-200 hover:border-white/12 hover:bg-[#122032]"
+                    key={workspace.id}
+                    onClick={() => {
+                      onChange(workspace.id);
+                      setIsOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <span className="flex min-w-0 items-start gap-3">
+                      <span
+                        className="mt-0.5 flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+                        style={{
+                          backgroundColor: `${accentColor}22`,
+                          borderColor: `${accentColor}55`,
+                          color: "#fff",
+                        }}
+                      >
+                        {buildInitials(workspace.name, "WS")}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block whitespace-normal font-medium leading-6 text-ink">
+                          {workspace.name}
+                        </span>
+                        <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
+                          {getWorkspaceKindLabel(workspace.kind)} · {getWorkspaceRoleLabel(workspace.role)} · Base {workspace.baseCurrencyCode}
+                        </span>
+                      </span>
+                    </span>
+                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="rounded-[22px] border border-white/8 bg-[#0f1826] px-4 py-5 text-sm text-storm">
+                No encontramos workspaces con ese nombre.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
+  const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
+  const [quickMovementFeedback, setQuickMovementFeedback] = useState("");
   const navigate = useNavigate();
   const { profile, signOut, user } = useAuth();
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
@@ -107,8 +307,15 @@ export function AppShell() {
     workspaces,
   } = useActiveWorkspace();
   const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  useNotificationsQuery(user?.id);
-  useNotificationPreferencesQuery(user?.id);
+  const notificationsQuery = useNotificationsQuery(user?.id);
+  const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
+  const notificationInbox = useNotificationInbox({
+    databaseNotifications: notificationsQuery.data ?? [],
+    snapshot: workspaceSnapshotQuery.data,
+    workspaceName: activeWorkspace?.name,
+  });
+  const unreadNotificationsCount =
+    notificationPreferencesQuery.data?.inAppEnabled === false ? 0 : notificationInbox.unreadCount;
   const currentUserName = profile?.fullName ?? user?.email?.split("@")[0] ?? "Usuario";
   const currentUserEmail = profile?.email ?? user?.email ?? "";
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
@@ -139,6 +346,20 @@ export function AppShell() {
     navigate("/auth/login", { replace: true });
   }
 
+  function openQuickMovement(kind: QuickMovementKind) {
+    if (!activeWorkspace || !user?.id || !workspaceSnapshotQuery.data) {
+      return;
+    }
+
+    setQuickMovementFeedback("");
+    setQuickMovementKind(kind);
+    setIsQuickMovementOpen(true);
+  }
+
+  const canUseQuickMovement =
+    Boolean(activeWorkspace && user?.id && workspaceSnapshotQuery.data) &&
+    !workspaceSnapshotQuery.isLoading;
+
   return (
     <div className="min-h-screen bg-glow text-ink">
       {sidebarOpen ? (
@@ -161,29 +382,55 @@ export function AppShell() {
           <div className="flex h-full flex-col">
             <div
               className={`flex ${
-                isSidebarCollapsed ? "items-center gap-3 lg:flex-col lg:justify-start" : "items-center justify-between gap-3"
+                isSidebarCollapsed ? "items-center gap-3 lg:flex-col lg:justify-start" : "items-start justify-between gap-4"
               }`}
             >
               <div
-                className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} h-14 w-14 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.04] font-display text-lg font-semibold tracking-[0.24em] text-ink`}
+                className={`min-w-0 ${isSidebarCollapsed ? "hidden lg:flex lg:flex-col lg:items-center lg:gap-3" : "flex flex-1 flex-col items-start gap-4"}`}
               >
-                DM
+                {isSidebarCollapsed ? (
+                  <BrandLogo
+                    className="h-14 w-14 rounded-[18px]"
+                    imageClassName="scale-[1.02] object-[center_48%]"
+                  />
+                ) : (
+                  <div className="flex w-full items-start justify-between gap-4">
+                    <BrandLogo
+                      className="h-28 w-28 rounded-[28px]"
+                      imageClassName="scale-[1.02] object-[center_48%]"
+                    />
+                    <button
+                      aria-label="Colapsar menu lateral"
+                      className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
+                      onClick={() => toggleSidebarCollapsed()}
+                      title="Colapsar menu"
+                      type="button"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                <div className={isSidebarCollapsed ? "hidden" : "min-w-0 max-w-[13rem]"}>
+                  <p className="text-[0.68rem] uppercase tracking-[0.28em] text-storm/72">
+                    Workspace OS
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-storm">
+                    Finanzas personales y compartidas en un solo sistema.
+                  </p>
+                </div>
               </div>
 
-              <div className={isSidebarCollapsed ? "min-w-0 lg:hidden" : "min-w-0"}>
-                <p className="text-xs uppercase tracking-[0.26em] text-storm/80">DarkMoney</p>
-                <p className="mt-2 font-display text-3xl font-semibold">Workspace OS</p>
-              </div>
-
-              <button
-                aria-label={isSidebarCollapsed ? "Expandir menu lateral" : "Colapsar menu lateral"}
-                className="hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
-                onClick={() => toggleSidebarCollapsed()}
-                title={isSidebarCollapsed ? "Expandir menu" : "Colapsar menu"}
-                type="button"
-              >
-                {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              </button>
+              {isSidebarCollapsed ? (
+                <button
+                  aria-label="Expandir menu lateral"
+                  className="hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
+                  onClick={() => toggleSidebarCollapsed()}
+                  title="Expandir menu"
+                  type="button"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              ) : null}
 
               <button
                 aria-label="Cerrar menu"
@@ -219,31 +466,15 @@ export function AppShell() {
               <label className="mt-5 block text-xs uppercase tracking-[0.22em] text-storm/80">
                 Cambiar workspace
               </label>
-              <select
-                className="field-dark mt-2"
-                disabled={!workspaces.length}
-                onChange={(event) => setActiveWorkspaceId(Number(event.target.value))}
-                value={activeWorkspace?.id ?? ""}
-              >
-                {!workspaces.length ? (
-                  <option
-                    className="bg-shell text-ink"
-                    value=""
-                  >
-                    {isLoading ? "Preparando..." : "Sin workspaces"}
-                  </option>
-                ) : (
-                  workspaces.map((workspace) => (
-                    <option
-                      className="bg-shell text-ink"
-                      key={workspace.id}
-                      value={workspace.id}
-                    >
-                      {workspace.name}
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="mt-2">
+                <WorkspacePicker
+                  activeWorkspaceId={activeWorkspace?.id ?? null}
+                  disabled={!workspaces.length}
+                  isLoading={isLoading}
+                  onChange={(workspaceId) => setActiveWorkspaceId(workspaceId)}
+                  workspaces={workspaces}
+                />
+              </div>
               {error ? (
                 <p className="mt-3 text-sm leading-6 text-rosewood">{workspaceErrorMessage}</p>
               ) : null}
@@ -278,6 +509,7 @@ export function AppShell() {
             <nav className="mt-8 space-y-2">
               {navigation.map((item) => {
                 const Icon = item.icon;
+                const isNotificationsItem = item.to === "/app/notifications";
                 return (
                   <NavLink
                     className={({ isActive }) =>
@@ -297,7 +529,14 @@ export function AppShell() {
                     to={item.to}
                     title={isSidebarCollapsed ? item.label : undefined}
                   >
-                    <Icon className={isSidebarCollapsed ? "h-5 w-5" : "h-4 w-4"} />
+                    <span className="relative inline-flex">
+                      <Icon className={isSidebarCollapsed ? "h-5 w-5" : "h-4 w-4"} />
+                      {isNotificationsItem && unreadNotificationsCount > 0 ? (
+                        <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
+                          {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className={isSidebarCollapsed ? "lg:sr-only" : ""}>{item.label}</span>
                   </NavLink>
                 );
@@ -382,18 +621,38 @@ export function AppShell() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button
-                  disabled={!activeWorkspace}
+                  className="relative"
+                  onClick={() => navigate("/app/notifications")}
+                  variant="ghost"
+                >
+                  <Bell className="h-4 w-4" />
+                  Alertas
+                  {unreadNotificationsCount > 0 ? (
+                    <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
+                      {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                    </span>
+                  ) : null}
+                </Button>
+                <Button
+                  disabled={!canUseQuickMovement}
+                  onClick={() => openQuickMovement("expense")}
                   variant="ghost"
                 >
                   Nuevo gasto
                 </Button>
                 <Button
-                  disabled={!activeWorkspace}
+                  disabled={!canUseQuickMovement}
+                  onClick={() => openQuickMovement("income")}
                   variant="secondary"
                 >
                   Nuevo ingreso
                 </Button>
-                <Button disabled={!activeWorkspace}>Transferencia</Button>
+                <Button
+                  disabled={!canUseQuickMovement}
+                  onClick={() => openQuickMovement("transfer")}
+                >
+                  Transferencia
+                </Button>
               </div>
             </div>
             {!activeWorkspace && !isLoading ? (
@@ -411,9 +670,31 @@ export function AppShell() {
             ) : null}
           </header>
 
+          {quickMovementFeedback ? (
+            <DataState
+              description={quickMovementFeedback}
+              title="Movimiento registrado"
+              tone="success"
+            />
+          ) : null}
+
           <Outlet />
         </div>
       </div>
+
+      {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data ? (
+        <QuickMovementDialog
+          initialKind={quickMovementKind}
+          onClose={() => setIsQuickMovementOpen(false)}
+          onCreated={(message) => {
+            setQuickMovementFeedback(message);
+            setIsQuickMovementOpen(false);
+          }}
+          snapshot={workspaceSnapshotQuery.data}
+          userId={user.id}
+          workspaceId={activeWorkspace.id}
+        />
+      ) : null}
     </div>
   );
 }

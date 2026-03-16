@@ -1,17 +1,22 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { useAuth } from "../auth-context";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isConfigured, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const nextPath = searchParams.get("next");
+  const resolvedNextPath =
+    nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/app";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -20,7 +25,7 @@ export function LoginPage() {
 
     try {
       await signIn(email, password);
-      navigate("/app", { replace: true });
+      navigate(resolvedNextPath, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo iniciar sesion.";
       setErrorMessage(message);
@@ -42,6 +47,7 @@ export function LoginPage() {
 
       <form
         className="glass-panel space-y-4 rounded-[28px] p-6"
+        noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
@@ -65,9 +71,10 @@ export function LoginPage() {
           />
         </label>
         {errorMessage ? (
-          <div className="rounded-2xl border border-rosewood/20 bg-rosewood/10 px-4 py-3 text-sm text-rosewood">
-            {errorMessage}
-          </div>
+          <FormFeedbackBanner
+            description={errorMessage}
+            title="No pudimos iniciar sesion"
+          />
         ) : null}
         {!isConfigured ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">

@@ -92,7 +92,7 @@ function buildFallbackProfile(user: User): AppProfile {
     email: user.email ?? "",
     fullName,
     initials: initials || "DM",
-    baseCurrencyCode: "USD",
+    baseCurrencyCode: "PEN",
     timezone: getDefaultTimezone(),
   };
 }
@@ -119,7 +119,7 @@ async function ensureProfile(user: User) {
   const payload = {
     id: user.id,
     full_name: getUserMetadata(user).full_name ?? null,
-    base_currency_code: "USD",
+    base_currency_code: "PEN",
     timezone: getDefaultTimezone(),
   };
 
@@ -312,19 +312,52 @@ export function AuthProvider({ children }: PropsWithChildren) {
       throw new Error("No hay sesion activa.");
     }
 
+    const normalizedFullName = input.fullName.trim();
+    const normalizedBaseCurrencyCode = input.baseCurrencyCode.trim().toUpperCase();
+    const normalizedTimezone = input.timezone.trim();
+
     const { data, error } = await supabase
       .from("profiles")
       .upsert({
         id: user.id,
-        full_name: input.fullName,
-        base_currency_code: input.baseCurrencyCode,
-        timezone: input.timezone,
+        full_name: normalizedFullName,
+        base_currency_code: normalizedBaseCurrencyCode,
+        timezone: normalizedTimezone,
       })
       .select("id, full_name, base_currency_code, timezone")
       .single();
 
     if (error) {
       throw error;
+    }
+
+    const { data: defaultMemberships, error: membershipsError } = await supabase
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("user_id", user.id)
+      .eq("is_default_workspace", true);
+
+    if (membershipsError) {
+      throw membershipsError;
+    }
+
+    const defaultWorkspaceIds = Array.from(
+      new Set((defaultMemberships ?? []).map((membership) => membership.workspace_id as number)),
+    );
+
+    if (defaultWorkspaceIds.length > 0) {
+      const { error: workspaceSyncError } = await supabase
+        .from("workspaces")
+        .update({
+          base_currency_code: normalizedBaseCurrencyCode,
+        })
+        .in("id", defaultWorkspaceIds)
+        .eq("owner_user_id", user.id)
+        .eq("kind", "personal");
+
+      if (workspaceSyncError) {
+        throw workspaceSyncError;
+      }
     }
 
     setProfile(buildProfile(data as ProfileRow, user));

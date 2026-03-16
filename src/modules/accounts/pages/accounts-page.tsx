@@ -22,11 +22,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { formatDateTime } from "../../../lib/formatting/dates";
-import { formatCurrency } from "../../../lib/formatting/money";
+import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
+import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import type { AccountSummary } from "../../../types/domain";
@@ -330,7 +332,7 @@ const accountPickerTriggerClassName = `${accountFieldClassName} flex h-16 items-
 const accountPickerSearchInputClassName =
   "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 const editorPanelClassName =
-  "glass-panel-soft relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
+  "glass-panel-soft relative overflow-visible rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
 const accountFieldLabelClassName =
   "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
 const accountFieldHintClassName = "mt-2 text-xs leading-6 text-storm/75";
@@ -414,7 +416,7 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
 
   return (
     <div
-      className="relative"
+      className={`relative ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
@@ -443,7 +445,7 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
 
       {isOpen ? (
         <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -541,7 +543,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
 
   return (
     <div
-      className="relative"
+      className={`relative ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
@@ -567,7 +569,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
 
       {isOpen ? (
         <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -672,7 +674,7 @@ function AccountIconSelect({
 
   return (
     <div
-      className="relative"
+      className={`relative ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
@@ -698,7 +700,7 @@ function AccountIconSelect({
 
       {isOpen ? (
         <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-30 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={pickerPanelStyle}
         >
           <div className="relative">
@@ -834,13 +836,12 @@ function AccountEditorDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-40 bg-black/62 backdrop-blur-xl"
-      onClick={closeEditor}
+      className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[980px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="pointer-events-none absolute inset-0">
@@ -893,11 +894,123 @@ function AccountEditorDialog({
 
             <form
               className="mt-6 flex flex-1 flex-col"
+              noValidate
               onSubmit={(event) => void handleSubmit(event)}
             >
-              <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+              <div className="space-y-6">
+                {errorMessage ? (
+                  <FormFeedbackBanner
+                    description={errorMessage}
+                    title="Revisa los datos antes de guardar"
+                  />
+                ) : null}
                 <div className="space-y-6">
-                  <section className={editorPanelClassName}>
+                  <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 sm:p-6 lg:p-7">
+                    <div
+                      className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
+                      style={{ backgroundColor: `${formState.color}3d` }}
+                    />
+                    <div className="relative">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
+                          Live preview
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
+                          {formState.includeInNetWorth
+                            ? "Incluida en patrimonio"
+                            : "Fuera de patrimonio"}
+                        </span>
+                      </div>
+
+                      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-end">
+                        <div className="flex items-start gap-5">
+                          <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+                            <div
+                              className="absolute inset-0 rounded-[30px] opacity-80 blur-2xl"
+                              style={{ backgroundColor: `${formState.color}5f` }}
+                            />
+                            <div
+                              className="relative flex h-full w-full items-center justify-center rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
+                              style={{
+                                background: `linear-gradient(160deg, ${formState.color}, rgba(8, 13, 20, 0.72))`,
+                              }}
+                            >
+                              <PreviewAccountIcon className="h-9 w-9" />
+                            </div>
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                              Vista previa
+                            </p>
+                            <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">
+                              {previewAccountName}
+                            </h3>
+                            <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
+                              {previewType.description}
+                            </p>
+                            <div className="mt-5 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                                {previewType.label}
+                              </span>
+                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                                {previewCurrency?.code ?? baseCurrencyCode}
+                              </span>
+                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                                {previewIconOption.label}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
+                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                              Saldo inicial
+                            </p>
+                            <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                              {formatCurrency(
+                                previewOpeningBalance,
+                                previewCurrency?.code ?? baseCurrencyCode,
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
+                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                              Moneda
+                            </p>
+                            <p className="mt-3 text-sm font-medium text-ink">
+                              {previewCurrency?.label ?? "Moneda configurada"}
+                            </p>
+                            <p className="mt-2 text-xs leading-6 text-storm/75">
+                              {previewCurrency
+                                ? `${previewCurrency.code} - ${previewCurrency.region}`
+                                : "Usaremos la moneda base del workspace."}
+                            </p>
+                          </div>
+
+                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
+                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                              Estado patrimonio
+                            </p>
+                            <p className="mt-3 text-sm font-medium text-ink">
+                              {formState.includeInNetWorth
+                                ? "Incluida en el net worth"
+                                : "Excluida del net worth"}
+                            </p>
+                            <p className="mt-2 text-xs leading-6 text-storm/75">
+                              {formState.includeInNetWorth
+                                ? "Aportara al resumen general del workspace."
+                                : "Quedara fuera del calculo patrimonial."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`${editorPanelClassName} z-40`}>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
@@ -934,8 +1047,8 @@ function AccountEditorDialog({
                           value={formState.name}
                         />
                         <p className={accountFieldHintClassName}>
-                          Usa un nombre corto y facil de reconocer, por ejemplo “Cuenta principal”
-                          o “Caja operativa”.
+                          Usa un nombre corto y facil de reconocer, por ejemplo "Cuenta principal"
+                          o "Caja operativa".
                         </p>
                       </label>
 
@@ -967,7 +1080,7 @@ function AccountEditorDialog({
                     </div>
                   </section>
 
-                  <section className={editorPanelClassName}>
+                  <section className={`${editorPanelClassName} z-10`}>
                     <div>
                       <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                         Finanzas
@@ -980,7 +1093,7 @@ function AccountEditorDialog({
                       </p>
                     </div>
 
-                    <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+                    <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,1.26fr)]">
                       <label className="block">
                         <div className="flex items-center justify-between gap-3">
                           <span className={accountFieldLabelClassName}>Saldo inicial</span>
@@ -1015,7 +1128,7 @@ function AccountEditorDialog({
                         </p>
                         <p className="mt-2 text-sm text-storm">
                           {previewCurrency
-                            ? `${previewCurrency.label} · ${previewCurrency.region}`
+                            ? `${previewCurrency.label} - ${previewCurrency.region}`
                             : "Sin moneda seleccionada"}
                         </p>
                         <div className="mt-4 h-px bg-white/8" />
@@ -1029,97 +1142,7 @@ function AccountEditorDialog({
                 </div>
 
                 <div className="space-y-6">
-                  <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 sm:p-6">
-                    <div
-                      className="absolute -right-10 top-0 h-28 w-28 rounded-full blur-3xl animate-soft-pulse"
-                      style={{ backgroundColor: `${formState.color}3d` }}
-                    />
-                    <div className="relative">
-                      <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
-                          Live preview
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
-                          {formState.includeInNetWorth
-                            ? "Incluida en patrimonio"
-                            : "Fuera de patrimonio"}
-                        </span>
-                      </div>
-
-                      <div className="mt-6 flex items-start gap-4">
-                        <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
-                          <div
-                            className="absolute inset-0 rounded-[26px] opacity-80 blur-2xl"
-                            style={{ backgroundColor: `${formState.color}5f` }}
-                          />
-                          <div
-                            className="relative flex h-full w-full items-center justify-center rounded-[26px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
-                            style={{
-                              background: `linear-gradient(160deg, ${formState.color}, rgba(8, 13, 20, 0.72))`,
-                            }}
-                          >
-                            <PreviewAccountIcon className="h-8 w-8" />
-                          </div>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Vista previa
-                          </p>
-                          <h3 className="mt-2 break-words font-display text-3xl font-semibold text-ink">
-                            {previewAccountName}
-                          </h3>
-                          <p className="mt-2 text-sm leading-7 text-storm">
-                            {previewType.description}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex flex-wrap gap-2">
-                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                          {previewType.label}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                          {previewCurrency?.code ?? baseCurrencyCode}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                          {previewIconOption.label}
-                        </span>
-                      </div>
-
-                      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                        <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Saldo inicial
-                          </p>
-                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                            {formatCurrency(
-                              previewOpeningBalance,
-                              previewCurrency?.code ?? baseCurrencyCode,
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Estado patrimonio
-                          </p>
-                          <p className="mt-3 text-sm font-medium text-ink">
-                            {formState.includeInNetWorth
-                              ? "Incluida en el net worth"
-                              : "Excluida del net worth"}
-                          </p>
-                          <p className="mt-2 text-xs leading-6 text-storm/75">
-                            {formState.includeInNetWorth
-                              ? "Aportara al resumen general del workspace."
-                              : "Quedara fuera del calculo patrimonial."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className={editorPanelClassName}>
+                  <section className={`${editorPanelClassName} z-30`}>
                     <div>
                       <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                         Visual
@@ -1210,7 +1233,7 @@ function AccountEditorDialog({
                     </div>
                   </section>
 
-                  <section className={editorPanelClassName}>
+                  <section className={`${editorPanelClassName} z-20`}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
@@ -1275,7 +1298,7 @@ function AccountEditorDialog({
                   </section>
 
                   {selectedAccount ? (
-                    <section className={editorPanelClassName}>
+                    <section className={`${editorPanelClassName} z-10`}>
                       <div>
                         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                           Contexto actual
@@ -1310,16 +1333,6 @@ function AccountEditorDialog({
                   ) : null}
                 </div>
               </div>
-
-              {errorMessage ? (
-                <div className="mt-6">
-                  <DataState
-                    description={errorMessage}
-                    title="No pudimos guardar la cuenta"
-                    tone="error"
-                  />
-                </div>
-              ) : null}
 
               <div className="mt-8 border-t border-white/10 pt-5 sm:pt-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1405,6 +1418,111 @@ function AccountEditorDialog({
   );
 }
 
+function AccountArchiveDialog({
+  account,
+  isSaving,
+  onCancel,
+  onConfirm,
+}: {
+  account: AccountSummary;
+  isSaving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const nextArchivedValue = !account.isArchived;
+  const AccountIcon = getAccountIcon(account.icon, account.type);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-xl">
+      <div className="w-full max-w-[720px] rounded-[38px] border border-white/12 bg-[#090e16]/96 p-6 shadow-[0_40px_130px_rgba(0,0,0,0.62)] sm:p-7">
+        <div className="flex items-start gap-4">
+          <div
+            className={`flex h-14 w-14 items-center justify-center rounded-[22px] border ${
+              nextArchivedValue
+                ? "border-gold/18 bg-gold/10 text-gold"
+                : "border-pine/20 bg-pine/10 text-pine"
+            }`}
+          >
+            {nextArchivedValue ? <Archive className="h-6 w-6" /> : <RotateCcw className="h-6 w-6" />}
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${
+                  nextArchivedValue
+                    ? "border-gold/25 bg-gold/10 text-gold"
+                    : "border-pine/25 bg-pine/10 text-pine"
+                }`}
+              >
+                {nextArchivedValue ? "Archivar cuenta" : "Reactivar cuenta"}
+              </span>
+            </div>
+            <h3 className="mt-4 font-display text-4xl font-semibold text-ink">
+              {nextArchivedValue ? "Confirma antes de archivarla" : "Confirma antes de reactivarla"}
+            </h3>
+            <p className="mt-4 max-w-2xl text-base leading-8 text-storm">
+              {nextArchivedValue
+                ? "La cuenta seguira existiendo con su historial, pero dejara de aparecer en la vista principal hasta que la reactives."
+                : "La cuenta volvera a mostrarse como activa y quedara disponible otra vez en los paneles principales del workspace."}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+          <div className="flex items-start gap-4">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-[22px] text-white shadow-lg"
+              style={{ backgroundColor: account.color }}
+            >
+              <AccountIcon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-semibold text-ink">{account.name}</p>
+              <p className="mt-2 text-sm text-storm">
+                {account.type} - {account.currencyCode}
+              </p>
+              <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                {formatCurrency(account.currentBalance, account.currencyCode)}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <StatusBadge
+                  status={account.includeInNetWorth ? "Incluida en patrimonio" : "Fuera de patrimonio"}
+                  tone={account.includeInNetWorth ? "success" : "warning"}
+                />
+                {account.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+          <Button disabled={isSaving} onClick={onCancel} variant="ghost">
+            Cancelar
+          </Button>
+          <Button
+            className={
+              nextArchivedValue
+                ? "bg-gold text-[#0b0d12] hover:brightness-105 focus-visible:outline-gold"
+                : "bg-pine text-[#07110e] hover:brightness-105 focus-visible:outline-pine"
+            }
+            disabled={isSaving}
+            onClick={onConfirm}
+          >
+            {isSaving ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : nextArchivedValue ? (
+              <Archive className="mr-2 h-4 w-4" />
+            ) : (
+              <RotateCcw className="mr-2 h-4 w-4" />
+            )}
+            {nextArchivedValue ? "Archivar cuenta" : "Reactivar cuenta"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AccountsPage() {
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -1413,6 +1531,7 @@ export function AccountsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<AccountEditorMode>("create");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -1430,14 +1549,20 @@ export function AccountsPage() {
     selectedAccountId !== null
       ? snapshot?.accounts.find((account) => account.id === selectedAccountId) ?? null
       : null;
+  const archiveTarget =
+    archiveTargetId !== null
+      ? snapshot?.accounts.find((account) => account.id === archiveTargetId) ?? null
+      : null;
   const visibleAccounts = showArchived
     ? snapshot?.accounts ?? []
     : (snapshot?.accounts.filter((account) => !account.isArchived) ?? []);
   const activeAccounts = snapshot?.accounts.filter((account) => !account.isArchived) ?? [];
   const archivedAccounts = snapshot?.accounts.filter((account) => account.isArchived) ?? [];
-  const netWorthBalance = activeAccounts
-    .filter((account) => account.includeInNetWorth)
-    .reduce((total, account) => total + account.currentBalance, 0);
+  const netWorthAccounts = activeAccounts.filter((account) => account.includeInNetWorth);
+  const netWorthDisplay = resolveAggregateBalanceDisplay(
+    netWorthAccounts,
+    snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? profile?.baseCurrencyCode ?? "USD",
+  );
   const excludedAccounts = activeAccounts.filter((account) => !account.includeInNetWorth).length;
   const isSaving =
     createAccountMutation.isPending ||
@@ -1643,39 +1768,41 @@ export function AccountsPage() {
     }
   }
 
-  async function handleArchiveToggle(account: AccountSummary) {
-    if (!activeWorkspace || !user) {
+  async function handleConfirmArchiveToggle() {
+    if (!activeWorkspace || !user || !archiveTarget) {
       return;
     }
 
-    const nextArchivedValue = !account.isArchived;
-    const confirmed = window.confirm(
-      nextArchivedValue
-        ? `Vas a archivar "${account.name}". La cuenta seguira existiendo pero saldra de la vista principal.`
-        : `Vas a reactivar "${account.name}".`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
+    const nextArchivedValue = !archiveTarget.isArchived;
 
     setFeedbackMessage("");
     setErrorMessage("");
 
     try {
       await archiveAccountMutation.mutateAsync({
-        accountId: account.id,
+        accountId: archiveTarget.id,
         isArchived: nextArchivedValue,
         userId: user.id,
         workspaceId: activeWorkspace.id,
       });
 
+      setArchiveTargetId(null);
       setFeedbackMessage(
         nextArchivedValue ? "Cuenta archivada correctamente." : "Cuenta reactivada correctamente.",
       );
     } catch (error) {
       setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar el estado de la cuenta."));
     }
+  }
+
+  function handleArchiveToggle(account: AccountSummary) {
+    if (!activeWorkspace || !user) {
+      return;
+    }
+
+    setFeedbackMessage("");
+    setErrorMessage("");
+    setArchiveTargetId(account.id);
   }
 
   async function handleDeleteAccount() {
@@ -1716,7 +1843,7 @@ export function AccountsPage() {
 
   if (workspaceError) {
     return (
-      <div className="space-y-6 pb-8">
+      <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           description="Necesitamos permisos de lectura del workspace para mostrar y editar las cuentas."
           eyebrow="accounts"
@@ -1733,7 +1860,7 @@ export function AccountsPage() {
 
   if (!activeWorkspace && !isWorkspacesLoading) {
     return (
-      <div className="space-y-6 pb-8">
+      <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           description="Las cuentas viven dentro de un workspace real."
           eyebrow="accounts"
@@ -1749,7 +1876,7 @@ export function AccountsPage() {
 
   if (!snapshot && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
-      <div className="space-y-6 pb-8">
+      <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           actions={
             <>
@@ -1773,7 +1900,7 @@ export function AccountsPage() {
 
   if (snapshotQuery.error || !snapshot) {
     return (
-      <div className="space-y-6 pb-8">
+      <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           description="Intentamos leer la tabla accounts y calcular los saldos actuales."
           eyebrow="accounts"
@@ -1790,7 +1917,7 @@ export function AccountsPage() {
 
   return (
     <>
-      <div className="space-y-6 pb-8">
+      <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           actions={
             <>
@@ -1806,14 +1933,14 @@ export function AccountsPage() {
               </Button>
             </>
           }
-          description="Inventario real de cuentas por workspace, con saldo actual calculado desde opening_balance y movimientos posted."
+          description="Inventario real de cuentas por workspace, con saldo actual calculado desde opening_balance y movimientos aplicados."
           eyebrow="accounts"
           title="Cuentas financieras"
         >
           <div className="flex flex-wrap gap-3 text-sm text-storm">
             <StatusBadge status={`${snapshot.accounts.length} cuentas`} tone="neutral" />
             <StatusBadge status={`${archivedAccounts.length} archivadas`} tone="warning" />
-            <StatusBadge status={snapshot.workspace.kind} tone="info" />
+            <StatusBadge status={formatWorkspaceKindLabel(snapshot.workspace.kind)} tone="info" />
             {snapshotQuery.isFetching ? (
               <StatusBadge
                 className="animate-soft-pulse"
@@ -1824,7 +1951,7 @@ export function AccountsPage() {
           </div>
         </PageHeader>
 
-        {errorMessage ? (
+        {errorMessage && !isEditorOpen ? (
           <DataState
             description={errorMessage}
             title="No pudimos completar la accion"
@@ -1934,7 +2061,7 @@ export function AccountsPage() {
             <div className="glass-panel-soft rounded-[26px] p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Net worth</p>
               <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                {formatCurrency(netWorthBalance, snapshot.workspace.baseCurrencyCode)}
+                {formatCurrency(netWorthDisplay.amount, netWorthDisplay.currencyCode)}
               </p>
               <p className="mt-2 text-sm text-storm">Solo cuentas incluidas en patrimonio.</p>
             </div>
@@ -1966,6 +2093,21 @@ export function AccountsPage() {
           isSaving={isSaving}
           selectedAccount={selectedAccount}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {archiveTarget ? (
+        <AccountArchiveDialog
+          account={archiveTarget}
+          isSaving={archiveAccountMutation.isPending}
+          onCancel={() => {
+            if (!archiveAccountMutation.isPending) {
+              setArchiveTargetId(null);
+            }
+          }}
+          onConfirm={() => {
+            void handleConfirmArchiveToggle();
+          }}
         />
       ) : null}
     </>

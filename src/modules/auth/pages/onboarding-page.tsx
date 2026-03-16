@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { useAuth } from "../auth-context";
 
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { profile, saveProfile } = useAuth();
   const [fullName, setFullName] = useState(profile?.fullName ?? "");
-  const [baseCurrencyCode, setBaseCurrencyCode] = useState(profile?.baseCurrencyCode ?? "USD");
+  const [baseCurrencyCode, setBaseCurrencyCode] = useState(profile?.baseCurrencyCode ?? "PEN");
   const [timezone, setTimezone] = useState(profile?.timezone ?? "America/Lima");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -85,6 +86,7 @@ export function OnboardingPage() {
         <section className="glass-panel-strong rounded-[32px] p-8">
           <form
             className="space-y-6"
+            noValidate
             onSubmit={handleSubmit}
           >
             <div className="space-y-3">
@@ -126,7 +128,12 @@ export function OnboardingPage() {
                   >
                     <option value="America/Lima">America/Lima</option>
                     <option value="America/Bogota">America/Bogota</option>
+                    <option value="America/Santiago">America/Santiago</option>
+                    <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires</option>
                     <option value="America/Mexico_City">America/Mexico_City</option>
+                    <option value="America/New_York">America/New_York</option>
+                    <option value="Europe/Madrid">Europe/Madrid</option>
+                    <option value="UTC">UTC</option>
                   </select>
                 </label>
               </div>
@@ -147,14 +154,19 @@ export function OnboardingPage() {
 
             <div className="flex flex-wrap gap-3">
               {errorMessage ? (
-                <div className="w-full rounded-2xl border border-rosewood/20 bg-rosewood/10 px-4 py-3 text-sm text-rosewood">
-                  {errorMessage}
-                </div>
+                <FormFeedbackBanner
+                  className="w-full"
+                  description={errorMessage}
+                  title="No pudimos guardar tu perfil"
+                />
               ) : null}
               {successMessage ? (
-                <div className="w-full rounded-2xl border border-pine/20 bg-pine/10 px-4 py-3 text-sm text-pine">
-                  {successMessage}
-                </div>
+                <FormFeedbackBanner
+                  className="w-full"
+                  description={successMessage}
+                  title="Perfil listo"
+                  tone="success"
+                />
               ) : null}
               <Button
                 disabled={isSubmitting}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { useAuth } from "../auth-context";
 
 export function RecoveryPage() {
@@ -41,6 +42,7 @@ export function RecoveryPage() {
 
       <form
         className="glass-panel space-y-4 rounded-[28px] p-6"
+        noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
@@ -54,14 +56,17 @@ export function RecoveryPage() {
           />
         </label>
         {errorMessage ? (
-          <div className="rounded-2xl border border-rosewood/20 bg-rosewood/10 px-4 py-3 text-sm text-rosewood">
-            {errorMessage}
-          </div>
+          <FormFeedbackBanner
+            description={errorMessage}
+            title="No pudimos enviar el enlace"
+          />
         ) : null}
         {successMessage ? (
-          <div className="rounded-2xl border border-pine/20 bg-pine/10 px-4 py-3 text-sm text-pine">
-            {successMessage}
-          </div>
+          <FormFeedbackBanner
+            description={successMessage}
+            title="Correo enviado"
+            tone="success"
+          />
         ) : null}
         <Button
           className="w-full"

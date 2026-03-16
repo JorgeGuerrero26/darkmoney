@@ -123,6 +123,18 @@ En las tablas colaborativas el antiguo `user_id` se renombra a `created_by_user_
 | `bank` | Banco |
 | `other` | Otro |
 
+### `counterparty_role_type`
+
+| Valor | Descripcion |
+|---|---|
+| `client` | Cliente o pagador recurrente |
+| `supplier` | Proveedor al que compras o pagas |
+| `lender` | Prestamista o financiador |
+| `borrower` | Persona o entidad que te debe |
+| `bank` | Banco o entidad financiera |
+| `service_provider` | Proveedor de servicios o suscripciones |
+| `other` | Otro rol funcional |
+
 ### `category_kind`
 
 | Valor | Descripcion |
@@ -184,6 +196,8 @@ En las tablas colaborativas el antiguo `user_id` se renombra a `created_by_user_
 | Valor | Descripcion |
 |---|---|
 | `opening` | Apertura del monto original |
+| `principal_increase` | Aumento real del principal |
+| `principal_decrease` | Reduccion real del principal |
 | `payment` | Pago o abono |
 | `interest` | Interes |
 | `fee` | Cargo adicional |
@@ -330,10 +344,18 @@ Invitaciones para sumar miembros a un workspace compartido.
 | `id` | `bigint` | No | Identificador de la invitacion |
 | `workspace_id` | `bigint` | No | Workspace al que se invita |
 | `invited_email` | `text` | No | Correo del invitado |
+| `invited_user_id` | `uuid` | No | Usuario real de DarkMoney vinculado a ese correo |
 | `invited_by_user_id` | `uuid` | No | Usuario que envia la invitacion |
+| `invited_display_name` | `text` | Si | Nombre visible del invitado para correo y UI |
+| `invited_by_display_name` | `text` | Si | Nombre visible de quien envia la invitacion |
 | `role` | `workspace_role` | No | Rol sugerido |
 | `status` | `workspace_invitation_status` | No | Estado de la invitacion |
-| `note` | `text` | Si | Nota adicional |
+| `token` | `uuid` | No | Token unico para abrir y aceptar la invitacion desde correo |
+| `note` | `text` | Si | Nota adicional incluida por quien invita |
+| `accepted_at` | `timestamptz` | Si | Fecha en la que se acepto |
+| `responded_at` | `timestamptz` | Si | Fecha en la que se respondio |
+| `last_sent_at` | `timestamptz` | Si | Ultimo envio de correo de invitacion |
+| `metadata` | `jsonb` | No | Contexto tecnico adicional |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
@@ -380,6 +402,20 @@ Personas, empresas, bancos o servicios vinculados a movimientos y obligaciones.
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
+### `counterparty_roles`
+
+Roles funcionales de una contraparte dentro del workspace.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del rol asignado |
+| `workspace_id` | `bigint` | No | Workspace al que pertenece |
+| `counterparty_id` | `bigint` | No | Contraparte relacionada |
+| `role_type` | `counterparty_role_type` | No | Rol de negocio dentro del workspace |
+| `notes` | `text` | Si | Observaciones internas del rol |
+| `created_at` | `timestamptz` | No | Fecha de creacion |
+| `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
 ### `categories`
 
 Categorias de ingresos y gastos por workspace.
@@ -403,7 +439,7 @@ Categorias de ingresos y gastos por workspace.
 
 ### `budgets`
 
-Presupuestos por periodo.
+Presupuestos por periodo. Pueden ser generales, por categoria, por cuenta o por categoria dentro de una cuenta segun `category_id` y `account_id`.
 
 | Campo | Tipo | Nulo | Descripcion |
 |---|---|---|---|
@@ -425,6 +461,71 @@ Presupuestos por periodo.
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
+### `attachments`
+
+Metadata de comprobantes y adjuntos guardados en Storage.
+
+Nota operativa:
+
+- el bucket privado recomendado es `receipts`;
+- la ruta esperada es `workspace_id/entity_type/entity_id/uuid.webp`;
+- las policies de `storage.objects` deben exigir membresia al workspace y acceso Pro para subir o borrar.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del adjunto |
+| `workspace_id` | `bigint` | No | Workspace al que pertenece |
+| `entity_type` | `text` | No | Entidad funcional duena del adjunto: `movement`, `obligation` o `subscription` |
+| `entity_id` | `bigint` | No | ID del registro relacionado |
+| `bucket_name` | `text` | No | Bucket de Storage, por defecto `receipts` |
+| `file_path` | `text` | No | Ruta exacta del archivo en Storage |
+| `file_name` | `text` | No | Nombre visible del archivo |
+| `mime_type` | `text` | No | Tipo MIME guardado |
+| `size_bytes` | `bigint` | No | Peso del archivo |
+| `width` | `integer` | Si | Ancho de la imagen |
+| `height` | `integer` | Si | Alto de la imagen |
+| `uploaded_by_user_id` | `uuid` | No | Usuario que lo subio |
+| `created_at` | `timestamptz` | No | Fecha de subida |
+
+### `user_entitlements`
+
+Entitlements globales del producto para habilitar funciones premium como `Modo Pro`.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `user_id` | `uuid` | No | Usuario dueno del entitlement |
+| `plan_code` | `text` | No | Plan actual, por ejemplo `free` o `pro` |
+| `pro_access_enabled` | `boolean` | No | Bandera efectiva de acceso Pro |
+| `billing_status` | `text` | Si | Estado devuelto por el proveedor de cobro |
+| `billing_provider` | `text` | Si | Proveedor futuro de facturacion |
+| `provider_customer_id` | `text` | Si | ID externo del cliente |
+| `provider_subscription_id` | `text` | Si | ID externo de la suscripcion |
+| `current_period_start` | `timestamptz` | Si | Inicio del periodo pagado |
+| `current_period_end` | `timestamptz` | Si | Fin del periodo pagado |
+| `cancel_at_period_end` | `boolean` | No | Marca si el plan dejara de renovarse al terminar el periodo |
+| `manual_override` | `boolean` | No | Permite habilitar acceso sin depender del cobro |
+| `metadata` | `jsonb` | No | Datos adicionales del proveedor o la suscripcion |
+| `created_at` | `timestamptz` | No | Fecha de creacion |
+| `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
+### `billing_events`
+
+Bitacora tecnica de checkout, webhooks y sincronizaciones con proveedores de cobro como Mercado Pago.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del evento registrado |
+| `provider` | `text` | No | Proveedor externo, por ahora `mercado_pago` |
+| `provider_event_id` | `text` | Si | ID externo del evento o recurso recibido |
+| `provider_event_type` | `text` | Si | Tipo de evento informado por el proveedor |
+| `user_id` | `uuid` | Si | Usuario impactado, si pudo resolverse |
+| `external_reference` | `text` | Si | Referencia funcional propia usada para enlazar el evento con DarkMoney |
+| `payload` | `jsonb` | No | Payload crudo o enriquecido para auditoria y debugging |
+| `processed` | `boolean` | No | Marca si el evento ya fue procesado correctamente |
+| `processing_error` | `text` | Si | Mensaje de error si el webhook o sync fallo |
+| `processed_at` | `timestamptz` | Si | Fecha de procesamiento exitoso |
+| `created_at` | `timestamptz` | No | Fecha en que se registro el evento |
+
 ### `obligations`
 
 Tabla central para creditos y deudas.
@@ -442,7 +543,7 @@ Tabla central para creditos y deudas.
 | `counterparty_id` | `bigint` | No | Persona o entidad relacionada |
 | `settlement_account_id` | `bigint` | Si | Cuenta usada para pagos |
 | `currency_code` | `char(3)` | No | Moneda principal |
-| `principal_amount` | `numeric(14,2)` | No | Monto base |
+| `principal_amount` | `numeric(14,2)` | No | Monto inicial de apertura. No representa necesariamente el monto vigente si luego hubo aumentos o reducciones de principal |
 | `start_date` | `date` | No | Fecha de inicio |
 | `due_date` | `date` | Si | Fecha objetivo de cierre |
 | `installment_amount` | `numeric(14,2)` | Si | Monto sugerido por cuota |
@@ -450,6 +551,31 @@ Tabla central para creditos y deudas.
 | `interest_rate` | `numeric(8,4)` | Si | Tasa de interes opcional |
 | `description` | `text` | Si | Descripcion funcional |
 | `notes` | `text` | Si | Notas libres |
+| `created_at` | `timestamptz` | No | Fecha de creacion |
+| `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
+### `obligation_shares`
+
+Invitaciones y acceso compartido de creditos o deudas con otros usuarios existentes de DarkMoney. El usuario invitado las acepta por correo y luego las ve en modo solo lectura dentro de su propio modulo.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del share |
+| `workspace_id` | `bigint` | No | Workspace donde vive el registro original |
+| `obligation_id` | `bigint` | No | Credito o deuda compartida |
+| `owner_user_id` | `uuid` | No | Usuario dueno del registro compartido |
+| `invited_by_user_id` | `uuid` | No | Usuario que envio la invitacion |
+| `invited_user_id` | `uuid` | No | Usuario DarkMoney que recibira el acceso compartido |
+| `owner_display_name` | `text` | Si | Nombre del dueno al momento de invitar |
+| `invited_display_name` | `text` | Si | Nombre del usuario invitado |
+| `invited_email` | `text` | No | Correo del usuario invitado, normalizado en minusculas |
+| `status` | `text` | No | Estado de la invitacion: `pending`, `accepted`, `declined` o `revoked` |
+| `token` | `uuid` | No | Token unico del enlace del correo |
+| `message` | `text` | Si | Mensaje opcional enviado junto con la invitacion |
+| `accepted_at` | `timestamptz` | Si | Fecha en la que se acepto el acceso |
+| `responded_at` | `timestamptz` | Si | Fecha de respuesta a la invitacion |
+| `last_sent_at` | `timestamptz` | Si | Ultimo intento de envio por correo |
+| `metadata` | `jsonb` | No | Datos adicionales del share |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
@@ -466,10 +592,30 @@ Detalle historico de eventos sobre una obligacion.
 | `amount` | `numeric(14,2)` | No | Monto del evento |
 | `installment_no` | `integer` | Si | Numero de cuota |
 | `description` | `text` | Si | Descripcion corta |
+| `reason` | `text` | Si | Motivo funcional del evento o cambio, por ejemplo un aumento o reduccion de principal |
 | `notes` | `text` | Si | Notas ampliadas |
-| `movement_id` | `bigint` | Si | Movimiento financiero asociado |
+| `movement_id` | `bigint` | Si | Movimiento financiero asociado, cuando el evento impacta una cuenta real |
+| `created_by_user_id` | `uuid` | Si | Usuario que registro el evento en la aplicacion |
+| `metadata` | `jsonb` | No | Datos adicionales del evento en formato JSON |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
+### `obligation_change_history`
+
+Auditoria de cambios estructurales en creditos y deudas.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del cambio |
+| `workspace_id` | `bigint` | No | Workspace al que pertenece el registro auditado |
+| `obligation_id` | `bigint` | No | Credito o deuda afectada |
+| `change_type` | `text` | No | Tipo de cambio, por ejemplo `principal_increase`, `principal_decrease` o `conditions_updated` |
+| `reason` | `text` | Si | Motivo funcional del cambio |
+| `changed_by_user_id` | `uuid` | Si | Usuario que realizo el cambio |
+| `before_data` | `jsonb` | No | Snapshot del registro antes del cambio |
+| `after_data` | `jsonb` | No | Snapshot del registro despues del cambio |
+| `metadata` | `jsonb` | No | Contexto adicional en formato JSON |
+| `created_at` | `timestamptz` | No | Fecha de registro del cambio |
 
 ### `subscriptions`
 
@@ -538,12 +684,43 @@ Libro mayor operativo del sistema.
 | `source_amount` | `numeric(14,2)` | Si | Monto salido |
 | `destination_account_id` | `bigint` | Si | Cuenta destino |
 | `destination_amount` | `numeric(14,2)` | Si | Monto ingresado |
-| `fx_rate` | `numeric(18,8)` | Si | Tipo de cambio aplicado |
+| `fx_rate` | `numeric(18,8)` | Si | Tipo de cambio aplicado al movimiento en el momento del registro |
 | `category_id` | `bigint` | Si | Categoria contable |
 | `counterparty_id` | `bigint` | Si | Contraparte relacionada |
 | `obligation_id` | `bigint` | Si | Obligacion relacionada |
 | `subscription_id` | `bigint` | Si | Suscripcion relacionada |
 | `metadata` | `jsonb` | No | Datos adicionales en JSON |
+| `created_at` | `timestamptz` | No | Fecha de creacion |
+| `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
+### `exchange_rates`
+
+Tabla de tipos de cambio historicos para conversion entre monedas del sistema.
+
+Regla principal:
+
+- `1 from_currency_code = rate to_currency_code`
+
+Uso esperado:
+
+- convertir patrimonio y balances agregados a la moneda base del workspace;
+- resolver transferencias y reportes entre cuentas con monedas distintas;
+- mantener historial por fecha efectiva (`effective_at`).
+
+Nota operativa:
+
+- `movements.fx_rate` conserva la tasa exacta usada por una operacion puntual;
+- `exchange_rates` y `v_latest_exchange_rates` sirven como referencia vigente para conversiones agregadas del workspace.
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador del registro |
+| `from_currency_code` | `text` | No | Moneda origen en formato ISO 4217, por ejemplo `USD` |
+| `to_currency_code` | `text` | No | Moneda destino en formato ISO 4217, por ejemplo `PEN` |
+| `rate` | `numeric(18,8)` | No | Tipo de cambio aplicado |
+| `effective_at` | `timestamptz` | No | Fecha y hora desde la que ese tipo de cambio es valido |
+| `source` | `text` | Si | Fuente del tipo de cambio, por ejemplo `manual` o proveedor externo |
+| `notes` | `text` | Si | Observaciones del registro |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
@@ -603,17 +780,24 @@ Historial compartido de acciones dentro de un workspace.
 |---|---|
 | `v_user_workspaces` | Lista los workspaces a los que pertenece cada usuario, con rol y marca de workspace por defecto |
 | `v_account_balances` | Calcula el saldo actual por cuenta usando opening_balance + entradas - salidas |
-| `v_obligation_summary` | Resume principal, pagos, extras, descuentos, saldo pendiente y porcentaje de avance |
-| `v_budget_progress` | Calcula gasto ejecutado, saldo remanente y porcentaje usado de cada presupuesto |
+| `v_obligation_summary` | Resume principal inicial, aumentos y reducciones de principal, principal vigente, pagos, extras, saldo pendiente y porcentaje de avance |
+| `v_counterparty_summary` | Resume por contacto sus roles, montos por cobrar, montos por pagar, flujo historico, ultima actividad y balance neto |
+| `v_budget_progress` | Calcula gasto ejecutado, saldo remanente, porcentaje usado, alcance derivado y alertas de cada presupuesto |
 | `v_subscription_upcoming` | Lista vencimientos proximos o vencidos con cuenta, categoria y proveedor |
 | `v_workspace_balances` | Totaliza saldos por workspace y moneda |
+| `v_latest_exchange_rates` | Devuelve el ultimo tipo de cambio disponible por par de monedas para conversiones agregadas |
 
 ## 7. Reglas funcionales recomendadas
 
 - Un usuario puede pertenecer a varios workspaces: el personal y uno o mas compartidos.
 - Una cuenta compartida se implementa como una cuenta dentro de un `workspace shared`.
 - Si dos miembros pertenecen al mismo workspace, ambos deben ver movimientos, presupuestos y suscripciones de ese workspace.
+- Las contrapartes deben centralizarse en `counterparties`; sus roles de negocio se expresan en `counterparty_roles` para evitar duplicados entre clientes, proveedores, bancos y otras relaciones.
 - Los creditos y deudas pueden ser personales o compartidos segun el workspace.
+- En creditos y deudas, `obligations.principal_amount` debe conservar el monto inicial de apertura; los cambios posteriores deben registrarse como eventos y auditoria, no sobreescribiendo el principal original.
+- Los comprobantes deben guardarse en Storage con la ruta `workspace_id/entity_type/entity_id/uuid.webp`, y su metadata debe vivir en `attachments`.
+- Las funciones premium como adjuntar comprobantes deben resolverse con `user_entitlements` o un override administrativo, no solo desde flags visuales del frontend.
+- Compartir un credito o deuda con otro usuario debe resolverse con `obligation_shares`, confirmacion explicita por correo y acceso solo lectura para el usuario invitado.
 - Las notificaciones por gasto compartido deben generarse por usuario destinatario en `notifications`, usando `activity_log` y/o `movements`.
 - La seguridad de acceso debe cerrarse con politicas RLS basadas en `workspace_members` y no solo en `created_by_user_id`.
 

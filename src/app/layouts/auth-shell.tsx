@@ -1,5 +1,6 @@
-import { WalletCards } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
+
+import { BrandLogo } from "../../components/ui/brand-logo";
 
 export function AuthShell() {
   return (
@@ -7,10 +8,15 @@ export function AuthShell() {
       <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl overflow-hidden rounded-[32px] border border-white/10 bg-shell/80 shadow-haze backdrop-blur-2xl xl:grid-cols-[1.05fr_0.95fr]">
         <section className="hidden flex-col justify-between bg-gradient-to-br from-shell via-void to-shell px-10 py-10 text-ink xl:flex">
           <div className="space-y-6">
-            <span className="inline-flex w-fit items-center gap-3 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-medium text-storm">
-              <WalletCards className="h-4 w-4" />
-              DarkMoney
-            </span>
+            <div className="space-y-4">
+              <BrandLogo
+                className="h-24 w-24 rounded-[28px]"
+                imageClassName="scale-[1.02] object-[center_48%]"
+              />
+              <p className="text-sm uppercase tracking-[0.24em] text-storm/72">
+                Workspace OS
+              </p>
+            </div>
             <div className="max-w-lg space-y-4">
               <p className="text-sm uppercase tracking-[0.28em] text-storm/80">
                 finanzas personales y compartidas
@@ -23,6 +29,10 @@ export function AuthShell() {
                 experiencia pensada para que todo se entienda de un vistazo.
               </p>
             </div>
+            <BrandLogo
+              className="h-[248px] w-[248px] rounded-[36px]"
+              imageClassName="scale-[1.02] object-[center_48%]"
+            />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -46,10 +56,10 @@ export function AuthShell() {
         <section className="flex items-center justify-center p-6 sm:p-10">
           <div className="w-full max-w-md space-y-8">
             <div className="space-y-3 xl:hidden">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-medium text-ink">
-                <WalletCards className="h-4 w-4" />
-                DarkMoney
-              </span>
+              <BrandLogo
+                className="h-20 w-20 rounded-[24px]"
+                imageClassName="scale-[1.02] object-[center_48%]"
+              />
               <h1 className="font-display text-3xl font-semibold leading-tight">
                 Finanzas personales y compartidas sin friccion.
               </h1>
