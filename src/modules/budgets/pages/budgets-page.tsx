@@ -1037,7 +1037,8 @@ export function BudgetsPage() {
   const toggleMutation = useToggleBudgetMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteBudgetMutation(activeWorkspace?.id, user?.id);
 
-  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [pageFeedback, setPageFeedback] = useState<FeedbackState | null>(null);
+  const [editorFeedback, setEditorFeedback] = useState<FeedbackState | null>(null);
   const [search, setSearch] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -1222,7 +1223,8 @@ export function BudgetsPage() {
   }
 
   function openCreateEditor() {
-    setFeedback(null);
+    setPageFeedback(null);
+    setEditorFeedback(null);
     setEditorMode("create");
     setSelectedBudgetId(null);
     setFormState(createDefaultFormState(activeWorkspace));
@@ -1230,7 +1232,8 @@ export function BudgetsPage() {
   }
 
   function openEditEditor(budget: BudgetOverview) {
-    setFeedback(null);
+    setPageFeedback(null);
+    setEditorFeedback(null);
     setEditorMode("edit");
     setSelectedBudgetId(budget.id);
     setFormState(buildFormStateFromBudget(budget));
@@ -1239,9 +1242,10 @@ export function BudgetsPage() {
 
   async function handleSubmitEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setEditorFeedback(null);
 
     if (!activeWorkspace || !user?.id) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No encontramos el workspace activo",
         description: "Recarga la pagina e intenta nuevamente.",
@@ -1255,7 +1259,7 @@ export function BudgetsPage() {
     const alertPercent = toNumericValue(formState.alertPercent);
 
     if (!name) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Falta el nombre",
         description: "Ponle un nombre claro para reconocer rapido el presupuesto.",
@@ -1264,7 +1268,7 @@ export function BudgetsPage() {
     }
 
     if (!formState.periodStart || !formState.periodEnd) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Define el periodo",
         description: "Necesitamos una fecha de inicio y una fecha de cierre.",
@@ -1273,7 +1277,7 @@ export function BudgetsPage() {
     }
 
     if (formState.periodEnd < formState.periodStart) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Revisa el rango",
         description: "La fecha final no puede quedar antes del inicio.",
@@ -1282,7 +1286,7 @@ export function BudgetsPage() {
     }
 
     if (currencyCode.length !== 3) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Moneda invalida",
         description: "Usa un codigo corto como PEN o USD.",
@@ -1291,7 +1295,7 @@ export function BudgetsPage() {
     }
 
     if (limitAmount === null || limitAmount <= 0) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Revisa el limite",
         description: "El monto maximo debe ser mayor que cero.",
@@ -1300,7 +1304,7 @@ export function BudgetsPage() {
     }
 
     if (alertPercent === null || alertPercent < 0 || alertPercent > 100) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Alerta fuera de rango",
         description: "El porcentaje de alerta debe ir entre 0 y 100.",
@@ -1312,7 +1316,7 @@ export function BudgetsPage() {
       (formState.scopeKind === "category" || formState.scopeKind === "category_account") &&
       !formState.categoryId
     ) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Selecciona una categoria",
         description: "Ese tipo de presupuesto necesita una categoria concreta para medir el gasto.",
@@ -1324,7 +1328,7 @@ export function BudgetsPage() {
       (formState.scopeKind === "account" || formState.scopeKind === "category_account") &&
       !formState.accountId
     ) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Selecciona una cuenta",
         description: "Ese alcance necesita la cuenta que quieres vigilar.",
@@ -1359,7 +1363,7 @@ export function BudgetsPage() {
           userId: user.id,
           ...payload,
         });
-        setFeedback({
+        setPageFeedback({
           tone: "success",
           title: "Presupuesto creado",
           description: "Ya aparece en tu control financiero y empezara a medirse en el dashboard.",
@@ -1371,7 +1375,7 @@ export function BudgetsPage() {
           userId: user.id,
           ...payload,
         });
-        setFeedback({
+        setPageFeedback({
           tone: "success",
           title: "Presupuesto actualizado",
           description: "Los cambios ya se reflejan en el seguimiento del periodo.",
@@ -1380,7 +1384,7 @@ export function BudgetsPage() {
 
       closeEditor();
     } catch (error) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No pudimos guardar el presupuesto",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -1400,7 +1404,7 @@ export function BudgetsPage() {
         userId: user.id,
         isActive: !budget.isActive,
       });
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title: budget.isActive ? "Presupuesto desactivado" : "Presupuesto reactivado",
         description: budget.isActive
@@ -1408,7 +1412,7 @@ export function BudgetsPage() {
           : "Volvio a entrar en el control activo del dashboard.",
       });
     } catch (error) {
-      setFeedback({
+      setPageFeedback({
         tone: "error",
         title: "No pudimos cambiar el estado",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -1427,13 +1431,13 @@ export function BudgetsPage() {
         workspaceId: activeWorkspace.id,
       });
       setDeleteTargetId(null);
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title: "Presupuesto eliminado",
         description: "Los movimientos se conservaron intactos; solo retiramos la regla de control.",
       });
     } catch (error) {
-      setFeedback({
+      setPageFeedback({
         tone: "error",
         title: "No pudimos eliminar el presupuesto",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -1539,11 +1543,11 @@ export function BudgetsPage() {
         </p>
       </PageHeader>
 
-      {feedback ? (
+      {pageFeedback ? (
         <FormFeedbackBanner
-          description={feedback.description}
-          tone={feedback.tone}
-          title={feedback.title}
+          description={pageFeedback.description}
+          tone={pageFeedback.tone}
+          title={pageFeedback.title}
         />
       ) : null}
 
@@ -1876,7 +1880,7 @@ export function BudgetsPage() {
           accounts={accounts}
           categories={categories}
           closeEditor={closeEditor}
-          feedback={feedback}
+          feedback={editorFeedback}
           formState={formState}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}

@@ -412,7 +412,7 @@ function describeShareInviteOutcome(
     return `Le enviamos un correo a ${invitedLabel} para que confirme el acceso.`;
   }
 
-  const emailIssue = inviteResult.emailError?.trim();
+  const emailIssue = formatShareInviteEmailIssue(inviteResult.emailError);
 
   if (context === "create") {
     return `La invitacion para ${invitedLabel} quedo creada, pero el correo automatico fallo${emailIssue ? `: ${emailIssue}` : "."}`;
@@ -423,6 +423,47 @@ function describeShareInviteOutcome(
   }
 
   return `La invitacion quedo creada para ${invitedLabel}, pero el correo automatico fallo${emailIssue ? `: ${emailIssue}` : "."}`;
+}
+
+function formatShareInviteEmailIssue(emailError?: string | null) {
+  const rawIssue = emailError?.trim();
+
+  if (!rawIssue) {
+    return null;
+  }
+
+  let resolvedMessage = rawIssue;
+  const jsonStart = rawIssue.indexOf("{");
+
+  if (jsonStart >= 0) {
+    const prefix = rawIssue.slice(0, jsonStart).trim().replace(/:$/, "");
+    const serializedPayload = rawIssue.slice(jsonStart);
+
+    try {
+      const parsedPayload = JSON.parse(serializedPayload) as {
+        message?: string;
+      };
+
+      if (typeof parsedPayload.message === "string" && parsedPayload.message.trim()) {
+        resolvedMessage = prefix
+          ? `${prefix}: ${parsedPayload.message.trim()}`
+          : parsedPayload.message.trim();
+      }
+    } catch {
+      resolvedMessage = rawIssue;
+    }
+  }
+
+  if (/You can only send testing emails to your own email address/i.test(resolvedMessage)) {
+    const ownerEmail =
+      resolvedMessage.match(/your own email address \(([^)]+)\)/i)?.[1] ?? null;
+
+    return `Resend esta en modo de prueba${
+      ownerEmail ? ` y solo permite enviar al correo ${ownerEmail}` : ""
+    }. Verifica un dominio en resend.com/domains y cambia RESEND_FROM_EMAIL a una direccion de ese dominio.`;
+  }
+
+  return resolvedMessage;
 }
 
 function buildFormStateFromObligation(obligation: ObligationSummary): ObligationFormState {
@@ -671,11 +712,11 @@ function getStatusTone(status: ObligationStatus) {
 function getShareStatusLabel(status: ObligationShareSummary["status"]) {
   switch (status) {
     case "accepted":
-      return "Aceptada";
+      return "Compartida";
     case "pending":
-      return "Pendiente";
+      return "Por aceptar";
     case "declined":
-      return "Rechazada";
+      return "No aceptada";
     case "revoked":
       return "Revocada";
     default:
@@ -1147,11 +1188,12 @@ function PaymentDialog({
                 </button>
               </div>
 
-              {feedback?.tone === "error" ? (
+              {feedback ? (
                 <FormFeedbackBanner
                   className="mt-6"
                   description={feedback.description}
                   title={feedback.title}
+                  tone={feedback.tone}
                 />
               ) : null}
 
@@ -1385,11 +1427,12 @@ function PrincipalAdjustmentDialog({
                 </button>
               </div>
 
-              {feedback?.tone === "error" ? (
+              {feedback ? (
                 <FormFeedbackBanner
                   className="mt-6"
                   description={feedback.description}
                   title={feedback.title}
+                  tone={feedback.tone}
                 />
               ) : null}
 
@@ -1654,11 +1697,12 @@ function ShareInviteDialog({
                 </button>
               </div>
 
-              {feedback?.tone === "error" ? (
+              {feedback ? (
                 <FormFeedbackBanner
                   className="mt-6"
                   description={feedback.description}
                   title={feedback.title}
+                  tone={feedback.tone}
                 />
               ) : null}
 
@@ -1946,11 +1990,12 @@ function EditorDialog({
                 </button>
               </div>
 
-              {feedback?.tone === "error" ? (
+              {feedback ? (
                 <FormFeedbackBanner
                   className="mt-6"
                   description={feedback.description}
                   title={feedback.title}
+                  tone={feedback.tone}
                 />
               ) : null}
 
@@ -2514,7 +2559,12 @@ export function ObligationsPage() {
   const shareInviteMutation = useCreateObligationShareInviteMutation(activeWorkspace?.id, user?.id);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(activeWorkspace?.id, user?.id);
   const deleteAttachmentRecordMutation = useDeleteAttachmentRecordMutation(activeWorkspace?.id, user?.id);
-  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [pageFeedback, setPageFeedback] = useState<FeedbackState | null>(null);
+  const [editorFeedback, setEditorFeedback] = useState<FeedbackState | null>(null);
+  const [paymentFeedback, setPaymentFeedback] = useState<FeedbackState | null>(null);
+  const [principalAdjustmentFeedback, setPrincipalAdjustmentFeedback] =
+    useState<FeedbackState | null>(null);
+  const [shareDialogFeedback, setShareDialogFeedback] = useState<FeedbackState | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedObligationId, setSelectedObligationId] = useState<number | null>(null);
@@ -2652,7 +2702,8 @@ export function ObligationsPage() {
   }
 
   function openCreateEditor() {
-    setFeedback(null);
+    setPageFeedback(null);
+    setEditorFeedback(null);
     setEditorMode("create");
     setSelectedObligationId(null);
     setFormState(applyObligationFormRules(createDefaultFormState(baseCurrencyCode)));
@@ -2664,7 +2715,8 @@ export function ObligationsPage() {
   function openEditEditor(obligation: ObligationSummary) {
     const currentShare = shareByObligationId.get(obligation.id) ?? null;
 
-    setFeedback(null);
+    setPageFeedback(null);
+    setEditorFeedback(null);
     setEditorMode("edit");
     setSelectedObligationId(obligation.id);
     setFormState(applyObligationFormRules(buildFormStateFromObligation(obligation)));
@@ -2676,7 +2728,8 @@ export function ObligationsPage() {
   function openShareDialog(obligation: ObligationSummary) {
     const currentShare = shareByObligationId.get(obligation.id);
 
-    setFeedback(null);
+    setPageFeedback(null);
+    setShareDialogFeedback(null);
     setShareTargetId(obligation.id);
     setShareDialogFormState(buildShareInviteFormState(currentShare));
   }
@@ -2717,7 +2770,7 @@ export function ObligationsPage() {
 
   async function handleUploadReceipt(file: File) {
     if (!selectedObligation) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Guarda primero el registro",
         description: "Necesitamos crear el credito o deuda antes de adjuntar un comprobante.",
@@ -2726,7 +2779,7 @@ export function ObligationsPage() {
     }
 
     if (!canUploadReceipts) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Comprobantes en Modo Pro",
         description: "Tu plan actual no tiene habilitada la subida de comprobantes.",
@@ -2734,17 +2787,17 @@ export function ObligationsPage() {
       return;
     }
 
-    setFeedback(null);
+    setEditorFeedback(null);
 
     try {
       await uploadReceiptForObligation(selectedObligation.id, file);
-      setFeedback({
+      setEditorFeedback({
         tone: "success",
         title: "Comprobante guardado",
         description: "El adjunto quedo vinculado correctamente a este credito o deuda.",
       });
     } catch (error) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No pudimos subir el comprobante",
         description: getQueryErrorMessage(error, "Intentalo otra vez en unos segundos."),
@@ -2758,7 +2811,7 @@ export function ObligationsPage() {
     }
 
     if (!canUploadReceipts) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Comprobantes en Modo Pro",
         description: "Tu plan actual no tiene habilitada la gestion de comprobantes.",
@@ -2766,7 +2819,7 @@ export function ObligationsPage() {
       return;
     }
 
-    setFeedback(null);
+    setEditorFeedback(null);
 
     try {
       await deleteStoredReceipt(attachment.bucketName, attachment.filePath);
@@ -2774,13 +2827,13 @@ export function ObligationsPage() {
         attachmentId: attachment.id,
         workspaceId: activeWorkspace.id,
       });
-      setFeedback({
+      setEditorFeedback({
         tone: "success",
         title: "Comprobante eliminado",
         description: "El adjunto ya no forma parte de este registro.",
       });
     } catch (error) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No pudimos eliminar el comprobante",
         description: getQueryErrorMessage(error, "Intentalo otra vez en unos segundos."),
@@ -2789,7 +2842,8 @@ export function ObligationsPage() {
   }
 
   function openPaymentDialog(obligation: ObligationSummary) {
-    setFeedback(null);
+    setPageFeedback(null);
+    setPaymentFeedback(null);
     setPaymentTargetId(obligation.id);
     setPaymentFormState(createDefaultPaymentFormState(obligation));
   }
@@ -2798,7 +2852,8 @@ export function ObligationsPage() {
     obligation: ObligationSummary,
     mode: PrincipalAdjustmentMode,
   ) {
-    setFeedback(null);
+    setPageFeedback(null);
+    setPrincipalAdjustmentFeedback(null);
     setPrincipalAdjustmentMode(mode);
     setPrincipalAdjustmentTargetId(obligation.id);
     setPrincipalAdjustmentFormState(createDefaultPrincipalAdjustmentFormState(obligation, mode));
@@ -2962,9 +3017,10 @@ export function ObligationsPage() {
 
   async function handleSubmitShareInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setShareDialogFeedback(null);
 
     if (!shareTarget) {
-      setFeedback({
+      setShareDialogFeedback({
         tone: "error",
         title: "No encontramos el registro",
         description: "Vuelve a abrir el dialogo para compartir este credito o deuda.",
@@ -2975,7 +3031,7 @@ export function ObligationsPage() {
     const invitedEmail = shareDialogFormState.invitedEmail.trim();
 
     if (!invitedEmail) {
-      setFeedback({
+      setShareDialogFeedback({
         tone: "error",
         title: "Falta el correo",
         description: "Ingresa el correo del usuario que recibira esta invitacion.",
@@ -2990,15 +3046,24 @@ export function ObligationsPage() {
         throw new Error("Falta el correo del usuario que recibira esta invitacion.");
       }
 
+      if (!inviteResult.alreadyAccepted && !inviteResult.emailSent) {
+        setShareDialogFeedback({
+          tone: "error",
+          title: "Invitacion creada, correo pendiente",
+          description: describeShareInviteOutcome(inviteResult),
+        });
+        return;
+      }
+
       setShareTargetId(null);
       setShareDialogFormState(createDefaultShareInviteFormState());
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title: inviteResult.alreadyAccepted ? "Acceso ya confirmado" : "Invitacion enviada",
         description: describeShareInviteOutcome(inviteResult),
       });
     } catch (error) {
-      setFeedback({
+      setShareDialogFeedback({
         tone: "error",
         title: "No pudimos compartir el registro",
         description: getQueryErrorMessage(
@@ -3011,9 +3076,10 @@ export function ObligationsPage() {
 
   async function handleSubmitObligation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setEditorFeedback(null);
 
     if (!activeWorkspace || !user?.id) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No encontramos el workspace activo",
         description: "Recarga la pagina e intenta nuevamente.",
@@ -3036,12 +3102,12 @@ export function ObligationsPage() {
     );
 
     if (!title) {
-      setFeedback({ tone: "error", title: "Falta el titulo", description: "Dale un nombre claro a este registro." });
+      setEditorFeedback({ tone: "error", title: "Falta el titulo", description: "Dale un nombre claro a este registro." });
       return;
     }
 
     if (counterpartyId === null || !Number.isInteger(counterpartyId) || counterpartyId <= 0) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Selecciona una contraparte",
         description: "Necesitamos saber con quien esta relacionado este registro.",
@@ -3050,7 +3116,7 @@ export function ObligationsPage() {
     }
 
     if (principalAmount === null || Number.isNaN(principalAmount) || principalAmount <= 0) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Revisa el monto principal",
         description: "Ingresa un monto mayor que cero.",
@@ -3059,7 +3125,7 @@ export function ObligationsPage() {
     }
 
     if (!formState.startDate) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Falta la fecha de inicio",
         description: "Define cuando comenzo este registro.",
@@ -3068,7 +3134,7 @@ export function ObligationsPage() {
     }
 
     if (formState.dueDate && formState.dueDate < formState.startDate) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "La fecha objetivo no cuadra",
         description: "La fecha objetivo no puede ser anterior al inicio.",
@@ -3077,7 +3143,7 @@ export function ObligationsPage() {
     }
 
     if (installmentAmount !== null && (Number.isNaN(installmentAmount) || installmentAmount <= 0)) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Monto por cuota invalido",
         description: "Si lo completas, debe ser un valor mayor que cero.",
@@ -3086,7 +3152,7 @@ export function ObligationsPage() {
     }
 
     if (installmentCount !== null && (Number.isNaN(installmentCount) || installmentCount <= 0)) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Numero de cuotas invalido",
         description: "Si defines cuotas, indica una cantidad mayor que cero.",
@@ -3095,7 +3161,7 @@ export function ObligationsPage() {
     }
 
     if (interestRate !== null && (Number.isNaN(interestRate) || interestRate < 0)) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "Interes invalido",
         description: "El interes debe ser cero o un valor positivo.",
@@ -3104,7 +3170,7 @@ export function ObligationsPage() {
     }
 
     if (settlementAccountId !== null && Number.isNaN(settlementAccountId)) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "La cuenta seleccionada no es valida",
         description: "Vuelve a elegir la cuenta de liquidacion.",
@@ -3114,7 +3180,7 @@ export function ObligationsPage() {
 
     if (openingImpact !== "none") {
       if (openingAccountId === null || Number.isNaN(openingAccountId) || openingAccountId <= 0) {
-        setFeedback({
+        setEditorFeedback({
           tone: "error",
           title: "Falta la cuenta inicial",
           description: "Selecciona la cuenta que recibira o entregara el monto de apertura.",
@@ -3126,7 +3192,7 @@ export function ObligationsPage() {
       const normalizedCurrencyCode = formState.currencyCode.trim().toUpperCase() || baseCurrencyCode;
 
       if (!selectedOpeningAccount || selectedOpeningAccount.currencyCode !== normalizedCurrencyCode) {
-        setFeedback({
+        setEditorFeedback({
           tone: "error",
           title: "La cuenta inicial no coincide",
           description: `La cuenta inicial debe estar en ${normalizedCurrencyCode} para registrar la apertura sin conversion.`,
@@ -3218,7 +3284,7 @@ export function ObligationsPage() {
           descriptionParts.push(`El registro se creo bien, pero compartirlo quedo pendiente: ${shareInviteErrorMessage}`);
         }
 
-        setFeedback({
+        setPageFeedback({
           tone: "success",
           title: "Registro creado",
           description: descriptionParts.join(" "),
@@ -3257,7 +3323,7 @@ export function ObligationsPage() {
           descriptionParts.push(`El registro se actualizo, pero la reasignacion quedo pendiente: ${shareInviteErrorMessage}`);
         }
 
-        setFeedback({
+        setPageFeedback({
           tone: "success",
           title: "Cambios guardados",
           description: descriptionParts.join(" "),
@@ -3269,7 +3335,7 @@ export function ObligationsPage() {
       setIsEditorOpen(false);
       setSelectedObligationId(null);
     } catch (error) {
-      setFeedback({
+      setEditorFeedback({
         tone: "error",
         title: "No pudimos guardar el registro",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -3279,9 +3345,10 @@ export function ObligationsPage() {
 
   async function handleSubmitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPaymentFeedback(null);
 
     if (!activeWorkspace || !user?.id || !paymentTarget) {
-      setFeedback({
+      setPaymentFeedback({
         tone: "error",
         title: "No encontramos el registro",
         description: "Recarga la pagina e intenta nuevamente.",
@@ -3293,7 +3360,7 @@ export function ObligationsPage() {
     const installmentNo = parseOptionalInteger(paymentFormState.installmentNo);
 
     if (amount === null || Number.isNaN(amount) || amount <= 0) {
-      setFeedback({
+      setPaymentFeedback({
         tone: "error",
         title: "Monto invalido",
         description: "Ingresa un abono mayor que cero.",
@@ -3302,7 +3369,7 @@ export function ObligationsPage() {
     }
 
     if (!paymentFormState.eventDate) {
-      setFeedback({
+      setPaymentFeedback({
         tone: "error",
         title: "Falta la fecha",
         description: "Selecciona la fecha en la que se realizo el abono.",
@@ -3311,7 +3378,7 @@ export function ObligationsPage() {
     }
 
     if (installmentNo !== null && (Number.isNaN(installmentNo) || installmentNo <= 0)) {
-      setFeedback({
+      setPaymentFeedback({
         tone: "error",
         title: "Cuota invalida",
         description: "Si la completas, debe ser un numero entero mayor que cero.",
@@ -3339,7 +3406,7 @@ export function ObligationsPage() {
         notes: paymentFormState.notes,
         nextStatus,
       } satisfies ObligationPaymentFormInput & { workspaceId: number; userId: string });
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title: "Abono registrado",
         description:
@@ -3349,7 +3416,7 @@ export function ObligationsPage() {
       });
       setPaymentTargetId(null);
     } catch (error) {
-      setFeedback({
+      setPaymentFeedback({
         tone: "error",
         title: "No pudimos registrar el abono",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -3359,9 +3426,10 @@ export function ObligationsPage() {
 
   async function handleSubmitPrincipalAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPrincipalAdjustmentFeedback(null);
 
     if (!activeWorkspace || !user?.id || !principalAdjustmentTarget) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "No encontramos el registro",
         description: "Recarga la pagina e intenta nuevamente.",
@@ -3374,7 +3442,7 @@ export function ObligationsPage() {
     const eventType = getPrincipalAdjustmentEventType(principalAdjustmentMode);
 
     if (amount === null || Number.isNaN(amount) || amount <= 0) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "Monto invalido",
         description: "Ingresa un monto mayor que cero para registrar el ajuste.",
@@ -3383,7 +3451,7 @@ export function ObligationsPage() {
     }
 
     if (!principalAdjustmentFormState.eventDate) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "Falta la fecha",
         description: "Selecciona cuando ocurrio este ajuste.",
@@ -3392,7 +3460,7 @@ export function ObligationsPage() {
     }
 
     if (!principalAdjustmentFormState.reason.trim()) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "Falta el motivo",
         description: "Necesitamos guardar por que cambiaste el principal.",
@@ -3401,7 +3469,7 @@ export function ObligationsPage() {
     }
 
     if (principalAdjustmentMode === "decrease" && amount > principalAdjustmentTarget.pendingAmount) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "La reduccion es demasiado grande",
         description: "No puedes reducir mas de lo que hoy queda pendiente en este registro.",
@@ -3411,7 +3479,7 @@ export function ObligationsPage() {
 
     if (principalAdjustmentFormState.registerAccountMovement) {
       if (accountId === null || Number.isNaN(accountId) || accountId <= 0) {
-        setFeedback({
+        setPrincipalAdjustmentFeedback({
           tone: "error",
           title: "Falta la cuenta",
           description: "Selecciona la cuenta que se vera afectada por este ajuste.",
@@ -3422,7 +3490,7 @@ export function ObligationsPage() {
       const selectedAccount = accounts.find((account) => account.id === accountId);
 
       if (!selectedAccount || selectedAccount.currencyCode !== principalAdjustmentTarget.currencyCode) {
-        setFeedback({
+        setPrincipalAdjustmentFeedback({
           tone: "error",
           title: "La cuenta no coincide",
           description: `La cuenta elegida debe estar en ${principalAdjustmentTarget.currencyCode}.`,
@@ -3462,7 +3530,7 @@ export function ObligationsPage() {
         nextStatus,
       } satisfies ObligationPrincipalAdjustmentFormInput & { workspaceId: number; userId: string });
 
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title:
           principalAdjustmentMode === "increase" ? "Monto agregado" : "Monto reducido",
@@ -3473,7 +3541,7 @@ export function ObligationsPage() {
       });
       setPrincipalAdjustmentTargetId(null);
     } catch (error) {
-      setFeedback({
+      setPrincipalAdjustmentFeedback({
         tone: "error",
         title: "No pudimos guardar el ajuste",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
@@ -3491,14 +3559,14 @@ export function ObligationsPage() {
         obligationId: deleteTarget.id,
         workspaceId: activeWorkspace.id,
       });
-      setFeedback({
+      setPageFeedback({
         tone: "success",
         title: "Registro eliminado",
         description: "La cartera se actualizo y el registro ya no aparece en la lista.",
       });
       setDeleteTargetId(null);
     } catch (error) {
-      setFeedback({
+      setPageFeedback({
         tone: "error",
         title: "No pudimos eliminar el registro",
         description: getQueryErrorMessage(error, "Revisa si tiene movimientos vinculados."),
@@ -3602,13 +3670,11 @@ export function ObligationsPage() {
         title="Creditos y deudas"
       />
 
-      {feedback &&
-      (!(isEditorOpen || paymentTarget || principalAdjustmentTarget || shareTarget) ||
-        feedback.tone !== "error") ? (
+      {pageFeedback ? (
         <DataState
-          description={feedback.description}
-          title={feedback.title}
-          tone={feedback.tone}
+          description={pageFeedback.description}
+          title={pageFeedback.title}
+          tone={pageFeedback.tone}
         />
       ) : null}
 
@@ -4303,7 +4369,7 @@ export function ObligationsPage() {
           }}
           counterparties={counterparties}
           currentShare={selectedObligation ? shareByObligationId.get(selectedObligation.id) ?? null : null}
-          feedback={feedback}
+          feedback={editorFeedback}
           formState={formState}
           handleDeleteReceipt={handleDeleteReceipt}
           handleUploadReceipt={handleUploadReceipt}
@@ -4323,7 +4389,7 @@ export function ObligationsPage() {
 
       {paymentTarget ? (
         <PaymentDialog
-          feedback={feedback}
+          feedback={paymentFeedback}
           formState={paymentFormState}
           isSaving={isRegisteringPayment}
           obligation={paymentTarget}
@@ -4340,7 +4406,7 @@ export function ObligationsPage() {
       {principalAdjustmentTarget ? (
         <PrincipalAdjustmentDialog
           accounts={accounts}
-          feedback={feedback}
+          feedback={principalAdjustmentFeedback}
           formState={principalAdjustmentFormState}
           isSaving={isAdjustingPrincipal}
           mode={principalAdjustmentMode}
@@ -4373,7 +4439,7 @@ export function ObligationsPage() {
       {shareTarget ? (
         <ShareInviteDialog
           currentShare={shareByObligationId.get(shareTarget.id) ?? null}
-          feedback={feedback}
+          feedback={shareDialogFeedback}
           formState={shareDialogFormState}
           isSaving={isSendingShareInvite}
           obligation={shareTarget}
