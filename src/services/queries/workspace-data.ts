@@ -825,6 +825,49 @@ async function buildFunctionInvokeOptions(body: Record<string, unknown> = {}) {
   };
 }
 
+async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
+  const client = getClient();
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("No hay una sesion activa para continuar con esta accion.");
+  }
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase no esta configurado correctamente en el frontend.");
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const errorMessage =
+      responseBody && typeof responseBody === "object" && "error" in responseBody
+        ? String((responseBody as { error?: unknown }).error ?? "")
+        : "";
+
+    throw new Error(
+      errorMessage || `La Edge Function ${functionName} respondio ${response.status}.`,
+    );
+  }
+
+  return responseBody as T;
+}
+
 function toNumber(value: NumericLike) {
   if (typeof value === "number") {
     return value;
@@ -1168,21 +1211,14 @@ async function fetchWorkspaces(userId: string, profile?: AppProfile | null) {
 }
 
 async function createSharedWorkspace(input: SharedWorkspaceMutationInput) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const response = (await invokeAuthenticatedFunction<CreateSharedWorkspaceFunctionResponse>(
     "create-shared-workspace",
-    await buildFunctionInvokeOptions({
+    {
       name: input.name,
       description: input.description ?? null,
       baseCurrencyCode: input.baseCurrencyCode ?? null,
-    }),
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  const response = (data ?? {}) as CreateSharedWorkspaceFunctionResponse;
+    },
+  )) as CreateSharedWorkspaceFunctionResponse;
 
   if (!response.ok || !response.workspace) {
     throw new Error(response.error ?? "No pudimos crear el workspace colaborativo.");
@@ -1192,17 +1228,10 @@ async function createSharedWorkspace(input: SharedWorkspaceMutationInput) {
 }
 
 async function fetchWorkspaceCollaboration(workspaceId: number) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const response = (await invokeAuthenticatedFunction<WorkspaceCollaborationFunctionResponse>(
     "get-workspace-collaboration",
-    await buildFunctionInvokeOptions({ workspaceId }),
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  const response = (data ?? {}) as WorkspaceCollaborationFunctionResponse;
+    { workspaceId },
+  )) as WorkspaceCollaborationFunctionResponse;
 
   if (!response.ok || !response.collaboration) {
     throw new Error(response.error ?? "No pudimos leer miembros e invitaciones de este workspace.");
@@ -1218,23 +1247,16 @@ async function fetchWorkspaceCollaboration(workspaceId: number) {
 }
 
 async function createWorkspaceInvitation(input: WorkspaceInvitationMutationInput) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const response = (await invokeAuthenticatedFunction<WorkspaceInvitationFunctionResponse>(
     "create-workspace-invitation",
-    await buildFunctionInvokeOptions({
+    {
       workspaceId: input.workspaceId,
       invitedEmail: input.invitedEmail,
       role: input.role,
       note: input.note ?? null,
       appUrl: input.appUrl ?? null,
-    }),
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  const response = (data ?? {}) as WorkspaceInvitationFunctionResponse;
+    },
+  )) as WorkspaceInvitationFunctionResponse;
 
   if (!response.ok || !response.invitedEmail || !response.role) {
     throw new Error(response.error ?? "No pudimos crear la invitacion del workspace.");
@@ -1274,17 +1296,10 @@ async function fetchWorkspaceInvitationDetails(token: string) {
 }
 
 async function acceptWorkspaceInvitation(token: string) {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const response = (await invokeAuthenticatedFunction<AcceptWorkspaceInvitationFunctionResponse>(
     "accept-workspace-invite",
-    await buildFunctionInvokeOptions({ token }),
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  const response = (data ?? {}) as AcceptWorkspaceInvitationFunctionResponse;
+    { token },
+  )) as AcceptWorkspaceInvitationFunctionResponse;
 
   if (!response.ok || !response.accepted || !response.workspaceId) {
     throw new Error(response.error ?? "No pudimos aceptar esta invitacion de workspace.");
@@ -1971,17 +1986,10 @@ async function fetchObligationShareInviteDetails(token: string) {
 }
 
 async function fetchSharedObligations() {
-  const client = getClient();
-  const { data, error } = await client.functions.invoke(
+  const response = (await invokeAuthenticatedFunction<ListSharedObligationsFunctionResponse>(
     "list-shared-obligations",
-    await buildFunctionInvokeOptions({}),
-  );
-
-  if (error) {
-    throw error;
-  }
-
-  const response = (data ?? {}) as ListSharedObligationsFunctionResponse;
+    {},
+  )) as ListSharedObligationsFunctionResponse;
 
   if (!response.ok) {
     throw new Error(response.error ?? "No pudimos cargar los registros compartidos contigo.");
@@ -2487,19 +2495,14 @@ export function useStartProCheckoutMutation(userId?: string) {
 
   return useMutation({
     mutationFn: async (input: StartProCheckoutInput) => {
-      const client = getClient();
-      const { data, error } = await client.functions.invoke(
+      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
         "create-pro-checkout",
-        await buildFunctionInvokeOptions({
+        {
           provider: "mercado_pago",
           appUrl: input.appUrl,
           workspaceId: input.workspaceId ?? null,
-        }),
+        },
       );
-
-      if (error) {
-        throw error;
-      }
 
       const checkoutUrl =
         typeof data?.checkoutUrl === "string"
@@ -2532,17 +2535,12 @@ export function useCancelProSubscriptionMutation(userId?: string) {
 
   return useMutation({
     mutationFn: async () => {
-      const client = getClient();
-      const { data, error } = await client.functions.invoke(
+      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
         "cancel-pro-subscription",
-        await buildFunctionInvokeOptions({
+        {
           provider: "mercado_pago",
-        }),
+        },
       );
-
-      if (error) {
-        throw error;
-      }
 
       return {
         provider: typeof data?.provider === "string" ? data.provider : "mercado_pago",
@@ -2563,23 +2561,16 @@ export function useCreateObligationShareInviteMutation(workspaceId?: number, use
 
   return useMutation({
     mutationFn: async (input: ObligationShareInviteInput) => {
-      const client = getClient();
-      const { data, error } = await client.functions.invoke(
+      const response = (await invokeAuthenticatedFunction<ObligationShareInviteFunctionResponse>(
         "create-obligation-share-invite",
-        await buildFunctionInvokeOptions({
+        {
           workspaceId: input.workspaceId,
           obligationId: input.obligationId,
           invitedEmail: input.invitedEmail,
           message: input.message ?? null,
           appUrl: input.appUrl ?? null,
-        }),
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      const response = (data ?? {}) as ObligationShareInviteFunctionResponse;
+        },
+      )) as ObligationShareInviteFunctionResponse;
 
       if (!response.ok || !response.shareId || !response.status || !response.invitedEmail) {
         throw new Error(
@@ -2621,17 +2612,10 @@ export function useAcceptObligationShareMutation(userId?: string) {
 
   return useMutation({
     mutationFn: async (token: string) => {
-      const client = getClient();
-      const { data, error } = await client.functions.invoke(
+      const response = (await invokeAuthenticatedFunction<AcceptObligationShareFunctionResponse>(
         "accept-obligation-share",
-        await buildFunctionInvokeOptions({ token }),
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      const response = (data ?? {}) as AcceptObligationShareFunctionResponse;
+        { token },
+      )) as AcceptObligationShareFunctionResponse;
 
       if (!response.ok || !response.accepted) {
         throw new Error(response.error ?? "No pudimos aceptar esta invitacion.");
