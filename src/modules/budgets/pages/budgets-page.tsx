@@ -580,9 +580,11 @@ function getBudgetScopeDetails(scopeKind: BudgetScopeKind) {
 function BudgetEditorDialog({
   accounts,
   categories,
+  clearFieldError,
   closeEditor,
   feedback,
   formState,
+  invalidFields,
   isCreateMode,
   isSaving,
   onSubmit,
@@ -591,9 +593,11 @@ function BudgetEditorDialog({
 }: {
   accounts: Array<{ id: number; name: string; currencyCode: string }>;
   categories: CategorySummary[];
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   feedback: FeedbackState | null;
   formState: BudgetFormState;
+  invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -603,6 +607,25 @@ function BudgetEditorDialog({
   ) => void;
   workspace: Workspace | null;
 }) {
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   const scopeDetails = getBudgetScopeDetails(formState.scopeKind);
   const selectedCategory = categories.find((category) => category.id === formState.categoryId) ?? null;
   const selectedAccount = accounts.find((account) => account.id === formState.accountId) ?? null;
@@ -665,9 +688,9 @@ function BudgetEditorDialog({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-[rgba(4,8,16,0.72)] backdrop-blur-[18px]" />
-      <div className="absolute inset-0 overflow-y-auto" onClick={closeEditor}>
+      <div className="absolute inset-0 overflow-y-auto" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
         <div className="flex min-h-full items-start justify-center px-4 py-10 sm:px-6">
-          <div className="relative w-full max-w-6xl rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.98),rgba(9,14,24,0.96))] px-6 pt-6 shadow-[0_35px_120px_rgba(0,0,0,0.55)] sm:px-8 sm:pt-8" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-6xl rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.98),rgba(9,14,24,0.96))] px-6 pt-6 shadow-[0_35px_120px_rgba(0,0,0,0.55)] sm:px-8 sm:pt-8" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
         <button
           className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/18 hover:text-ink"
           onClick={closeEditor}
@@ -761,11 +784,13 @@ function BudgetEditorDialog({
               <div className="mt-6 space-y-5">
                 <label className="block">
                   <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Nombre</span>
-                  <Input
-                    onChange={(event) => updateFormState("name", event.target.value)}
-                    placeholder="Ej. Salud mensual"
-                    value={formState.name}
-                  />
+                  <div className={invalidFields.has("name") ? "field-error-ring" : ""} data-field="name">
+                    <Input
+                      onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }}
+                      placeholder="Ej. Salud mensual"
+                      value={formState.name}
+                    />
+                  </div>
                 </label>
 
                 <div>
@@ -812,12 +837,14 @@ function BudgetEditorDialog({
 
                     <label className="block">
                       <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Limite maximo</span>
-                      <Input
-                        inputMode="decimal"
-                        onChange={(event) => updateFormState("limitAmount", event.target.value)}
-                        placeholder="0.00"
-                        value={formState.limitAmount}
-                      />
+                      <div className={invalidFields.has("limitAmount") ? "field-error-ring" : ""} data-field="limitAmount">
+                        <Input
+                          inputMode="decimal"
+                          onChange={(event) => { clearFieldError("limitAmount"); updateFormState("limitAmount", event.target.value); }}
+                          placeholder="0.00"
+                          value={formState.limitAmount}
+                        />
+                      </div>
                     </label>
 
                     <label className="block">
@@ -837,17 +864,21 @@ function BudgetEditorDialog({
                   <div className="mt-4 grid gap-5 sm:grid-cols-2">
                     <label className="block min-w-0">
                       <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Inicio</span>
-                      <DatePickerField
-                        onChange={(value) => updateFormState("periodStart", value)}
-                        value={formState.periodStart}
-                      />
+                      <div className={invalidFields.has("periodStart") ? "field-error-ring" : ""} data-field="periodStart">
+                        <DatePickerField
+                          onChange={(value) => { clearFieldError("periodStart"); updateFormState("periodStart", value); }}
+                          value={formState.periodStart}
+                        />
+                      </div>
                     </label>
                     <label className="block min-w-0">
                       <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Fin</span>
-                      <DatePickerField
-                        onChange={(value) => updateFormState("periodEnd", value)}
-                        value={formState.periodEnd}
-                      />
+                      <div className={invalidFields.has("periodEnd") ? "field-error-ring" : ""} data-field="periodEnd">
+                        <DatePickerField
+                          onChange={(value) => { clearFieldError("periodEnd"); updateFormState("periodEnd", value); }}
+                          value={formState.periodEnd}
+                        />
+                      </div>
                     </label>
                   </div>
                 </div>
@@ -862,30 +893,34 @@ function BudgetEditorDialog({
                 <div className="mt-6 grid gap-5">
                   <label className="block">
                     <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Categoría</span>
-                    <BudgetPicker
-                      disabled={formState.scopeKind === "general" || formState.scopeKind === "account"}
-                      emptyMessage="No encontramos categorías con ese nombre."
-                      onChange={(value) => updateFormState("categoryId", value ? Number(value) : null)}
-                      options={categoryOptions}
-                      placeholderDescription="Elige una categoría para seguir este tope de forma más precisa."
-                      placeholderLabel="Selecciona una categoría"
-                      queryPlaceholder="Buscar categoría..."
-                      value={formState.categoryId ? String(formState.categoryId) : ""}
-                    />
+                    <div className={invalidFields.has("categoryId") ? "field-error-ring" : ""} data-field="categoryId">
+                      <BudgetPicker
+                        disabled={formState.scopeKind === "general" || formState.scopeKind === "account"}
+                        emptyMessage="No encontramos categorías con ese nombre."
+                        onChange={(value) => { clearFieldError("categoryId"); updateFormState("categoryId", value ? Number(value) : null); }}
+                        options={categoryOptions}
+                        placeholderDescription="Elige una categoría para seguir este tope de forma más precisa."
+                        placeholderLabel="Selecciona una categoría"
+                        queryPlaceholder="Buscar categoría..."
+                        value={formState.categoryId ? String(formState.categoryId) : ""}
+                      />
+                    </div>
                   </label>
 
                   <label className="block">
                     <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Cuenta</span>
-                    <BudgetPicker
-                      disabled={formState.scopeKind === "general" || formState.scopeKind === "category"}
-                      emptyMessage="No encontramos cuentas con ese nombre."
-                      onChange={(value) => updateFormState("accountId", value ? Number(value) : null)}
-                      options={accountOptions}
-                      placeholderDescription="Elige una cuenta si quieres controlar solo lo que sale de ahi."
-                      placeholderLabel="Selecciona una cuenta"
-                      queryPlaceholder="Buscar cuenta..."
-                      value={formState.accountId ? String(formState.accountId) : ""}
-                    />
+                    <div className={invalidFields.has("accountId") ? "field-error-ring" : ""} data-field="accountId">
+                      <BudgetPicker
+                        disabled={formState.scopeKind === "general" || formState.scopeKind === "category"}
+                        emptyMessage="No encontramos cuentas con ese nombre."
+                        onChange={(value) => { clearFieldError("accountId"); updateFormState("accountId", value ? Number(value) : null); }}
+                        options={accountOptions}
+                        placeholderDescription="Elige una cuenta si quieres controlar solo lo que sale de ahi."
+                        placeholderLabel="Selecciona una cuenta"
+                        queryPlaceholder="Buscar cuenta..."
+                        value={formState.accountId ? String(formState.accountId) : ""}
+                      />
+                    </div>
                   </label>
                 </div>
               </section>
@@ -1059,6 +1094,16 @@ export function BudgetsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   useSuccessToast(pageFeedback, {
     clear: () => setPageFeedback(null),
   });
@@ -1254,6 +1299,7 @@ export function BudgetsPage() {
   function openCreateEditor() {
     setPageFeedback(null);
     setEditorFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedBudgetId(null);
     setFormState(createDefaultFormState(activeWorkspace));
@@ -1264,6 +1310,7 @@ export function BudgetsPage() {
   function openEditEditor(budget: BudgetOverview) {
     setPageFeedback(null);
     setEditorFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedBudgetId(budget.id);
     setFormState(buildFormStateFromBudget(budget));
@@ -1289,47 +1336,28 @@ export function BudgetsPage() {
     const limitAmount = toNumericValue(formState.limitAmount);
     const alertPercent = toNumericValue(formState.alertPercent);
 
-    if (!name) {
+    const budgetErrors: string[] = [];
+    if (!name) budgetErrors.push("name");
+    if (!formState.periodStart) budgetErrors.push("periodStart");
+    if (!formState.periodEnd) budgetErrors.push("periodEnd");
+    if (limitAmount === null || limitAmount <= 0) budgetErrors.push("limitAmount");
+    if ((formState.scopeKind === "category" || formState.scopeKind === "category_account") && !formState.categoryId) budgetErrors.push("categoryId");
+    if ((formState.scopeKind === "account" || formState.scopeKind === "category_account") && !formState.accountId) budgetErrors.push("accountId");
+    if (budgetErrors.length > 0) {
+      setInvalidFields(new Set(budgetErrors));
       setEditorFeedback({
         tone: "error",
-        title: "Falta el nombre",
-        description: "Ponle un nombre claro para reconocer rapido el presupuesto.",
+        title: "Revisa los campos requeridos",
+        description: "Completa los campos marcados en rojo antes de guardar.",
       });
       return;
     }
 
-    if (!formState.periodStart || !formState.periodEnd) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Define el periodo",
-        description: "Necesitamos una fecha de inicio y una fecha de cierre.",
-      });
-      return;
-    }
-
-    if (formState.periodEnd < formState.periodStart) {
+    if (formState.periodStart && formState.periodEnd && formState.periodEnd < formState.periodStart) {
       setEditorFeedback({
         tone: "error",
         title: "Revisa el rango",
         description: "La fecha final no puede quedar antes del inicio.",
-      });
-      return;
-    }
-
-    if (currencyCode.length !== 3) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Moneda invalida",
-        description: "Usa un codigo corto como PEN o USD.",
-      });
-      return;
-    }
-
-    if (limitAmount === null || limitAmount <= 0) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Revisa el limite",
-        description: "El monto maximo debe ser mayor que cero.",
       });
       return;
     }
@@ -1339,30 +1367,6 @@ export function BudgetsPage() {
         tone: "error",
         title: "Alerta fuera de rango",
         description: "El porcentaje de alerta debe ir entre 0 y 100.",
-      });
-      return;
-    }
-
-    if (
-      (formState.scopeKind === "category" || formState.scopeKind === "category_account") &&
-      !formState.categoryId
-    ) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Selecciona una categoría",
-        description: "Ese tipo de presupuesto necesita una categoría concreta para medir el gasto.",
-      });
-      return;
-    }
-
-    if (
-      (formState.scopeKind === "account" || formState.scopeKind === "category_account") &&
-      !formState.accountId
-    ) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Selecciona una cuenta",
-        description: "Ese alcance necesita la cuenta que quieres vigilar.",
       });
       return;
     }
@@ -1978,9 +1982,11 @@ export function BudgetsPage() {
         <BudgetEditorDialog
           accounts={accounts}
           categories={categories}
+          clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           feedback={editorFeedback}
           formState={formState}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
           onSubmit={handleSubmitEditor}

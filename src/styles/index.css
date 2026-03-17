@@ -224,3 +224,39 @@
     transform: scaleX(0);
   }
 }
+
+@keyframes field-error-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  18% {
+    transform: translateX(-6px);
+  }
+
+  36% {
+    transform: translateX(6px);
+  }
+
+  54% {
+    transform: translateX(-4px);
+  }
+
+  72% {
+    transform: translateX(4px);
+  }
+
+  90% {
+    transform: translateX(-2px);
+  }
+}
+
+.field-error-shake {
+  animation: field-error-shake 0.38s ease;
+}
+
+.field-error-ring > *:first-child {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.09) !important;
+}

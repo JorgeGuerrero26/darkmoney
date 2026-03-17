@@ -61,7 +61,9 @@ type QuickMovementFormState = {
 
 type QuickFieldProps = {
   children: ReactNode;
+  errorKey?: string;
   hint?: string;
+  invalidFields?: Set<string>;
   label: string;
 };
 
@@ -316,11 +318,17 @@ function buildQuickMovementDescription(
   return kind === "expense" ? "Gasto rapido" : "Ingreso rapido";
 }
 
-function QuickField({ children, hint, label }: QuickFieldProps) {
+function QuickField({ children, errorKey, hint, invalidFields, label }: QuickFieldProps) {
+  const hasError = Boolean(errorKey && invalidFields?.has(errorKey));
   return (
     <label className="block min-w-0">
       <span className={quickFieldLabelClassName}>{label}</span>
-      <div className="mt-3">{children}</div>
+      <div
+        className={`mt-3 ${hasError ? "field-error-ring" : ""}`}
+        data-field={errorKey}
+      >
+        {children}
+      </div>
       {hint ? <p className={quickFieldHintClassName}>{hint}</p> : null}
     </label>
   );
@@ -525,6 +533,7 @@ export function QuickMovementDialog({
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [inlineCounterparties, setInlineCounterparties] = useState<CounterpartySummary[]>([]);
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
@@ -626,8 +635,42 @@ export function QuickMovementDialog({
   useEffect(() => {
     setKind(initialKind);
     setErrorMessage("");
+    setInvalidFields(new Set());
     setPendingReceiptFile(null);
   }, [initialKind]);
+
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const el = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      const inner = el.querySelector<HTMLElement>("input,button,textarea,select");
+      if (inner) inner.focus();
+    }, 300);
+    document.querySelectorAll<HTMLElement>(".field-error-shake").forEach((node) => {
+      node.classList.remove("field-error-shake");
+      void node.offsetWidth;
+      node.classList.add("field-error-shake");
+    });
+    document.querySelectorAll<HTMLElement>(`[data-field]`).forEach((node) => {
+      if (invalidFields.has(node.getAttribute("data-field") ?? "")) {
+        node.classList.remove("field-error-shake");
+        void node.offsetWidth;
+        node.classList.add("field-error-shake");
+      }
+    });
+  }, [invalidFields]);
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
 
   function updateFormState<Field extends keyof QuickMovementFormState>(
     field: Field,
@@ -701,6 +744,7 @@ export function QuickMovementDialog({
     const occurredAt = new Date(formState.occurredAt);
 
     if (Number.isNaN(occurredAt.getTime())) {
+      setInvalidFields(new Set(["occurredAt"]));
       setErrorMessage("La fecha del movimiento no es valida.");
       return;
     }
@@ -712,13 +756,12 @@ export function QuickMovementDialog({
         const categoryId = parseOptionalInteger(formState.categoryId);
         const counterpartyId = parseOptionalInteger(formState.counterpartyId);
 
-        if (accountId === null || !Number.isFinite(accountId)) {
-          setErrorMessage("Selecciona una cuenta para registrar este movimiento.");
-          return;
-        }
-
-        if (amount === null || !Number.isFinite(amount) || amount <= 0) {
-          setErrorMessage("Ingresa un monto mayor a cero.");
+        const qErrors: string[] = [];
+        if (accountId === null || !Number.isFinite(accountId)) qErrors.push("accountId");
+        if (amount === null || !Number.isFinite(amount) || amount <= 0) qErrors.push("amount");
+        if (qErrors.length > 0) {
+          setInvalidFields(new Set(qErrors));
+          setErrorMessage("Completa los campos requeridos antes de guardar.");
           return;
         }
 
@@ -783,32 +826,20 @@ export function QuickMovementDialog({
         ? parseOptionalNumber(formState.destinationAmount)
         : sourceAmount;
 
-      if (sourceAccountId === null || !Number.isFinite(sourceAccountId)) {
-        setErrorMessage("Selecciona la cuenta origen.");
-        return;
-      }
+      const tErrors: string[] = [];
+      if (sourceAccountId === null || !Number.isFinite(sourceAccountId)) tErrors.push("sourceAccountId");
+      if (destinationAccountId === null || !Number.isFinite(destinationAccountId)) tErrors.push("destinationAccountId");
+      if (sourceAmount === null || !Number.isFinite(sourceAmount) || sourceAmount <= 0) tErrors.push("amount");
+      if (hasTransferCurrencyMismatch && (destinationAmount === null || !Number.isFinite(destinationAmount) || destinationAmount <= 0)) tErrors.push("destinationAmount");
 
-      if (destinationAccountId === null || !Number.isFinite(destinationAccountId)) {
-        setErrorMessage("Selecciona la cuenta destino.");
-        return;
-      }
-
-      if (sourceAccountId === destinationAccountId) {
+      if (tErrors.length === 0 && sourceAccountId === destinationAccountId) {
         setErrorMessage("La cuenta origen y destino deben ser distintas.");
         return;
       }
 
-      if (sourceAmount === null || !Number.isFinite(sourceAmount) || sourceAmount <= 0) {
-        setErrorMessage("Ingresa un monto origen mayor a cero.");
-        return;
-      }
-
-      if (destinationAmount === null || !Number.isFinite(destinationAmount) || destinationAmount <= 0) {
-        setErrorMessage(
-          hasTransferCurrencyMismatch
-            ? "Ingresa tambien el monto destino para completar la conversion."
-            : "Ingresa un monto valido para la transferencia.",
-        );
+      if (tErrors.length > 0) {
+        setInvalidFields(new Set(tErrors));
+        setErrorMessage("Completa los campos requeridos antes de guardar.");
         return;
       }
 
@@ -937,11 +968,12 @@ export function QuickMovementDialog({
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-50 isolate bg-black/68 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-['']"
-      onClick={requestClose}
+      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) requestClose(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
-        <div className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1040px] overflow-hidden rounded-[38px] border border-white/10 bg-[#050a12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1040px] overflow-hidden rounded-[38px] border border-white/10 bg-[#050a12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <div className="pointer-events-none absolute inset-0">
             <div
               className="absolute -left-20 top-10 h-64 w-64 rounded-full blur-3xl"
@@ -1071,12 +1103,14 @@ export function QuickMovementDialog({
                         {isTransfer ? (
                           <>
                             <QuickField
+                              errorKey="sourceAccountId"
                               hint="Cuenta desde donde sale el saldo."
+                              invalidFields={invalidFields}
                               label="Cuenta origen"
                             >
                               <QuickPicker
                                 emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => updateFormState("sourceAccountId", nextValue)}
+                                onChange={(nextValue) => { clearFieldError("sourceAccountId"); updateFormState("sourceAccountId", nextValue); }}
                                 options={accountOptions}
                                 placeholderDescription="Selecciona la cuenta que envia."
                                 placeholderLabel="Selecciona origen"
@@ -1086,12 +1120,14 @@ export function QuickMovementDialog({
                             </QuickField>
 
                             <QuickField
+                              errorKey="destinationAccountId"
                               hint="Cuenta que recibira el saldo."
+                              invalidFields={invalidFields}
                               label="Cuenta destino"
                             >
                               <QuickPicker
                                 emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => updateFormState("destinationAccountId", nextValue)}
+                                onChange={(nextValue) => { clearFieldError("destinationAccountId"); updateFormState("destinationAccountId", nextValue); }}
                                 options={accountOptions}
                                 placeholderDescription="Selecciona la cuenta que recibe."
                                 placeholderLabel="Selecciona destino"
@@ -1101,12 +1137,14 @@ export function QuickMovementDialog({
                             </QuickField>
 
                             <QuickField
+                              errorKey="amount"
                               hint={selectedSourceAccount ? `Moneda ${selectedSourceAccount.currencyCode}.` : "Monto que sale."}
+                              invalidFields={invalidFields}
                               label="Monto origen"
                             >
                               <QuickInput
                                 inputMode="decimal"
-                                onChange={(event) => updateFormState("amount", event.target.value)}
+                                onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }}
                                 placeholder="0.00"
                                 value={formState.amount}
                               />
@@ -1114,12 +1152,14 @@ export function QuickMovementDialog({
 
                             {hasTransferCurrencyMismatch ? (
                               <QuickField
+                                errorKey="destinationAmount"
                                 hint={selectedDestinationAccount ? `Moneda ${selectedDestinationAccount.currencyCode}.` : "Monto que entra."}
+                                invalidFields={invalidFields}
                                 label="Monto destino"
                               >
                                 <QuickInput
                                   inputMode="decimal"
-                                  onChange={(event) => updateFormState("destinationAmount", event.target.value)}
+                                  onChange={(event) => { clearFieldError("destinationAmount"); updateFormState("destinationAmount", event.target.value); }}
                                   placeholder="0.00"
                                   value={formState.destinationAmount}
                                 />
@@ -1140,16 +1180,18 @@ export function QuickMovementDialog({
                         ) : (
                           <>
                             <QuickField
+                              errorKey="accountId"
                               hint={
                                 kind === "expense"
                                   ? "Cuenta desde donde sale el dinero."
                                   : "Cuenta que recibe el dinero."
                               }
+                              invalidFields={invalidFields}
                               label="Cuenta"
                             >
                               <QuickPicker
                                 emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => updateFormState("accountId", nextValue)}
+                                onChange={(nextValue) => { clearFieldError("accountId"); updateFormState("accountId", nextValue); }}
                                 options={accountOptions}
                                 placeholderDescription={
                                   kind === "expense"
@@ -1163,12 +1205,14 @@ export function QuickMovementDialog({
                             </QuickField>
 
                             <QuickField
+                              errorKey="amount"
                               hint={selectedAccount ? `Moneda ${selectedAccount.currencyCode}.` : "Monto principal del movimiento."}
+                              invalidFields={invalidFields}
                               label="Monto"
                             >
                               <QuickInput
                                 inputMode="decimal"
-                                onChange={(event) => updateFormState("amount", event.target.value)}
+                                onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }}
                                 placeholder="0.00"
                                 value={formState.amount}
                               />
@@ -1227,12 +1271,14 @@ export function QuickMovementDialog({
                         ) : null}
 
                         <QuickField
+                          errorKey="occurredAt"
                           hint="Se guardara con esta fecha y hora."
+                          invalidFields={invalidFields}
                           label="Fecha operativa"
                         >
                           <DatePickerField
                             mode="datetime-local"
-                            onChange={(nextValue) => updateFormState("occurredAt", nextValue)}
+                            onChange={(nextValue) => { clearFieldError("occurredAt"); updateFormState("occurredAt", nextValue); }}
                             value={formState.occurredAt}
                           />
                         </QuickField>

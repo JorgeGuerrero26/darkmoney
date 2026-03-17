@@ -999,11 +999,17 @@ function Picker({
   );
 }
 
-function Field({ children, hint, label }: { children: ReactNode; hint?: string; label: string }) {
+function Field({ children, errorKey, hint, invalidFields, label }: { children: ReactNode; errorKey?: string; hint?: string; invalidFields?: Set<string>; label: string }) {
+  const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
     <label className="block">
       <span className={labelClassName}>{label}</span>
-      <div className="mt-3">{children}</div>
+      <div
+        className={`mt-3${hasError ? " field-error-ring" : ""}`}
+        data-field={errorKey}
+      >
+        {children}
+      </div>
       {hint ? <p className="mt-2 text-xs leading-6 text-storm/75">{hint}</p> : null}
     </label>
   );
@@ -1846,6 +1852,7 @@ function EditorDialog({
   baseCurrencyCode,
   canManageReceipts,
   canShareObligations,
+  clearFieldError,
   closeEditor,
   counterparties,
   currentShare,
@@ -1853,6 +1860,7 @@ function EditorDialog({
   formState,
   handleDeleteReceipt,
   handleUploadReceipt,
+  invalidFields,
   isCreateMode,
   isSaving,
   isUploadingReceipt,
@@ -1882,6 +1890,8 @@ function EditorDialog({
   isSaving: boolean;
   isUploadingReceipt: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  invalidFields: Set<string>;
+  clearFieldError: (field: string) => void;
   pendingReceiptFile: File | null;
   shareAccessMessage: string;
   shareFormState: ShareInviteFormState;
@@ -1891,11 +1901,32 @@ function EditorDialog({
     field: Field,
     value: ShareInviteFormState[Field],
   ) => void;
+  invalidFields: Set<string>;
+  clearFieldError: (field: string) => void;
   updateFormState: <Field extends keyof ObligationFormState>(
     field: Field,
     value: ObligationFormState[Field],
   ) => void;
 }) {
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   const title = formState.title.trim() || "Nuevo registro";
   const principalAmount = parseOptionalNumber(formState.principalAmount) ?? 0;
   const selectedCounterparty = counterparties.find(
@@ -1967,9 +1998,9 @@ function EditorDialog({
   }));
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form
             className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
             noValidate
@@ -2140,25 +2171,29 @@ function EditorDialog({
                       />
                     </Field>
                     <Field
+                      errorKey="title"
                       hint="Usa un nombre corto y facil de reconocer."
+                      invalidFields={invalidFields}
                       label="Titulo"
                     >
                       <Input
                         maxLength={120}
-                        onChange={(event) => updateFormState("title", event.target.value)}
+                        onChange={(event) => { clearFieldError("title"); updateFormState("title", event.target.value); }}
                         placeholder="Ej. Prestamo familiar marzo"
                         type="text"
                         value={formState.title}
                       />
                     </Field>
                     <Field
+                      errorKey="counterpartyId"
                       hint="Persona, empresa o banco relacionado."
+                      invalidFields={invalidFields}
                       label="Contraparte"
                     >
                       <Picker
                         disabled={counterpartyOptions.length === 0}
                         emptyMessage="No tienes contrapartes disponibles aun."
-                        onChange={(value) => updateFormState("counterpartyId", value)}
+                        onChange={(value) => { clearFieldError("counterpartyId"); updateFormState("counterpartyId", value); }}
                         options={counterpartyOptions}
                         placeholderDescription="Selecciona la persona o entidad principal."
                         placeholderLabel="Selecciona una contraparte"
@@ -2176,18 +2211,20 @@ function EditorDialog({
                   </h3>
                   <div className="mt-6 grid gap-5 lg:grid-cols-2">
                     <Field
+                      errorKey="principalAmount"
                       hint={
                         isCreateMode
                           ? "Monto base con el que nace el registro."
                           : "El monto de apertura ya fue definido al crear este registro."
                       }
+                      invalidFields={invalidFields}
                       label="Principal"
                     >
                       <Input
                         disabled={!isCreateMode}
                         inputMode="decimal"
                         min="0"
-                        onChange={(event) => updateFormState("principalAmount", event.target.value)}
+                        onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }}
                         placeholder="0.00"
                         step="0.01"
                         type="number"
@@ -2214,16 +2251,18 @@ function EditorDialog({
                       />
                     </Field>
                     <Field
+                      errorKey="startDate"
                       hint={
                         isCreateMode
                           ? "Fecha en la que comenzo la relacion."
                           : "La fecha de apertura ya fue registrada."
                       }
+                      invalidFields={invalidFields}
                       label="Inicio"
                     >
                       <DatePickerField
                         disabled={!isCreateMode}
-                        onChange={(nextValue) => updateFormState("startDate", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("startDate"); updateFormState("startDate", nextValue); }}
                         value={formState.startDate}
                       />
                     </Field>
@@ -2583,8 +2622,18 @@ export function ObligationsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedObligationId, setSelectedObligationId] = useState<number | null>(null);
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [paymentTargetId, setPaymentTargetId] = useState<number | null>(null);
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
@@ -2742,6 +2791,7 @@ export function ObligationsPage() {
   function openCreateEditor() {
     setPageFeedback(null);
     setEditorFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedObligationId(null);
     setFormState(applyObligationFormRules(createDefaultFormState(baseCurrencyCode)));
@@ -2756,6 +2806,7 @@ export function ObligationsPage() {
 
     setPageFeedback(null);
     setEditorFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedObligationId(obligation.id);
     setFormState(applyObligationFormRules(buildFormStateFromObligation(obligation)));
@@ -3179,35 +3230,14 @@ export function ObligationsPage() {
       formState.manualOpeningImpact,
     );
 
-    if (!title) {
-      setEditorFeedback({ tone: "error", title: "Falta el titulo", description: "Dale un nombre claro a este registro." });
-      return;
-    }
-
-    if (counterpartyId === null || !Number.isInteger(counterpartyId) || counterpartyId <= 0) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Selecciona una contraparte",
-        description: "Necesitamos saber con quien esta relacionado este registro.",
-      });
-      return;
-    }
-
-    if (principalAmount === null || Number.isNaN(principalAmount) || principalAmount <= 0) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Revisa el monto principal",
-        description: "Ingresa un monto mayor que cero.",
-      });
-      return;
-    }
-
-    if (!formState.startDate) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Falta la fecha de inicio",
-        description: "Define cuando comenzo este registro.",
-      });
+    const oblErrors: string[] = [];
+    if (!title) oblErrors.push("title");
+    if (counterpartyId === null || !Number.isInteger(counterpartyId) || counterpartyId <= 0) oblErrors.push("counterpartyId");
+    if (principalAmount === null || Number.isNaN(principalAmount) || principalAmount <= 0) oblErrors.push("principalAmount");
+    if (!formState.startDate) oblErrors.push("startDate");
+    if (oblErrors.length > 0) {
+      setInvalidFields(new Set(oblErrors));
+      setEditorFeedback({ tone: "error", title: "Revisa los campos requeridos", description: "Completa los campos marcados en rojo antes de guardar." });
       return;
     }
 
@@ -4731,6 +4761,7 @@ export function ObligationsPage() {
           baseCurrencyCode={baseCurrencyCode}
           canManageReceipts={canUploadReceipts}
           canShareObligations={canAccessProFeatures}
+          clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           counterparties={counterparties}
           currentShare={selectedObligation ? shareByObligationId.get(selectedObligation.id) ?? null : null}
@@ -4738,6 +4769,7 @@ export function ObligationsPage() {
           formState={formState}
           handleDeleteReceipt={handleDeleteReceipt}
           handleUploadReceipt={handleUploadReceipt}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
           isUploadingReceipt={isUploadingReceipt}

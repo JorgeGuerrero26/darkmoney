@@ -370,6 +370,38 @@ export function AppShell() {
     Boolean(activeWorkspace && user?.id && workspaceSnapshotQuery.data) &&
     !workspaceSnapshotQuery.isLoading;
 
+  useEffect(() => {
+    const EDGE_ZONE = 32;
+    const MIN_SWIPE_X = 48;
+    const MAX_SWIPE_Y = 80;
+    let startX = 0;
+    let startY = 0;
+
+    function onTouchStart(e: TouchEvent) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (window.innerWidth >= 1024) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = Math.abs(e.changedTouches[0].clientY - startY);
+      if (dy > MAX_SWIPE_Y) return;
+      if (dx > MIN_SWIPE_X && startX < EDGE_ZONE) {
+        setSidebarOpen(true);
+      } else if (dx < -MIN_SWIPE_X) {
+        setSidebarOpen(false);
+      }
+    }
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-glow text-ink">
       {sidebarOpen ? (
@@ -539,9 +571,9 @@ export function AppShell() {
                   size="compact"
                   title={currentUserName}
                 />
-                <div>
-                  <p className="font-medium">{currentUserName}</p>
-                  <p className="text-sm text-storm">{currentUserEmail}</p>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{currentUserName}</p>
+                  <p className="truncate text-sm text-storm">{currentUserEmail}</p>
                 </div>
               </div>
               <button

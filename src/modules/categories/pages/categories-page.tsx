@@ -32,7 +32,7 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -221,9 +221,11 @@ function buildCategoryMonogram(name: string) {
 
 function CategoryEditorDialog({
   categories,
+  clearFieldError,
   closeEditor,
   feedback,
   formState,
+  invalidFields,
   isCreateMode,
   isSaving,
   onSubmit,
@@ -231,9 +233,11 @@ function CategoryEditorDialog({
   updateFormState,
 }: {
   categories: CategoryOverview[];
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   feedback: FeedbackState | null;
   formState: CategoryFormState;
+  invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -249,6 +253,25 @@ function CategoryEditorDialog({
   const title = formState.name.trim() || "Nueva categoria";
   const availableParentOptions = categories.filter((category) => category.id !== selectedCategoryId);
 
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   function handleKindChange(nextKind: CategoryKind) {
     updateFormState("kind", nextKind);
 
@@ -258,9 +281,9 @@ function CategoryEditorDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
@@ -360,10 +383,13 @@ function CategoryEditorDialog({
                       <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                         Nombre
                       </span>
-                      <div className="mt-3">
+                      <div
+                        className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`}
+                        data-field="name"
+                      >
                         <Input
                           maxLength={80}
-                          onChange={(event) => updateFormState("name", event.target.value)}
+                          onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }}
                           placeholder="Ej. Alimentacion"
                           type="text"
                           value={formState.name}
@@ -487,10 +513,13 @@ function CategoryEditorDialog({
                       <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                         Orden
                       </span>
-                      <div className="mt-3">
+                      <div
+                        className={`mt-3${invalidFields.has("sortOrder") ? " field-error-ring" : ""}`}
+                        data-field="sortOrder"
+                      >
                         <Input
                           min="0"
-                          onChange={(event) => updateFormState("sortOrder", event.target.value)}
+                          onChange={(event) => { clearFieldError("sortOrder"); updateFormState("sortOrder", event.target.value); }}
                           placeholder="10"
                           step="10"
                           type="number"
@@ -710,6 +739,16 @@ export function CategoriesPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -793,6 +832,7 @@ export function CategoriesPage() {
 
   function openCreateEditor() {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedCategoryId(null);
     setFormState(createDefaultFormState(categories));
@@ -802,6 +842,7 @@ export function CategoriesPage() {
 
   function openEditEditor(category: CategoryOverview) {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedCategoryId(category.id);
     setFormState(buildFormStateFromCategory(category));
@@ -824,20 +865,18 @@ export function CategoriesPage() {
     const name = formState.name.trim();
     const sortOrder = Number(formState.sortOrder);
 
-    if (!name) {
-      setFeedback({
-        tone: "error",
-        title: "Falta el nombre",
-        description: "Dale un nombre claro para que luego sea facil encontrarla.",
-      });
-      return;
-    }
+    const errors: string[] = [];
+    if (!name) errors.push("name");
+    if (!Number.isFinite(sortOrder) || sortOrder < 0) errors.push("sortOrder");
 
-    if (!Number.isFinite(sortOrder) || sortOrder < 0) {
+    if (errors.length > 0) {
+      setInvalidFields(new Set(errors));
       setFeedback({
         tone: "error",
-        title: "Revisa el orden",
-        description: "El orden debe ser un numero positivo o cero.",
+        title: "Revisa los campos requeridos",
+        description: errors.includes("name")
+          ? "Dale un nombre claro para que luego sea facil encontrarla."
+          : "El orden debe ser un numero positivo o cero.",
       });
       return;
     }
@@ -1041,7 +1080,7 @@ export function CategoriesPage() {
         title="Categorias"
       />
 
-      {feedback && (!isEditorOpen || feedback.tone !== "error") ? (
+      {feedback && feedback.tone !== "error" && !isEditorOpen ? (
         <DataState
           description={feedback.description}
           title={feedback.title}
@@ -1382,9 +1421,11 @@ export function CategoriesPage() {
       {isEditorOpen ? (
         <CategoryEditorDialog
           categories={categories}
+          clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           feedback={feedback}
           formState={formState}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
           onSubmit={handleSubmitEditor}

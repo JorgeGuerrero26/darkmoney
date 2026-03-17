@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -139,17 +139,21 @@ function getModuleErrorMessage(error: unknown) {
 }
 
 function ContactEditorDialog({
+  clearFieldError,
   closeEditor,
   feedback,
   formState,
+  invalidFields,
   isSaving,
   isCreateMode,
   onSubmit,
   updateFormState,
 }: {
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   feedback: FeedbackState | null;
   formState: ContactFormState;
+  invalidFields: Set<string>;
   isSaving: boolean;
   isCreateMode: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -159,15 +163,34 @@ function ContactEditorDialog({
   const selectedType = getTypeDefinition(formState.type);
   const TypeIcon = selectedType.icon;
 
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   function toggleRole(role: CounterpartyRoleType) {
     const hasRole = formState.roles.includes(role);
     updateFormState("roles", hasRole ? formState.roles.filter((item) => item !== role) : [...formState.roles, role]);
   }
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
@@ -258,8 +281,11 @@ function ContactEditorDialog({
                   <div className="mt-6 space-y-5">
                     <label className="block">
                       <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Nombre</span>
-                      <div className="mt-3">
-                        <Input maxLength={120} onChange={(event) => updateFormState("name", event.target.value)} placeholder="Ej. Cliente Premium SAC" type="text" value={formState.name} />
+                      <div
+                        className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`}
+                        data-field="name"
+                      >
+                        <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Cliente Premium SAC" type="text" value={formState.name} />
                       </div>
                     </label>
                     <div>
@@ -475,6 +501,16 @@ export function ContactsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -574,6 +610,7 @@ export function ContactsPage() {
 
   function openCreateEditor() {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedContactId(null);
     setFormState(createDefaultFormState());
@@ -583,6 +620,7 @@ export function ContactsPage() {
 
   function openEditEditor(contact: CounterpartyOverview) {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedContactId(contact.id);
     setFormState(buildFormStateFromContact(contact));
@@ -601,6 +639,7 @@ export function ContactsPage() {
     const name = formState.name.trim();
 
     if (!name) {
+      setInvalidFields(new Set(["name"]));
       setFeedback({ tone: "error", title: "Falta el nombre", description: "Dale un nombre claro a este contacto." });
       return;
     }
@@ -724,7 +763,7 @@ export function ContactsPage() {
         eyebrow="contactos"
         title="Contactos"
       />
-      {feedback && (!isEditorOpen || feedback.tone !== "error") ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
+      {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
       <SurfaceCard action={<Users className="h-5 w-5 text-gold" />} description="Vista general de tu red financiera dentro del workspace." title="Red de contactos">
         <div className="grid gap-4 md:grid-cols-4">
@@ -879,7 +918,7 @@ export function ContactsPage() {
         )
       )}
 
-      {isEditorOpen ? <ContactEditorDialog closeEditor={requestCloseEditor} feedback={feedback} formState={formState} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
+      {isEditorOpen ? <ContactEditorDialog clearFieldError={clearFieldError} closeEditor={requestCloseEditor} feedback={feedback} formState={formState} invalidFields={invalidFields} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
 
       {showUnsavedDialog ? (
         <UnsavedChangesDialog

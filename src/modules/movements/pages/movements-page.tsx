@@ -96,6 +96,8 @@ type MovementFormState = {
 type MovementFieldProps = {
   label: string;
   hint?: string;
+  errorKey?: string;
+  invalidFields?: Set<string>;
   children: ReactNode;
 };
 
@@ -470,11 +472,17 @@ function filterCategoriesForMovementType(
   });
 }
 
-function MovementField({ children, hint, label }: MovementFieldProps) {
+function MovementField({ children, errorKey, hint, invalidFields, label }: MovementFieldProps) {
+  const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
     <label className="block min-w-0">
       <span className={movementFieldLabelClassName}>{label}</span>
-      <div className="mt-1.5 sm:mt-3">{children}</div>
+      <div
+        className={`mt-1.5 sm:mt-3${hasError ? " field-error-ring" : ""}`}
+        data-field={errorKey}
+      >
+        {children}
+      </div>
       {hint ? <p className={movementFieldHintClassName}>{hint}</p> : null}
     </label>
   );
@@ -649,10 +657,12 @@ type MovementEditorDialogProps = {
   baseCurrencyCode: string;
   canManageReceipts: boolean;
   categories: CategorySummary[];
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   counterparties: CounterpartySummary[];
   errorMessage: string;
   formState: MovementFormState;
+  invalidFields: Set<string>;
   handleDeleteMovement: () => Promise<void>;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
@@ -799,6 +809,7 @@ function MovementEditorDialog({
   baseCurrencyCode,
   canManageReceipts,
   categories,
+  clearFieldError,
   closeEditor,
   counterparties,
   errorMessage,
@@ -807,6 +818,7 @@ function MovementEditorDialog({
   handleDeleteReceipt,
   handleUploadReceipt,
   handleSubmit,
+  invalidFields,
   isCreateMode,
   isSaving,
   isUploadingReceipt,
@@ -818,6 +830,26 @@ function MovementEditorDialog({
   updateFormState,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   const selectedCategoryId = parseOptionalInteger(formState.categoryId);
   const filteredCategories = filterCategoriesForMovementType(
     categories,
@@ -984,12 +1016,15 @@ function MovementEditorDialog({
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
-      onClick={closeEditor}
+      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="pointer-events-none absolute inset-0">
@@ -1195,23 +1230,27 @@ function MovementEditorDialog({
                     </MovementField>
 
                     <MovementField
+                      errorKey="description"
                       hint="Aparece en listados, dashboards y trazabilidad."
+                      invalidFields={invalidFields}
                       label="Descripcion"
                     >
                       <EditorInput
-                        onChange={(event) => updateFormState("description", event.target.value)}
+                        onChange={(event) => { clearFieldError("description"); updateFormState("description", event.target.value); }}
                         placeholder="Ej. Pago de internet de la oficina"
                         value={formState.description}
                       />
                     </MovementField>
 
                     <MovementField
+                      errorKey="occurredAt"
                       hint="Fecha y hora efectiva del movimiento."
+                      invalidFields={invalidFields}
                       label="Fecha operativa"
                     >
                       <DatePickerField
                         mode="datetime-local"
-                        onChange={(nextValue) => updateFormState("occurredAt", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("occurredAt"); updateFormState("occurredAt", nextValue); }}
                         value={formState.occurredAt}
                       />
                     </MovementField>
@@ -1229,12 +1268,14 @@ function MovementEditorDialog({
 
                   <div className="mt-4 sm:mt-6 grid gap-3 sm:gap-4 md:grid-cols-2">
                     <MovementField
+                      errorKey="sourceAccountId"
                       hint="Cuenta desde donde sale saldo. Es clave para gastos y transferencias."
+                      invalidFields={invalidFields}
                       label="Cuenta origen"
                     >
                       <SearchablePicker
                         emptyMessage="No encontramos una cuenta origen con ese termino."
-                        onChange={(nextValue) => updateFormState("sourceAccountId", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("sourceAccountId"); updateFormState("sourceAccountId", nextValue); }}
                         options={accountPickerOptions}
                         placeholderDescription="Cuenta desde donde sale saldo."
                         placeholderLabel="Sin origen"
@@ -1244,24 +1285,28 @@ function MovementEditorDialog({
                     </MovementField>
 
                     <MovementField
+                      errorKey="sourceAmount"
                       hint={selectedSourceAccount ? `Moneda ${selectedSourceAccount.currencyCode}.` : "Monto que sale."}
+                      invalidFields={invalidFields}
                       label="Monto origen"
                     >
                       <EditorInput
                         inputMode="decimal"
-                        onChange={(event) => updateFormState("sourceAmount", event.target.value)}
+                        onChange={(event) => { clearFieldError("sourceAmount"); updateFormState("sourceAmount", event.target.value); }}
                         placeholder="0.00"
                         value={formState.sourceAmount}
                       />
                     </MovementField>
 
                     <MovementField
+                      errorKey="destinationAccountId"
                       hint="Cuenta que recibe saldo. Es clave para ingresos y transferencias."
+                      invalidFields={invalidFields}
                       label="Cuenta destino"
                     >
                       <SearchablePicker
                         emptyMessage="No encontramos una cuenta destino con ese termino."
-                        onChange={(nextValue) => updateFormState("destinationAccountId", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("destinationAccountId"); updateFormState("destinationAccountId", nextValue); }}
                         options={accountPickerOptions}
                         placeholderDescription="Cuenta que recibe saldo."
                         placeholderLabel="Sin destino"
@@ -1271,16 +1316,18 @@ function MovementEditorDialog({
                     </MovementField>
 
                     <MovementField
+                      errorKey="destinationAmount"
                       hint={
                         selectedDestinationAccount
                           ? `Moneda ${selectedDestinationAccount.currencyCode}.`
                           : "Monto que entra."
                       }
+                      invalidFields={invalidFields}
                       label="Monto destino"
                     >
                       <EditorInput
                         inputMode="decimal"
-                        onChange={(event) => updateFormState("destinationAmount", event.target.value)}
+                        onChange={(event) => { clearFieldError("destinationAmount"); updateFormState("destinationAmount", event.target.value); }}
                         placeholder="0.00"
                         value={formState.destinationAmount}
                       />
@@ -1535,7 +1582,17 @@ export function MovementsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [editorMode, setEditorMode] = useState<MovementEditorMode>("create");
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [selectedMovementId, setSelectedMovementId] = useState<number | null>(null);
   const [formState, setFormState] = useState<MovementFormState>(() => createDefaultMovementFormState());
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
@@ -1732,6 +1789,7 @@ export function MovementsPage() {
     setFormState(createDefaultMovementFormState());
     setPendingReceiptFile(null);
     setIsDirty(false);
+    setInvalidFields(new Set());
     setIsEditorOpen(true);
   }
 
@@ -1743,6 +1801,7 @@ export function MovementsPage() {
     setFormState(buildFormStateFromMovement(movement));
     setPendingReceiptFile(null);
     setIsDirty(false);
+    setInvalidFields(new Set());
     setIsEditorOpen(true);
   }
 
@@ -1869,22 +1928,10 @@ export function MovementsPage() {
     setFeedbackMessage("");
     setErrorMessage("");
 
-    if (!formState.description.trim()) {
-      setErrorMessage("Ingresa una descripcion para el movimiento.");
-      return;
-    }
+    const movErrors: string[] = [];
 
-    if (!formState.occurredAt) {
-      setErrorMessage("Selecciona la fecha y hora efectiva del movimiento.");
-      return;
-    }
-
-    const occurredAt = new Date(formState.occurredAt);
-
-    if (Number.isNaN(occurredAt.getTime())) {
-      setErrorMessage("La fecha del movimiento no es valida.");
-      return;
-    }
+    if (!formState.description.trim()) movErrors.push("description");
+    if (!formState.occurredAt || Number.isNaN(new Date(formState.occurredAt).getTime())) movErrors.push("occurredAt");
 
     const sourceAccountId = parseOptionalInteger(formState.sourceAccountId);
     const destinationAccountId = parseOptionalInteger(formState.destinationAccountId);
@@ -1909,56 +1956,38 @@ export function MovementsPage() {
       return;
     }
 
-    if (sourceAmount !== null && sourceAmount <= 0) {
-      setErrorMessage("El monto origen debe ser mayor a cero.");
-      return;
-    }
-
-    if (destinationAmount !== null && destinationAmount <= 0) {
-      setErrorMessage("El monto destino debe ser mayor a cero.");
-      return;
-    }
+    if (sourceAmount !== null && sourceAmount <= 0) movErrors.push("sourceAmount");
+    if (destinationAmount !== null && destinationAmount <= 0) movErrors.push("destinationAmount");
 
     if (manualFxRate !== null && manualFxRate <= 0) {
       setErrorMessage("La tasa de cambio debe ser mayor a cero.");
       return;
     }
 
-    if (sourceAccountId !== null && sourceAmount === null) {
-      setErrorMessage("Si eliges una cuenta origen, tambien debes indicar su monto.");
-      return;
-    }
-
-    if (destinationAccountId !== null && destinationAmount === null) {
-      setErrorMessage("Si eliges una cuenta destino, tambien debes indicar su monto.");
-      return;
-    }
+    if (sourceAccountId !== null && sourceAmount === null) movErrors.push("sourceAmount");
+    if (destinationAccountId !== null && destinationAmount === null) movErrors.push("destinationAmount");
 
     const hasSourceSide = sourceAccountId !== null && sourceAmount !== null;
     const hasDestinationSide = destinationAccountId !== null && destinationAmount !== null;
 
     if (formState.movementType === "transfer") {
-      if (!hasSourceSide || !hasDestinationSide) {
-        setErrorMessage("Las transferencias requieren origen, destino y montos completos.");
-        return;
-      }
-
-      if (sourceAccountId === destinationAccountId) {
+      if (!hasSourceSide) { movErrors.push("sourceAccountId"); movErrors.push("sourceAmount"); }
+      if (!hasDestinationSide) { movErrors.push("destinationAccountId"); movErrors.push("destinationAmount"); }
+      if (hasSourceSide && hasDestinationSide && sourceAccountId === destinationAccountId) {
         setErrorMessage("La cuenta origen y destino deben ser distintas en una transferencia.");
         return;
       }
     } else if (expenseLikeMovementTypes.has(formState.movementType)) {
-      if (!hasSourceSide) {
-        setErrorMessage("Este tipo de movimiento necesita cuenta y monto de origen.");
-        return;
-      }
+      if (!hasSourceSide) { movErrors.push("sourceAccountId"); movErrors.push("sourceAmount"); }
     } else if (incomeLikeMovementTypes.has(formState.movementType)) {
-      if (!hasDestinationSide) {
-        setErrorMessage("Este tipo de movimiento necesita cuenta y monto de destino.");
-        return;
-      }
+      if (!hasDestinationSide) { movErrors.push("destinationAccountId"); movErrors.push("destinationAmount"); }
     } else if (!hasSourceSide && !hasDestinationSide) {
-      setErrorMessage("Registra al menos una cuenta con su monto para guardar el movimiento.");
+      movErrors.push("sourceAccountId"); movErrors.push("sourceAmount");
+    }
+
+    if (movErrors.length > 0) {
+      setInvalidFields(new Set(movErrors));
+      setErrorMessage("Completa los campos requeridos antes de guardar.");
       return;
     }
 
@@ -2125,7 +2154,7 @@ export function MovementsPage() {
         ) : null}
         <SurfaceCard
           action={<Filter className="h-5 w-5 text-gold" />}
-          className="relative z-30 overflow-visible"
+          className="relative z-20 overflow-visible"
           description="Busca por descripcion, cuenta, contraparte o categoria y filtra por estado o tipo."
           title="Explorar movimientos"
         >
@@ -2474,6 +2503,8 @@ export function MovementsPage() {
           handleDeleteReceipt={handleDeleteReceipt}
           handleUploadReceipt={handleUploadReceipt}
           handleSubmit={handleSubmit}
+          clearFieldError={clearFieldError}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSaving}
           isUploadingReceipt={isUploadingReceipt}

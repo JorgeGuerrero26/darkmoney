@@ -328,17 +328,17 @@ const pickerEmptyStateStyle = {
 };
 
 const accountFieldClassName =
-  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 
-const accountTextInputClassName = `${accountFieldClassName} h-16`;
-const accountPickerTriggerClassName = `${accountFieldClassName} flex h-16 items-center justify-between gap-3 text-left`;
+const accountTextInputClassName = `${accountFieldClassName} h-14 sm:h-16`;
+const accountPickerTriggerClassName = `${accountFieldClassName} flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left`;
 const accountPickerSearchInputClassName =
   "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 const editorPanelClassName =
-  "glass-panel-soft relative overflow-visible rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
+  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
 const accountFieldLabelClassName =
-  "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
-const accountFieldHintClassName = "mt-2 text-xs leading-6 text-storm/75";
+  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
+const accountFieldHintClassName = "mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75";
 
 const ACCOUNT_EDITOR_DRAFT_STORAGE_KEY = "darkmoney-account-editor-draft";
 const ACCOUNT_EDITOR_DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
@@ -429,7 +429,7 @@ function CurrencySelect({ onChange, value }: CurrencySelectProps) {
         type="button"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <span className="flex h-9 min-w-[2.5rem] shrink-0 items-center justify-center rounded-[14px] sm:h-10 sm:min-w-[3rem] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             {selectedCurrency?.symbol ?? "?"}
           </span>
           <span className="min-w-0">
@@ -557,7 +557,7 @@ function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
       >
         <span className="flex min-w-0 items-center gap-3">
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] text-white shadow-lg"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] sm:h-10 sm:w-10 sm:rounded-[18px] text-white shadow-lg"
             style={{ backgroundColor: selectedType.color }}
           >
             <SelectedTypeIcon className="h-4 w-4" />
@@ -795,6 +795,7 @@ function AccountsLoadingSkeleton() {
 
 type AccountEditorDialogProps = {
   baseCurrencyCode: string;
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   errorMessage: string;
   formState: AccountFormState;
@@ -802,6 +803,7 @@ type AccountEditorDialogProps = {
   handleArchiveToggle: (account: AccountSummary) => Promise<void> | void;
   handleDeleteAccount: () => Promise<void> | void;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void> | void;
+  invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
   selectedAccount: AccountSummary | null;
@@ -813,6 +815,7 @@ type AccountEditorDialogProps = {
 
 function AccountEditorDialog({
   baseCurrencyCode,
+  clearFieldError,
   closeEditor,
   errorMessage,
   formState,
@@ -820,6 +823,7 @@ function AccountEditorDialog({
   handleArchiveToggle,
   handleDeleteAccount,
   handleSubmit,
+  invalidFields,
   isCreateMode,
   isSaving,
   selectedAccount,
@@ -836,16 +840,38 @@ function AccountEditorDialog({
   const previewIconOption = getIconOption(formState.icon || previewType.icon);
   const PreviewAccountIcon = getAccountIcon(previewIconOption.value, formState.type);
 
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
+
   return (
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
-      onClick={closeEditor}
+      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="pointer-events-none absolute inset-0">
@@ -909,7 +935,7 @@ function AccountEditorDialog({
                   />
                 ) : null}
                 <div className="space-y-6">
-                  <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 sm:p-6 lg:p-7">
+                  <section className="relative overflow-hidden rounded-[24px] sm:rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 sm:p-6 lg:p-7">
                     <div
                       className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
                       style={{ backgroundColor: `${formState.color}3d` }}
@@ -928,18 +954,18 @@ function AccountEditorDialog({
 
                       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-end">
                         <div className="flex items-start gap-5">
-                          <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+                          <div className="relative flex h-16 w-16 shrink-0 items-center justify-center sm:h-24 sm:w-24">
                             <div
-                              className="absolute inset-0 rounded-[30px] opacity-80 blur-2xl"
+                              className="absolute inset-0 rounded-[20px] sm:rounded-[30px] opacity-80 blur-2xl"
                               style={{ backgroundColor: `${formState.color}5f` }}
                             />
                             <div
-                              className="relative flex h-full w-full items-center justify-center rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
+                              className="relative flex h-full w-full items-center justify-center rounded-[20px] sm:rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
                               style={{
                                 background: `linear-gradient(160deg, ${formState.color}, rgba(8, 13, 20, 0.72))`,
                               }}
                             >
-                              <PreviewAccountIcon className="h-9 w-9" />
+                              <PreviewAccountIcon className="h-6 w-6 sm:h-9 sm:w-9" />
                             </div>
                           </div>
 
@@ -947,7 +973,7 @@ function AccountEditorDialog({
                             <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Vista previa
                             </p>
-                            <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">
+                            <h3 className="mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
                               {previewAccountName}
                             </h3>
                             <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
@@ -968,11 +994,11 @@ function AccountEditorDialog({
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Saldo inicial
                             </p>
-                            <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                            <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
                               {formatCurrency(
                                 previewOpeningBalance,
                                 previewCurrency?.code ?? baseCurrencyCode,
@@ -980,30 +1006,30 @@ function AccountEditorDialog({
                             </p>
                           </div>
 
-                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Moneda
                             </p>
-                            <p className="mt-3 text-sm font-medium text-ink">
+                            <p className="mt-2 sm:mt-3 text-xs sm:text-sm font-medium text-ink">
                               {previewCurrency?.label ?? "Moneda configurada"}
                             </p>
-                            <p className="mt-2 text-xs leading-6 text-storm/75">
+                            <p className="mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">
                               {previewCurrency
                                 ? `${previewCurrency.code} - ${previewCurrency.region}`
                                 : "Usaremos la moneda base del workspace."}
                             </p>
                           </div>
 
-                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Estado patrimonio
                             </p>
-                            <p className="mt-3 text-sm font-medium text-ink">
+                            <p className="mt-2 sm:mt-3 text-xs sm:text-sm font-medium text-ink">
                               {formState.includeInNetWorth
                                 ? "Incluida en el net worth"
                                 : "Excluida del net worth"}
                             </p>
-                            <p className="mt-2 text-xs leading-6 text-storm/75">
+                            <p className="mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">
                               {formState.includeInNetWorth
                                 ? "Aportara al resumen general del workspace."
                                 : "Quedara fuera del calculo patrimonial."}
@@ -1043,13 +1069,18 @@ function AccountEditorDialog({
                             Visible en dashboard y movimientos
                           </span>
                         </div>
-                        <input
-                          className={`${accountTextInputClassName} mt-3`}
-                          onChange={(event) => updateFormState("name", event.target.value)}
-                          placeholder="Ej. Cuenta principal"
-                          type="text"
-                          value={formState.name}
-                        />
+                        <div
+                          className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`}
+                          data-field="name"
+                        >
+                          <input
+                            className={accountTextInputClassName}
+                            onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }}
+                            placeholder="Ej. Cuenta principal"
+                            type="text"
+                            value={formState.name}
+                          />
+                        </div>
                         <p className={accountFieldHintClassName}>
                           Usa un nombre corto y facil de reconocer, por ejemplo "Cuenta principal"
                           o "Caja operativa".
@@ -1105,16 +1136,19 @@ function AccountEditorDialog({
                             {previewCurrency?.code ?? baseCurrencyCode}
                           </span>
                         </div>
-                        <input
-                          className={`${accountTextInputClassName} mt-3`}
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            updateFormState("openingBalance", event.target.value)
-                          }
-                          placeholder="0.00"
-                          type="text"
-                          value={formState.openingBalance}
-                        />
+                        <div
+                          className={`mt-3${invalidFields.has("openingBalance") ? " field-error-ring" : ""}`}
+                          data-field="openingBalance"
+                        >
+                          <input
+                            className={accountTextInputClassName}
+                            inputMode="decimal"
+                            onChange={(event) => { clearFieldError("openingBalance"); updateFormState("openingBalance", event.target.value); }}
+                            placeholder="0.00"
+                            type="text"
+                            value={formState.openingBalance}
+                          />
+                        </div>
                         <p className={accountFieldHintClassName}>
                           Acepta decimales y puede ser 0 si la cuenta empieza vacia.
                         </p>
@@ -1535,6 +1569,16 @@ export function AccountsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [editorMode, setEditorMode] = useState<AccountEditorMode>("create");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
@@ -1675,6 +1719,7 @@ export function AccountsPage() {
 
     setFeedbackMessage("");
     setErrorMessage("");
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedAccountId(null);
     setFormState(createDefaultFormState(activeWorkspace.baseCurrencyCode));
@@ -1685,6 +1730,7 @@ export function AccountsPage() {
   function openEditEditor(account: AccountSummary) {
     setFeedbackMessage("");
     setErrorMessage("");
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedAccountId(account.id);
     setFormState(buildFormStateFromAccount(account));
@@ -1746,15 +1792,13 @@ export function AccountsPage() {
     setFeedbackMessage("");
     setErrorMessage("");
 
-    if (!formState.name.trim()) {
-      setErrorMessage("Ingresa un nombre para la cuenta.");
-      return;
-    }
-
     const parsedOpeningBalance = Number(formState.openingBalance);
-
-    if (Number.isNaN(parsedOpeningBalance)) {
-      setErrorMessage("El saldo inicial debe ser un numero valido.");
+    const accountErrors: string[] = [];
+    if (!formState.name.trim()) accountErrors.push("name");
+    if (Number.isNaN(parsedOpeningBalance)) accountErrors.push("openingBalance");
+    if (accountErrors.length > 0) {
+      setInvalidFields(new Set(accountErrors));
+      setErrorMessage(accountErrors.includes("name") ? "Ingresa un nombre para la cuenta." : "El saldo inicial debe ser un numero valido.");
       return;
     }
 
@@ -2201,6 +2245,7 @@ export function AccountsPage() {
       {isEditorOpen ? (
         <AccountEditorDialog
           baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+          clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           errorMessage={errorMessage}
           formState={formState}
@@ -2208,6 +2253,7 @@ export function AccountsPage() {
           handleArchiveToggle={handleArchiveToggle}
           handleDeleteAccount={handleDeleteAccount}
           handleSubmit={handleSubmit}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSaving}
           selectedAccount={selectedAccount}

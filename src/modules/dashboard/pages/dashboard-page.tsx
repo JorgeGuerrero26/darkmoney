@@ -3480,8 +3480,8 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-pine">Ultimo ingreso</p>
+            <div className="flex flex-wrap items-start gap-2">
+              <p className="min-w-0 flex-1 text-xs uppercase tracking-[0.18em] text-pine">Ultimo ingreso</p>
               {latestIncomeAmount !== null ? (
                 <StatusBadge status={formatCurrency(latestIncomeAmount, displayCurrencyCode)} tone="success" />
               ) : null}
@@ -3494,13 +3494,13 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultimo movimiento</p>
+            <div className="flex flex-wrap items-start gap-2">
+              <p className="min-w-0 flex-1 text-xs uppercase tracking-[0.18em] text-storm">Ultimo movimiento</p>
               {latestMovementLabel && latestMovementAmount !== null ? (
-                <StatusBadge
-                  status={`${latestMovementLabel} - ${formatCurrency(latestMovementAmount, displayCurrencyCode)}`}
-                  tone={latestMovementTone}
-                />
+                <div className="flex flex-wrap gap-1">
+                  <StatusBadge status={latestMovementLabel} tone={latestMovementTone} />
+                  <StatusBadge status={formatCurrency(latestMovementAmount, displayCurrencyCode)} tone={latestMovementTone} />
+                </div>
               ) : null}
             </div>
             <p className="mt-3 font-semibold text-ink">

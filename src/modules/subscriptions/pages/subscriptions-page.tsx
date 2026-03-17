@@ -400,11 +400,17 @@ function Picker({
   );
 }
 
-function Field({ children, hint, label }: { children: ReactNode; hint?: string; label: string }) {
+function Field({ children, errorKey, hint, invalidFields, label }: { children: ReactNode; errorKey?: string; hint?: string; invalidFields?: Set<string>; label: string }) {
+  const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
     <label className="block min-w-0">
       <span className={labelClassName}>{label}</span>
-      <div className="mt-1.5 sm:mt-3">{children}</div>
+      <div
+        className={`mt-1.5 sm:mt-3${hasError ? " field-error-ring" : ""}`}
+        data-field={errorKey}
+      >
+        {children}
+      </div>
       {hint ? <p className="mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">{hint}</p> : null}
     </label>
   );
@@ -548,10 +554,12 @@ function EditorDialog({
   accounts,
   baseCurrencyCode,
   categories,
+  clearFieldError,
   closeEditor,
   counterparties,
   feedback,
   formState,
+  invalidFields,
   isCreateMode,
   isSaving,
   onSubmit,
@@ -560,10 +568,12 @@ function EditorDialog({
   accounts: AccountSummary[];
   baseCurrencyCode: string;
   categories: CategorySummary[];
+  clearFieldError: (field: string) => void;
   closeEditor: () => void;
   counterparties: CounterpartySummary[];
   feedback: FeedbackState | null;
   formState: SubscriptionFormState;
+  invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -573,6 +583,25 @@ function EditorDialog({
   ) => void;
 }) {
   const title = formState.name.trim() || "Nueva suscripcion";
+
+  useEffect(() => {
+    if (invalidFields.size === 0) return;
+    const firstField = [...invalidFields][0];
+    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+    if (firstEl) {
+      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }, 300);
+    }
+    invalidFields.forEach((field) => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!el) return;
+      el.classList.remove("field-error-shake");
+      void el.offsetWidth;
+      el.classList.add("field-error-shake");
+    });
+  }, [invalidFields]);
   const amount = parseOptionalNumber(formState.amount) ?? 0;
   const selectedVendor = counterparties.find(
     (counterparty) => String(counterparty.id) === formState.vendorPartyId,
@@ -652,9 +681,9 @@ function EditorDialog({
     formState.frequency === "yearly";
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
@@ -738,8 +767,8 @@ function EditorDialog({
                   <p className={labelClassName}>Identidad</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Base de la suscripcion</h3>
                   <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
-                    <Field hint="Nombre visible para reconocerla en la app." label="Nombre">
-                      <Input maxLength={120} onChange={(event) => updateFormState("name", event.target.value)} placeholder="Ej. Netflix familiar" type="text" value={formState.name} />
+                    <Field errorKey="name" hint="Nombre visible para reconocerla en la app." invalidFields={invalidFields} label="Nombre">
+                      <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Netflix familiar" type="text" value={formState.name} />
                     </Field>
                     <Field hint="Proveedor o servicio relacionado." label="Proveedor">
                       <Picker disabled={counterpartyOptions.length === 0} emptyMessage="No tienes contrapartes disponibles aun." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Puedes dejarlo libre si aun no lo registras." placeholderLabel="Sin proveedor fijo" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
@@ -757,8 +786,8 @@ function EditorDialog({
                   <p className={labelClassName}>Monto</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Monto y moneda</h3>
                   <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
-                    <Field hint="Monto esperado en cada cobro." label="Monto">
-                      <Input inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
+                    <Field errorKey="amount" hint="Monto esperado en cada cobro." invalidFields={invalidFields} label="Monto">
+                      <Input inputMode="decimal" min="0" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
                     </Field>
                     <Field hint="Moneda principal de la suscripcion." label="Moneda">
                       <Picker emptyMessage="No hay monedas configuradas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Selecciona la moneda principal." placeholderLabel="Selecciona una moneda" queryPlaceholder="Buscar PEN, USD, EUR..." value={formState.currencyCode} />
@@ -776,15 +805,15 @@ function EditorDialog({
                     <Field hint="Usa 1 para la frecuencia normal, 2 para cada dos ciclos, etc." label="Intervalo">
                       <Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" step="1" type="number" value={formState.intervalCount} />
                     </Field>
-                    <Field hint="Fecha desde la que empieza a considerarse activa." label="Inicio">
+                    <Field errorKey="startDate" hint="Fecha desde la que empieza a considerarse activa." invalidFields={invalidFields} label="Inicio">
                       <DatePickerField
-                        onChange={(nextValue) => updateFormState("startDate", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("startDate"); updateFormState("startDate", nextValue); }}
                         value={formState.startDate}
                       />
                     </Field>
-                    <Field hint="Siguiente fecha esperada de cobro." label="Proximo cobro">
+                    <Field errorKey="nextDueDate" hint="Siguiente fecha esperada de cobro." invalidFields={invalidFields} label="Proximo cobro">
                       <DatePickerField
-                        onChange={(nextValue) => updateFormState("nextDueDate", nextValue)}
+                        onChange={(nextValue) => { clearFieldError("nextDueDate"); updateFormState("nextDueDate", nextValue); }}
                         value={formState.nextDueDate}
                       />
                     </Field>
@@ -891,6 +920,16 @@ export function SubscriptionsPage() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  function clearFieldError(field: string) {
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -944,6 +983,7 @@ export function SubscriptionsPage() {
 
   function openCreateEditor() {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedSubscriptionId(null);
     setFormState(createDefaultFormState(baseCurrencyCode));
@@ -953,6 +993,7 @@ export function SubscriptionsPage() {
 
   function openEditEditor(subscription: SubscriptionSummary) {
     setFeedback(null);
+    setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedSubscriptionId(subscription.id);
     setFormState(buildFormStateFromSubscription(subscription));
@@ -1016,20 +1057,17 @@ export function SubscriptionsPage() {
     const dayOfWeek = parseOptionalInteger(formState.dayOfWeek);
     const remindDaysBefore = parseOptionalInteger(formState.remindDaysBefore);
 
-    if (!name) {
+    const subErrors: string[] = [];
+    if (!name) subErrors.push("name");
+    if (amount === null || Number.isNaN(amount) || amount <= 0) subErrors.push("amount");
+    if (!formState.startDate) subErrors.push("startDate");
+    if (!formState.nextDueDate) subErrors.push("nextDueDate");
+    if (subErrors.length > 0) {
+      setInvalidFields(new Set(subErrors));
       setFeedback({
         tone: "error",
-        title: "Falta el nombre",
-        description: "Dale un nombre claro para identificar esta suscripcion.",
-      });
-      return;
-    }
-
-    if (amount === null || Number.isNaN(amount) || amount <= 0) {
-      setFeedback({
-        tone: "error",
-        title: "Revisa el monto",
-        description: "Ingresa un monto mayor que cero.",
+        title: "Revisa los campos requeridos",
+        description: "Completa los campos marcados en rojo antes de guardar.",
       });
       return;
     }
@@ -1269,7 +1307,7 @@ export function SubscriptionsPage() {
         title="Suscripciones"
       />
 
-      {feedback && (!isEditorOpen || feedback.tone !== "error") ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
+      {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
       <SurfaceCard action={<CalendarClock className="h-5 w-5 text-gold" />} description="Resumen general de tus pagos recurrentes configurados." title="Radar de suscripciones">
         <div className="grid gap-4 md:grid-cols-4">
@@ -1416,10 +1454,12 @@ export function SubscriptionsPage() {
           accounts={accounts}
           baseCurrencyCode={baseCurrencyCode}
           categories={categories}
+          clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           counterparties={counterparties}
           feedback={feedback}
           formState={formState}
+          invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
           onSubmit={handleSubmit}
