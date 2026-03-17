@@ -196,7 +196,7 @@ export function ContactQuickCreateDialog({
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[860px] overflow-hidden rounded-[34px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(event) => event.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[860px] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(event) => event.stopPropagation()}>
           <div className="pointer-events-none absolute inset-0">
             <div
               className="absolute -left-12 top-8 h-48 w-48 rounded-full blur-3xl"

@@ -701,7 +701,7 @@ function DeleteMovementConfirmDialog({
 
   return (
     <div className="absolute inset-0 z-[90] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-md sm:p-6">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] border border-[#f27a86]/18 bg-[#07101a]/96 p-6 shadow-[0_35px_120px_rgba(0,0,0,0.58)] sm:p-7">
+      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/18 bg-[#07101a]/96 p-6 shadow-[0_35px_120px_rgba(0,0,0,0.58)] sm:p-7">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/18 blur-3xl" />
           <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4566d6]/12 blur-3xl" />
@@ -1022,7 +1022,7 @@ function MovementEditorDialog({
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
