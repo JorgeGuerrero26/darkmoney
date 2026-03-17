@@ -1022,7 +1022,7 @@ function MovementEditorDialog({
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -1043,7 +1043,7 @@ function MovementEditorDialog({
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
           </div>
 
-          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
+          <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-2xl space-y-4">
                 <div className="flex flex-wrap items-center gap-3">

@@ -1175,7 +1175,7 @@ function PaymentDialog({
       <div className="flex min-h-full items-center justify-center">
         <div className="animate-rise-in relative w-full max-w-[880px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
           <form
-            className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
+            className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
@@ -1414,7 +1414,7 @@ function PrincipalAdjustmentDialog({
       <div className="flex min-h-full items-center justify-center">
         <div className="animate-rise-in relative w-full max-w-[980px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
           <form
-            className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
+            className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
@@ -1682,7 +1682,7 @@ function ShareInviteDialog({
       <div className="flex min-h-full items-center justify-center">
         <div className="animate-rise-in relative w-full max-w-[920px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
           <form
-            className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
+            className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
@@ -2000,7 +2000,7 @@ function EditorDialog({
       <div className="flex min-h-full items-center justify-center">
         <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form
-            className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
+            className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
