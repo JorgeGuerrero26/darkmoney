@@ -1901,8 +1901,6 @@ function EditorDialog({
     field: Field,
     value: ShareInviteFormState[Field],
   ) => void;
-  invalidFields: Set<string>;
-  clearFieldError: (field: string) => void;
   updateFormState: <Field extends keyof ObligationFormState>(
     field: Field,
     value: ObligationFormState[Field],
@@ -3329,7 +3327,7 @@ export function ObligationsPage() {
       counterpartyId: validatedCounterpartyId,
       settlementAccountId: normalizedSettlementAccountId,
       currencyCode: formState.currencyCode.trim().toUpperCase() || baseCurrencyCode,
-      principalAmount,
+      principalAmount: principalAmount!,
       startDate: formState.startDate,
       dueDate: formState.dueDate || null,
       installmentAmount,

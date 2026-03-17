@@ -1168,7 +1168,7 @@ export function SubscriptionsPage() {
       accountId: accountId === null ? null : accountId,
       categoryId: categoryId === null ? null : categoryId,
       currencyCode: formState.currencyCode.trim().toUpperCase() || baseCurrencyCode,
-      amount,
+      amount: amount!,
       frequency: formState.frequency,
       intervalCount,
       dayOfMonth: dayOfMonth === null ? null : dayOfMonth,

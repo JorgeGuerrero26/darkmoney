@@ -1929,9 +1929,10 @@ export function MovementsPage() {
     setErrorMessage("");
 
     const movErrors: string[] = [];
+    const occurredAt = new Date(formState.occurredAt);
 
     if (!formState.description.trim()) movErrors.push("description");
-    if (!formState.occurredAt || Number.isNaN(new Date(formState.occurredAt).getTime())) movErrors.push("occurredAt");
+    if (!formState.occurredAt || Number.isNaN(occurredAt.getTime())) movErrors.push("occurredAt");
 
     const sourceAccountId = parseOptionalInteger(formState.sourceAccountId);
     const destinationAccountId = parseOptionalInteger(formState.destinationAccountId);

@@ -801,16 +801,16 @@ export function QuickMovementDialog({
           try {
             await uploadReceiptForMovement(createdMovementId, pendingReceiptFile);
             onCreated(
-              `${selectedMode.label} guardado con su comprobante por ${formatCurrency(amount, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}.`,
+              `${selectedMode.label} guardado con su comprobante por ${formatCurrency(amount ?? 0, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}.`,
             );
           } catch {
             onCreated(
-              `${selectedMode.label} guardado por ${formatCurrency(amount, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}, pero el comprobante quedo pendiente.`,
+              `${selectedMode.label} guardado por ${formatCurrency(amount ?? 0, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}, pero el comprobante quedo pendiente.`,
             );
           }
         } else {
           onCreated(
-            `${selectedMode.label} guardado por ${formatCurrency(amount, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}.`,
+            `${selectedMode.label} guardado por ${formatCurrency(amount ?? 0, selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode)}.`,
           );
         }
 

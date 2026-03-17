@@ -1384,7 +1384,7 @@ export function BudgetsPage() {
         formState.scopeKind === "general" || formState.scopeKind === "category"
           ? null
           : formState.accountId,
-      limitAmount,
+      limitAmount: limitAmount!,
       rolloverEnabled: formState.rolloverEnabled,
       alertPercent,
       notes: formState.notes,
