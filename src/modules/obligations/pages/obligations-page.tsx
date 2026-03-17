@@ -27,6 +27,7 @@ import type {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
@@ -35,6 +36,7 @@ import { ProgressBar } from "../../../components/ui/progress-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -1965,9 +1967,9 @@ function EditorDialog({
   }));
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
           <form
             className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden"
             noValidate
@@ -2577,7 +2579,10 @@ export function ObligationsPage() {
   const [principalAdjustmentFeedback, setPrincipalAdjustmentFeedback] =
     useState<FeedbackState | null>(null);
   const [shareDialogFeedback, setShareDialogFeedback] = useState<FeedbackState | null>(null);
+  const [viewMode, setViewMode] = useViewMode("obligations");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedObligationId, setSelectedObligationId] = useState<number | null>(null);
   const [paymentTargetId, setPaymentTargetId] = useState<number | null>(null);
@@ -2683,9 +2688,27 @@ export function ObligationsPage() {
     field: Field,
     value: ObligationFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentValue) =>
       applyObligationFormRules({ ...currentValue, [field]: value }),
     );
+  }
+
+  function closeEditorDialog() {
+    if (isSavingEditor) return;
+    setIsEditorOpen(false);
+    setSelectedObligationId(null);
+    setPendingReceiptFile(null);
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSavingEditor) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditorDialog();
+    }
   }
 
   function updatePaymentFormState<Field extends keyof PaymentFormState>(
@@ -2724,6 +2747,7 @@ export function ObligationsPage() {
     setFormState(applyObligationFormRules(createDefaultFormState(baseCurrencyCode)));
     setCreateShareFormState(createDefaultShareInviteFormState());
     setPendingReceiptFile(null);
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -2737,6 +2761,7 @@ export function ObligationsPage() {
     setFormState(applyObligationFormRules(buildFormStateFromObligation(obligation)));
     setCreateShareFormState(buildShareInviteFormState(currentShare));
     setPendingReceiptFile(null);
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -3713,10 +3738,13 @@ export function ObligationsPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <Button onClick={openCreateEditor}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo credito o deuda
-          </Button>
+          <>
+            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            <Button onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo credito o deuda
+            </Button>
+          </>
         }
         description="Organiza todo lo que te deben y todo lo que debes, con saldo pendiente, avance y abonos en un solo lugar."
         eyebrow="cartera"
@@ -4098,6 +4126,75 @@ export function ObligationsPage() {
               title="Sin resultados para mostrar"
             />
           ) : (
+            viewMode === "list" ? (
+              <div className="space-y-3">
+                {filteredObligations.map((obligation) => {
+                  const directionVisual = getDirectionVisual(obligation.direction);
+                  const DirectionIcon = directionVisual.icon;
+                  const statusOption = getStatusOption(obligation.status);
+                  return (
+                    <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={obligation.id}>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
+                        <DirectionIcon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-ink">{obligation.title}</p>
+                        <p className="text-xs text-storm">{obligation.counterparty} · {getDirectionLabel(obligation.direction)}</p>
+                      </div>
+                      <div className="hidden sm:flex flex-col text-right shrink-0">
+                        <p className="text-sm font-semibold text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</p>
+                        <p className="text-xs text-storm">pendiente</p>
+                      </div>
+                      <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
+                      <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(obligation)} variant="ghost">Ver</Button>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : viewMode === "table" ? (
+              <div className="overflow-x-auto rounded-[24px] border border-white/10">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-white/[0.02]">
+                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Registro</th>
+                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Contraparte</th>
+                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Direccion</th>
+                      <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Principal</th>
+                      <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Pendiente</th>
+                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                      <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredObligations.map((obligation, index) => {
+                      const directionVisual = getDirectionVisual(obligation.direction);
+                      const DirectionIcon = directionVisual.icon;
+                      const statusOption = getStatusOption(obligation.status);
+                      return (
+                        <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredObligations.length - 1 ? "border-b-0" : ""}`} key={obligation.id}>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
+                                <DirectionIcon className="h-3.5 w-3.5" />
+                              </div>
+                              <p className="font-medium text-ink">{obligation.title}</p>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{obligation.counterparty}</td>
+                          <td className="px-5 py-3.5 hidden md:table-cell"><StatusBadge status={getDirectionLabel(obligation.direction)} tone={getDirectionTone(obligation.direction)} /></td>
+                          <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(obligation.currentPrincipalAmount ?? obligation.principalAmount, obligation.currencyCode)}</td>
+                          <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</td>
+                          <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} /></td>
+                          <td className="px-5 py-3.5 text-right">
+                            <Button className="py-1.5 text-xs" onClick={() => openEditEditor(obligation)} variant="ghost">Ver</Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
             <section className="grid gap-6 xl:grid-cols-2">
               {filteredObligations.map((obligation) => {
                 const directionVisual = getDirectionVisual(obligation.direction);
@@ -4334,6 +4431,7 @@ export function ObligationsPage() {
                 );
               })}
             </section>
+            )
           )}
         </>
       )}
@@ -4368,6 +4466,68 @@ export function ObligationsPage() {
           description="Estos registros fueron compartidos contigo por otros usuarios. Los veras siempre en modo solo lectura, pero con historial, avance y cambios de monto."
           title="Compartidos contigo"
         >
+          {viewMode === "list" ? (
+            <div className="space-y-3">
+              {filteredSharedObligations.map((obligation) => {
+                const directionVisual = getDirectionVisual(obligation.direction);
+                const DirectionIcon = directionVisual.icon;
+                const statusOption = getStatusOption(obligation.status);
+                return (
+                  <article className="flex items-center gap-4 rounded-[22px] border border-[#7aa2ff]/18 bg-white/[0.03] px-5 py-4 transition hover:border-[#7aa2ff]/26" key={`shared-list-${obligation.id}`}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
+                      <DirectionIcon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-ink">{obligation.title}</p>
+                      <p className="text-xs text-storm">{obligation.share.ownerDisplayName ?? "Usuario DarkMoney"} · {getSharedDirectionLabel(obligation.direction)}</p>
+                    </div>
+                    <div className="hidden sm:flex flex-col text-right shrink-0">
+                      <p className="text-sm font-semibold text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</p>
+                      <p className="text-xs text-storm">pendiente</p>
+                    </div>
+                    <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
+                  </article>
+                );
+              })}
+            </div>
+          ) : viewMode === "table" ? (
+            <div className="overflow-x-auto rounded-[24px] border border-white/10">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/[0.02]">
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Registro</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Propietario</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Direccion</th>
+                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Pendiente</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSharedObligations.map((obligation, index) => {
+                    const directionVisual = getDirectionVisual(obligation.direction);
+                    const DirectionIcon = directionVisual.icon;
+                    const statusOption = getStatusOption(obligation.status);
+                    return (
+                      <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredSharedObligations.length - 1 ? "border-b-0" : ""}`} key={`shared-table-${obligation.id}`}>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
+                              <DirectionIcon className="h-3.5 w-3.5" />
+                            </div>
+                            <p className="font-medium text-ink">{obligation.title}</p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{obligation.share.ownerDisplayName ?? "Usuario DarkMoney"}</td>
+                        <td className="px-5 py-3.5 hidden md:table-cell"><StatusBadge status={getSharedDirectionLabel(obligation.direction)} tone={getDirectionTone(obligation.direction)} /></td>
+                        <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</td>
+                        <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <section className="grid gap-6 xl:grid-cols-2">
             {filteredSharedObligations.map((obligation) => {
               const directionVisual = getDirectionVisual(obligation.direction);
@@ -4559,6 +4719,7 @@ export function ObligationsPage() {
               );
             })}
           </section>
+          )}
         </SurfaceCard>
       ) : null}
 
@@ -4570,13 +4731,7 @@ export function ObligationsPage() {
           baseCurrencyCode={baseCurrencyCode}
           canManageReceipts={canUploadReceipts}
           canShareObligations={canAccessProFeatures}
-          closeEditor={() => {
-            if (!isSavingEditor) {
-              setIsEditorOpen(false);
-              setSelectedObligationId(null);
-              setPendingReceiptFile(null);
-            }
-          }}
+          closeEditor={requestCloseEditor}
           counterparties={counterparties}
           currentShare={selectedObligation ? shareByObligationId.get(selectedObligation.id) ?? null : null}
           feedback={editorFeedback}
@@ -4594,6 +4749,13 @@ export function ObligationsPage() {
           updatePendingReceiptFile={setPendingReceiptFile}
           updateShareFormState={updateCreateShareFormState}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditorDialog(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
 

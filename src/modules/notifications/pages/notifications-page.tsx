@@ -32,7 +32,7 @@ const filterOptions: Array<{ value: NotificationFilter; label: string }> = [
   { value: "unread", label: "Pendientes" },
   { value: "smart", label: "Inteligentes" },
   { value: "database", label: "Guardadas" },
-  { value: "read", label: "Leidas" },
+  { value: "read", label: "Leídas" },
 ];
 
 function getToneClasses(tone: "info" | "success" | "warning" | "danger" | "neutral") {
@@ -131,12 +131,12 @@ export function NotificationsPage() {
               variant="ghost"
             >
               <CheckCheck className="h-4 w-4" />
-              {isUpdatingReadState ? "Actualizando..." : "Marcar todo como leido"}
+              {isUpdatingReadState ? "Actualizando..." : "Marcar todo como leído"}
             </Button>
           </div>
         }
-        description="Bandeja personal con alertas guardadas en base de datos y recordatorios inteligentes generados desde tus cuentas, suscripciones, creditos, deudas y presupuestos."
-        eyebrow="notifications"
+        description="Bandeja personal con alertas y recordatorios inteligentes generados desde tus cuentas, suscripciones, créditos, deudas y presupuestos."
+        eyebrow="notificaciones"
         title="Alertas y recordatorios"
       />
 
@@ -144,7 +144,7 @@ export function NotificationsPage() {
         <div className="glass-panel-soft rounded-[24px] p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendientes</p>
           <p className="mt-3 font-display text-3xl font-semibold text-ink">{inbox.unreadCount}</p>
-          <p className="mt-2 text-sm text-storm">Lo que aun pide tu atencion.</p>
+          <p className="mt-2 text-sm text-storm">Lo que aún pide tu atención.</p>
         </div>
         <div className="glass-panel-soft rounded-[24px] p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-storm">Inteligentes</p>
@@ -154,18 +154,18 @@ export function NotificationsPage() {
           <p className="mt-2 text-sm text-storm">Recordatorios vivos del workspace.</p>
         </div>
         <div className="glass-panel-soft rounded-[24px] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-storm">En base de datos</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-storm">Guardadas</p>
           <p className="mt-3 font-display text-3xl font-semibold text-ink">
             {inbox.notifications.filter((notification) => notification.source === "database").length}
           </p>
-          <p className="mt-2 text-sm text-storm">Alertas persistidas por tu usuario.</p>
+          <p className="mt-2 text-sm text-storm">Alertas almacenadas en tu cuenta.</p>
         </div>
         <div className="glass-panel-soft rounded-[24px] p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-storm">Workspace activo</p>
           <p className="mt-3 font-display text-2xl font-semibold text-ink">
             {activeWorkspace?.name ?? "Sin workspace"}
           </p>
-          <p className="mt-2 text-sm text-storm">Fuente de las alertas inteligentes.</p>
+          <p className="mt-2 text-sm text-storm">Origen de los recordatorios inteligentes.</p>
         </div>
       </section>
 
@@ -180,7 +180,7 @@ export function NotificationsPage() {
             <input
               className="field-dark"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Ej. suscripcion, Kevin, presupuesto, pago..."
+              placeholder="Ej. suscripción, Kevin, presupuesto, pago..."
               value={search}
             />
           </label>
@@ -224,10 +224,10 @@ export function NotificationsPage() {
             <DataState
               description={
                 inbox.notifications.length === 0
-                  ? "Aun no hay alertas guardadas ni recordatorios inteligentes activos."
-                  : "No hubo coincidencias con el filtro o la busqueda actual."
+                  ? "Aún no hay alertas guardadas ni recordatorios inteligentes activos."
+                  : "No hubo coincidencias con el filtro o la búsqueda actual."
               }
-              title={inbox.notifications.length === 0 ? "Tu bandeja esta vacia" : "No encontramos coincidencias"}
+              title={inbox.notifications.length === 0 ? "Tu bandeja está vacía" : "No encontramos coincidencias"}
             />
           ) : (
             <div className="grid gap-3">
@@ -271,7 +271,7 @@ export function NotificationsPage() {
                         </p>
                         <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm">
                           {notification.readAt
-                            ? `Leida ${formatDateTime(notification.readAt)}`
+                            ? `Leída ${formatDateTime(notification.readAt)}`
                             : "Pendiente"}
                         </p>
                       </div>
@@ -281,7 +281,7 @@ export function NotificationsPage() {
                           className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
                           to={notification.href}
                         >
-                          {notification.kind === "invite" ? "Abrir invitacion" : "Ir al modulo"}
+                          {notification.kind === "invite" ? "Abrir invitación" : "Ir al módulo"}
                         </Link>
                         {notification.status !== "read" && notification.kind !== "invite" ? (
                           <Button
@@ -289,7 +289,7 @@ export function NotificationsPage() {
                             onClick={() => void handleMarkOneRead(notification.id, notification.databaseId)}
                             variant="ghost"
                           >
-                            Marcar leida
+                            Marcar leída
                           </Button>
                         ) : null}
                       </div>
@@ -305,7 +305,7 @@ export function NotificationsPage() {
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <SurfaceCard
           action={<Sparkles className="h-5 w-5 text-pine" />}
-          description="Resumen operativo de la bandeja para saber si lo que viene esta bajo control o ya necesita accion."
+          description="Resumen operativo de la bandeja para saber si lo que viene está bajo control o ya necesita acción."
           title="Pulso de alertas"
         >
           <div className="grid gap-4 md:grid-cols-3">
@@ -317,7 +317,7 @@ export function NotificationsPage() {
             <div className="glass-panel-soft rounded-[24px] p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Inteligentes sin leer</p>
               <p className="mt-3 font-display text-3xl font-semibold text-ink">{inbox.unreadSmartCount}</p>
-              <p className="mt-2 text-sm text-storm">Vienen del estado real del sistema.</p>
+              <p className="mt-2 text-sm text-storm">Generados desde tus datos del workspace.</p>
             </div>
             <div className="glass-panel-soft rounded-[24px] p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Base sin leer</p>
@@ -329,19 +329,19 @@ export function NotificationsPage() {
 
         <SurfaceCard
           action={<MailWarning className="h-5 w-5 text-ember" />}
-          description="Preferencias personales guardadas en notification_preferences."
+          description="Controla cómo y cuándo querés recibir alertas de este workspace."
           title="Preferencias actuales"
         >
           {preferencesQuery.isLoading ? (
             <DataState
-              description="Consultando las preferencias reales del usuario."
+              description="Buscando tu configuración de alertas guardada."
               title="Cargando preferencias"
             />
           ) : preferencesQuery.error ? (
             <DataState
               description={getQueryErrorMessage(
                 preferencesQuery.error,
-                "No pudimos leer tus preferencias de notificacion.",
+                "No pudimos leer tus preferencias de notificación.",
               )}
               title="No fue posible cargar las preferencias"
               tone="error"
@@ -360,7 +360,15 @@ export function NotificationsPage() {
             </div>
           ) : (
             <DataState
-              description="Todavia no existe una fila de preferencias para este usuario. Puedes crearla desde Configuracion."
+              action={
+                <Link
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/[0.06] px-4 py-3 text-sm font-semibold text-ink ring-1 ring-white/10 transition duration-200 hover:-translate-y-0.5 hover:bg-white/[0.1]"
+                  to="/settings"
+                >
+                  Ir a Configuración
+                </Link>
+              }
+              description="Aún no hay preferencias guardadas para tu cuenta. Puedes configurarlas desde Configuración."
               title="Sin preferencias guardadas"
             />
           )}

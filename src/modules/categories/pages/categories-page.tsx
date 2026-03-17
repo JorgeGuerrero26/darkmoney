@@ -41,7 +41,9 @@ import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDate } from "../../../lib/formatting/dates";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import type { CategoryKind, CategoryOverview } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
@@ -256,9 +258,9 @@ function CategoryEditorDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
@@ -701,10 +703,13 @@ export function CategoriesPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const [viewMode, setViewMode] = useViewMode("categories");
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [showInactive, setShowInactive] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -766,7 +771,24 @@ export function CategoriesPage() {
     field: Field,
     value: CategoryFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function closeEditor() {
+    if (isSavingEditor) return;
+    setIsEditorOpen(false);
+    setSelectedCategoryId(null);
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSavingEditor) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function openCreateEditor() {
@@ -774,6 +796,7 @@ export function CategoriesPage() {
     setEditorMode("create");
     setSelectedCategoryId(null);
     setFormState(createDefaultFormState(categories));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -782,6 +805,7 @@ export function CategoriesPage() {
     setEditorMode("edit");
     setSelectedCategoryId(category.id);
     setFormState(buildFormStateFromCategory(category));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1004,10 +1028,13 @@ export function CategoriesPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <Button onClick={openCreateEditor}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva categoria
-          </Button>
+          <>
+            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            <Button onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva categoria
+            </Button>
+          </>
         }
         description="Gestiona las categorias que organizan tus movimientos y suscripciones para que la app se sienta clara, consistente y facil de analizar."
         eyebrow="categorias"
@@ -1172,6 +1199,75 @@ export function CategoriesPage() {
           title="Sin resultados para mostrar"
         />
       ) : (
+        viewMode === "list" ? (
+          <div className="space-y-3">
+            {filteredCategories.map((category) => {
+              const kindDefinition = getKindDefinition(category.kind);
+              const iconDefinition = getIconDefinition(category.icon);
+              const CategoryIcon = iconDefinition.icon;
+              return (
+                <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={category.id}>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}>
+                    <CategoryIcon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">{category.name}</p>
+                    <p className="text-xs text-storm">{kindDefinition.label} · {category.movementCount} movimientos · {category.subscriptionCount} suscripciones</p>
+                  </div>
+                  <div className="hidden sm:flex flex-wrap gap-2">
+                    <StatusBadge status={category.isActive ? "Activa" : "Inactiva"} tone={category.isActive ? "success" : "neutral"} />
+                  </div>
+                  <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(category)} variant="ghost">Editar</Button>
+                </article>
+              );
+            })}
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="overflow-x-auto rounded-[24px] border border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Categoria</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Movimientos</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCategories.map((category, index) => {
+                  const kindDefinition = getKindDefinition(category.kind);
+                  const iconDefinition = getIconDefinition(category.icon);
+                  const CategoryIcon = iconDefinition.icon;
+                  return (
+                    <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredCategories.length - 1 ? "border-b-0" : ""}`} key={category.id}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}>
+                            <CategoryIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-ink">{category.name}</p>
+                            {category.parentName ? <p className="text-xs text-storm">{category.parentName}</p> : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={kindDefinition.label} tone={kindDefinition.tone} /></td>
+                      <td className="px-5 py-3.5"><StatusBadge status={category.isActive ? "Activa" : "Inactiva"} tone={category.isActive ? "success" : "neutral"} /></td>
+                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{category.movementCount}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button className="py-1.5 text-xs" onClick={() => openEditEditor(category)} variant="ghost">Editar</Button>
+                          <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => void handleToggleCategory(category)} variant="ghost">{category.isActive ? "Desactivar" : "Reactivar"}</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <section className="grid gap-6 xl:grid-cols-2">
           {filteredCategories.map((category) => {
             const kindDefinition = getKindDefinition(category.kind);
@@ -1280,17 +1376,13 @@ export function CategoriesPage() {
             );
           })}
         </section>
+        )
       )}
 
       {isEditorOpen ? (
         <CategoryEditorDialog
           categories={categories}
-          closeEditor={() => {
-            if (!isSavingEditor) {
-              setIsEditorOpen(false);
-              setSelectedCategoryId(null);
-            }
-          }}
+          closeEditor={requestCloseEditor}
           feedback={feedback}
           formState={formState}
           isCreateMode={editorMode === "create"}
@@ -1298,6 +1390,13 @@ export function CategoriesPage() {
           onSubmit={handleSubmitEditor}
           selectedCategoryId={selectedCategoryId}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
 

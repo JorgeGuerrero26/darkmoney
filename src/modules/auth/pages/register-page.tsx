@@ -1,3 +1,4 @@
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -13,6 +14,7 @@ export function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,7 +38,7 @@ export function RegisterPage() {
 
       if (result.needsEmailConfirmation) {
         setSuccessMessage(
-          "Tu cuenta fue creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesion.",
+          "Tu cuenta fue creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.",
         );
         return;
       }
@@ -68,9 +70,10 @@ export function RegisterPage() {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-ink">Nombre completo</span>
           <input
+            autoComplete="name"
             className="field-dark"
             onChange={(event) => setFullName(event.target.value)}
-            placeholder="Lucia Ramirez"
+            placeholder="Lucía Ramírez"
             type="text"
             value={fullName}
           />
@@ -78,6 +81,7 @@ export function RegisterPage() {
         <label className="block space-y-2">
           <span className="text-sm font-medium text-ink">Correo</span>
           <input
+            autoComplete="email"
             className="field-dark"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="tu@correo.com"
@@ -86,14 +90,25 @@ export function RegisterPage() {
           />
         </label>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Contrasena</span>
-          <input
-            className="field-dark"
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="********"
-            type="password"
-            value={password}
-          />
+          <span className="text-sm font-medium text-ink">Contraseña</span>
+          <div className="relative">
+            <input
+              autoComplete="new-password"
+              className="field-dark pr-12"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              type={showPassword ? "text" : "password"}
+              value={password}
+            />
+            <button
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-storm transition hover:text-ink"
+              onClick={() => setShowPassword((v) => !v)}
+              type="button"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </label>
         {errorMessage ? (
           <FormFeedbackBanner
@@ -103,7 +118,7 @@ export function RegisterPage() {
         ) : null}
         {!isConfigured ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
-            Falta configurar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` en `.env`.
+            Falta configurar <code>VITE_SUPABASE_URL</code> y <code>VITE_SUPABASE_ANON_KEY</code> en <code>.env</code>.
           </div>
         ) : null}
         <Button
@@ -111,12 +126,19 @@ export function RegisterPage() {
           disabled={!isConfigured || isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
+          {isSubmitting ? (
+            <>
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Creando cuenta...
+            </>
+          ) : (
+            "Crear cuenta"
+          )}
         </Button>
       </form>
 
       <div className="text-sm text-storm">
-        <span>Ya tienes cuenta. </span>
+        <span>¿Ya tienes cuenta? </span>
         <NavLink
           className="underline decoration-white/20 underline-offset-4 transition hover:text-ink"
           to="/auth/login"

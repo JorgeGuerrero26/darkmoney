@@ -35,13 +35,13 @@ function getInvitationStatusLabel(status: "pending" | "accepted" | "declined" | 
     case "accepted":
       return "Acceso ya confirmado";
     case "declined":
-      return "Invitacion rechazada";
+      return "Invitación rechazada";
     case "expired":
-      return "Invitacion expirada";
+      return "Invitación expirada";
     case "revoked":
-      return "Invitacion revocada";
+      return "Invitación revocada";
     default:
-      return "Pendiente de confirmacion";
+      return "Pendiente de confirmación";
   }
 }
 
@@ -114,7 +114,7 @@ export function WorkspaceInvitePage() {
         description:
           error instanceof Error
             ? error.message
-            : "Intentalo otra vez dentro de unos segundos.",
+            : "Inténtalo otra vez dentro de unos segundos.",
       });
     }
   }
@@ -142,15 +142,15 @@ export function WorkspaceInvitePage() {
                 Confirma tu acceso compartido en DarkMoney
               </h1>
               <p className="mt-4 max-w-xl text-base leading-9 text-storm">
-                Cuando aceptes, este workspace aparecera en tu selector y podras revisar sus
-                cuentas, movimientos, presupuestos, suscripciones y creditos o deudas segun tu rol.
+                Cuando aceptes, este workspace aparecerá en tu selector y podrás revisar sus
+                cuentas, movimientos, presupuestos, suscripciones y créditos o deudas según tu rol.
               </p>
             </div>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
-                  Invitacion enviada por
+                  Invitación enviada por
                 </p>
                 <p className="mt-3 text-lg font-semibold text-ink">
                   {invite?.invitation.invitedByDisplayName ?? "Usuario DarkMoney"}
@@ -159,7 +159,7 @@ export function WorkspaceInvitePage() {
               <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">Estado</p>
                 <p className="mt-3 text-lg font-semibold text-ink">
-                  {invite ? statusLabel : "Cargando invitacion"}
+                  {invite ? statusLabel : "Cargando invitación"}
                 </p>
               </div>
             </div>
@@ -170,18 +170,18 @@ export function WorkspaceInvitePage() {
               <div className="flex min-h-[520px] items-center justify-center">
                 <div className="text-center">
                   <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-pine" />
-                  <p className="mt-4 text-sm text-storm">Cargando los detalles de esta invitacion...</p>
+                  <p className="mt-4 text-sm text-storm">Cargando los detalles de esta invitación...</p>
                 </div>
               </div>
             ) : inviteQuery.error ? (
               <FormFeedbackBanner
                 description={inviteQuery.error instanceof Error ? inviteQuery.error.message : "No pudimos abrir este enlace."}
-                title="No pudimos cargar la invitacion"
+                title="No pudimos cargar la invitación"
               />
             ) : !invite ? (
               <FormFeedbackBanner
                 description="El enlace puede haber vencido o ya no estar disponible."
-                title="Invitacion no disponible"
+                title="Invitación no disponible"
               />
             ) : (
               <>
@@ -198,13 +198,13 @@ export function WorkspaceInvitePage() {
                   {invite.workspace.name}
                 </h2>
                 <p className="mt-3 text-base leading-8 text-storm">
-                  {invite.workspace.description || "Workspace compartido sin descripcion adicional."}
+                  {invite.workspace.description || "Workspace compartido sin descripción adicional."}
                 </p>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <div className="rounded-[26px] border border-white/10 bg-white/[0.04] p-5">
                     <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
-                      Rol sugerido
+                      Tu rol
                     </p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
                       {getRoleLabel(invite.invitation.role)}
@@ -249,7 +249,7 @@ export function WorkspaceInvitePage() {
                       <div className="flex items-center gap-3">
                         <MailCheck className="h-5 w-5 text-pine" />
                         <p className="text-sm leading-8 text-storm">
-                          Esta invitacion fue enviada a <span className="font-medium text-ink">{invite.invitation.invitedEmail}</span>.
+                          Esta invitación fue enviada a <span className="font-medium text-ink">{invite.invitation.invitedEmail}</span>.
                         </p>
                       </div>
                       <Button
@@ -257,7 +257,7 @@ export function WorkspaceInvitePage() {
                         onClick={() => navigate(loginTarget)}
                       >
                         <LogIn className="mr-2 h-4 w-4" />
-                        Iniciar sesion para confirmar
+                        Iniciar sesión para confirmar
                       </Button>
                     </div>
                   ) : isMatchingUser ? (
@@ -272,12 +272,12 @@ export function WorkspaceInvitePage() {
                           <p className="text-sm font-medium text-ink">
                             {isAlreadyAccepted
                               ? "Este acceso ya fue confirmado por ti."
-                              : "Estas entrando con la cuenta correcta para aceptar esta invitacion."}
+                              : "Estás entrando con la cuenta correcta para aceptar esta invitación."}
                           </p>
                           <p className="mt-2 text-sm leading-8 text-storm">
                             {isAlreadyAccepted
                               ? "Puedes abrir DarkMoney y cambiar al workspace compartido desde el selector superior."
-                              : "Al aceptarla, este workspace aparecera en tu selector con el rol indicado y podras empezar a revisarlo."}
+                              : "Al aceptarla, este workspace aparecerá en tu selector con el rol indicado y podrás empezar a revisarlo."}
                           </p>
                         </div>
                       </div>
@@ -322,8 +322,8 @@ export function WorkspaceInvitePage() {
                   ) : (
                     <div className="space-y-4">
                       <FormFeedbackBanner
-                        description={`Esta invitacion fue enviada a ${invite.invitation.invitedEmail}. Debes entrar con esa cuenta para aceptarla.`}
-                        title="Estas usando otra cuenta"
+                        description={`Esta invitación fue enviada a ${invite.invitation.invitedEmail}. Debes entrar con esa cuenta para aceptarla.`}
+                        title="Estás usando otra cuenta"
                       />
                       <Button
                         onClick={() => {

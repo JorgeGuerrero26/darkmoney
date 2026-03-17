@@ -15,11 +15,13 @@
 
   html {
     @apply scroll-smooth;
+    overflow-x: hidden;
   }
 
   body {
     @apply m-0 min-h-screen bg-canvas font-body text-ink antialiased;
     background-attachment: fixed;
+    overflow-x: hidden;
   }
 
   body::before {
@@ -92,14 +94,21 @@
   }
 
   .field-dark {
-    @apply w-full rounded-2xl border px-4 py-3 text-sm text-ink outline-none transition placeholder:text-storm;
+    @apply w-full rounded-2xl border px-4 py-3 text-sm text-ink outline-none transition duration-200 placeholder:text-storm/70;
+    min-height: 52px;
     border-color: rgba(255, 255, 255, 0.1);
     background-color: rgba(255, 255, 255, 0.05);
   }
 
+  .field-dark:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+
   .field-dark:focus {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(107, 228, 197, 0.25);
     background-color: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 0 0 4px rgba(107, 228, 197, 0.08);
   }
 
   .shimmer-surface {

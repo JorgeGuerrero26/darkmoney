@@ -218,7 +218,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${toneStyle.badge}`}>
-                      {toast.tone === "error" ? "Atencion" : toast.tone === "info" ? "Aviso" : "Confirmado"}
+                      {toast.tone === "error" ? "Atención" : toast.tone === "info" ? "Aviso" : "Confirmado"}
                     </span>
                   </div>
                   <p className="mt-3 font-display text-xl font-semibold text-ink sm:text-2xl">

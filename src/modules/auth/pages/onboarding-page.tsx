@@ -65,18 +65,18 @@ export function OnboardingPage() {
           </span>
           <div className="mt-6 space-y-4">
             <h1 className="font-display text-5xl font-semibold leading-tight">
-              Dejemos listo tu contexto financiero desde el primer minuto.
+              Configura tu perfil en menos de un minuto.
             </h1>
             <p className="max-w-xl text-base leading-8 text-storm">
-              Esta pantalla ya modela el flujo de perfil, moneda base y zona horaria. Luego se
-              conectara con `profiles` y la deteccion del workspace por defecto.
+              Solo necesitamos tu nombre, la moneda que usas y tu zona horaria para preparar
+              tu espacio financiero personal.
             </p>
           </div>
           <div className="mt-10 space-y-4">
             {[
-              "Crear o confirmar workspace personal",
-              "Guardar moneda base y timezone del usuario",
-              "Definir workspace por defecto",
+              "Tu workspace personal se crea automáticamente",
+              "Moneda base para todos tus reportes y cuentas",
+              "Zona horaria para fechas y recordatorios correctos",
             ].map((item) => (
               <div
                 className="rounded-3xl border border-white/10 bg-white/[0.05] px-5 py-4 text-sm text-storm"
@@ -95,9 +95,9 @@ export function OnboardingPage() {
             onSubmit={handleSubmit}
           >
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.24em] text-storm">configuracion inicial</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-storm">configuración inicial</p>
               <h2 className="font-display text-4xl font-semibold text-ink">
-                Perfil financiero basico
+                Tu perfil financiero
               </h2>
             </div>
 
@@ -147,10 +147,10 @@ export function OnboardingPage() {
                 <div className="flex items-start gap-3">
                   <Globe className="mt-1 h-5 w-5 text-gold" />
                   <div>
-                    <p className="font-medium text-ink">Workspace personal automatico</p>
+                    <p className="font-medium text-ink">Workspace personal automático</p>
                     <p className="mt-2 text-sm leading-7 text-storm">
-                      El BBP y la base de datos ya contemplan el bootstrap del workspace personal.
-                      Esta pantalla queda lista para confirmar ese contexto y continuar.
+                      Se creará un espacio personal para ti de forma automática. Después puedes
+                      crear workspaces compartidos desde Configuración.
                     </p>
                   </div>
                 </div>
@@ -169,7 +169,7 @@ export function OnboardingPage() {
                 disabled={isSubmitting}
                 type="submit"
               >
-                {isSubmitting ? "Guardando..." : "Guardar configuracion"}
+                {isSubmitting ? "Guardando..." : "Guardar y continuar"}
               </Button>
               <Link to="/app">
                 <Button variant="ghost">

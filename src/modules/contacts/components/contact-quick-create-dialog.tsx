@@ -14,6 +14,7 @@ import { useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import type { CounterpartySummary } from "../../../types/domain";
 import {
   getQueryErrorMessage,
@@ -52,7 +53,7 @@ const typeOptions = [
   },
   {
     color: "#4566d6",
-    description: "Clientes, empleadores o companias.",
+    description: "Clientes, empleadores o compañías.",
     icon: Building2,
     label: "Empresa",
     value: "company" as const,
@@ -80,7 +81,7 @@ const typeOptions = [
   },
   {
     color: "#64748b",
-    description: "Cualquier otro tipo de relacion.",
+    description: "Cualquier otro tipo de relación.",
     icon: Users,
     label: "Otro",
     value: "other" as const,
@@ -117,6 +118,7 @@ export function ContactQuickCreateDialog({
     createDefaultFormState(initialName),
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
   const isSaving = createCounterpartyMutation.isPending;
   const selectedType =
@@ -171,14 +173,30 @@ export function ContactQuickCreateDialog({
     }
   }
 
+  const isDirty =
+    formState.name.trim() !== (initialName?.trim() ?? "") ||
+    formState.email !== "" ||
+    formState.phone !== "" ||
+    formState.notes !== "";
+
+  function handleRequestClose() {
+    if (isDirty) {
+      setShowUnsavedWarning(true);
+    } else {
+      onClose();
+    }
+  }
+
   return (
     <div
+      aria-labelledby="contact-create-title"
       aria-modal="true"
       className="fixed inset-0 z-[95] isolate overflow-y-auto bg-[#02060d]/84 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/70 before:backdrop-blur-2xl before:content-[''] sm:p-6"
+      onClick={handleRequestClose}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[860px] overflow-hidden rounded-[34px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[860px] overflow-hidden rounded-[34px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(event) => event.stopPropagation()}>
           <div className="pointer-events-none absolute inset-0">
             <div
               className="absolute -left-12 top-8 h-48 w-48 rounded-full blur-3xl"
@@ -199,18 +217,18 @@ export function ContactQuickCreateDialog({
                       {subtitle ?? "Crealo sin salir del formulario actual"}
                     </span>
                   </div>
-                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]">
+                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]" id="contact-create-title">
                     Agregar contraparte
                   </h2>
                   <p className="mt-3 max-w-xl text-sm leading-7 text-storm">
-                    Registra rapido a la persona, empresa o banco relacionado y dejalo
+                    Registra rápido a la persona, empresa o banco relacionado y déjalo
                     seleccionado para este movimiento.
                   </p>
                 </div>
                 <button
                   className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
                   disabled={isSaving}
-                  onClick={onClose}
+                  onClick={handleRequestClose}
                   type="button"
                 >
                   <X className="h-5 w-5" />
@@ -261,7 +279,7 @@ export function ContactQuickCreateDialog({
                         Uso
                       </p>
                       <p className="mt-3 text-sm leading-7 text-storm">
-                        Te servira en ingresos, gastos, creditos, deudas y suscripciones.
+                        Te servirá en ingresos, gastos, créditos, deudas y suscripciones.
                       </p>
                     </div>
                   </div>
@@ -334,7 +352,7 @@ export function ContactQuickCreateDialog({
                   <div className="mt-5 grid gap-4 sm:grid-cols-2">
                     <label className="block">
                       <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                        Telefono
+                        Teléfono
                       </span>
                       <div className="relative mt-3">
                         <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
@@ -384,10 +402,10 @@ export function ContactQuickCreateDialog({
 
             <div className="flex flex-col gap-4 border-t border-white/8 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <p className="text-sm text-storm">
-                Tambien lo veras despues en el modulo de contactos para editarlo o archivarlo.
+                También lo verás después en el módulo de contactos para editarlo o archivarlo.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Button disabled={isSaving} onClick={onClose} type="button" variant="ghost">
+                <Button disabled={isSaving} onClick={handleRequestClose} type="button" variant="ghost">
                   Cancelar
                 </Button>
                 <Button disabled={isSaving} type="submit">
@@ -399,6 +417,13 @@ export function ContactQuickCreateDialog({
           </form>
         </div>
       </div>
+
+      {showUnsavedWarning ? (
+        <UnsavedChangesDialog
+          onDiscard={onClose}
+          onKeepEditing={() => setShowUnsavedWarning(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -16,6 +16,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
@@ -93,38 +95,38 @@ const scopeOptions: Array<{
   {
     value: "general",
     label: "General",
-    description: "Controla el gasto total del periodo sin amarrarlo a una categoria o cuenta concreta.",
+    description: "Controla el gasto total del periodo sin amarrarlo a una categoría o cuenta concreta.",
   },
   {
     value: "category",
-    label: "Por categoria",
+    label: "Por categoría",
     description: "Ideal para poner un tope a Salud, Comida, Transporte u otra familia de gasto.",
   },
   {
     value: "account",
     label: "Por cuenta",
-    description: "Sirve para limitar cuanto sale de una cuenta especifica durante el periodo.",
+    description: "Sirve para limitar cuánto sale de una cuenta específica durante el período.",
   },
   {
     value: "category_account",
-    label: "Categoria en cuenta",
-    description: "Cruza categoria y cuenta para presupuestos mas estrictos y granulares.",
+    label: "Categoría en cuenta",
+    description: "Cruza categoría y cuenta para presupuestos más estrictos y granulares.",
   },
 ];
 
 const statusOptions: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Todo" },
   { value: "active", label: "Activos" },
-  { value: "critical", label: "Criticos" },
+  { value: "critical", label: "Críticos" },
   { value: "inactive", label: "Inactivos" },
 ];
 
 const scopeFilterOptions: Array<{ value: ScopeFilter; label: string }> = [
   { value: "all", label: "Todo alcance" },
   { value: "general", label: "General" },
-  { value: "category", label: "Categoria" },
+  { value: "category", label: "Categoría" },
   { value: "account", label: "Cuenta" },
-  { value: "category_account", label: "Categoria + cuenta" },
+  { value: "category_account", label: "Categoría + cuenta" },
 ];
 
 function Input({
@@ -163,8 +165,18 @@ function useBudgetPickerPanel(isOpen: boolean, onClose: () => void) {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   return containerRef;
@@ -606,11 +618,11 @@ function BudgetEditorDialog({
     () => [
       {
         value: "",
-        label: "Sin categoria fija",
-        description: "El presupuesto se aplicara sin amarrarse a una categoria puntual.",
+        label: "Sin categoría fija",
+        description: "El presupuesto se aplicará sin amarrarse a una categoría puntual.",
         leadingLabel: "SC",
         leadingColor: "#6b7280",
-        searchText: "sin categoria fija general",
+        searchText: "sin categoría fija general",
       },
       ...categories
         .filter((category) => category.kind !== "income")
@@ -653,9 +665,9 @@ function BudgetEditorDialog({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-[rgba(4,8,16,0.72)] backdrop-blur-[18px]" />
-      <div className="absolute inset-0 overflow-y-auto">
+      <div className="absolute inset-0 overflow-y-auto" onClick={closeEditor}>
         <div className="flex min-h-full items-start justify-center px-4 py-10 sm:px-6">
-          <div className="relative w-full max-w-6xl rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.98),rgba(9,14,24,0.96))] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.55)] sm:p-8">
+          <div className="relative w-full max-w-6xl rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.98),rgba(9,14,24,0.96))] px-6 pt-6 shadow-[0_35px_120px_rgba(0,0,0,0.55)] sm:px-8 sm:pt-8" onClick={(e) => e.stopPropagation()}>
         <button
           className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/18 hover:text-ink"
           onClick={closeEditor}
@@ -673,12 +685,11 @@ function BudgetEditorDialog({
           {isCreateMode ? "Crear presupuesto" : "Actualizar presupuesto"}
         </h2>
         <p className="mt-4 max-w-3xl text-sm leading-8 text-storm">
-          Define un tope mensual, por categoria, por cuenta o por ambos. Luego el dashboard te mostrara cuanto vas usando y cuales estan en riesgo.
+          Define un tope mensual, por categoría, por cuenta o por ambos. Luego el dashboard te mostrará cuánto vas usando y cuáles están en riesgo.
         </p>
 
         <div className="mt-8 space-y-6">
-          <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-            <div className="grid gap-5 rounded-[26px] border border-white/10 bg-white/[0.03] p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <div className="grid gap-5 rounded-[30px] border border-white/10 bg-white/[0.04] p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
               <div>
                 <div className="flex items-start gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-gradient-to-br from-pine/35 to-[#0d1420] text-pine ring-1 ring-white/10">
@@ -720,9 +731,9 @@ function BudgetEditorDialog({
                   </p>
                 </div>
                 <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoria</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoría</p>
                   <p className="mt-3 text-sm font-semibold text-ink">
-                    {selectedCategory?.name ?? "Sin categoria fija"}
+                    {selectedCategory?.name ?? "Sin categoría fija"}
                   </p>
                 </div>
                 <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
@@ -733,7 +744,6 @@ function BudgetEditorDialog({
                 </div>
               </div>
             </div>
-          </div>
 
           <form className="grid gap-6" noValidate onSubmit={onSubmit}>
             {feedback ? (
@@ -851,15 +861,15 @@ function BudgetEditorDialog({
 
                 <div className="mt-6 grid gap-5">
                   <label className="block">
-                    <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Categoria</span>
+                    <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Categoría</span>
                     <BudgetPicker
                       disabled={formState.scopeKind === "general" || formState.scopeKind === "account"}
-                      emptyMessage="No encontramos categorias con ese nombre."
+                      emptyMessage="No encontramos categorías con ese nombre."
                       onChange={(value) => updateFormState("categoryId", value ? Number(value) : null)}
                       options={categoryOptions}
-                      placeholderDescription="Elige una categoria para seguir este tope de forma mas precisa."
-                      placeholderLabel="Selecciona una categoria"
-                      queryPlaceholder="Buscar categoria..."
+                      placeholderDescription="Elige una categoría para seguir este tope de forma más precisa."
+                      placeholderLabel="Selecciona una categoría"
+                      queryPlaceholder="Buscar categoría..."
                       value={formState.categoryId ? String(formState.categoryId) : ""}
                     />
                   </label>
@@ -924,18 +934,20 @@ function BudgetEditorDialog({
               </section>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
-              <p className="text-sm leading-7 text-storm">
-                El dashboard te mostrara cuanto gastaste, cuanto te queda y que presupuestos estan por entrar en riesgo.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={closeEditor} type="button" variant="ghost">
-                  Cancelar
-                </Button>
-                <Button disabled={isSaving} type="submit" variant="primary">
-                  {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {isCreateMode ? "Crear presupuesto" : "Guardar cambios"}
-                </Button>
+            <div className="sticky bottom-0 z-[60] -mx-6 sm:-mx-8 mt-8 rounded-b-[34px] border-t border-white/10 bg-[#060b12]/95 px-6 py-5 sm:px-8 backdrop-blur-md">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <p className="text-sm leading-7 text-storm">
+                  El dashboard te mostrará cuánto gastaste, cuanto te queda y que presupuestos estan por entrar en riesgo.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button onClick={closeEditor} type="button" variant="ghost">
+                    Cancelar
+                  </Button>
+                  <Button disabled={isSaving} type="submit" variant="primary">
+                    {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {isCreateMode ? "Crear presupuesto" : "Guardar cambios"}
+                  </Button>
+                </div>
               </div>
             </div>
           </form>
@@ -1045,12 +1057,15 @@ export function BudgetsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showCurrentOnly, setShowCurrentOnly] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   useSuccessToast(pageFeedback, {
     clear: () => setPageFeedback(null),
   });
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useViewMode("budgets");
   const [formState, setFormState] = useState<BudgetFormState>(() =>
     createDefaultFormState(activeWorkspace),
   );
@@ -1199,6 +1214,7 @@ export function BudgetsPage() {
     field: Field,
     value: BudgetFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentValue) => {
       const nextValue = { ...currentValue, [field]: value };
 
@@ -1224,6 +1240,15 @@ export function BudgetsPage() {
   function closeEditor() {
     setIsEditorOpen(false);
     setSelectedBudgetId(null);
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function openCreateEditor() {
@@ -1232,6 +1257,7 @@ export function BudgetsPage() {
     setEditorMode("create");
     setSelectedBudgetId(null);
     setFormState(createDefaultFormState(activeWorkspace));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1241,6 +1267,7 @@ export function BudgetsPage() {
     setEditorMode("edit");
     setSelectedBudgetId(budget.id);
     setFormState(buildFormStateFromBudget(budget));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1322,8 +1349,8 @@ export function BudgetsPage() {
     ) {
       setEditorFeedback({
         tone: "error",
-        title: "Selecciona una categoria",
-        description: "Ese tipo de presupuesto necesita una categoria concreta para medir el gasto.",
+        title: "Selecciona una categoría",
+        description: "Ese tipo de presupuesto necesita una categoría concreta para medir el gasto.",
       });
       return;
     }
@@ -1453,8 +1480,8 @@ export function BudgetsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Estamos preparando tu espacio para empezar a controlar limites y alertas."
-          eyebrow="planificacion"
+          description="Estamos preparando tu espacio para empezar a controlar límites y alertas."
+          eyebrow="planificación"
           title="Presupuestos"
         />
         <DataState description="Cargando tu workspace..." title="Un momento" />
@@ -1466,13 +1493,13 @@ export function BudgetsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Necesitamos el workspace activo para mostrarte reglas, limites y consumo real."
-          eyebrow="planificacion"
+          description="Necesitamos el workspace activo para mostrarte reglas, límites y consumo real."
+          eyebrow="planificación"
           title="Presupuestos no disponibles"
         />
         <DataState
           description={getQueryErrorMessage(workspaceError, "No pudimos cargar tus workspaces.")}
-          title="No fue posible abrir este modulo"
+          title="No fue posible abrir este módulo"
           tone="error"
         />
       </div>
@@ -1483,13 +1510,13 @@ export function BudgetsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Cuando tengas un workspace activo, aqui podras fijar topes por categoria, cuenta o ambos."
-          eyebrow="planificacion"
-          title="Aun no hay un workspace activo"
+          description="Cuando tengas un workspace activo, aquí podrás fijar topes por categoría, cuenta o ambos."
+          eyebrow="planificación"
+          title="Aún no hay un workspace activo"
         />
         <DataState
           description="Primero activa un workspace para empezar a construir tus reglas de gasto."
-          title="Todavia no hay contexto financiero"
+          title="Todavía no hay contexto financiero"
         />
       </div>
     );
@@ -1500,7 +1527,7 @@ export function BudgetsPage() {
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           description="Estamos reuniendo categorias, cuentas y movimientos para armar tus presupuestos."
-          eyebrow="planificacion"
+          eyebrow="planificación"
           title={`${activeWorkspace.name}, bajo control`}
         />
         <DataState description="Cargando reglas y consumo del workspace..." title="Preparando presupuestos" />
@@ -1512,8 +1539,8 @@ export function BudgetsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Intentamos leer cuentas, categorias y movimientos para medir tus limites."
-          eyebrow="planificacion"
+          description="Intentamos leer cuentas, categorías y movimientos para medir tus límites."
+          eyebrow="planificación"
           title={`${activeWorkspace.name}, con problemas de lectura`}
         />
         <DataState
@@ -1529,13 +1556,16 @@ export function BudgetsPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <Button onClick={openCreateEditor}>
-            <Plus className="h-4 w-4" />
-            Nuevo presupuesto
-          </Button>
+          <>
+            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            <Button onClick={openCreateEditor}>
+              <Plus className="h-4 w-4" />
+              Nuevo presupuesto
+            </Button>
+          </>
         }
-        description="Pon topes mensuales o por rango a tu gasto total, a una categoria, a una cuenta o al cruce de ambas."
-        eyebrow="planificacion"
+        description="Pon topes mensuales o por rango a tu gasto total, a una categoría, a una cuenta o al cruce de ambas."
+        eyebrow="planificación"
         title="Presupuestos"
       >
         <div className="flex flex-wrap gap-3">
@@ -1557,19 +1587,19 @@ export function BudgetsPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          description={`${currentActiveBudgets.length} activos en el periodo actual.`}
+          description={`${currentActiveBudgets.length} activos en el período actual.`}
           title="Techo total"
           value={formatCurrency(totalLimitBase, displayCurrencyCode)}
         />
         <StatCard
-          description={`${totalTrackedMovements} movimientos ya cuentan para estos limites.`}
+          description={`${totalTrackedMovements} movimientos ya cuentan para estos límites.`}
           title="Consumido"
           value={formatCurrency(totalSpentBase, displayCurrencyCode)}
         />
         <StatCard
           description={
             totalRemainingBase >= 0
-              ? "Espacio que aun tienes disponible antes de tocar tus topes."
+              ? "Espacio que aún tienes disponible antes de tocar tus topes."
               : "Ya sobrepasaste parte del techo planeado para este periodo."
           }
           title="Restante"
@@ -1644,12 +1674,12 @@ export function BudgetsPage() {
 
         <SurfaceCard
           action={<PiggyBank className="h-5 w-5 text-gold" />}
-          description="Lo mas delicado del momento para no abrir cada presupuesto uno por uno."
-          title="Presion actual"
+          description="Lo más delicado del momento para no abrir cada presupuesto uno por uno."
+          title="Presión actual"
         >
           {topRiskBudgets.length === 0 ? (
             <DataState
-              description="Cuando empieces a usar presupuestos vigentes, aqui veras cuales se acercan primero al limite."
+              description="Cuando empieces a usar presupuestos vigentes, aquí verás cuáles se acercan primero al límite."
               title="Todo despejado por ahora"
               tone="success"
             />
@@ -1703,7 +1733,7 @@ export function BudgetsPage() {
 
       <SurfaceCard
         action={<StatusBadge status={`${filteredBudgets.length} visibles`} tone="info" />}
-        description="Cada tarjeta te muestra el limite, lo consumido, el saldo restante y la presion del periodo."
+        description="Cada tarjeta te muestra el límite, lo consumido, el saldo restante y la presión del período."
         title="Mantenedor de presupuestos"
       >
         {filteredBudgets.length === 0 ? (
@@ -1727,11 +1757,76 @@ export function BudgetsPage() {
             }
             description={
               budgets.length === 0
-                ? "Puedes crear reglas generales, por categoria, por cuenta o por categoria dentro de una cuenta."
-                : "Prueba cambiando los filtros o buscando por nombre, categoria o cuenta."
+                ? "Puedes crear reglas generales, por categoría, por cuenta o por categoría dentro de una cuenta."
+                : "Prueba cambiando los filtros o buscando por nombre, categoría o cuenta."
             }
-            title={budgets.length === 0 ? "Aun no has creado presupuestos" : "No encontramos coincidencias"}
+            title={budgets.length === 0 ? "Aún no has creado presupuestos" : "No encontramos coincidencias"}
           />
+        ) : viewMode === "list" ? (
+          <div className="space-y-3">
+            {filteredBudgets.map((budget) => (
+              <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={budget.id}>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-pine">
+                  {budget.scopeKind === "account" || budget.scopeKind === "category_account" ? <Wallet className="h-4 w-4" /> : <PiggyBank className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink">{budget.name}</p>
+                  <p className="text-xs text-storm">{budget.scopeLabel} · {formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}</p>
+                </div>
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="h-2 w-24 rounded-full bg-white/[0.08]">
+                    <div className={`h-full rounded-full ${budget.isOverLimit ? "bg-ember" : budget.isNearLimit ? "bg-gold" : "bg-pine"}`} style={{ width: `${Math.min(budget.usedPercent, 100)}%` }} />
+                  </div>
+                  <span className="text-xs text-storm w-8 text-right">{Math.round(budget.usedPercent)}%</span>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`font-display text-xl font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"}`}>{formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}</p>
+                  <p className="text-xs text-storm">de {formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}</p>
+                </div>
+                <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
+                <div className="flex shrink-0 gap-2">
+                  <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">Editar</Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="overflow-x-auto rounded-[24px] border border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Presupuesto</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Período</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Límite</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Consumido</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Restante</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBudgets.map((budget, index) => (
+                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredBudgets.length - 1 ? "border-b-0" : ""}`} key={budget.id}>
+                    <td className="px-5 py-3.5">
+                      <p className="font-medium text-ink">{budget.name}</p>
+                      <p className="text-xs text-storm">{budget.scopeLabel}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}</td>
+                    <td className="px-5 py-3.5 text-right font-semibold text-ink">{formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}</td>
+                    <td className="px-5 py-3.5 text-right text-ink">{formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)}</td>
+                    <td className={`px-5 py-3.5 text-right font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"}`}>{formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} /></td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">Editar</Button>
+                        <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => void handleToggleBudget(budget)} variant="ghost">{budget.isActive ? "Desactivar" : "Activar"}</Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="grid gap-5 xl:grid-cols-2">
             {filteredBudgets.map((budget) => {
@@ -1827,15 +1922,15 @@ export function BudgetsPage() {
                           ? `Estas entrando en zona de alerta desde el ${Math.round(
                               budget.alertPercent,
                             )}% configurado.`
-                          : "Todavia tienes aire para seguir dentro del plan."}
+                          : "Todavía tienes aire para seguir dentro del plan."}
                     </p>
                   </div>
 
                   <div className="mt-5 grid gap-3 md:grid-cols-2">
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoria</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoría</p>
                       <p className="mt-3 text-sm font-semibold text-ink">
-                        {budget.categoryName ?? "Sin categoria fija"}
+                        {budget.categoryName ?? "Sin categoría fija"}
                       </p>
                     </div>
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
@@ -1883,7 +1978,7 @@ export function BudgetsPage() {
         <BudgetEditorDialog
           accounts={accounts}
           categories={categories}
-          closeEditor={closeEditor}
+          closeEditor={requestCloseEditor}
           feedback={editorFeedback}
           formState={formState}
           isCreateMode={editorMode === "create"}
@@ -1891,6 +1986,13 @@ export function BudgetsPage() {
           onSubmit={handleSubmitEditor}
           updateFormState={updateFormState}
           workspace={activeWorkspace}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
 

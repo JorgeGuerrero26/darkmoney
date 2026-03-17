@@ -25,11 +25,13 @@ export function MetricCard({
   return (
     <article className="glass-panel rounded-[28px] p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.24em] text-storm/90">{label}</p>
-          <p className="mt-3 font-display text-4xl font-semibold text-ink">{value}</p>
+          <p className="mt-3 min-w-0 break-words font-display text-3xl font-semibold leading-tight text-ink">
+            {value}
+          </p>
         </div>
-        <div className={`rounded-3xl bg-gradient-to-br p-3 ring-1 ring-white/8 ${accents[accent]}`}>
+        <div className={`shrink-0 rounded-3xl bg-gradient-to-br p-3 ring-1 ring-white/8 ${accents[accent]}`}>
           {icon}
         </div>
       </div>

@@ -224,7 +224,7 @@ export function DatePickerField({
   }
 
   return (
-    <div className={`relative ${isOpen ? "z-50" : "z-10"}`} data-picker-id={panelId}>
+    <div className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`} data-picker-id={panelId}>
       <button
         aria-controls={panelId}
         aria-expanded={isOpen}

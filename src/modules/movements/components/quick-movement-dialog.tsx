@@ -17,6 +17,7 @@ import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { StatusBadge } from "../../../components/ui/status-badge";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -90,11 +91,11 @@ type QuickPickerProps = {
 
 const quickFieldClassName =
   "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const quickInputClassName = `${quickFieldClassName} h-16`;
+const quickInputClassName = `${quickFieldClassName} h-12 sm:h-16`;
 const quickFieldLabelClassName =
   "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
-const quickFieldHintClassName = "mt-2 text-xs leading-6 text-storm/75";
-const quickPickerTriggerClassName = `${quickFieldClassName} flex h-16 items-center justify-between gap-3 text-left`;
+const quickFieldHintClassName = "mt-1.5 sm:mt-2 break-words text-xs leading-6 text-storm/75";
+const quickPickerTriggerClassName = `${quickFieldClassName} flex h-12 sm:h-16 items-center justify-between gap-3 text-left`;
 const quickPickerSearchInputClassName =
   "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 
@@ -317,7 +318,7 @@ function buildQuickMovementDescription(
 
 function QuickField({ children, hint, label }: QuickFieldProps) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className={quickFieldLabelClassName}>{label}</span>
       <div className="mt-3">{children}</div>
       {hint ? <p className={quickFieldHintClassName}>{hint}</p> : null}
@@ -378,7 +379,7 @@ function QuickPicker({
 
   return (
     <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
+      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
@@ -445,8 +446,8 @@ function QuickPicker({
                   {actionLeadingLabel ?? "+"}
                 </span>
                 <span className="min-w-0">
-                  <span className="block font-medium text-ink">{actionLabel}</span>
-                  <span className="mt-1 block text-xs text-storm">
+                  <span className="block truncate font-medium text-ink">{actionLabel}</span>
+                  <span className="mt-1 block truncate text-xs text-storm">
                     {actionDescription ?? "Agrega un nuevo registro sin salir de este flujo."}
                   </span>
                 </span>
@@ -485,7 +486,7 @@ function QuickPicker({
                         {option.leadingLabel}
                       </span>
                       <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.label}</span>
+                        <span className="block truncate font-medium text-ink">{option.label}</span>
                         <span className="mt-1 block truncate text-xs text-storm">
                           {option.description}
                         </span>
@@ -520,6 +521,8 @@ export function QuickMovementDialog({
   const [formState, setFormState] = useState<QuickMovementFormState>(() =>
     createDefaultQuickMovementFormState(),
   );
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [inlineCounterparties, setInlineCounterparties] = useState<CounterpartySummary[]>([]);
@@ -630,10 +633,19 @@ export function QuickMovementDialog({
     field: Field,
     value: QuickMovementFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
     }));
+  }
+
+  function requestClose() {
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      onClose();
+    }
   }
 
   async function uploadReceiptForMovement(movementId: number, file: File) {
@@ -925,10 +937,11 @@ export function QuickMovementDialog({
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-50 isolate bg-black/68 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-['']"
+      onClick={requestClose}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
-        <div className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1040px] overflow-hidden rounded-[38px] border border-white/10 bg-[#050a12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative max-h-[calc(100vh-1.5rem)] w-full max-w-[1040px] overflow-hidden rounded-[38px] border border-white/10 bg-[#050a12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
           <div className="pointer-events-none absolute inset-0">
             <div
               className="absolute -left-20 top-10 h-64 w-64 rounded-full blur-3xl"
@@ -938,7 +951,7 @@ export function QuickMovementDialog({
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_20%,transparent_80%,rgba(255,255,255,0.03))]" />
           </div>
 
-          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-2xl space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -963,7 +976,7 @@ export function QuickMovementDialog({
                 aria-label="Cerrar captura rapida"
                 className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:-translate-y-0.5 hover:bg-white/[0.08] hover:text-ink"
                 disabled={isSaving}
-                onClick={onClose}
+                onClick={requestClose}
                 type="button"
               >
                 <X className="h-5 w-5" />
@@ -1019,7 +1032,7 @@ export function QuickMovementDialog({
                   action={
                     <Button
                       disabled={isSaving}
-                      onClick={onClose}
+                      onClick={requestClose}
                       variant="secondary"
                     >
                       Volver
@@ -1042,19 +1055,19 @@ export function QuickMovementDialog({
                     />
                   ) : null}
 
-                  <div className="mt-6 grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-                    <section className="glass-panel-soft relative overflow-visible rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-                      <div className="mb-6 flex items-center gap-3">
-                        <Sparkles className="h-5 w-5 text-gold" />
+                  <div className="mt-6 grid gap-4 sm:gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+                    <section className="glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6">
+                      <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+                        <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-gold" />
                         <div>
-                          <p className="text-xs uppercase tracking-[0.22em] text-storm">Datos base</p>
-                          <p className="mt-1 text-lg font-medium text-ink">
+                          <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Datos base</p>
+                          <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">
                             {isTransfer ? "Cuentas y montos" : "Cuenta, monto y contexto"}
                           </p>
                         </div>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
                         {isTransfer ? (
                           <>
                             <QuickField
@@ -1199,7 +1212,7 @@ export function QuickMovementDialog({
                         )}
                       </div>
 
-                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div className="mt-3 sm:mt-5 grid gap-3 sm:gap-4 md:grid-cols-2">
                         {isTransfer && hasTransferCurrencyMismatch ? (
                           <QuickField
                             hint="Opcional. Si la dejas vacia la descripcion se construye sola."
@@ -1243,7 +1256,7 @@ export function QuickMovementDialog({
                       </div>
                     </section>
 
-                    <section className="glass-panel-soft relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+                    <section className="glass-panel-soft relative min-w-0 overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6">
                       <div
                         className="absolute -right-10 top-0 h-36 w-36 rounded-full blur-3xl"
                         style={{ backgroundColor: `${selectedMode.color}30` }}
@@ -1259,66 +1272,66 @@ export function QuickMovementDialog({
                           </span>
                         </div>
 
-                        <div className="mt-6 flex items-start gap-5">
-                          <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
+                        <div className="mt-4 sm:mt-6 flex items-start gap-3 sm:gap-5">
+                          <div className="relative flex h-12 w-12 sm:h-20 sm:w-20 shrink-0 items-center justify-center">
                             <div
-                              className="absolute inset-0 rounded-[28px] opacity-80 blur-2xl"
+                              className="absolute inset-0 rounded-[16px] sm:rounded-[28px] opacity-80 blur-2xl"
                               style={{ backgroundColor: `${selectedMode.color}5f` }}
                             />
                             <div
-                              className="relative flex h-full w-full items-center justify-center rounded-[28px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
+                              className="relative flex h-full w-full items-center justify-center rounded-[16px] sm:rounded-[28px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
                               style={{
                                 background: `linear-gradient(160deg, ${selectedMode.color}, rgba(8, 13, 20, 0.72))`,
                               }}
                             >
-                              <QuickModeIcon className="h-8 w-8" />
+                              <QuickModeIcon className="h-5 w-5 sm:h-8 sm:w-8" />
                             </div>
                           </div>
 
                           <div className="min-w-0">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Resumen
                             </p>
-                            <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">
+                            <h3 className="mt-1 sm:mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
                               {previewTitle}
                             </h3>
-                            <p className="mt-3 text-sm leading-7 text-storm">{previewFlowLabel}</p>
+                            <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm leading-6 sm:leading-7 text-storm">{previewFlowLabel}</p>
                           </div>
                         </div>
 
-                        <div className="mt-6 grid gap-3">
-                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                        <div className="mt-4 sm:mt-6 grid gap-2 sm:gap-3">
+                          <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Impacto principal
                             </p>
-                            <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                            <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
                               {formatCurrency(computedAmount > 0 ? computedAmount : 0, previewCurrencyCode)}
                             </p>
-                            <p className="mt-2 text-xs leading-6 text-storm/75">{previewDateLabel}</p>
+                            <p className="mt-1 sm:mt-2 text-xs leading-6 text-storm/75">{previewDateLabel}</p>
                           </div>
 
                           {isTransfer && hasTransferCurrencyMismatch ? (
-                            <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                              <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                              <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                                 Monto destino
                               </p>
-                              <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                              <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
                                 {formatCurrency(
                                   computedDestinationAmount > 0 ? computedDestinationAmount : 0,
                                   selectedDestinationAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode,
                                 )}
                               </p>
-                              <p className="mt-2 text-xs leading-6 text-storm/75">
+                              <p className="mt-1 sm:mt-2 text-xs leading-6 text-storm/75">
                                 {transferFxRate ? `FX ${transferFxRate.toFixed(6)}` : "Esperando montos para calcular FX"}
                               </p>
                             </div>
                           ) : null}
 
-                          <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Lectura rapida
                             </p>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-2 sm:mt-3 flex flex-wrap gap-2">
                               <StatusBadge
                                 status={selectedMode.label}
                                 tone={kind === "expense" ? "danger" : kind === "income" ? "success" : "info"}
@@ -1334,7 +1347,7 @@ export function QuickMovementDialog({
                                 />
                               ) : null}
                             </div>
-                            <p className="mt-3 text-xs leading-6 text-storm/75">
+                            <p className="mt-2 sm:mt-3 text-xs leading-6 text-storm/75">
                               Se registrara usando el flujo rapido y quedara disponible de inmediato en tu historial.
                             </p>
                           </div>
@@ -1353,7 +1366,7 @@ export function QuickMovementDialog({
                     />
                   </div>
 
-                  <div className="mt-8 border-t border-white/10 pt-5 sm:pt-6">
+                  <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#050a12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <p className="max-w-xl text-sm leading-7 text-storm">
                         Este formulario resume lo esencial. Si necesitas notas, metadata, FX manual o vinculos avanzados, luego puedes abrir el modulo completo de movimientos.
@@ -1363,7 +1376,7 @@ export function QuickMovementDialog({
                         <Button
                           className="min-w-[140px] justify-center"
                           disabled={isSaving}
-                          onClick={onClose}
+                          onClick={requestClose}
                           type="button"
                           variant="ghost"
                         >
@@ -1400,6 +1413,13 @@ export function QuickMovementDialog({
           subtitle="Agregalo una sola vez y reutilizalo en ingresos, gastos o deudas."
           userId={userId}
           workspaceId={workspaceId}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); onClose(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
     </div>

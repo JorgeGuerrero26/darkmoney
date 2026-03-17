@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -27,7 +28,7 @@ export function RecoveryPage() {
     try {
       await resetPassword(email);
       setSuccessMessage(
-        "Te enviamos un correo con un enlace seguro para cambiar tu contrasena.",
+        "Te enviamos un correo con un enlace seguro para cambiar tu contraseña.",
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo enviar el correo.";
@@ -40,10 +41,10 @@ export function RecoveryPage() {
   return (
     <section className="space-y-6">
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-storm">recuperacion</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-storm">recuperación</p>
         <h2 className="font-display text-4xl font-semibold text-ink">Recupera tu acceso.</h2>
         <p className="text-sm leading-7 text-storm">
-          Escribe tu correo y te enviaremos un enlace para crear una nueva contrasena.
+          Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña.
         </p>
       </div>
 
@@ -53,8 +54,9 @@ export function RecoveryPage() {
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Correo de recuperacion</span>
+          <span className="text-sm font-medium text-ink">Correo de recuperación</span>
           <input
+            autoComplete="email"
             className="field-dark"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="tu@correo.com"
@@ -73,7 +75,14 @@ export function RecoveryPage() {
           disabled={!isConfigured || isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Enviando..." : "Enviar enlace"}
+          {isSubmitting ? (
+            <>
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Enviando...
+            </>
+          ) : (
+            "Enviar enlace"
+          )}
         </Button>
       </form>
 

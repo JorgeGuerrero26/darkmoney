@@ -264,30 +264,30 @@ const DASHBOARD_HIDDEN_WIDGETS_STORAGE_KEY = "darkmoney.dashboard.hiddenWidgets"
 
 const dashboardModeOptions: Array<{ value: DashboardMode; label: string; helper: string }> = [
   { value: "simple", label: "Vista simple", helper: "solo lo esencial" },
-  { value: "advanced", label: "Vista avanzada", helper: "mas analisis" },
+  { value: "advanced", label: "Vista avanzada", helper: "más análisis" },
 ];
 
 const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
   { id: "overview_kpis", label: "Resumen principal", helper: "KPIs y mini indicadores", modes: ["simple", "advanced"] },
-  { id: "savings_trend", label: "Ahorro cronologico", helper: "evolucion y ritmo", modes: ["simple", "advanced"] },
-  { id: "period_radar", label: "Radar del periodo", helper: "lecturas rapidas", modes: ["advanced"] },
+  { id: "savings_trend", label: "Ahorro cronológico", helper: "evolución y ritmo", modes: ["simple", "advanced"] },
+  { id: "period_radar", label: "Radar del período", helper: "lecturas rápidas", modes: ["advanced"] },
   { id: "budget_snapshot", label: "Presupuestos", helper: "topes, uso y alertas", modes: ["simple", "advanced"] },
   { id: "obligation_watch", label: "Cartera", helper: "vencimientos y aging", modes: ["advanced"] },
-  { id: "future_flow", label: "Flujo futuro", helper: "7, 15 y 30 dias", modes: ["advanced"] },
-  { id: "alert_center", label: "Alertas", helper: "anomalias y atencion", modes: ["advanced"] },
-  { id: "workspace_collaboration", label: "Colaboracion", helper: "workspace y miembros", modes: ["advanced"] },
+  { id: "future_flow", label: "Flujo futuro", helper: "7, 15 y 30 días", modes: ["advanced"] },
+  { id: "alert_center", label: "Alertas", helper: "anomalías y atención", modes: ["advanced"] },
+  { id: "workspace_collaboration", label: "Colaboración", helper: "workspace y miembros", modes: ["advanced"] },
   { id: "data_quality", label: "Calidad del dato", helper: "limpieza del sistema", modes: ["advanced"] },
   { id: "accounts_breakdown", label: "Dinero por cuenta", helper: "saldos y actividad", modes: ["simple", "advanced"] },
   { id: "receivable_leaders", label: "Quienes te deben", helper: "cartera por cobrar", modes: ["simple", "advanced"] },
   { id: "payable_leaders", label: "A quienes debes", helper: "cartera por pagar", modes: ["simple", "advanced"] },
-  { id: "category_comparison", label: "Categorias", helper: "comparativo de gasto", modes: ["simple", "advanced"] },
+  { id: "category_comparison", label: "Categorías", helper: "comparativo de gasto", modes: ["simple", "advanced"] },
   { id: "monthly_pulse", label: "Pulso mensual", helper: "tendencia de meses", modes: ["advanced"] },
-  { id: "weekly_pattern", label: "Ritmo semanal", helper: "habitos por dia", modes: ["advanced"] },
-  { id: "upcoming_recent", label: "Vencimientos y movimientos", helper: "lo que viene y lo ultimo", modes: ["simple", "advanced"] },
+  { id: "weekly_pattern", label: "Ritmo semanal", helper: "hábitos por día", modes: ["advanced"] },
+  { id: "upcoming_recent", label: "Vencimientos y movimientos", helper: "lo que viene y lo último", modes: ["simple", "advanced"] },
   { id: "subscriptions_snapshot", label: "Suscripciones", helper: "costo recurrente y top", modes: ["advanced"] },
   { id: "transfer_snapshot", label: "Transferencias", helper: "flujo entre cuentas", modes: ["advanced"] },
   { id: "health_center", label: "Salud financiera", helper: "riesgo, liquidez y ahorro", modes: ["advanced"] },
-  { id: "currency_exposure", label: "Monedas", helper: "exposicion cambiaria", modes: ["advanced"] },
+  { id: "currency_exposure", label: "Monedas", helper: "exposición cambiaria", modes: ["advanced"] },
   { id: "learning_panel", label: "Aprendiendo de ti", helper: "patrones y proyecciones", modes: ["advanced"] },
   { id: "activity_timeline", label: "Actividad reciente", helper: "historial del workspace", modes: ["advanced"] },
 ];
@@ -296,7 +296,7 @@ const learningPhaseDefinitions: LearningPhaseDefinition[] = [
   {
     step: 1,
     title: "Fase 1 - Base lista",
-    description: "Detecta ritmo inicial, dias fuertes y primeras categorias dominantes.",
+    description: "Detecta ritmo inicial, días fuertes y primeras categorías dominantes.",
     minMovements: 20,
     minHistoryDays: 21,
     minCategorizedRate: 0.35,
@@ -306,7 +306,7 @@ const learningPhaseDefinitions: LearningPhaseDefinition[] = [
   {
     step: 2,
     title: "Fase 2 - Patrones",
-    description: "Empieza a reconocer rutinas por categoria, contraparte y dias de gasto.",
+    description: "Empieza a reconocer rutinas por categoría, contraparte y días de gasto.",
     minMovements: 60,
     minHistoryDays: 56,
     minCategorizedRate: 0.55,
@@ -316,7 +316,7 @@ const learningPhaseDefinitions: LearningPhaseDefinition[] = [
   {
     step: 3,
     title: "Fase 3 - Proyecciones",
-    description: "Activa proyecciones del mes y focos de gasto que vienen acelerando.",
+    description: "Activa proyecciones del mes y focos de gasto que vienen acelerándose.",
     minMovements: 120,
     minHistoryDays: 90,
     minCategorizedRate: 0.7,
@@ -326,7 +326,7 @@ const learningPhaseDefinitions: LearningPhaseDefinition[] = [
   {
     step: 4,
     title: "Fase 4 - Alertas inteligentes",
-    description: "Lanza alertas tempranas y predicciones mas confiables con historial suficiente.",
+    description: "Lanza alertas tempranas y predicciones más confiables con historial suficiente.",
     minMovements: 200,
     minHistoryDays: 180,
     minCategorizedRate: 0.8,
@@ -577,7 +577,7 @@ function buildComparisonDefinition(preset: ComparisonPreset, reference = new Dat
       current: {
         start: currentStart,
         end: today,
-        label: "Ultimos 30 dias",
+        label: "Últimos 30 días",
         detail: formatShortDateRange(currentStart, today),
       },
       previous: {
@@ -586,7 +586,7 @@ function buildComparisonDefinition(preset: ComparisonPreset, reference = new Dat
         label: "30 dias previos",
         detail: formatShortDateRange(previousStart, previousEnd),
       },
-      caption: "Comparacion movil para ver tendencia real sin depender del cambio de mes.",
+      caption: "Comparación móvil para ver tendencia real sin depender del cambio de mes.",
     };
   }
 
@@ -944,13 +944,13 @@ function OverviewCard({
   }[accent];
 
   return (
-    <article className="glass-panel rounded-[28px] p-5">
-      <div className="flex items-start justify-between gap-4">
+    <article className="glass-panel rounded-[28px] p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-2 sm:gap-4">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.24em] text-storm/90">{label}</p>
-          <p className="mt-3 font-display text-4xl font-semibold text-ink">{value}</p>
+          <p className="text-[0.65rem] uppercase tracking-[0.18em] text-storm/90 sm:text-xs sm:tracking-[0.24em]">{label}</p>
+          <p className="mt-2 font-display text-2xl font-semibold text-ink sm:mt-3 sm:text-4xl">{value}</p>
         </div>
-        <div className={`rounded-[22px] bg-gradient-to-br p-3 ring-1 ring-white/8 ${accentStyles}`}>
+        <div className={`hidden rounded-[22px] bg-gradient-to-br p-3 ring-1 ring-white/8 sm:block ${accentStyles}`}>
           {icon}
         </div>
       </div>
@@ -1239,7 +1239,7 @@ function buildUpcomingCommitments(
     })
     .map((subscription) => ({
       key: `subscription-${subscription.id}`,
-      kind: "Suscripcion",
+      kind: "Suscripción",
       title: subscription.name,
       counterpart: subscription.vendor,
       amount: subscription.amountInBaseCurrency ?? subscription.amount,
@@ -1423,8 +1423,8 @@ function buildFinancialHealthSnapshot({
   if (overdueAmount > 0 || realFreeMoney < 0 || currentNet < 0) {
     return {
       tone: "danger",
-      title: "Necesita atencion",
-      description: "Tienes compromisos vencidos o tu flujo actual esta apretando la caja disponible.",
+      title: "Necesita atención",
+      description: "Tienes compromisos vencidos o tu flujo actual está apretando la caja disponible.",
       realFreeMoney,
       savingsRate,
       coverageMonths,
@@ -1440,7 +1440,7 @@ function buildFinancialHealthSnapshot({
   ) {
     return {
       tone: "warning",
-      title: "Bajo observacion",
+      title: "Bajo observación",
       description: "La liquidez o el ritmo de ahorro necesitan seguimiento para no perder margen.",
       realFreeMoney,
       savingsRate,
@@ -1453,7 +1453,7 @@ function buildFinancialHealthSnapshot({
   return {
     tone: "success",
     title: "Salud estable",
-    description: "Tu liquidez y tu capacidad de ahorro van en una direccion saludable para este corte.",
+    description: "Tu liquidez y tu capacidad de ahorro van en una dirección saludable para este corte.",
     realFreeMoney,
     savingsRate,
     coverageMonths,
@@ -1486,7 +1486,7 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
       insights: [],
       pendingActions: [
         "Empieza registrando ingresos, gastos y transferencias reales.",
-        "Usa categorias desde el inicio para que el sistema pueda aprender mas rapido.",
+        "Usa categorías desde el inicio para que el sistema pueda aprender más rápido.",
       ],
     };
   }
@@ -1541,16 +1541,16 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
 
     if (categorizedRate < phase.minCategorizedRate) {
       remainingRequirements.push(
-        `Sube tu categoria util al ${Math.round(phase.minCategorizedRate * 100)}% para desbloquear esta fase.`,
+        `Sube tu categoría útil al ${Math.round(phase.minCategorizedRate * 100)}% para desbloquear esta fase.`,
       );
     }
 
     if (distinctMonths < phase.minDistinctMonths) {
-      remainingRequirements.push(`Necesitamos ${phase.minDistinctMonths - distinctMonths} meses mas con actividad.`);
+      remainingRequirements.push(`Necesitamos ${phase.minDistinctMonths - distinctMonths} meses más con actividad.`);
     }
 
     if (distinctCategories < phase.minDistinctCategories) {
-      remainingRequirements.push(`Activa ${phase.minDistinctCategories - distinctCategories} categorias adicionales.`);
+      remainingRequirements.push(`Activa ${phase.minDistinctCategories - distinctCategories} categorías adicionales.`);
     }
 
     return {
@@ -1667,15 +1667,15 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
   if (currentPhase >= 1 && topWeekdayEntry) {
     const weekdayLabel = weekdayLabels[(topWeekdayEntry[0] + 6) % 7];
     insights.push({
-      title: `Tu dia mas cargado hoy parece ser ${weekdayLabel}`,
-      description: `Ese dia concentra ${Math.round((topWeekdayEntry[1] / Math.max(totalExpense, 1)) * 100)}% del gasto historico aplicable.`,
+      title: `Tu día más cargado hoy parece ser ${weekdayLabel}`,
+      description: `Ese día concentra ${Math.round((topWeekdayEntry[1] / Math.max(totalExpense, 1)) * 100)}% del gasto histórico aplicable.`,
       tone: "info",
     });
   }
 
   if (currentPhase >= 1 && topCategoryEntry) {
     insights.push({
-      title: `La categoria que mas pesa es ${topCategoryEntry[0]}`,
+      title: `La categoría que más pesa es ${topCategoryEntry[0]}`,
       description: `${topCategoryEntry[1].count} movimientos y ${formatCurrency(topCategoryEntry[1].amount, currencyCode)} de salida acumulada la vuelven tu foco principal.`,
       tone: "warning",
     });
@@ -1692,7 +1692,7 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
   if (currentPhase >= 2 && weekendShare >= 0.4) {
     insights.push({
       title: "Tus fines de semana concentran mucho gasto",
-      description: `${Math.round(weekendShare * 100)}% de tus salidas historicas cae entre sabado y domingo.`,
+      description: `${Math.round(weekendShare * 100)}% de tus salidas históricas cae entre sábado y domingo.`,
       tone: "warning",
     });
   }
@@ -1704,8 +1704,8 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
       title: "Ya podemos proyectar tu cierre del mes",
       description:
         projectedDelta !== null
-          ? `Si sigues al ritmo actual cerrarias cerca de ${formatCurrency(projectedMonthExpense, currencyCode)}, ${projectedDelta >= 0 ? "por encima" : "por debajo"} de tu promedio reciente.`
-          : `Con el ritmo actual cerrarias cerca de ${formatCurrency(projectedMonthExpense, currencyCode)} este mes.`,
+          ? `Si sigues al ritmo actual cerrarías cerca de ${formatCurrency(projectedMonthExpense, currencyCode)}, ${projectedDelta >= 0 ? "por encima" : "por debajo"} de tu promedio reciente.`
+          : `Con el ritmo actual cerrarías cerca de ${formatCurrency(projectedMonthExpense, currencyCode)} este mes.`,
       tone:
         projectedDelta !== null
           ? projectedDelta > 0
@@ -1717,8 +1717,8 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
 
   if (currentPhase >= 3 && growthCategoryEntry) {
     insights.push({
-      title: `La categoria con mas presion ahora es ${growthCategoryEntry.category}`,
-      description: `En los ultimos 30 dias subio ${formatCurrency(growthCategoryEntry.delta, currencyCode)} frente al bloque anterior, asi que es la candidata mas clara a dominar tu gasto cercano.`,
+      title: `La categoría con más presión ahora es ${growthCategoryEntry.category}`,
+      description: `En los últimos 30 días subió ${formatCurrency(growthCategoryEntry.delta, currencyCode)} frente al bloque anterior, así que es la candidata más clara a dominar tu gasto cercano.`,
       tone: "warning",
     });
   }
@@ -1729,12 +1729,12 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
     if (overAverageRatio !== null && overAverageRatio >= 1.15) {
       insights.push({
         title: "Alerta temprana de gasto alto",
-        description: `Tu proyeccion del mes ya va ${Math.round((overAverageRatio - 1) * 100)}% por encima de tu promedio de los ultimos meses.`,
+        description: `Tu proyección del mes ya va ${Math.round((overAverageRatio - 1) * 100)}% por encima de tu promedio de los últimos meses.`,
         tone: "danger",
       });
     } else {
       insights.push({
-        title: "Tu proyeccion luce controlada",
+        title: "Tu proyección luce controlada",
         description: "El gasto proyectado del mes se mantiene dentro de un rango saludable frente a tu historial reciente.",
         tone: "success",
       });
@@ -1747,7 +1747,7 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
       ? nextLockedPhase.remainingRequirements
       : [
           "Sigue registrando con disciplina para reforzar las predicciones.",
-          "Mantener categorias consistentes mejora la precision del panel.",
+          "Mantener categorías consistentes mejora la precisión del panel.",
         ];
 
   return {
@@ -1809,8 +1809,8 @@ function SavingsLineChart({
   if (!points.length) {
     return (
       <DataState
-        description="Necesitamos movimientos aplicados dentro del periodo para dibujar la evolucion diaria."
-        title="Aun no hay trazo para este periodo"
+        description="Necesitamos movimientos aplicados dentro del período para dibujar la evolución diaria."
+        title="Aún no hay trazo para este período"
       />
     );
   }
@@ -1843,7 +1843,7 @@ function SavingsLineChart({
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-storm">Ahorro acumulado</p>
             <p className="mt-2 text-sm text-storm">
-              Toca un punto para ver el detalle de ese dia frente al periodo anterior.
+              Toca un punto para ver el detalle de ese día frente al período anterior.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-storm">
@@ -1853,7 +1853,7 @@ function SavingsLineChart({
             </span>
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
               <span className="h-2 w-2 rounded-full bg-white/60" />
-              Comparacion
+              Comparación
             </span>
           </div>
         </div>
@@ -1971,7 +1971,7 @@ function SavingsLineChart({
                 </p>
               </div>
               <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparacion</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparación</p>
                 <p className="mt-3 font-display text-3xl font-semibold text-ink">
                   {formatCurrency(points[selectedIndex].previousNet, currencyCode)}
                 </p>
@@ -1991,7 +1991,7 @@ function SavingsLineChart({
                 />
               </div>
               <p className="mt-3 text-sm leading-7 text-storm">
-                Si mantienes este ritmo, el acumulado del periodo seguiria en{" "}
+                Si mantienes este ritmo, el acumulado del período seguiría en{" "}
                 <span className="font-semibold text-ink">
                   {formatCurrency(points[selectedIndex].cumulative, currencyCode)}
                 </span>
@@ -2184,8 +2184,8 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Tu centro de control va a aparecer aqui apenas termine la conexion inicial."
-          eyebrow="overview"
+          description="Tu centro de control va a aparecer aquí apenas termine la conexión inicial."
+          eyebrow="resumen"
           title="Dashboard"
         />
         <DashboardLoadingSkeleton />
@@ -2197,12 +2197,12 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="El dashboard necesita el workspace activo y permisos para leer su informacion."
-          eyebrow="overview"
+          description="El dashboard necesita el workspace activo y permisos para leer su información."
+          eyebrow="resumen"
           title="Dashboard no disponible"
         />
         <DataState
-          description={getQueryErrorMessage(workspaceError, "No pudimos cargar tus workspaces reales.")}
+          description={getQueryErrorMessage(workspaceError, "No pudimos cargar tus workspaces.")}
           title="Acceso bloqueado al workspace"
           tone="error"
         />
@@ -2214,13 +2214,13 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Necesitamos un workspace real para mostrar balances, comparativos y tendencias."
-          eyebrow="overview"
-          title="Aun no hay un workspace activo"
+          description="Seleccioná o creá un workspace para ver balances, comparativos y tendencias."
+          eyebrow="resumen"
+          title="Aún no hay un workspace activo"
         />
         <DataState
-          description="Cuando tu workspace este listo, aqui veras tu dinero, tus compromisos y tus patrones de gasto en una sola vista."
-          title="Todavia no encontramos datos financieros"
+          description="Cuando tu workspace esté listo, aquí verás tu dinero, tus compromisos y tus patrones de gasto en una sola vista."
+          title="Todavía no encontramos datos financieros"
         />
       </div>
     );
@@ -2230,8 +2230,8 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Estamos armando una vista mas inteligente a partir de tus cuentas, movimientos y compromisos."
-          eyebrow="overview"
+          description="Estamos armando una vista más inteligente a partir de tus cuentas, movimientos y compromisos."
+          eyebrow="resumen"
           title={`${activeWorkspace.name}, en una sola mirada`}
         />
         <DashboardLoadingSkeleton />
@@ -2243,12 +2243,12 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
-          description="Intentamos leer cuentas, movimientos, creditos, deudas y suscripciones de este workspace."
-          eyebrow="overview"
+          description="Intentamos leer cuentas, movimientos, créditos, deudas y suscripciones de este workspace."
+          eyebrow="resumen"
           title={`${activeWorkspace.name}, con problemas de lectura`}
         />
         <DataState
-          description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer la informacion del dashboard.")}
+          description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer la información del dashboard.")}
           title="No fue posible cargar el panel principal"
           tone="error"
         />
@@ -2944,7 +2944,7 @@ export function DashboardPage() {
           {
             key: "low-balance",
             title: "Cuenta con saldo bajo",
-            description: `${lowBalanceAccounts[0].name} ya se ve apretada para el ritmo reciente del periodo.`,
+            description: `${lowBalanceAccounts[0].name} ya se ve apretada para el ritmo reciente del período.`,
             tone: "warning",
           },
         ]
@@ -2954,7 +2954,7 @@ export function DashboardPage() {
       ? [
           {
             key: "subscription-close",
-            title: "Suscripcion muy proxima",
+            title: "Suscripción muy próxima",
             description: `${nextSubscriptionDue.name} cae el ${formatDate(nextSubscriptionDue.nextDueDate)}.`,
             tone: "info",
           },
@@ -2981,9 +2981,9 @@ export function DashboardPage() {
     },
     {
       key: "uncategorized",
-      label: "Sin categoria",
+      label: "Sin categoría",
       value: uncategorizedMovements.length,
-      helper: "Restan precision a comparativos e insights.",
+      helper: "Restan precisión a comparativos e insights.",
       tone: "warning" as const,
     },
     {
@@ -3004,7 +3004,7 @@ export function DashboardPage() {
       key: "without-counterparty",
       label: "Registros sin contraparte",
       value: movementsWithoutCounterparty.length,
-      helper: "Pierdes trazabilidad de con quien se movio el dinero.",
+      helper: "Pierdes trazabilidad de con quién se movió el dinero.",
       tone: "info" as const,
     },
   ];
@@ -3077,8 +3077,8 @@ export function DashboardPage() {
             />
           </div>
         }
-        description="Tu dinero ya tiene suficiente contexto. Aqui lo convertimos en decisiones: cuanto tienes, quien te debe, en que se te va mas, y si realmente estas ahorrando mejor que antes."
-        eyebrow="overview"
+        description="Tu dinero ya tiene suficiente contexto. Aquí lo convertimos en decisiones: cuánto tienes, quién te debe, en qué se te va más, y si realmente estás ahorrando mejor que antes."
+        eyebrow="resumen"
         title={`${snapshot.workspace.name}, con foco en decisiones`}
       >
         <div className="flex flex-wrap gap-3">
@@ -3130,7 +3130,7 @@ export function DashboardPage() {
             ) : null}
             <p className="mt-4 text-sm leading-7 text-storm">
               {effectiveDashboardMode === "simple"
-                ? "Muestra solo los bloques esenciales para leer dinero, categorias, cuentas y vencimientos."
+                ? "Muestra solo los bloques esenciales para leer dinero, categorías, cuentas y vencimientos."
                 : "Activa widgets extra para profundizar en riesgo, monedas, suscripciones, transferencias y actividad."}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -3194,7 +3194,7 @@ export function DashboardPage() {
       </SurfaceCard>
 
       {isWidgetVisible("overview_kpis") ? (
-      <section className="grid gap-4 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
         <OverviewCard
           accent="pine"
           hint="Saldo combinado de tus cuentas activas, convertido a una sola lectura cuando hace falta."
@@ -3215,7 +3215,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="ember"
-          hint="Lo que todavia tienes por pagar considerando deudas, compras a cuotas y compromisos vivos."
+          hint="Lo que todavía tienes por pagar considerando deudas, compras a cuotas y compromisos vivos."
           icon={<ArrowUpCircle className="h-5 w-5" />}
           label="Debes"
           trendLabel={`${payableLeaders.length} contactos con saldo`}
@@ -3226,14 +3226,14 @@ export function DashboardPage() {
           accent="gold"
           hint={`Resultado neto de ${comparison.current.label.toLowerCase()} restando gastos a ingresos.`}
           icon={<PiggyBank className="h-5 w-5" />}
-          label="Ahorro del periodo"
+          label="Ahorro del período"
           trendLabel={formatSignedPercentage(currentTotals.net, previousTotals.net)}
           trendTone={getChangeTone(totalCurrentSavingsDelta)}
           value={formatCurrency(currentTotals.net, displayCurrencyCode)}
         />
         <OverviewCard
           accent="pine"
-          hint="Entradas aplicadas dentro del periodo seleccionado. No cuenta transferencias internas."
+          hint="Entradas aplicadas dentro del período seleccionado. No cuenta transferencias internas."
           icon={<ArrowUpRight className="h-5 w-5" />}
           label="Ingresos"
           trendLabel={formatSignedPercentage(currentTotals.income, previousTotals.income)}
@@ -3242,7 +3242,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="ember"
-          hint="Salidas aplicadas dentro del periodo seleccionado, incluyendo pagos recurrentes y obligaciones."
+          hint="Salidas aplicadas dentro del período seleccionado, incluyendo pagos recurrentes y obligaciones."
           icon={<ArrowDownRight className="h-5 w-5" />}
           label="Gastos"
           trendLabel={formatSignedPercentage(currentTotals.expense, previousTotals.expense)}
@@ -3253,7 +3253,7 @@ export function DashboardPage() {
       ) : null}
 
       {isWidgetVisible("overview_kpis") ? (
-        <section className="grid gap-4 xl:grid-cols-6">
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <div className="glass-panel-soft rounded-[24px] p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Dinero libre real</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -3276,7 +3276,7 @@ export function DashboardPage() {
             </p>
           </div>
           <div className="glass-panel-soft rounded-[24px] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos proximos</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos próximos</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(upcomingOutflows, displayCurrencyCode)}
             </p>
@@ -3300,14 +3300,14 @@ export function DashboardPage() {
       ) : null}
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
-        <section className="grid gap-4 xl:grid-cols-6">
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-pine">Patrimonio neto ampliado</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(expandedNetWorth, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">
-              Caja actual mas lo que te deben, menos lo que aun debes.
+              Caja actual más lo que te deben, menos lo que aún debes.
             </p>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
@@ -3403,20 +3403,20 @@ export function DashboardPage() {
                   {formatCurrency(sharedPendingDisplay.amount, sharedPendingDisplay.currencyCode)}
                 </p>
                 <p className="mt-2 text-sm text-storm">
-                  Exposicion viva que ves aparte de tu cartera propia.
+                  Exposición viva que ves aparte de tu cartera propia.
                 </p>
               </div>
               <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-pine">Creditos compartidos</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-pine">Créditos compartidos</p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedReceivableDisplay.amount, sharedReceivableDisplay.currencyCode)}
                 </p>
                 <p className="mt-2 text-sm text-storm">
                   {sharedReceivableObligations.length}{" "}
-                  {sharedReceivableObligations.length === 1 ? "credito" : "creditos"} en solo lectura.
+                  {sharedReceivableObligations.length === 1 ? "crédito" : "créditos"} en solo lectura.
                 </p>
                 <p className="mt-2 text-sm text-storm/85">
-                  Al propietario de estos registros aun le deben pagar.
+                  Al propietario de estos registros aún le deben pagar.
                 </p>
               </div>
               <div className="rounded-[24px] border border-rosewood/18 bg-rosewood/10 p-4">
@@ -3431,7 +3431,7 @@ export function DashboardPage() {
                   {sharedPayableObligations.length === 1 ? "deuda" : "deudas"} en solo lectura.
                 </p>
                 <p className="mt-2 text-sm text-storm/85">
-                  El propietario de estos registros aun debe pagar.
+                  El propietario de estos registros aún debe pagar.
                 </p>
               </div>
             </div>
@@ -3440,13 +3440,13 @@ export function DashboardPage() {
       ) : null}
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
-        <section className="grid gap-4 xl:grid-cols-6">
+        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Gasto semanal medio</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(averageWeeklySpend, displayCurrencyCode)}
             </p>
-            <p className="mt-2 text-sm text-storm">Referencia rapida para medir tu ritmo de consumo.</p>
+            <p className="mt-2 text-sm text-storm">Referencia rápida para medir tu ritmo de consumo.</p>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Ahorro mensual medio</p>
@@ -3465,7 +3465,7 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               {topBalanceAccount
                 ? `${topBalanceAccount.account.name} concentra ${formatPercentage(topBalanceAccount.share)} del dinero visible.`
-                : "Crea o activa una cuenta para empezar a ver concentracion de saldo."}
+                : "Crea o activa una cuenta para empezar a ver concentración de saldo."}
             </p>
           </div>
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
@@ -3476,7 +3476,7 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               {bottomBalanceAccount
                 ? `${bottomBalanceAccount.account.name} hoy tiene el menor peso dentro del dinero activo.`
-                : "Aun no hay suficientes cuentas para comparar extremos."}
+                : "Aún no hay suficientes cuentas para comparar extremos."}
             </p>
           </div>
           <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
@@ -3507,7 +3507,7 @@ export function DashboardPage() {
               {latestMovement?.description || latestMovement?.counterparty || "Sin actividad reciente"}
             </p>
             <p className="mt-2 text-sm text-storm">
-              {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Todavia no hay movimientos aplicados para resumir."}
+              {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Todavía no hay movimientos aplicados para resumir."}
             </p>
           </div>
         </section>
@@ -3524,8 +3524,8 @@ export function DashboardPage() {
         {isWidgetVisible("savings_trend") ? (
         <SurfaceCard
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
-          description="Asi evoluciono tu ahorro dia a dia durante el periodo actual frente a su comparativo directo."
-          title="Ahorro cronologico"
+          description="Así evolucionó tu ahorro día a día durante el período actual frente a su comparativo directo."
+          title="Ahorro cronológico"
         >
           <SavingsLineChart
             currencyCode={displayCurrencyCode}
@@ -3539,52 +3539,52 @@ export function DashboardPage() {
         {isWidgetVisible("period_radar") ? (
         <SurfaceCard
           action={<Sparkles className="h-5 w-5 text-gold" />}
-          description="Lecturas rapidas para saber donde poner atencion antes de abrir cada modulo."
-          title="Radar del periodo"
+          description="Lecturas rápidas para saber dónde poner atención antes de abrir cada módulo."
+          title="Radar del período"
         >
           <div className="grid gap-3">
             <article className="rounded-[24px] border border-pine/18 bg-pine/10 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-pine">Categoria mas pesada ahora</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-pine">Categoría más pesada ahora</p>
               <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
-                {topCategoryThisPeriod?.name ?? "Aun sin categoria dominante"}
+                {topCategoryThisPeriod?.name ?? "Aún sin categoría dominante"}
               </h4>
               <p className="mt-2 text-sm leading-7 text-storm">
                 {topCategoryThisPeriod
                   ? `${formatCurrency(topCategoryThisPeriod.current, displayCurrencyCode)} y ${formatPercentage(
                       topCategoryThisPeriod.share,
-                    )} de tu gasto del periodo.`
-                  : "Todavia no hay gasto suficiente para detectar una categoria dominante."}
+                    )} de tu gasto del período.`
+                  : "Todavía no hay gasto suficiente para detectar una categoría dominante."}
               </p>
             </article>
 
             <article className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">La que mas pesaba antes</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-storm">La que más pesaba antes</p>
               <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
                 {topCategoryPreviousPeriod?.name ?? "Sin historial comparable"}
               </h4>
               <p className="mt-2 text-sm leading-7 text-storm">
                 {topCategoryPreviousPeriod
                   ? `${formatCurrency(topCategoryPreviousPeriod.previous, displayCurrencyCode)} durante ${comparison.previous.label.toLowerCase()}.`
-                  : "Todavia no hay registros suficientes en el periodo anterior."}
+                  : "Todavía no hay registros suficientes en el período anterior."}
               </p>
             </article>
 
             <article className="rounded-[24px] border border-ember/18 bg-ember/10 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-ember">Oportunidad mas clara</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-ember">Oportunidad más clara</p>
               <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
-                {opportunityCategory?.name ?? "Sin fuga clara todavia"}
+                {opportunityCategory?.name ?? "Sin fuga clara todavía"}
               </h4>
               <p className="mt-2 text-sm leading-7 text-storm">
                 {opportunityCategory
-                  ? `Subio ${formatDeltaCurrency(opportunityCategory.delta, displayCurrencyCode)} frente a ${comparison.previous.label.toLowerCase()}. Si recortas aqui, el ahorro mejora mas rapido.`
-                  : "Todavia no hay diferencia clara para recomendarte un recorte especifico."}
+                  ? `Subió ${formatDeltaCurrency(opportunityCategory.delta, displayCurrencyCode)} frente a ${comparison.previous.label.toLowerCase()}. Si recortas aquí, el ahorro mejora más rápido.`
+                  : "Todavía no hay diferencia clara para recomendarte un recorte específico."}
               </p>
             </article>
 
             <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Mejor dia de ahorro</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Mejor día de ahorro</p>
                   <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
                     {bestSavingsDay ? formatCurrency(bestSavingsDay.net, displayCurrencyCode) : "Sin datos"}
                   </h4>
@@ -3593,10 +3593,10 @@ export function DashboardPage() {
               </div>
               <p className="mt-2 text-sm leading-7 text-storm">
                 {bestSavingsDay
-                  ? `Tuviste ${positiveDays} dias positivos dentro del periodo. El mas duro fue ${
+                  ? `Tuviste ${positiveDays} días positivos dentro del período. El más duro fue ${
                       hardestDay ? hardestDay.fullLabel.toLowerCase() : "sin suficiente historial"
                     }.`
-                  : "Cuando registres ingresos y gastos aplicados, aqui veras el dia que mejor defendiste tu caja."}
+                  : "Cuando registres ingresos y gastos aplicados, aquí verás el día que mejor defendiste tu caja."}
               </p>
             </article>
           </div>
@@ -3610,14 +3610,14 @@ export function DashboardPage() {
         {isWidgetVisible("accounts_breakdown") ? (
         <SurfaceCard
           action={<GhostLink label="Ver cuentas" to="/app/accounts" />}
-          description="Cuanto dinero sostiene hoy cada cuenta y cuanta actividad tuvo dentro del periodo."
+          description="Cuánto dinero sostiene hoy cada cuenta y cuánta actividad tuvo dentro del período."
           title="Dinero por cuenta"
         >
           {visibleAccountsBreakdown.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear cuenta" to="/app/accounts" />}
-              description="Tu primera cuenta abrira automaticamente esta lectura por balance, participacion y actividad."
-              title="Aun no hay cuentas activas"
+              description="Tu primera cuenta abrirá automáticamente esta lectura por balance, participación y actividad."
+              title="Aún no hay cuentas activas"
             />
           ) : (
             <div className="grid gap-5">
@@ -3686,8 +3686,8 @@ export function DashboardPage() {
                     </div>
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                        Actividad del periodo
-                      </p>
+                        Actividad del período
+</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {selectedAccount.periodMovementCount}
                       </p>
@@ -3709,15 +3709,15 @@ export function DashboardPage() {
 
         {isWidgetVisible("receivable_leaders") ? (
         <SurfaceCard
-          action={<GhostLink label="Ver creditos y deudas" to="/app/obligations" />}
-          description="Quienes concentran hoy la mayor parte de lo que te deben."
-          title="Quienes mas te deben"
+          action={<GhostLink label="Ver créditos y deudas" to="/app/obligations" />}
+          description="Quiénes concentran hoy la mayor parte de lo que te deben."
+          title="Quiénes más te deben"
         >
           {visibleReceivableLeaders.length === 0 ? (
             <DataState
-              action={<GhostLink label="Crear credito" to="/app/obligations" />}
-              description="Cuando registres ventas a cuotas o prestamos hechos por ti, apareceran aqui ordenados por impacto."
-              title="Todavia no tienes cuentas por cobrar"
+              action={<GhostLink label="Crear crédito" to="/app/obligations" />}
+              description="Cuando registres ventas a cuotas o préstamos hechos por ti, aparecerán aquí ordenados por impacto."
+              title="Todavía no tienes cuentas por cobrar"
             />
           ) : (
             <div className="grid gap-5">
@@ -3759,7 +3759,7 @@ export function DashboardPage() {
 
               {selectedReceivable ? (
                 <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Contacto mas relevante</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Contacto más relevante</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {selectedReceivable.counterparty}
                   </h4>
@@ -3787,15 +3787,15 @@ export function DashboardPage() {
 
         {isWidgetVisible("payable_leaders") ? (
         <SurfaceCard
-          action={<GhostLink label="Ver creditos y deudas" to="/app/obligations" />}
-          description="Quienes concentran la mayor parte de lo que hoy tienes pendiente por pagar."
-          title="A quienes mas debes"
+          action={<GhostLink label="Ver créditos y deudas" to="/app/obligations" />}
+          description="Quiénes concentran la mayor parte de lo que hoy tienes pendiente por pagar."
+          title="A quiénes más debes"
         >
           {visiblePayableLeaders.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear deuda" to="/app/obligations" />}
-              description="Cuando registres compras a cuotas o prestamos recibidos, aqui veras quien pesa mas sobre tu flujo."
-              title="Todavia no tienes saldos por pagar"
+              description="Cuando registres compras a cuotas o préstamos recibidos, aquí verás quién pesa más sobre tu flujo."
+              title="Todavía no tienes saldos por pagar"
             />
           ) : (
             <div className="grid gap-5">
@@ -3837,7 +3837,7 @@ export function DashboardPage() {
 
               {selectedPayable ? (
                 <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Compromiso mas pesado</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Compromiso más pesado</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {selectedPayable.counterparty}
                   </h4>
@@ -3873,15 +3873,15 @@ export function DashboardPage() {
       >
         {isWidgetVisible("category_comparison") ? (
         <SurfaceCard
-          action={<GhostLink label="Ver categorias" to="/app/categories" />}
-          description="Comparativo por categoria del periodo actual contra su referencia anterior. Toca una fila para abrir el detalle."
-          title="Comparativo por categorias"
+          action={<GhostLink label="Ver categorías" to="/app/categories" />}
+          description="Comparativo por categoría del período actual contra su referencia anterior. Toca una fila para abrir el detalle."
+          title="Comparativo por categorías"
         >
           {visibleCategories.length === 0 ? (
             <DataState
               action={<GhostLink label="Registrar gasto" to="/app/movements" />}
-              description="Cuando tengas gastos aplicados, aqui veras donde mas se fue el dinero y como cambia frente al comparativo."
-              title="Aun no hay categorias con gasto"
+              description="Cuando tengas gastos aplicados, aquí verás dónde más se fue el dinero y cómo cambia frente al comparativo."
+              title="Aún no hay categorías con gasto"
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -3905,7 +3905,7 @@ export function DashboardPage() {
                           <p className="font-semibold text-ink">{item.name}</p>
                           <p className="mt-1 text-sm text-storm">
                             {item.currentCount} movimiento{item.currentCount === 1 ? "" : "s"} este
-                            periodo
+                            período
                           </p>
                         </div>
                         <DeltaBadge currencyCode={displayCurrencyCode} inverse value={item.delta} />
@@ -3939,26 +3939,26 @@ export function DashboardPage() {
 
               {selectedCategory ? (
                 <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoria activa</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoría activa</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {selectedCategory.name}
                   </h4>
                   <div className="mt-5 grid gap-3">
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                        Gasto del periodo
-                      </p>
+                        Gasto del período
+</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(selectedCategory.current, displayCurrencyCode)}
                       </p>
                       <p className="mt-2 text-sm text-storm">
                         {totalCurrentExpenses > 0
                           ? `${formatPercentage(selectedCategory.share)} de todo tu gasto actual.`
-                          : "Todavia no representa gasto real en este periodo."}
+                          : "Todavía no representa gasto real en este período."}
                       </p>
                     </div>
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparacion</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparación</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(selectedCategory.previous, displayCurrencyCode)}
                       </p>
@@ -3970,10 +3970,10 @@ export function DashboardPage() {
                   </div>
                   <p className="mt-4 text-sm leading-7 text-storm">
                     {selectedCategory.delta > 0
-                      ? "Aqui tienes la mejor oportunidad para ahorrar mas si no era un gasto intencional."
+                      ? "Aquí tienes la mejor oportunidad para ahorrar más si no era un gasto intencional."
                       : selectedCategory.delta < 0
-                        ? "Ya lograste bajar esta categoria frente al comparativo anterior."
-                        : "Esta categoria viene practicamente igual que en el periodo de referencia."}
+                        ? "Ya lograste bajar esta categoría frente al comparativo anterior."
+                        : "Esta categoría viene prácticamente igual que en el período de referencia."}
                   </p>
                 </article>
               ) : null}
@@ -3990,7 +3990,7 @@ export function DashboardPage() {
         >
           {monthlyPulse.length === 0 ? (
             <DataState
-              description="Aun no hay movimientos aplicados para construir tu evolucion mensual."
+              description="Aún no hay movimientos aplicados para construir tu evolución mensual."
               title="Sin historia mensual"
             />
           ) : (
@@ -4097,14 +4097,14 @@ export function DashboardPage() {
       <section className="grid gap-6 xl:grid-cols-1">
         <SurfaceCard
           action={<GhostLink label="Ver presupuestos" to="/app/budgets" />}
-          description="Topes activos del periodo actual para ver rapido cuanto espacio te queda y donde ya se esta tensando el gasto."
-          title="Presupuestos del periodo"
+          description="Topes activos del período actual para ver rápido cuánto espacio te queda y dónde ya se está tensando el gasto."
+          title="Presupuestos del período"
         >
           {activeCurrentBudgets.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear presupuesto" to="/app/budgets" />}
-              description="Puedes fijar limites generales, por categoria, por cuenta o cruzando ambas para que el dashboard te avise cuando se acerquen al borde."
-              title="Aun no hay presupuestos vigentes"
+              description="Puedes fijar límites generales, por categoría, por cuenta o cruzando ambas para que el dashboard te avise cuando se acerquen al borde."
+              title="Aún no hay presupuestos vigentes"
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
@@ -4140,16 +4140,16 @@ export function DashboardPage() {
                 </div>
 
                 <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Lectura rapida</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Lectura rápida</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {criticalCurrentBudgets.length > 0
-                      ? `${criticalCurrentBudgets.length} presupuesto${criticalCurrentBudgets.length === 1 ? "" : "s"} pide${criticalCurrentBudgets.length === 1 ? "" : "n"} atencion`
+                      ? `${criticalCurrentBudgets.length} presupuesto${criticalCurrentBudgets.length === 1 ? "" : "s"} pide${criticalCurrentBudgets.length === 1 ? "" : "n"} atención`
                       : "Tus topes vienen sanos por ahora"}
                   </h4>
                   <p className="mt-3 text-sm leading-7 text-storm">
                     {criticalCurrentBudgets.length > 0
-                      ? `Ya tienes ${overLimitCurrentBudgets.length} por encima del limite y ${criticalCurrentBudgets.length - overLimitCurrentBudgets.length} entrando en zona de alerta.`
-                      : "Todavia tienes aire dentro del plan de gasto activo del periodo."}
+                      ? `Ya tienes ${overLimitCurrentBudgets.length} por encima del límite y ${criticalCurrentBudgets.length - overLimitCurrentBudgets.length} entrando en zona de alerta.`
+                      : "Todavía tienes aire dentro del plan de gasto activo del período."}
                   </p>
                 </article>
               </div>
@@ -4252,13 +4252,13 @@ export function DashboardPage() {
         {isWidgetVisible("weekly_pattern") ? (
         <SurfaceCard
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
-          description="Que dias de la semana suelen darte aire y cuales suelen presionarte mas."
+          description="Qué días de la semana suelen darte aire y cuáles suelen presionarte más."
           title="Ritmo semanal"
         >
           {weekdayPattern.every((item) => item.movementCount === 0) ? (
             <DataState
-              description="Con algunos movimientos aplicados ya se puede detectar que dias concentran ingresos o gasto."
-              title="Sin patron semanal todavia"
+              description="Con algunos movimientos aplicados ya se puede detectar qué días concentran ingresos o gasto."
+              title="Sin patrón semanal todavía"
             />
           ) : (
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -4343,15 +4343,15 @@ export function DashboardPage() {
         {isWidgetVisible("upcoming_recent") ? (
         <SurfaceCard
           action={<GhostLink label="Ver suscripciones" to="/app/subscriptions" />}
-          description="Compromisos cercanos y movimientos recientes que explican por donde viene el flujo."
-          title="Lo que viene y lo que movio tu periodo"
+          description="Compromisos cercanos y movimientos recientes que explican por dónde viene el flujo."
+          title="Lo que viene y lo que movió tu período"
         >
           <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-storm">Proximos 30 dias</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-storm">Próximos 30 días</p>
               {upcomingCommitments.length === 0 ? (
                 <DataState
-                  description="No hay cuotas ni suscripciones venciendo en las proximas cuatro semanas."
+                  description="No hay cuotas ni suscripciones venciendo en las próximas cuatro semanas."
                   title="Sin compromisos inmediatos"
                   tone="success"
                 />
@@ -4384,11 +4384,11 @@ export function DashboardPage() {
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-storm">Ultimos movimientos aplicados</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-storm">Últimos movimientos aplicados</p>
               {currentPeriodMovements.length === 0 ? (
                 <DataState
-                  description="Aun no tienes movimientos aplicados en el periodo seleccionado."
-                  title="Nada explica este corte todavia"
+                  description="Aún no tienes movimientos aplicados en el período seleccionado."
+                  title="Nada explica este corte todavía"
                 />
               ) : (
                 <div className="mt-4 grid gap-3">
@@ -4467,8 +4467,8 @@ export function DashboardPage() {
                   {displayObligations.length === 0 ? (
                     <DataState
                       action={<GhostLink label="Crear registro" to="/app/obligations" />}
-                      description="Cuando registres creditos o deudas, aqui veras envejecimiento, pagos del periodo y presion por vencimiento."
-                      title="Sin cartera todavia"
+                      description="Cuando registres créditos o deudas, aquí verás envejecimiento, pagos del período y presión por vencimiento."
+                      title="Sin cartera todavía"
                     />
                   ) : (
                     <div className="grid gap-5">
@@ -4525,9 +4525,9 @@ export function DashboardPage() {
 
               {isWidgetVisible("future_flow") ? (
                 <SurfaceCard
-                  action={<StatusBadge status="7, 15 y 30 dias" tone="info" />}
-                  description="Una mirada mas explicita al dinero que probablemente entrara o saldra segun compromisos y registros programados."
-                  title="Proyeccion de flujo futuro"
+                  action={<StatusBadge status="7, 15 y 30 días" tone="info" />}
+                  description="Una mirada más explícita al dinero que probablemente entrará o saldrá según compromisos y registros programados."
+                  title="Proyección de flujo futuro"
                 >
                   <div className="grid gap-4">
                     {futureFlowWindows.map((window) => (
@@ -4538,7 +4538,7 @@ export function DashboardPage() {
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                              Proximos {window.days} dias
+                              Próximos {window.days} días
                             </p>
                             <p className="mt-3 font-display text-3xl font-semibold text-ink">
                               {formatCurrency(window.estimatedBalance, displayCurrencyCode)}
@@ -4590,11 +4590,11 @@ export function DashboardPage() {
                 <SurfaceCard
                   action={<StatusBadge status={`${anomalyAlerts.length} alertas`} tone={anomalyAlerts.length > 0 ? "warning" : "success"} />}
                   description="Alertas concretas para que el dashboard te diga donde mirar primero sin tener que interpretar todo el panel."
-                  title="Alertas y anomalias"
+                  title="Alertas y anomalías"
                 >
                   {anomalyAlerts.length === 0 ? (
                     <DataState
-                      description="Por ahora no detectamos senales llamativas fuera de presupuesto, vencimientos o ritmo reciente."
+                      description="Por ahora no detectamos señales llamativas fuera de presupuesto, vencimientos o ritmo reciente."
                       title="Sin alertas fuertes"
                       tone="success"
                     />
@@ -4615,7 +4615,7 @@ export function DashboardPage() {
                                 alert.tone === "danger"
                                   ? "Alerta"
                                   : alert.tone === "warning"
-                                    ? "Atencion"
+                                    ? "Atención"
                                     : "Info"
                               }
                               tone={alert.tone as "danger" | "warning" | "info"}
@@ -4631,7 +4631,7 @@ export function DashboardPage() {
               {isWidgetVisible("data_quality") ? (
                 <SurfaceCard
                   action={<StatusBadge status={`${qualityIssuesTotal} pendientes`} tone={qualityIssuesTotal > 0 ? "warning" : "success"} />}
-                  description="Mide que tan limpio viene el sistema para que comparativos, proyecciones y reportes no pierdan precision."
+                  description="Revisá qué tan completos están tus datos para que comparativos, proyecciones y reportes sean confiables."
                   title="Calidad de datos"
                 >
                   <div className="grid gap-3">
@@ -4662,13 +4662,13 @@ export function DashboardPage() {
               {isWidgetVisible("subscriptions_snapshot") ? (
                 <SurfaceCard
                   action={<GhostLink label="Ver suscripciones" to="/app/subscriptions" />}
-                  description="Lectura recurrente para saber cuanto pesan tus cargos fijos y cual es el siguiente en caer."
+                  description="Lectura recurrente para saber cuánto pesan tus cargos fijos y cuál es el siguiente en caer."
                   title="Pulso de suscripciones"
                 >
                   {visibleSubscriptionHighlights.length === 0 ? (
                     <DataState
-                      action={<GhostLink label="Crear suscripcion" to="/app/subscriptions" />}
-                      description="Cuando registres cargos recurrentes, aqui veras costo mensual, proximos cobros y las mas caras."
+                      action={<GhostLink label="Crear suscripción" to="/app/subscriptions" />}
+                      description="Cuando registres cargos recurrentes, aquí verás costo mensual, próximos cobros y las más caras."
                       title="Sin suscripciones activas"
                     />
                   ) : (
@@ -4690,7 +4690,7 @@ export function DashboardPage() {
 
                       {nextSubscriptionDue ? (
                         <article className="rounded-[22px] border border-gold/18 bg-gold/10 p-4">
-                          <p className="text-xs uppercase tracking-[0.18em] text-gold">Proxima suscripcion</p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-gold">Próxima suscripción</p>
                           <p className="mt-3 font-semibold text-ink">{nextSubscriptionDue.name}</p>
                           <p className="mt-1 text-sm text-storm">
                             {nextSubscriptionDue.vendor} · {formatDate(nextSubscriptionDue.nextDueDate)}
@@ -4708,7 +4708,7 @@ export function DashboardPage() {
                               <div>
                                 <p className="font-semibold text-ink">{item.name}</p>
                                 <p className="mt-1 text-sm text-storm">
-                                  {item.vendor} · {item.categoryName ?? "Sin categoria"}
+                                  {item.vendor} · {item.categoryName ?? "Sin categoría"}
                                 </p>
                               </div>
                               <StatusBadge status={formatCurrency(item.monthlyAmount, displayCurrencyCode)} tone="warning" />
@@ -4729,7 +4729,7 @@ export function DashboardPage() {
                 >
                   {visibleTransferRoutes.length === 0 ? (
                     <DataState
-                      description="Todavia no hay transferencias aplicadas en el periodo seleccionado."
+                      description="Todavía no hay transferencias aplicadas en el período seleccionado."
                       title="Sin flujo interno"
                     />
                   ) : (
@@ -4784,13 +4784,13 @@ export function DashboardPage() {
               {isWidgetVisible("currency_exposure") ? (
                 <SurfaceCard
                   action={<StatusBadge status={`Vista ${displayCurrencyCode}`} tone="neutral" />}
-                  description="Cuanto de tu dinero en cuentas queda expuesto a cada moneda antes de consolidarlo en la vista global."
-                  title="Exposicion por moneda"
+                  description="Cuánto de tu dinero en cuentas queda expuesto a cada moneda antes de consolidarlo en la vista global."
+                  title="Exposición por moneda"
                 >
                   {currencyExposure.length === 0 ? (
                     <DataState
-                      description="Aun no hay cuentas activas para calcular la exposicion cambiaria."
-                      title="Sin exposicion visible"
+                      description="Aún no hay cuentas activas para calcular la exposición cambiaria."
+                      title="Sin exposición visible"
                     />
                   ) : (
                     <div className="grid gap-4">
@@ -4834,7 +4834,7 @@ export function DashboardPage() {
                     status={
                       learningSnapshot.currentPhase > 0
                         ? `Fase ${learningSnapshot.currentPhase} activa`
-                        : "Aun aprendiendo"
+                        : "Aún aprendiendo"
                     }
                     tone={
                       learningSnapshot.currentPhase >= 4
@@ -4845,7 +4845,7 @@ export function DashboardPage() {
                     }
                   />
                 }
-                description="El sistema mide si ya tiene suficiente historial para pasar de lecturas basicas a patrones, proyecciones y alertas tempranas."
+                description="DarkMoney analiza tu historial para ir de lecturas básicas a patrones, proyecciones y alertas inteligentes."
                 title="Aprendiendo de ti"
               >
                 <div className="grid gap-4">
@@ -4940,14 +4940,14 @@ export function DashboardPage() {
                     }
                   />
                 }
-                description="Aqui veras lo que el sistema ya puede inferir sobre tus habitos y lo que aun falta para subir de nivel."
-                title="Senales activas"
+                description="Lo que DarkMoney ya puede inferir sobre tus hábitos y lo que falta para detectar patrones más precisos."
+                title="Señales activas"
               >
                 <div className="grid gap-4">
                   {learningSnapshot.insights.length === 0 ? (
                     <DataState
-                      description="Todavia no hay suficiente historial aplicado para detectar patrones con criterio."
-                      title="Aun no hay insights"
+                      description="Todavía no hay suficiente historial aplicado para detectar patrones con criterio."
+                      title="Aún no hay insights"
                     />
                   ) : (
                     <div className="grid gap-3">
@@ -4964,11 +4964,11 @@ export function DashboardPage() {
                             <StatusBadge
                               status={
                                 insight.tone === "success"
-                                  ? "Buena senal"
+                                  ? "Buena señal"
                                   : insight.tone === "danger"
                                     ? "Alerta"
                                     : insight.tone === "warning"
-                                      ? "Atencion"
+                                      ? "Atención"
                                       : "Insight"
                               }
                               tone={insight.tone}
@@ -4998,8 +4998,8 @@ export function DashboardPage() {
             <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
               <SurfaceCard
                 action={<StatusBadge status={`Workspace ${formatWorkspaceKindLabel(activeWorkspace.kind)}`} tone="info" />}
-                description="Lectura del workspace activo y de la colaboracion reciente para saber cuanto movimiento humano hubo en este entorno."
-                title="Colaboracion del workspace"
+                description="Lectura del workspace activo y de la colaboración reciente para saber cuánto movimiento humano hubo en este entorno."
+                title="Colaboración del workspace"
               >
                 <div className="grid gap-4">
                   <div className="grid gap-3 sm:grid-cols-4">
@@ -5024,11 +5024,11 @@ export function DashboardPage() {
                   </div>
 
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Lectura rapida</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Lectura rápida</p>
                     <p className="mt-3 text-sm leading-7 text-storm">
                       {activeWorkspace.kind === "shared"
-                        ? "Este panel ya esta leyendo un workspace compartido. Aqui conviene vigilar mas la actividad y los cambios recientes del equipo."
-                        : "Estas viendo un workspace personal. Si luego cambias a uno compartido, aqui veras mas foco en colaboracion y actividad por actor."}
+                        ? "Este panel ya está leyendo un workspace compartido. Aquí conviene vigilar más la actividad y los cambios recientes del equipo."
+                        : "Estás viendo un workspace personal. Si luego cambias a uno compartido, aquí verás más foco en colaboración y actividad por actor."}
                     </p>
                   </article>
                 </div>
@@ -5036,12 +5036,12 @@ export function DashboardPage() {
 
               <SurfaceCard
                 action={<StatusBadge status={`${actorActivity.length} actores visibles`} tone="neutral" />}
-                description="Quienes movieron mas actividad en el periodo actual dentro del workspace activo."
+                description="Quiénes movieron más actividad en el período actual dentro del workspace activo."
                 title="Actividad por actor"
               >
                 {actorActivity.length === 0 ? (
                   <DataState
-                    description="Todavia no hay suficiente actividad registrada en este corte para construir un ranking."
+                    description="Todavía no hay suficiente actividad registrada en este corte para construir un ranking."
                     title="Sin huella colaborativa reciente"
                   />
                 ) : (
@@ -5054,7 +5054,7 @@ export function DashboardPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="font-semibold text-ink">{item.actor}</p>
-                            <p className="mt-2 text-sm text-storm">Interacciones registradas en el periodo actual.</p>
+                            <p className="mt-2 text-sm text-storm">Interacciones registradas en el período actual.</p>
                           </div>
                           <StatusBadge status={`${item.count}`} tone="info" />
                         </div>
@@ -5077,7 +5077,7 @@ export function DashboardPage() {
               {isWidgetVisible("health_center") ? (
                 <SurfaceCard
                   action={<StatusBadge status={healthSnapshot.title} tone={healthSnapshot.tone} />}
-                  description="Lectura rapida de liquidez, ahorro y presion financiera usando lo que ya paso y lo que viene."
+                  description="Lectura rápida de liquidez, ahorro y presión financiera usando lo que ya pasó y lo que viene."
                   title="Centro de salud financiera"
                 >
                   <div className="grid gap-4">
@@ -5114,9 +5114,9 @@ export function DashboardPage() {
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <article className="rounded-[22px] border border-gold/18 bg-gold/10 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-gold">Lo proximo a pagar</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-gold">Lo próximo a pagar</p>
                         <p className="mt-3 font-semibold text-ink">
-                          {nextPayableDue ? nextPayableDue.title : "Sin deuda proxima"}
+                          {nextPayableDue ? nextPayableDue.title : "Sin deuda próxima"}
                         </p>
                         <p className="mt-1 text-sm text-storm">
                           {nextPayableDue
@@ -5125,9 +5125,9 @@ export function DashboardPage() {
                         </p>
                       </article>
                       <article className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-pine">Lo proximo a cobrar</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-pine">Lo próximo a cobrar</p>
                         <p className="mt-3 font-semibold text-ink">
-                          {nextReceivableDue ? nextReceivableDue.title : "Sin cobro proximo"}
+                          {nextReceivableDue ? nextReceivableDue.title : "Sin cobro próximo"}
                         </p>
                         <p className="mt-1 text-sm text-storm">
                           {nextReceivableDue
@@ -5148,8 +5148,8 @@ export function DashboardPage() {
                 >
                   {snapshot.activity.length === 0 ? (
                     <DataState
-                      description="Cuando empieces a mover el sistema, aqui quedaran visibles las acciones recientes."
-                      title="Sin actividad todavia"
+                      description="Cuando registres movimientos o hagas cambios en el workspace, aquí verás las acciones más recientes."
+                      title="Sin actividad todavía"
                     />
                   ) : (
                     <div className="grid gap-3">

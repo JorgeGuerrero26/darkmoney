@@ -61,7 +61,7 @@ const workspaceInviteRoleOptions: Array<{
   {
     value: "admin",
     label: "Administrador",
-    description: "Puede editar casi todo el workspace y tambien invitar a otros miembros.",
+    description: "Puede editar casi todo el workspace y también invitar a otros miembros.",
     leadingLabel: "AD",
     leadingColor: "#4566d6",
   },
@@ -75,7 +75,7 @@ const workspaceInviteRoleOptions: Array<{
   {
     value: "viewer",
     label: "Solo lectura",
-    description: "Puede revisar la informacion compartida sin editarla.",
+    description: "Puede revisar la información compartida sin editarla.",
     leadingLabel: "VR",
     leadingColor: "#b48b34",
   },
@@ -130,7 +130,7 @@ function NotificationPreferenceCard({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-ink">{title}</span>
-          <StatusBadge status={isLive ? "Disponible hoy" : "En preparacion"} tone={isLive ? "success" : "warning"} />
+          <StatusBadge status={isLive ? "Disponible hoy" : "En preparación"} tone={isLive ? "success" : "warning"} />
           <StatusBadge status={checked ? "Activado" : "Desactivado"} tone={checked ? "info" : "neutral"} />
         </div>
         <p className="mt-2 text-sm leading-7 text-storm">{description}</p>
@@ -172,8 +172,18 @@ function useSettingsPickerPanel(isOpen: boolean, onClose: () => void) {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   return containerRef;
@@ -413,7 +423,7 @@ export function SettingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   useSuccessToast(feedbackMessage, {
     clear: () => setFeedbackMessage(""),
-    title: "Configuracion actualizada",
+    title: "Configuración actualizada",
   });
   useSuccessToast(workspaceFeedbackMessage, {
     clear: () => setWorkspaceFeedbackMessage(""),
@@ -517,7 +527,7 @@ export function SettingsPage() {
 
     if (billingStatus === "mercadopago") {
       setBillingFeedbackMessage(
-        "Volviste desde Mercado Pago. Cuando el proveedor confirme la suscripcion, DarkMoney actualizara tu acceso Pro automaticamente.",
+        "Volviste desde Mercado Pago. Cuando el proveedor confirme la suscripción, DarkMoney actualizará tu acceso Pro automáticamente.",
       );
     }
   }, [location.search]);
@@ -554,10 +564,10 @@ export function SettingsPage() {
         await snapshotQuery.refetch();
       }
 
-      setFeedbackMessage("Configuracion actualizada correctamente.");
+      setFeedbackMessage("Configuración actualizada correctamente.");
     } catch (error) {
       setErrorMessage(
-        getQueryErrorMessage(error, "No pudimos guardar la configuracion real del usuario."),
+        getQueryErrorMessage(error, "No pudimos guardar tu configuración. Intentá de nuevo."),
       );
     } finally {
       setIsSubmitting(false);
@@ -595,14 +605,14 @@ export function SettingsPage() {
       setShowCancelConfirmation(false);
       setBillingFeedbackMessage(
         response.billingStatus
-          ? `Tu suscripcion se actualizo con estado "${response.billingStatus}". DarkMoney ajusto tu acceso Pro con esa respuesta.`
-          : "La suscripcion de DarkMoney Pro fue cancelada correctamente.",
+          ? `Tu suscripción se actualizó con estado "${response.billingStatus}". DarkMoney ajustó tu acceso Pro con esa respuesta.`
+          : "La suscripción de DarkMoney Pro fue cancelada correctamente.",
       );
     } catch (error) {
       setBillingErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos cancelar la suscripcion actual de DarkMoney Pro.",
+          "No pudimos cancelar la suscripción actual de DarkMoney Pro.",
         ),
       );
     }
@@ -659,7 +669,7 @@ export function SettingsPage() {
 
       if (!result.alreadyMember && !result.emailSent) {
         setWorkspaceErrorMessage(
-          `La invitacion quedo lista para ${result.invitedDisplayName ?? result.invitedEmail}, pero el correo automatico aun no esta configurado.`,
+          `La invitación quedó lista para ${result.invitedDisplayName ?? result.invitedEmail}, pero el correo automático aún no está configurado.`,
         );
         return;
       }
@@ -671,13 +681,13 @@ export function SettingsPage() {
       setWorkspaceFeedbackMessage(
         result.alreadyMember
           ? `${result.invitedDisplayName ?? result.invitedEmail} ya pertenece a este workspace.`
-          : `Le enviamos una invitacion por correo a ${result.invitedDisplayName ?? result.invitedEmail}.`,
+          : `Le enviamos una invitación por correo a ${result.invitedDisplayName ?? result.invitedEmail}.`,
       );
     } catch (error) {
       setWorkspaceErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos enviar la invitacion de este workspace.",
+          "No pudimos enviar la invitación de este workspace.",
         ),
       );
     }
@@ -718,9 +728,9 @@ export function SettingsPage() {
             {isSaving ? "Guardando..." : "Guardar cambios"}
           </Button>
         }
-        description="Configuracion real del usuario y del contexto financiero activo."
-        eyebrow="settings"
-        title="Configuracion"
+        description="Administra tu perfil, preferencias de notificación, plan y la configuración del workspace activo."
+        eyebrow="configuración"
+        title="Configuración"
       />
 
       <form
@@ -733,7 +743,7 @@ export function SettingsPage() {
           <div className="relative z-20">
             <SurfaceCard
             action={<Briefcase className="h-5 w-5 text-gold" />}
-            description="Datos reales del perfil autenticado."
+            description="Tu nombre y los datos de acceso asociados a tu cuenta."
             title="Perfil"
           >
             <div className="grid gap-4">
@@ -776,19 +786,19 @@ export function SettingsPage() {
 
           <SurfaceCard
             action={<BellDot className="h-5 w-5 text-ember" />}
-            description="Define como quieres enterarte de recordatorios, cobros, pagos y alertas del sistema."
-            title="Preferencias"
+            description="Elige cómo y cuándo recibir alertas de recordatorios, cobros y pagos del workspace."
+            title="Preferencias de notificación"
           >
             {preferencesQuery.isLoading ? (
               <DataState
-                description="Consultando las preferencias reales del usuario."
+                description="Buscando tu configuración de alertas guardada."
                 title="Cargando preferencias"
               />
             ) : preferencesQuery.error ? (
               <DataState
                 description={getQueryErrorMessage(
                   preferencesQuery.error,
-                  "No pudimos leer tus preferencias de notificacion.",
+                  "No pudimos leer tus preferencias de notificación.",
                 )}
                 title="No fue posible cargar las preferencias"
                 tone="error"
@@ -806,15 +816,15 @@ export function SettingsPage() {
                 <NotificationPreferenceCard
                   checked={emailEnabled}
                   description="Guarda si quieres recibir correos cuando venzan suscripciones, cobros esperados, pagos pendientes u otras alertas importantes."
-                  detail="Por ahora guardamos tu preferencia. Los correos automaticos se estan preparando."
+                  detail="Por ahora guardamos tu preferencia. Los correos automáticos se están preparando."
                   isLive={false}
                   onChange={setEmailEnabled}
                   title="Recordatorios por correo"
                 />
                 <NotificationPreferenceCard
                   checked={pushEnabled}
-                  description="Reserva tu preferencia para futuras notificaciones push en navegador o app movil, sin depender de que tengas abierta la bandeja."
-                  detail="Todavia no enviamos push reales. Esta opcion queda guardada para activarla despues."
+                  description="Reserva tu preferencia para futuras notificaciones push en navegador o app móvil, sin depender de que tengas abierta la bandeja."
+                  detail="Todavía no enviamos push reales. Esta opción queda guardada para activarla después."
                   isLive={false}
                   onChange={setPushEnabled}
                   title="Notificaciones push"
@@ -841,12 +851,12 @@ export function SettingsPage() {
         ) : null}
         <SurfaceCard
           action={<Sparkles className="h-5 w-5 text-gold" />}
-          description="DarkMoney Pro controla funciones premium como la vista avanzada del dashboard y la gestion de comprobantes."
+          description="Accede a funciones premium como el dashboard avanzado y la gestión de comprobantes con DarkMoney Pro."
           title="DarkMoney Pro"
         >
           {entitlementQuery.isLoading ? (
             <DataState
-              description="Estamos leyendo el estado real de tu acceso premium."
+              description="Verificando el estado de tu acceso premium."
               title="Cargando plan"
             />
           ) : entitlementQuery.error ? (
@@ -880,10 +890,10 @@ export function SettingsPage() {
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-storm">
                   {isAdminOverride
-                    ? "Esta cuenta entra por override administrativo, asi que no necesita pasar por Mercado Pago para probar funciones premium."
+                    ? "Esta cuenta entra por override administrativo, así que no necesita pasar por Mercado Pago para probar funciones premium."
                     : canAccessProFeatures
-                      ? "Tu acceso ya esta activo. Si vuelves desde Mercado Pago, el estado se refrescara automaticamente cuando llegue la confirmacion."
-                      : "Este flujo creara una suscripcion mensual en Mercado Pago. Cuando la autorizacion quede activa, DarkMoney te habilitara automaticamente el modo Pro."}
+                      ? "Tu acceso ya está activo. Si vuelves desde Mercado Pago, el estado se refrescará automáticamente cuando llegue la confirmación."
+                      : "Este flujo creará una suscripción mensual en Mercado Pago. Cuando la autorización quede activa, DarkMoney te habilitará automáticamente el modo Pro."}
                 </p>
 
                 {billingErrorMessage ? (
@@ -897,7 +907,7 @@ export function SettingsPage() {
                   <FormFeedbackBanner
                     className="mt-5"
                     description={billingFeedbackMessage}
-                    title="Seguimiento de tu suscripcion"
+                    title="Seguimiento de tu suscripción"
                     tone="info"
                   />
                 ) : null}
@@ -911,7 +921,7 @@ export function SettingsPage() {
                         >
                           {cancelProSubscriptionMutation.isPending
                             ? "Cancelando..."
-                            : "Confirmar cancelacion"}
+                            : "Confirmar cancelación"}
                         </Button>
                         <Button
                           disabled={cancelProSubscriptionMutation.isPending}
@@ -922,10 +932,10 @@ export function SettingsPage() {
                         </Button>
                       </div>
                     }
-                    badgeLabel="Confirmacion"
+                    badgeLabel="Confirmación"
                     className="mt-5"
-                    description="La cancelacion se enviara a Mercado Pago y DarkMoney actualizara tu acceso Pro con la respuesta real del proveedor."
-                    title="Vas a cancelar la suscripcion de DarkMoney Pro"
+                    description="La cancelación se enviará a Mercado Pago y DarkMoney actualizará tu acceso Pro con la respuesta real del proveedor."
+                    title="Vas a cancelar la suscripción de DarkMoney Pro"
                   />
                 ) : null}
 
@@ -971,13 +981,13 @@ export function SettingsPage() {
                   <p className="mt-3 text-sm leading-7 text-ink">
                     {entitlement?.billingStatus
                       ? `Mercado Pago reporta el estado "${entitlement.billingStatus}".`
-                      : "Todavia no hay una suscripcion asociada a esta cuenta."}
+                      : "Todavía no hay una suscripción asociada a esta cuenta."}
                   </p>
                 </div>
                 <div className="glass-panel-soft rounded-[24px] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Siguiente paso</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
-                    Si activas el plan, DarkMoney guardara el entitlement en Supabase y usara ese estado para desbloquear funciones premium.
+                    Si activás el plan, DarkMoney habilitará las funciones premium en cuanto Mercado Pago confirme el pago.
                   </p>
                 </div>
               </div>
@@ -988,7 +998,7 @@ export function SettingsPage() {
         <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <SurfaceCard
             action={<ShieldCheck className="h-5 w-5 text-pine" />}
-            description="Informacion real del workspace actualmente seleccionado."
+            description="Detalles, moneda base y opciones del workspace que tenés seleccionado."
             title="Workspace activo"
           >
             {workspaceError ? (
@@ -1005,7 +1015,7 @@ export function SettingsPage() {
                 <div className="glass-panel-soft rounded-[26px] p-4">
                   <p className="font-medium text-ink">{activeWorkspace.name}</p>
                   <p className="mt-1 text-sm text-storm">
-                    {activeWorkspace.description || "Sin descripcion registrada."}
+                    {activeWorkspace.description || "Sin descripción registrada."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3">
                     <StatusBadge status={formatWorkspaceKindLabel(activeWorkspace.kind)} tone="info" />
@@ -1073,12 +1083,12 @@ export function SettingsPage() {
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm leading-7 text-storm">
                     Este es tu workspace personal. Si quieres trabajar con otra persona, crea un
                     workspace compartido y mueve o registra ahi las cuentas, movimientos,
-                    presupuestos, suscripciones y creditos/deudas que quieran ver juntos.
+                    presupuestos, suscripciones y créditos/deudas que quieran ver juntos.
                   </div>
                 ) : workspaceCollaborationQuery.isLoading ? (
                   <DataState
-                    description="Consultando miembros y invitaciones reales del workspace."
-                    title="Cargando colaboracion"
+                    description="Buscando miembros activos e invitaciones del workspace."
+                    title="Cargando colaboración"
                   />
                 ) : workspaceCollaborationQuery.error ? (
                   <DataState
@@ -1086,7 +1096,7 @@ export function SettingsPage() {
                       workspaceCollaborationQuery.error,
                       "No pudimos leer los miembros ni las invitaciones de este workspace.",
                     )}
-                    title="No pudimos cargar la colaboracion"
+                    title="No pudimos cargar la colaboración"
                     tone="error"
                   />
                 ) : (
@@ -1123,7 +1133,7 @@ export function SettingsPage() {
                           ))
                         ) : (
                           <div className="rounded-[20px] border border-white/10 bg-black/15 p-4 text-sm leading-7 text-storm">
-                            Aun no hay miembros cargados para este workspace.
+                            Aún no hay miembros cargados para este workspace.
                           </div>
                         )}
                       </div>
@@ -1172,7 +1182,7 @@ export function SettingsPage() {
               </div>
             ) : (
               <DataState
-                description="Todavia no existe un workspace activo para esta sesion."
+                description="Todavía no existe un workspace activo para esta sesión."
                 title="Sin workspace activo"
               />
             )}
@@ -1180,8 +1190,8 @@ export function SettingsPage() {
 
           <SurfaceCard
             action={<Tag className="h-5 w-5 text-gold" />}
-            description="Conteos reales de catalogos y soporte del workspace."
-            title="Catalogos del workspace"
+            description="Resumen de categorías, cuentas, contactos y suscripciones del workspace activo."
+            title="Catálogos del workspace"
           >
             {!activeWorkspace ? (
               <DataState
@@ -1190,8 +1200,8 @@ export function SettingsPage() {
               />
             ) : snapshotQuery.isLoading ? (
               <DataState
-                description="Consultando categorias y contrapartes reales del workspace."
-                title="Cargando catalogos"
+                description="Consultando categorías, contactos y cuentas del workspace."
+                title="Cargando catálogos"
               />
             ) : snapshotQuery.error ? (
               <DataState
@@ -1258,7 +1268,7 @@ export function SettingsPage() {
                     />
                   </label>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium text-ink">Descripcion</span>
+                    <span className="text-sm font-medium text-ink">Descripción</span>
                     <textarea
                       className="field-dark min-h-[140px] py-4"
                       onChange={(event) => setSharedWorkspaceDescription(event.target.value)}
@@ -1284,8 +1294,8 @@ export function SettingsPage() {
                     />
                   </label>
                   <div className="rounded-[24px] border border-white/10 bg-black/15 p-4 text-sm leading-7 text-storm">
-                    DarkMoney lo creara como un workspace separado, con tu cuenta como
-                    propietaria. Luego podras invitar miembros y cambiar a ese espacio desde el
+                    DarkMoney lo creará como un workspace separado, con tu cuenta como
+                    propietaria. Luego podrás invitar miembros y cambiar a ese espacio desde el
                     selector superior.
                   </div>
                 </div>
@@ -1339,7 +1349,7 @@ export function SettingsPage() {
           >
             <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
               <div className="glass-panel-soft rounded-[28px] p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-storm">Invitacion</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-storm">Invitación</p>
                 <div className="mt-5 grid gap-5">
                   <label className="block space-y-2">
                     <span className="text-sm font-medium text-ink">Correo del usuario</span>

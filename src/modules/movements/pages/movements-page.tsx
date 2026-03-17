@@ -28,12 +28,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatMovementStatusLabel, formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -174,15 +176,15 @@ const expenseLikeMovementTypes = new Set<MovementType>([
 const incomeLikeMovementTypes = new Set<MovementType>(["income", "refund"]);
 
 const movementFieldClassName =
-  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const movementTextInputClassName = `${movementFieldClassName} h-16`;
-const movementTextareaClassName = `${movementFieldClassName} min-h-[160px] py-4 leading-7`;
+  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+const movementTextInputClassName = `${movementFieldClassName} h-10 sm:h-16`;
+const movementTextareaClassName = `${movementFieldClassName} min-h-[120px] sm:min-h-[160px] py-3 sm:py-4 leading-7`;
 const movementEditorPanelClassName =
-  "glass-panel-soft relative overflow-visible rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
+  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
 const movementFieldLabelClassName =
-  "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
-const movementFieldHintClassName = "mt-2 text-xs leading-6 text-storm/75";
-const movementPickerTriggerClassName = `${movementFieldClassName} flex h-16 items-center justify-between gap-3 text-left`;
+  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
+const movementFieldHintClassName = "mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75";
+const movementPickerTriggerClassName = `${movementFieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left`;
 const movementPickerSearchInputClassName =
   "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 
@@ -470,9 +472,9 @@ function filterCategoriesForMovementType(
 
 function MovementField({ children, hint, label }: MovementFieldProps) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className={movementFieldLabelClassName}>{label}</span>
-      <div className="mt-3">{children}</div>
+      <div className="mt-1.5 sm:mt-3">{children}</div>
       {hint ? <p className={movementFieldHintClassName}>{hint}</p> : null}
     </label>
   );
@@ -535,7 +537,7 @@ function SearchablePicker({
 
   return (
     <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
+      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
@@ -544,9 +546,9 @@ function SearchablePicker({
         style={getMovementPickerTriggerStyle(isOpen)}
         type="button"
       >
-        <span className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span
-            className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            className="flex h-7 min-w-[2.25rem] sm:h-10 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
             style={{
               backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
               color: selectedOption?.leadingColor ? "#ffffff" : undefined,
@@ -556,15 +558,15 @@ function SearchablePicker({
             {selectedOption?.leadingLabel ?? "?"}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">
+            <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-1 block truncate text-xs text-storm">
+            <span className="mt-0.5 sm:mt-1 block truncate text-[0.65rem] sm:text-xs text-storm">
               {selectedOption ? selectedOption.description : placeholderDescription}
             </span>
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen ? (
@@ -592,7 +594,7 @@ function SearchablePicker({
 
                 return (
                   <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
+                    className={`flex w-full items-center justify-between gap-2 sm:gap-3 rounded-[18px] sm:rounded-[24px] border px-3 sm:px-4 py-2.5 sm:py-3.5 text-left transition duration-200 ${
                       isSelected ? "text-ink" : "text-storm hover:text-ink"
                     }`}
                     key={option.value}
@@ -603,9 +605,9 @@ function SearchablePicker({
                     style={getMovementPickerOptionStyle(isSelected)}
                     type="button"
                   >
-                    <span className="flex min-w-0 items-center gap-3">
+                    <span className="flex min-w-0 items-center gap-2 sm:gap-3">
                       <span
-                        className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+                        className="flex h-8 min-w-[2.25rem] sm:h-11 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
                         style={{
                           backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
                           color: option.leadingColor ? "#ffffff" : undefined,
@@ -615,7 +617,7 @@ function SearchablePicker({
                         {option.leadingLabel}
                       </span>
                       <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.label}</span>
+                        <span className="block truncate font-medium text-ink">{option.label}</span>
                         <span className="mt-1 block truncate text-xs text-storm">
                           {option.description}
                         </span>
@@ -982,6 +984,7 @@ function MovementEditorDialog({
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
+      onClick={closeEditor}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
@@ -1005,7 +1008,7 @@ function MovementEditorDialog({
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
           </div>
 
-          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-2xl space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -1049,7 +1052,7 @@ function MovementEditorDialog({
                 />
               ) : null}
 
-              <section className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 sm:p-6 lg:p-7">
+              <section className="relative min-w-0 overflow-hidden rounded-[24px] sm:rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 sm:p-6 lg:p-7">
               <div
                 className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
                 style={{ backgroundColor: `${movementVisual.color}3d` }}
@@ -1064,31 +1067,31 @@ function MovementEditorDialog({
                   </span>
                 </div>
 
-                <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-end">
-                  <div className="flex items-start gap-5">
-                    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
+                <div className="mt-4 sm:mt-6 grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-end">
+                  <div className="flex items-start gap-3 sm:gap-5">
+                    <div className="relative flex h-12 w-12 sm:h-24 sm:w-24 shrink-0 items-center justify-center">
                       <div
-                        className="absolute inset-0 rounded-[30px] opacity-80 blur-2xl"
+                        className="absolute inset-0 rounded-[16px] sm:rounded-[30px] opacity-80 blur-2xl"
                         style={{ backgroundColor: `${movementVisual.color}5f` }}
                       />
                       <div
-                        className="relative flex h-full w-full items-center justify-center rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
+                        className="relative flex h-full w-full items-center justify-center rounded-[16px] sm:rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
                         style={{
                           background: `linear-gradient(160deg, ${movementVisual.color}, rgba(8, 13, 20, 0.72))`,
                         }}
                       >
-                        <PreviewMovementIcon className="h-9 w-9" />
+                        <PreviewMovementIcon className="h-5 w-5 sm:h-9 sm:w-9" />
                       </div>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                         Vista previa
                       </p>
-                      <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">
+                      <h3 className="mt-1 sm:mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
                         {previewTitle}
                       </h3>
-                      <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
+                      <p className="mt-2 sm:mt-3 break-words max-w-2xl text-xs sm:text-sm leading-6 sm:leading-7 text-storm">
                         {movementTypeOption.description}
                       </p>
                       <div className="mt-5 flex flex-wrap gap-2">
@@ -1105,30 +1108,30 @@ function MovementEditorDialog({
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                    <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                  <div className="grid gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                    <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                         Impacto
                       </p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                      <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
                         {formatCurrency(displayAmount, displayCurrencyCode)}
                       </p>
                     </div>
 
-                    <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                    <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                         Flujo
                       </p>
-                      <p className="mt-3 text-sm font-medium text-ink">{previewFlowLabel}</p>
-                      <p className="mt-2 text-xs leading-6 text-storm/75">{previewContextLabel}</p>
+                      <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm font-medium text-ink">{previewFlowLabel}</p>
+                      <p className="mt-1 sm:mt-2 break-words text-xs leading-6 text-storm/75">{previewContextLabel}</p>
                     </div>
 
-                    <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 backdrop-blur">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                    <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                         Conversion
                       </p>
-                      <p className="mt-3 text-sm font-medium text-ink">{conversionLabel}</p>
-                      <p className="mt-2 text-xs leading-6 text-storm/75">
+                      <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm font-medium text-ink">{conversionLabel}</p>
+                      <p className="mt-1 sm:mt-2 text-xs leading-6 text-storm/75">
                         {formState.occurredAt
                           ? formatDateTime(new Date(formState.occurredAt).toISOString())
                           : "Sin fecha definida"}
@@ -1147,18 +1150,18 @@ function MovementEditorDialog({
               <div className="h-px flex-1 bg-gradient-to-r from-white/5 via-white/10 to-transparent" />
               </div>
 
-              <div className="mt-8 grid gap-6 xl:gap-7 xl:grid-cols-[1.08fr_0.92fr]">
-              <div className="space-y-6">
+              <div className="mt-4 sm:mt-8 grid gap-4 sm:gap-6 xl:gap-7 xl:grid-cols-[1.08fr_0.92fr]">
+              <div className="space-y-4 sm:space-y-6">
                 <section className={`${movementEditorPanelClassName} z-30`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <ReceiptText className="h-5 w-5 text-gold" />
+                  <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+                    <ReceiptText className="h-4 w-4 sm:h-5 sm:w-5 text-gold" />
                     <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-storm">Operacion</p>
-                      <p className="mt-1 text-lg font-medium text-ink">Base del registro</p>
+                      <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Operacion</p>
+                      <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">Base del registro</p>
                     </div>
                   </div>
 
-                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="mt-4 sm:mt-6 grid gap-3 sm:gap-4 md:grid-cols-2">
                     <MovementField
                       hint="Selecciona la semantica real del registro segun el diccionario."
                       label="Tipo de movimiento"
@@ -1216,15 +1219,15 @@ function MovementEditorDialog({
                 </section>
 
                 <section className={`${movementEditorPanelClassName} z-20`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <Wallet className="h-5 w-5 text-pine" />
+                  <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+                    <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-pine" />
                     <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-storm">Flujo</p>
-                      <p className="mt-1 text-lg font-medium text-ink">Cuentas y montos</p>
+                      <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Flujo</p>
+                      <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">Cuentas y montos</p>
                     </div>
                   </div>
 
-                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="mt-4 sm:mt-6 grid gap-3 sm:gap-4 md:grid-cols-2">
                     <MovementField
                       hint="Cuenta desde donde sale saldo. Es clave para gastos y transferencias."
                       label="Cuenta origen"
@@ -1284,7 +1287,7 @@ function MovementEditorDialog({
                     </MovementField>
                   </div>
 
-                  <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+                  <div className="mt-3 sm:mt-5 grid gap-3 sm:gap-4 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
                     <MovementField
                       hint="Opcional. Si hay dos monedas, puedes guardarla manualmente."
                       label="FX rate"
@@ -1297,14 +1300,14 @@ function MovementEditorDialog({
                       />
                     </MovementField>
 
-                    <div className="rounded-[28px] border border-white/8 bg-[#0c1320]/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                    <div className="rounded-[18px] sm:rounded-[28px] border border-white/8 bg-[#0c1320]/80 p-3 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                         Preview financiero
                       </p>
-                      <p className="mt-4 font-display text-3xl font-semibold text-ink">
+                      <p className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl font-semibold text-ink">
                         {formatCurrency(displayAmount, displayCurrencyCode)}
                       </p>
-                      <p className="mt-2 text-sm text-storm">{previewFlowLabel}</p>
+                      <p className="mt-1 sm:mt-2 break-words text-xs sm:text-sm text-storm">{previewFlowLabel}</p>
                       <div className="mt-4 h-px bg-white/8" />
                       <p className="mt-4 text-xs leading-6 text-storm/75">
                         Las transferencias usan origen y destino. Los gastos salen de una cuenta y
@@ -1316,17 +1319,17 @@ function MovementEditorDialog({
                 </section>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <section className={`${movementEditorPanelClassName} z-20`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <BriefcaseBusiness className="h-5 w-5 text-ember" />
+                  <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+                    <BriefcaseBusiness className="h-4 w-4 sm:h-5 sm:w-5 text-ember" />
                     <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-storm">Vinculos</p>
-                      <p className="mt-1 text-lg font-medium text-ink">Contexto contable</p>
+                      <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Vinculos</p>
+                      <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">Contexto contable</p>
                     </div>
                   </div>
 
-                  <div className="mt-6 space-y-5">
+                  <div className="mt-3 sm:mt-6 space-y-3 sm:space-y-5">
                     <MovementField
                       hint="La lista se adapta segun si el movimiento es de ingreso o gasto."
                       label="Categoria"
@@ -1390,15 +1393,15 @@ function MovementEditorDialog({
                 </section>
 
                 <section className={`${movementEditorPanelClassName} z-10`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <CalendarClock className="h-5 w-5 text-gold" />
+                  <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
+                    <CalendarClock className="h-4 w-4 sm:h-5 sm:w-5 text-gold" />
                     <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-storm">Contexto</p>
-                      <p className="mt-1 text-lg font-medium text-ink">Notas y metadata</p>
+                      <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Contexto</p>
+                      <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">Notas y metadata</p>
                     </div>
                   </div>
 
-                  <div className="mt-6 space-y-5">
+                  <div className="mt-3 sm:mt-6 space-y-3 sm:space-y-5">
                     <MovementField
                       hint="Observaciones legibles para auditoria humana."
                       label="Notas"
@@ -1449,7 +1452,7 @@ function MovementEditorDialog({
               </div>
               </div>
 
-              <div className="mt-8 border-t border-white/10 pt-5 sm:pt-6">
+              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#060b12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <p className="max-w-xl text-sm leading-7 text-storm">
                   {isCreateMode
@@ -1528,7 +1531,10 @@ export function MovementsPage() {
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const snapshot = snapshotQuery.data;
+  const [viewMode, setViewMode] = useViewMode("movements");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<MovementEditorMode>("create");
   const [selectedMovementId, setSelectedMovementId] = useState<number | null>(null);
   const [formState, setFormState] = useState<MovementFormState>(() => createDefaultMovementFormState());
@@ -1725,6 +1731,7 @@ export function MovementsPage() {
     setSelectedMovementId(null);
     setFormState(createDefaultMovementFormState());
     setPendingReceiptFile(null);
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1735,6 +1742,7 @@ export function MovementsPage() {
     setSelectedMovementId(movement.id);
     setFormState(buildFormStateFromMovement(movement));
     setPendingReceiptFile(null);
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1747,12 +1755,23 @@ export function MovementsPage() {
     setSelectedMovementId(null);
     setPendingReceiptFile(null);
     setErrorMessage("");
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSaving) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function updateFormState<Field extends keyof MovementFormState>(
     field: Field,
     value: MovementFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
@@ -2070,10 +2089,13 @@ export function MovementsPage() {
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
           actions={
-            <Button onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo movimiento
-            </Button>
+            <>
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo movimiento
+              </Button>
+            </>
           }
           description="Registra y organiza tus movimientos con cuentas, estados, categorias y relaciones en un solo lugar."
           eyebrow="movimientos"
@@ -2183,6 +2205,62 @@ export function MovementsPage() {
               }
               title={hasActiveFilters ? "Sin resultados" : "Sin movimientos"}
             />
+          ) : viewMode === "list" ? (
+            <div className="space-y-2">
+              {filteredMovements.map((movement) => {
+                const movementTypeOption = getMovementTypeOption(movement.movementType);
+                const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
+                return (
+                  <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-3.5 transition hover:border-white/16" key={movement.id}>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-ink">{movement.description}</p>
+                      <p className="text-xs text-storm">{movement.category} · {movement.counterparty} · {formatDateTime(movement.occurredAt)}</p>
+                    </div>
+                    <div className="hidden sm:flex gap-2">
+                      <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
+                      <StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} />
+                    </div>
+                    {movement.sourceAmount !== null ? <p className="text-sm font-semibold text-ink shrink-0">{formatCurrency(movement.sourceAmount, sourceCurrencyCode)}</p> : null}
+                    <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : viewMode === "table" ? (
+            <div className="overflow-x-auto rounded-[24px] border border-white/10">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/[0.02]">
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Descripcion</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Estado</th>
+                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Cuenta origen</th>
+                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
+                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Fecha</th>
+                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMovements.map((movement, index) => {
+                    const movementTypeOption = getMovementTypeOption(movement.movementType);
+                    const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
+                    return (
+                      <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredMovements.length - 1 ? "border-b-0" : ""}`} key={movement.id}>
+                        <td className="px-5 py-3.5 font-medium text-ink">{movement.description}</td>
+                        <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} /></td>
+                        <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
+                        <td className="px-5 py-3.5 text-storm hidden md:table-cell">{movement.sourceAccountName ?? "-"}</td>
+                        <td className="px-5 py-3.5 text-right font-medium text-ink">{movement.sourceAmount !== null ? formatCurrency(movement.sourceAmount, sourceCurrencyCode) : "-"}</td>
+                        <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatDateTime(movement.occurredAt)}</td>
+                        <td className="px-5 py-3.5 text-right">
+                          <Button className="py-1.5 text-xs" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="space-y-3">
               {filteredMovements.map((movement) => {
@@ -2388,7 +2466,7 @@ export function MovementsPage() {
           baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
           canManageReceipts={canUploadReceipts}
           categories={snapshot.catalogs.categories}
-          closeEditor={closeEditor}
+          closeEditor={requestCloseEditor}
           counterparties={snapshot.catalogs.counterparties}
           errorMessage={errorMessage}
           formState={formState}
@@ -2405,6 +2483,13 @@ export function MovementsPage() {
           subscriptions={snapshot.subscriptions}
           updatePendingReceiptFile={setPendingReceiptFile}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
     </>

@@ -1,6 +1,6 @@
 import {
+  ArrowLeftRight,
   Bell,
-  BriefcaseBusiness,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -11,7 +11,9 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  Minus,
   PiggyBank,
+  Plus,
   Search,
   Settings,
   Shapes,
@@ -26,6 +28,7 @@ import { BrandLogo } from "../../components/ui/brand-logo";
 import { Button } from "../../components/ui/button";
 import { DataState } from "../../components/ui/data-state";
 import { StatusBadge } from "../../components/ui/status-badge";
+import { useToast } from "../../components/ui/toast-provider";
 import { useAuth } from "../../modules/auth/auth-context";
 import {
   QuickMovementDialog,
@@ -47,13 +50,13 @@ const navigation = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid },
   { to: "/app/accounts", label: "Cuentas", icon: Wallet },
   { to: "/app/movements", label: "Movimientos", icon: Gauge },
-  { to: "/app/categories", label: "Categorias", icon: Shapes },
+  { to: "/app/categories", label: "Categorías", icon: Shapes },
   { to: "/app/budgets", label: "Presupuestos", icon: PiggyBank },
   { to: "/app/contacts", label: "Contactos", icon: Users },
-  { to: "/app/obligations", label: "Creditos y deudas", icon: HandCoins },
+  { to: "/app/obligations", label: "Créditos y deudas", icon: HandCoins },
   { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
   { to: "/app/notifications", label: "Notificaciones", icon: Bell },
-  { to: "/app/settings", label: "Configuracion", icon: Settings },
+  { to: "/app/settings", label: "Configuración", icon: Settings },
 ];
 
 function buildInitials(value: string | null | undefined, fallback: string) {
@@ -143,8 +146,18 @@ function useWorkspacePickerPanel(isOpen: boolean, onClose: () => void) {
       }
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   return containerRef;
@@ -193,34 +206,33 @@ function WorkspacePicker({
   return (
     <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
       <button
-        className={`flex min-h-[5.1rem] w-full items-start justify-between gap-3 rounded-[24px] border border-white/10 bg-[#101725] px-4 py-3.5 text-left text-ink shadow-[0_20px_45px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.03)] transition duration-200 hover:border-white/14 hover:bg-[#131c2b] ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-3.5 py-3 text-left text-ink transition duration-200 hover:border-white/16 hover:bg-white/[0.06] ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
       >
-        <span className="flex min-w-0 items-start gap-3">
+        <span className="flex min-w-0 items-center gap-2.5">
           <span
-            className="mt-0.5 flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-xs font-semibold text-ink"
             style={{
-              backgroundColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}22` : undefined,
+              backgroundColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}22` : "rgba(255,255,255,0.04)",
               borderColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}55` : undefined,
-              color: selectedWorkspace ? "#fff" : undefined,
             }}
           >
             {selectedWorkspace ? buildInitials(selectedWorkspace.name, "WS") : "WS"}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block whitespace-normal text-sm font-semibold leading-6 text-ink">
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-ink">
               {selectedWorkspace?.name ?? (isLoading ? "Preparando..." : "Sin workspace")}
             </span>
-            <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
+            <span className="block truncate text-[0.65rem] text-storm">
               {selectedWorkspace
-                ? `${getWorkspaceKindLabel(selectedWorkspace.kind)} · ${getWorkspaceRoleLabel(selectedWorkspace.role)} · Base ${selectedWorkspace.baseCurrencyCode}`
-                : "Cambia rapido entre espacios personales y compartidos."}
+                ? `${getWorkspaceKindLabel(selectedWorkspace.kind)} · ${getWorkspaceRoleLabel(selectedWorkspace.role)}`
+                : "Sin workspace activo"}
             </span>
           </span>
         </span>
-        <ChevronDown className={`mt-2 h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-storm/60 transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen ? (
@@ -245,7 +257,7 @@ function WorkspacePicker({
 
                 return (
                   <button
-                    className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0f1826] px-4 py-3.5 text-left transition duration-200 hover:border-white/12 hover:bg-[#122032]"
+                    className="flex w-full items-center justify-between gap-3 rounded-[16px] border border-white/5 bg-white/[0.03] px-3.5 py-2.5 text-left transition duration-200 hover:border-white/10 hover:bg-white/[0.06]"
                     key={workspace.id}
                     onClick={() => {
                       onChange(workspace.id);
@@ -253,27 +265,26 @@ function WorkspacePicker({
                     }}
                     type="button"
                   >
-                    <span className="flex min-w-0 items-start gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
                       <span
-                        className="mt-0.5 flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-white/10 text-xs font-semibold text-ink"
                         style={{
                           backgroundColor: `${accentColor}22`,
                           borderColor: `${accentColor}55`,
-                          color: "#fff",
                         }}
                       >
                         {buildInitials(workspace.name, "WS")}
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block whitespace-normal font-medium leading-6 text-ink">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-ink">
                           {workspace.name}
                         </span>
-                        <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-                          {getWorkspaceKindLabel(workspace.kind)} · {getWorkspaceRoleLabel(workspace.role)} · Base {workspace.baseCurrencyCode}
+                        <span className="block truncate text-[0.65rem] text-storm">
+                          {getWorkspaceKindLabel(workspace.kind)} · {getWorkspaceRoleLabel(workspace.role)} · {workspace.baseCurrencyCode}
                         </span>
                       </span>
                     </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
+                    {isSelected ? <Check className="h-3.5 w-3.5 shrink-0 text-pine" /> : null}
                   </button>
                 );
               })
@@ -293,7 +304,7 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
-  const [quickMovementFeedback, setQuickMovementFeedback] = useState("");
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { profile, signOut, user } = useAuth();
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
@@ -336,10 +347,10 @@ export function AppShell() {
     ? workspaceErrorMessage
     : activeWorkspace
       ? activeWorkspace.description ||
-        "Este workspace ya esta leyendo datos reales desde Supabase."
+        "Todos tus movimientos, cuentas y datos financieros están disponibles."
       : isLoading
-        ? "Tu entorno financiero se esta preparando en segundo plano."
-        : "No encontramos workspaces activos para esta cuenta todavia.";
+        ? "Preparando tu espacio financiero, solo toma un momento."
+        : "No encontramos workspaces activos para esta cuenta todavía.";
 
   async function handleSignOut() {
     await signOut();
@@ -351,7 +362,6 @@ export function AppShell() {
       return;
     }
 
-    setQuickMovementFeedback("");
     setQuickMovementKind(kind);
     setIsQuickMovementOpen(true);
   }
@@ -364,7 +374,7 @@ export function AppShell() {
     <div className="min-h-screen bg-glow text-ink">
       {sidebarOpen ? (
         <button
-          aria-label="Cerrar menu"
+          aria-label="Cerrar menú"
           className="fixed inset-0 z-20 bg-void/55 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
           type="button"
@@ -373,13 +383,13 @@ export function AppShell() {
 
       <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:gap-5 lg:px-4 lg:py-4">
         <aside
-          className={`fixed inset-y-3 left-3 z-30 w-[296px] rounded-[30px] border border-white/10 bg-shell/95 px-5 py-6 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:static lg:translate-x-0 ${
+          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-6 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:static lg:overflow-visible lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
             isSidebarCollapsed ? "lg:w-[118px] lg:px-4" : "lg:w-[296px] lg:px-5"
           }`}
         >
-          <div className="flex h-full flex-col">
+          <div className="flex min-h-full flex-col">
             <div
               className={`flex ${
                 isSidebarCollapsed ? "items-center gap-3 lg:flex-col lg:justify-start" : "items-start justify-between gap-4"
@@ -400,10 +410,10 @@ export function AppShell() {
                       imageClassName="scale-[1.02] object-[center_48%]"
                     />
                     <button
-                      aria-label="Colapsar menu lateral"
+                      aria-label="Colapsar menú lateral"
                       className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
                       onClick={() => toggleSidebarCollapsed()}
-                      title="Colapsar menu"
+                      title="Colapsar menú"
                       type="button"
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -422,10 +432,10 @@ export function AppShell() {
 
               {isSidebarCollapsed ? (
                 <button
-                  aria-label="Expandir menu lateral"
+                  aria-label="Expandir menú lateral"
                   className="hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
                   onClick={() => toggleSidebarCollapsed()}
-                  title="Expandir menu"
+                  title="Expandir menú"
                   type="button"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -433,7 +443,7 @@ export function AppShell() {
               ) : null}
 
               <button
-                aria-label="Cerrar menu"
+                aria-label="Cerrar menú"
                 className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.06] hover:text-ink lg:hidden"
                 onClick={() => setSidebarOpen(false)}
                 type="button"
@@ -442,41 +452,19 @@ export function AppShell() {
               </button>
             </div>
 
-            <div className={`glass-panel-soft mt-8 rounded-[28px] p-5 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
-              <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10">
-                  <BriefcaseBusiness className="h-5 w-5" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.22em] text-storm/80">workspace activo</p>
-                  <p className="font-display text-2xl font-semibold">
-                    {activeWorkspace?.name ?? (isLoading ? "Tu workspace" : "Sin workspace")}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {activeWorkspace ? (
-                      <>
-                        <StatusBadge status={activeWorkspace.kind} tone="neutral" />
-                        <StatusBadge status={activeWorkspace.role} tone="info" />
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              <label className="mt-5 block text-xs uppercase tracking-[0.22em] text-storm/80">
-                Cambiar workspace
-              </label>
-              <div className="mt-2">
-                <WorkspacePicker
-                  activeWorkspaceId={activeWorkspace?.id ?? null}
-                  disabled={!workspaces.length}
-                  isLoading={isLoading}
-                  onChange={(workspaceId) => setActiveWorkspaceId(workspaceId)}
-                  workspaces={workspaces}
-                />
-              </div>
+            <div className={`mt-6 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+              <p className="mb-2 text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
+                Workspace
+              </p>
+              <WorkspacePicker
+                activeWorkspaceId={activeWorkspace?.id ?? null}
+                disabled={!workspaces.length}
+                isLoading={isLoading}
+                onChange={(workspaceId) => setActiveWorkspaceId(workspaceId)}
+                workspaces={workspaces}
+              />
               {error ? (
-                <p className="mt-3 text-sm leading-6 text-rosewood">{workspaceErrorMessage}</p>
+                <p className="mt-2 text-xs text-rosewood">{workspaceErrorMessage}</p>
               ) : null}
             </div>
 
@@ -576,10 +564,10 @@ export function AppShell() {
                 perfil
               </p>
               <button
-                aria-label="Cerrar sesion"
+                aria-label="Cerrar sesión"
                 className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition hover:bg-white/[0.08] hover:text-ink"
                 onClick={() => void handleSignOut()}
-                title="Cerrar sesion"
+                title="Cerrar sesión"
                 type="button"
               >
                 <LogOut className="h-4 w-4" />
@@ -593,7 +581,7 @@ export function AppShell() {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
                 <button
-                  aria-label="Abrir menu"
+                  aria-label="Abrir menú"
                   className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 text-ink lg:hidden"
                   onClick={() => setSidebarOpen(true)}
                   type="button"
@@ -619,9 +607,9 @@ export function AppShell() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
                 <Button
-                  className="relative"
+                  className="relative col-span-2 sm:col-span-1"
                   onClick={() => navigate("/app/notifications")}
                   variant="ghost"
                 >
@@ -638,19 +626,22 @@ export function AppShell() {
                   onClick={() => openQuickMovement("expense")}
                   variant="ghost"
                 >
-                  Nuevo gasto
+                  <Minus className="h-4 w-4" />
+                  Gasto
                 </Button>
                 <Button
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("income")}
                   variant="secondary"
                 >
-                  Nuevo ingreso
+                  <Plus className="h-4 w-4" />
+                  Ingreso
                 </Button>
                 <Button
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("transfer")}
                 >
+                  <ArrowLeftRight className="h-4 w-4" />
                   Transferencia
                 </Button>
               </div>
@@ -661,22 +652,14 @@ export function AppShell() {
                   description={
                     error
                       ? workspaceErrorMessage
-                      : "Cuando existan workspaces o se complete el bootstrap automatico del perfil, el resto de modulos cargara informacion real aqui."
+                      : "Ve a Configuración para crear tu primer workspace y empezar a registrar tus finanzas."
                   }
-                  title={error ? "No pudimos leer tu acceso real" : "No hay un workspace activo todavia"}
+                  title={error ? "No se pudo cargar tu workspace" : "No hay un workspace activo todavía"}
                   tone={error ? "error" : "neutral"}
                 />
               </div>
             ) : null}
           </header>
-
-          {quickMovementFeedback ? (
-            <DataState
-              description={quickMovementFeedback}
-              title="Movimiento registrado"
-              tone="success"
-            />
-          ) : null}
 
           <Outlet />
         </div>
@@ -687,8 +670,8 @@ export function AppShell() {
           initialKind={quickMovementKind}
           onClose={() => setIsQuickMovementOpen(false)}
           onCreated={(message) => {
-            setQuickMovementFeedback(message);
             setIsQuickMovementOpen(false);
+            showToast({ title: "Movimiento registrado", description: message, tone: "success" });
           }}
           snapshot={workspaceSnapshotQuery.data}
           userId={user.id}

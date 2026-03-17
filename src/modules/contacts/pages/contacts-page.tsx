@@ -25,8 +25,10 @@ import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import type { CounterpartyOverview, CounterpartyRoleType, CounterpartySummary } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
@@ -163,9 +165,9 @@ function ContactEditorDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
@@ -466,10 +468,13 @@ export function ContactsPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const [viewMode, setViewMode] = useViewMode("contacts");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [showArchived, setShowArchived] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -547,7 +552,24 @@ export function ContactsPage() {
   const topCreditors = [...contactsWithExposure].filter((contact) => contact.payablePendingInBase > 0).sort((a, b) => b.payablePendingInBase - a.payablePendingInBase).slice(0, 3);
 
   function updateFormState<Field extends keyof ContactFormState>(field: Field, value: ContactFormState[Field]) {
+    setIsDirty(true);
     setFormState((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function closeEditor() {
+    if (isSavingEditor) return;
+    setIsEditorOpen(false);
+    setSelectedContactId(null);
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSavingEditor) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function openCreateEditor() {
@@ -555,6 +577,7 @@ export function ContactsPage() {
     setEditorMode("create");
     setSelectedContactId(null);
     setFormState(createDefaultFormState());
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -563,6 +586,7 @@ export function ContactsPage() {
     setEditorMode("edit");
     setSelectedContactId(contact.id);
     setFormState(buildFormStateFromContact(contact));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -695,7 +719,7 @@ export function ContactsPage() {
   return (
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
-        actions={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button>}
+        actions={<><ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} /><Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button></>}
         description="Gestiona clientes, proveedores, bancos y relaciones clave del workspace para entender mejor quien te debe, a quien le debes y con quien se mueve tu dinero."
         eyebrow="contactos"
         title="Contactos"
@@ -741,6 +765,74 @@ export function ContactsPage() {
       {filteredContacts.length === 0 ? (
         <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer contacto</Button>} description="Aun no tienes contactos que coincidan con ese filtro dentro del workspace." title="Sin resultados para mostrar" />
       ) : (
+        viewMode === "list" ? (
+          <div className="space-y-3">
+            {filteredContacts.map((contact) => {
+              const typeDefinition = getTypeDefinition(contact.type);
+              const TypeIcon = typeDefinition.icon;
+              return (
+                <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={contact.id}>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
+                    <TypeIcon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">{contact.name}</p>
+                    <p className="text-xs text-storm">{typeDefinition.label}{contact.roles.length > 0 ? ` · ${contact.roles.map((role) => getRoleDefinition(role).label).join(", ")}` : ""}</p>
+                  </div>
+                  <div className="hidden sm:flex flex-col text-right shrink-0">
+                    <p className="text-sm font-medium text-pine">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</p>
+                    <p className="text-xs text-storm">por cobrar</p>
+                  </div>
+                  {contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}
+                  <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
+                </article>
+              );
+            })}
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="overflow-x-auto rounded-[24px] border border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Contacto</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Por cobrar</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Por pagar</th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredContacts.map((contact, index) => {
+                  const typeDefinition = getTypeDefinition(contact.type);
+                  const TypeIcon = typeDefinition.icon;
+                  return (
+                    <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredContacts.length - 1 ? "border-b-0" : ""}`} key={contact.id}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
+                            <TypeIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <p className="font-medium text-ink">{contact.name}</p>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={typeDefinition.label} tone="neutral" /></td>
+                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</td>
+                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</td>
+                      <td className="px-5 py-3.5">{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button className="py-1.5 text-xs" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
+                          <Button className="py-1.5 text-xs" disabled={isArchiving} onClick={() => { void handleArchive(contact, !contact.isArchived); }} variant="ghost">{contact.isArchived ? "Reactivar" : "Archivar"}</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <section className="grid gap-6 xl:grid-cols-2">
           {filteredContacts.map((contact) => {
             const typeDefinition = getTypeDefinition(contact.type);
@@ -784,9 +876,17 @@ export function ContactsPage() {
             );
           })}
         </section>
+        )
       )}
 
-      {isEditorOpen ? <ContactEditorDialog closeEditor={() => { if (!isSavingEditor) { setIsEditorOpen(false); setSelectedContactId(null); } }} feedback={feedback} formState={formState} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
+      {isEditorOpen ? <ContactEditorDialog closeEditor={requestCloseEditor} feedback={feedback} formState={formState} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
+        />
+      ) : null}
       {deleteTarget ? <DeleteDialog contact={deleteTarget} isDeleting={isDeleting} onCancel={() => { if (!isDeleting) { setDeleteTargetId(null); } }} onConfirm={() => { void handleDelete(); }} /> : null}
     </div>
   );

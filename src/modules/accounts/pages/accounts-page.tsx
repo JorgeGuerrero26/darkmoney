@@ -25,8 +25,10 @@ import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
@@ -838,6 +840,7 @@ function AccountEditorDialog({
     <div
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
+      onClick={closeEditor}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
@@ -861,7 +864,7 @@ function AccountEditorDialog({
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
           </div>
 
-          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="relative flex max-h-[calc(100vh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-2xl space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -1335,7 +1338,7 @@ function AccountEditorDialog({
                 </div>
               </div>
 
-              <div className="mt-8 border-t border-white/10 pt-5 sm:pt-6">
+              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#060b12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <p className="max-w-xl text-sm leading-7 text-storm">
                     {isCreateMode
@@ -1530,12 +1533,15 @@ export function AccountsPage() {
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const snapshot = snapshotQuery.data;
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<AccountEditorMode>("create");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [viewMode, setViewMode] = useViewMode("accounts");
   const [formState, setFormState] = useState<AccountFormState>(() =>
     createDefaultFormState(profile?.baseCurrencyCode ?? "USD"),
   );
@@ -1672,6 +1678,7 @@ export function AccountsPage() {
     setEditorMode("create");
     setSelectedAccountId(null);
     setFormState(createDefaultFormState(activeWorkspace.baseCurrencyCode));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1681,6 +1688,7 @@ export function AccountsPage() {
     setEditorMode("edit");
     setSelectedAccountId(account.id);
     setFormState(buildFormStateFromAccount(account));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1693,12 +1701,23 @@ export function AccountsPage() {
     setIsEditorOpen(false);
     setSelectedAccountId(null);
     setErrorMessage("");
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSaving) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function updateFormState<Field extends keyof AccountFormState>(
     field: Field,
     value: AccountFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
@@ -1708,6 +1727,7 @@ export function AccountsPage() {
   function handleAccountTypeChange(nextType: string) {
     const preset = getTypePreset(nextType);
 
+    setIsDirty(true);
     setFormState((currentState) => ({
       ...currentState,
       type: nextType,
@@ -1926,6 +1946,7 @@ export function AccountsPage() {
         <PageHeader
           actions={
             <>
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
               <Button
                 onClick={() => setShowArchived((currentValue) => !currentValue)}
                 variant="ghost"
@@ -1973,6 +1994,107 @@ export function AccountsPage() {
             }
             title={showArchived ? "No hay cuentas archivadas" : "No hay cuentas reales todavia"}
           />
+        ) : viewMode === "list" ? (
+          <div className="space-y-3">
+            {visibleAccounts.map((account) => {
+              const AccountIcon = getAccountIcon(account.icon, account.type);
+              const typeLabel = getTypePreset(account.type).label;
+
+              return (
+                <article
+                  className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16"
+                  key={account.id}
+                >
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white"
+                    style={{ backgroundColor: account.color }}
+                  >
+                    <AccountIcon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">{account.name}</p>
+                    <p className="text-xs text-storm">
+                      {typeLabel} · {account.currencyCode}
+                      {account.isArchived ? " · archivada" : ""}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-ink">
+                    {formatCurrency(account.currentBalance, account.currencyCode)}
+                  </p>
+                  <Button
+                    className="shrink-0 py-1.5 text-xs"
+                    onClick={() => openEditEditor(account)}
+                    variant="ghost"
+                  >
+                    Editar
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="overflow-x-auto rounded-[22px] border border-white/10 bg-white/[0.03]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Cuenta</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Tipo</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Saldo actual</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Moneda</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Estado</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleAccounts.map((account) => {
+                  const AccountIcon = getAccountIcon(account.icon, account.type);
+                  const typeLabel = getTypePreset(account.type).label;
+
+                  return (
+                    <tr
+                      className="border-b border-white/[0.06] transition last:border-0 hover:bg-white/[0.02]"
+                      key={account.id}
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white"
+                            style={{ backgroundColor: account.color }}
+                          >
+                            <AccountIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="font-medium text-ink">{account.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-storm">{typeLabel}</td>
+                      <td className="px-5 py-4 text-right font-semibold text-ink">
+                        {formatCurrency(account.currentBalance, account.currencyCode)}
+                      </td>
+                      <td className="px-5 py-4 text-storm">{account.currencyCode}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          <StatusBadge
+                            status={account.includeInNetWorth ? "incluida" : "fuera de patrimonio"}
+                            tone={account.includeInNetWorth ? "success" : "warning"}
+                          />
+                          {account.isArchived ? <StatusBadge status="archivada" tone="neutral" /> : null}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <Button
+                          className="py-1.5 text-xs"
+                          onClick={() => openEditEditor(account)}
+                          variant="ghost"
+                        >
+                          Editar
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <section className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-4">
             {visibleAccounts.map((account) => {
@@ -2079,7 +2201,7 @@ export function AccountsPage() {
       {isEditorOpen ? (
         <AccountEditorDialog
           baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
-          closeEditor={closeEditor}
+          closeEditor={requestCloseEditor}
           errorMessage={errorMessage}
           formState={formState}
           handleAccountTypeChange={handleAccountTypeChange}
@@ -2090,6 +2212,13 @@ export function AccountsPage() {
           isSaving={isSaving}
           selectedAccount={selectedAccount}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
 

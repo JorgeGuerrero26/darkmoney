@@ -22,12 +22,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -133,13 +135,13 @@ const weekdayOptions = [
 ] as const;
 
 const fieldClassName =
-  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const inputClassName = `${fieldClassName} h-16`;
-const textareaClassName = `${fieldClassName} min-h-[140px] py-4 leading-7`;
+  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+const inputClassName = `${fieldClassName} h-10 sm:h-16`;
+const textareaClassName = `${fieldClassName} min-h-[100px] sm:min-h-[140px] py-3 sm:py-4 leading-7`;
 const panelClassName =
-  "glass-panel-soft relative overflow-visible rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6";
+  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
 const labelClassName =
-  "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
+  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
 
 function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
@@ -303,18 +305,18 @@ function Picker({
 
   return (
     <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
+      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
       ref={containerRef}
     >
       <button
-        className={`${fieldClassName} flex h-16 items-center justify-between gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`${fieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
       >
-        <span className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span
-            className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+            className="flex h-7 min-w-[2.25rem] sm:h-10 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
             style={{
               backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
               borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
@@ -324,15 +326,15 @@ function Picker({
             {selectedOption?.leadingLabel ?? "?"}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">
+            <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-1 block truncate text-xs text-storm">
+            <span className="mt-0.5 sm:mt-1 block truncate text-[0.65rem] sm:text-xs text-storm">
               {selectedOption ? selectedOption.description : placeholderDescription}
             </span>
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen ? (
@@ -356,7 +358,7 @@ function Picker({
 
                 return (
                   <button
-                    className="flex w-full items-center justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
+                    className="flex w-full items-center justify-between gap-2 sm:gap-3 rounded-[18px] sm:rounded-[24px] border border-white/5 bg-[#0d1623] px-3 sm:px-4 py-2.5 sm:py-3.5 text-left transition duration-200 hover:border-white/12"
                     key={option.value}
                     onClick={() => {
                       onChange(option.value);
@@ -366,7 +368,7 @@ function Picker({
                   >
                     <span className="flex min-w-0 items-center gap-3">
                       <span
-                        className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+                        className="flex h-8 min-w-[2.25rem] sm:h-11 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
                         style={{
                           backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
                           borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
@@ -376,7 +378,7 @@ function Picker({
                         {option.leadingLabel}
                       </span>
                       <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.label}</span>
+                        <span className="block truncate font-medium text-ink">{option.label}</span>
                         <span className="mt-1 block truncate text-xs text-storm">
                           {option.description}
                         </span>
@@ -400,10 +402,10 @@ function Picker({
 
 function Field({ children, hint, label }: { children: ReactNode; hint?: string; label: string }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className={labelClassName}>{label}</span>
-      <div className="mt-3">{children}</div>
-      {hint ? <p className="mt-2 text-xs leading-6 text-storm/75">{hint}</p> : null}
+      <div className="mt-1.5 sm:mt-3">{children}</div>
+      {hint ? <p className="mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">{hint}</p> : null}
     </label>
   );
 }
@@ -650,11 +652,11 @@ function EditorDialog({
     formState.frequency === "yearly";
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onClick={closeEditor}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100vh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
-            <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
+            <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="max-w-3xl">
                   <div className="flex flex-wrap gap-2">
@@ -731,11 +733,11 @@ function EditorDialog({
                 </div>
               </div>
 
-              <div className="mt-7 grid gap-5 lg:grid-cols-2">
+              <div className="mt-4 sm:mt-7 grid gap-3 sm:gap-5 lg:grid-cols-2">
                 <div className={panelClassName}>
                   <p className={labelClassName}>Identidad</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Base de la suscripcion</h3>
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Base de la suscripcion</h3>
+                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
                     <Field hint="Nombre visible para reconocerla en la app." label="Nombre">
                       <Input maxLength={120} onChange={(event) => updateFormState("name", event.target.value)} placeholder="Ej. Netflix familiar" type="text" value={formState.name} />
                     </Field>
@@ -753,8 +755,8 @@ function EditorDialog({
 
                 <div className={panelClassName}>
                   <p className={labelClassName}>Monto</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Monto y moneda</h3>
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Monto y moneda</h3>
+                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
                     <Field hint="Monto esperado en cada cobro." label="Monto">
                       <Input inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
                     </Field>
@@ -766,8 +768,8 @@ function EditorDialog({
 
                 <div className={panelClassName}>
                   <p className={labelClassName}>Ritmo</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
+                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
                     <Field hint="Define cada cuanto esperas el cobro." label="Frecuencia">
                       <Picker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as SubscriptionFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
                     </Field>
@@ -807,8 +809,8 @@ function EditorDialog({
 
                 <div className={panelClassName}>
                   <p className={labelClassName}>Seguimiento</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Estado y recordatorios</h3>
-                  <div className="mt-6 grid gap-5">
+                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Estado y recordatorios</h3>
+                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5">
                     <Field hint="Controla si sigue activa, pausada o cerrada." label="Estado">
                       <Picker emptyMessage="No hay estados disponibles." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Selecciona el estado actual." placeholderLabel="Selecciona un estado" queryPlaceholder="Buscar estado..." value={formState.status} />
                     </Field>
@@ -821,7 +823,7 @@ function EditorDialog({
 
                 <div className={`${panelClassName} lg:col-span-2`}>
                   <p className={labelClassName}>Contexto</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Descripcion y notas</h3>
+                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Descripcion y notas</h3>
                   <div className="mt-6 grid gap-5 lg:grid-cols-2">
                     <Field hint="Se usa como resumen dentro de la tarjeta." label="Descripcion">
                       <Textarea className="min-h-[120px]" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Ej. Plan familiar de streaming compartido en casa." value={formState.description} />
@@ -834,7 +836,7 @@ function EditorDialog({
               </div>
             </div>
 
-            <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
+            <div className="relative z-[60] border-t border-white/10 bg-[#060b12]/95 px-4 py-4 sm:px-6 backdrop-blur-md">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm leading-7 text-storm">
                   {isCreateMode
@@ -885,7 +887,10 @@ export function SubscriptionsPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const [viewMode, setViewMode] = useViewMode("subscriptions");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -917,7 +922,24 @@ export function SubscriptionsPage() {
     field: Field,
     value: SubscriptionFormState[Field],
   ) {
+    setIsDirty(true);
     setFormState((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function closeEditor() {
+    if (isSavingEditor) return;
+    setIsEditorOpen(false);
+    setSelectedSubscriptionId(null);
+    setIsDirty(false);
+  }
+
+  function requestCloseEditor() {
+    if (isSavingEditor) return;
+    if (isDirty) {
+      setShowUnsavedDialog(true);
+    } else {
+      closeEditor();
+    }
   }
 
   function openCreateEditor() {
@@ -925,6 +947,7 @@ export function SubscriptionsPage() {
     setEditorMode("create");
     setSelectedSubscriptionId(null);
     setFormState(createDefaultFormState(baseCurrencyCode));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -933,6 +956,7 @@ export function SubscriptionsPage() {
     setEditorMode("edit");
     setSelectedSubscriptionId(subscription.id);
     setFormState(buildFormStateFromSubscription(subscription));
+    setIsDirty(false);
     setIsEditorOpen(true);
   }
 
@@ -1232,10 +1256,13 @@ export function SubscriptionsPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <Button onClick={openCreateEditor}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva suscripcion
-          </Button>
+          <>
+            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            <Button onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva suscripcion
+            </Button>
+          </>
         }
         description="Organiza tus pagos recurrentes con monto, frecuencia, cuenta sugerida y recordatorios en un solo lugar."
         eyebrow="suscripciones"
@@ -1253,6 +1280,63 @@ export function SubscriptionsPage() {
         </div>
       </SurfaceCard>
 
+      {viewMode === "list" ? (
+        <div className="space-y-3">
+          {subscriptions.length === 0 ? (
+            <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
+          ) : subscriptions.map((subscription) => {
+            const statusOption = getStatusOption(subscription.status);
+            return (
+              <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={subscription.id}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink">{subscription.name}</p>
+                  <p className="text-xs text-storm">{subscription.vendor}{subscription.categoryName ? ` · ${subscription.categoryName}` : ""} · {subscription.frequencyLabel}</p>
+                </div>
+                <div className="hidden sm:flex flex-col text-right shrink-0">
+                  <p className="text-sm font-semibold text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
+                  <p className="text-xs text-storm">{formatDate(subscription.nextDueDate)}</p>
+                </div>
+                <StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} />
+                <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
+              </article>
+            );
+          })}
+        </div>
+      ) : viewMode === "table" ? (
+        <div className="overflow-x-auto rounded-[24px] border border-white/10">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/[0.02]">
+                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Nombre</th>
+                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Proveedor</th>
+                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Frecuencia</th>
+                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
+                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Proximo cobro</th>
+                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.map((subscription, index) => {
+                const statusOption = getStatusOption(subscription.status);
+                return (
+                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === subscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
+                    <td className="px-5 py-3.5 font-medium text-ink">{subscription.name}</td>
+                    <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{subscription.vendor}</td>
+                    <td className="px-5 py-3.5 text-storm hidden md:table-cell">{subscription.frequencyLabel}</td>
+                    <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</td>
+                    <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatDate(subscription.nextDueDate)}</td>
+                    <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} /></td>
+                    <td className="px-5 py-3.5 text-right">
+                      <Button className="py-1.5 text-xs" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <SurfaceCard action={<StatusBadge status={`${subscriptions.length} activas o registradas`} tone="success" />} description="Cada tarjeta representa una suscripcion real con sus datos principales y sus acciones." title="Pagos recurrentes">
           {subscriptions.length === 0 ? (
@@ -1325,18 +1409,14 @@ export function SubscriptionsPage() {
           )}
         </SurfaceCard>
       </section>
+      )}
 
       {isEditorOpen ? (
         <EditorDialog
           accounts={accounts}
           baseCurrencyCode={baseCurrencyCode}
           categories={categories}
-          closeEditor={() => {
-            if (!isSavingEditor) {
-              setIsEditorOpen(false);
-              setSelectedSubscriptionId(null);
-            }
-          }}
+          closeEditor={requestCloseEditor}
           counterparties={counterparties}
           feedback={feedback}
           formState={formState}
@@ -1344,6 +1424,13 @@ export function SubscriptionsPage() {
           isSaving={isSavingEditor}
           onSubmit={handleSubmit}
           updateFormState={updateFormState}
+        />
+      ) : null}
+
+      {showUnsavedDialog ? (
+        <UnsavedChangesDialog
+          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
 
