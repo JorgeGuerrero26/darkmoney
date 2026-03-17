@@ -4,6 +4,7 @@ import {
   Banknote,
   BriefcaseBusiness,
   CarFront,
+  Dumbbell,
   FileText,
   Fuel,
   Gift,
@@ -129,6 +130,7 @@ const iconOptions = [
   { value: "banknote", label: "Ventas", icon: Banknote },
   { value: "badge-percent", label: "Intereses", icon: BadgePercent },
   { value: "rotate-ccw", label: "Reembolso", icon: RotateCcw },
+  { value: "dumbbell", label: "Deporte", icon: Dumbbell },
   { value: "shapes", label: "General", icon: Shapes },
 ] as const;
 
