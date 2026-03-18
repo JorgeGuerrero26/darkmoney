@@ -36,9 +36,13 @@ function getEventLabel(eventType: ObligationSummary["events"][number]["eventType
   switch (eventType) {
     case "payment": return "Pago";
     case "opening": return "Apertura";
-    case "adjustment_increase": return "Aumento";
-    case "adjustment_decrease": return "Reducción";
-    case "cancellation": return "Cancelación";
+    case "principal_increase": return "Aumento de principal";
+    case "principal_decrease": return "Reducción de principal";
+    case "adjustment": return "Ajuste";
+    case "interest": return "Interés";
+    case "fee": return "Cargo";
+    case "discount": return "Descuento";
+    case "writeoff": return "Cancelación";
     default: return "Evento";
   }
 }
@@ -216,7 +220,7 @@ export function ObligationAnalyticsModal({
               </p>
             </div>
           </div>
-          <Button onClick={onClose} size="sm" variant="ghost">
+          <Button className="p-2" onClick={onClose} variant="ghost">
             <X className="h-4 w-4" />
           </Button>
         </div>

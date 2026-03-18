@@ -203,7 +203,7 @@ export function SubscriptionAnalyticsModal({
               </p>
             </div>
           </div>
-          <Button onClick={onClose} size="sm" variant="ghost">
+          <Button className="p-2" onClick={onClose} variant="ghost">
             <X className="h-4 w-4" />
           </Button>
         </div>
