@@ -392,10 +392,17 @@ type ExchangeRateRow = {
   effective_at: string;
 };
 
+type UiPrefsRow = {
+  view_modes?: Record<string, string>;
+  column_visibility?: Record<string, Record<string, boolean>>;
+};
+
 type NotificationPreferencesRow = {
   in_app_enabled: boolean;
   push_enabled: boolean;
   email_enabled: boolean;
+  smart_reads: Record<string, string> | null;
+  ui_prefs: UiPrefsRow | null;
 };
 
 type CategoryMovementUsageRow = {
@@ -414,10 +421,17 @@ export type CashflowPoint = {
   expense: number;
 };
 
+export type UiPrefs = {
+  view_modes: Record<string, string>;
+  column_visibility: Record<string, Record<string, boolean>>;
+};
+
 export type NotificationPreferences = {
   inAppEnabled: boolean;
   pushEnabled: boolean;
   emailEnabled: boolean;
+  smartReads: Record<string, string>;
+  uiPrefs: UiPrefs | null;
 };
 
 export type SharedWorkspaceFormInput = {
@@ -2071,7 +2085,7 @@ async function fetchNotificationPreferences(userId: string) {
 
   const { data, error } = await client
     .from("notification_preferences")
-    .select("in_app_enabled, push_enabled, email_enabled")
+    .select("in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -2089,6 +2103,13 @@ async function fetchNotificationPreferences(userId: string) {
     inAppEnabled: row.in_app_enabled,
     pushEnabled: row.push_enabled,
     emailEnabled: row.email_enabled,
+    smartReads: (row.smart_reads as Record<string, string>) ?? {},
+    uiPrefs: row.ui_prefs
+      ? {
+          view_modes: row.ui_prefs.view_modes ?? {},
+          column_visibility: row.ui_prefs.column_visibility ?? {},
+        }
+      : null,
   };
 }
 
@@ -2293,6 +2314,40 @@ async function invalidateWorkspaceSnapshot(
       exact: false,
     }),
   ]);
+}
+
+type OptimisticSnapshotContext = { previousSnapshot?: WorkspaceSnapshot };
+
+function snapshotKey(workspaceId: number, userId?: string) {
+  return ["workspace-snapshot", workspaceId, userId] as const;
+}
+
+function optimisticDelete<TInput>(
+  queryClient: ReturnType<typeof useQueryClient>,
+  workspaceId: number | undefined,
+  userId: string | undefined,
+  apply: (snapshot: WorkspaceSnapshot, input: TInput) => WorkspaceSnapshot,
+) {
+  return {
+    onMutate: async (input: TInput): Promise<OptimisticSnapshotContext> => {
+      if (!workspaceId) return {};
+      const key = snapshotKey(workspaceId, userId);
+      await queryClient.cancelQueries({ queryKey: ["workspace-snapshot", workspaceId], exact: false });
+      const previousSnapshot = queryClient.getQueryData<WorkspaceSnapshot>(key);
+      if (previousSnapshot) {
+        queryClient.setQueryData<WorkspaceSnapshot>(key, apply(previousSnapshot, input));
+      }
+      return { previousSnapshot };
+    },
+    onError: (_err: unknown, _input: TInput, context: OptimisticSnapshotContext | undefined) => {
+      if (context?.previousSnapshot && workspaceId) {
+        queryClient.setQueryData(snapshotKey(workspaceId, userId), context.previousSnapshot);
+      }
+    },
+    onSettled: async () => {
+      if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+    },
+  };
 }
 
 async function invalidateCounterpartiesOverview(
@@ -2777,6 +2832,39 @@ export function useSaveNotificationPreferencesMutation(userId?: string) {
   });
 }
 
+export function useSaveSmartNotificationReadsMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (smartReads: Record<string, string>) => {
+      if (!userId) return;
+      const client = getClient();
+      const { error } = await client.from("notification_preferences").upsert({
+        user_id: userId,
+        smart_reads: smartReads,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notification-preferences", userId] });
+    },
+  });
+}
+
+export function useSaveUiPrefsMutation(userId?: string) {
+  return useMutation({
+    mutationFn: async (uiPrefs: UiPrefs) => {
+      if (!userId) return;
+      const client = getClient();
+      const { error } = await client.from("notification_preferences").upsert({
+        user_id: userId,
+        ui_prefs: uiPrefs,
+      });
+      if (error) throw error;
+    },
+  });
+}
+
 export function useCreateAccountMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -2862,11 +2950,12 @@ export function useArchiveAccountMutation(workspaceId?: number, userId?: string)
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<AccountArchiveInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      accounts: snap.accounts.map((a) =>
+        a.id === input.accountId ? { ...a, isArchived: input.isArchived } : a,
+      ),
+    })),
   });
 }
 
@@ -2886,11 +2975,10 @@ export function useDeleteAccountMutation(workspaceId?: number, userId?: string) 
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<AccountDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      accounts: snap.accounts.filter((a) => a.id !== input.accountId),
+    })),
   });
 }
 
@@ -2995,7 +3083,16 @@ export function useToggleCategoryMutation(workspaceId?: number, userId?: string)
         throw error;
       }
     },
-    onSuccess: async () => {
+    ...optimisticDelete<CategoryToggleInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      catalogs: {
+        ...snap.catalogs,
+        categories: snap.catalogs.categories.map((c) =>
+          c.id === input.categoryId ? { ...c, isActive: input.isActive } : c,
+        ),
+      },
+    })),
+    onSettled: async () => {
       if (workspaceId) {
         await Promise.all([
           invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
@@ -3081,7 +3178,15 @@ export function useDeleteCategoryMutation(workspaceId?: number, userId?: string)
         throw error;
       }
     },
-    onSuccess: async () => {
+    ...optimisticDelete<CategoryDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      catalogs: {
+        ...snap.catalogs,
+        categories: snap.catalogs.categories.filter((c) => c.id !== input.categoryId),
+        categoriesCount: Math.max(0, snap.catalogs.categoriesCount - 1),
+      },
+    })),
+    onSettled: async () => {
       if (workspaceId) {
         await Promise.all([
           invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
@@ -3183,11 +3288,10 @@ export function useDeleteBudgetMutation(workspaceId?: number, userId?: string) {
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<BudgetDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      budgets: snap.budgets.filter((b) => b.id !== input.budgetId),
+    })),
   });
 }
 
@@ -3319,7 +3423,16 @@ export function useArchiveCounterpartyMutation(workspaceId?: number, userId?: st
         throw error;
       }
     },
-    onSuccess: async () => {
+    ...optimisticDelete<CounterpartyArchiveInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      catalogs: {
+        ...snap.catalogs,
+        counterparties: snap.catalogs.counterparties.map((c) =>
+          c.id === input.counterpartyId ? { ...c, isArchived: input.isArchived } : c,
+        ),
+      },
+    })),
+    onSettled: async () => {
       if (workspaceId) {
         await Promise.all([
           invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
@@ -3396,7 +3509,15 @@ export function useDeleteCounterpartyMutation(workspaceId?: number, userId?: str
         throw error;
       }
     },
-    onSuccess: async () => {
+    ...optimisticDelete<CounterpartyDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      catalogs: {
+        ...snap.catalogs,
+        counterparties: snap.catalogs.counterparties.filter((c) => c.id !== input.counterpartyId),
+        counterpartiesCount: Math.max(0, snap.catalogs.counterpartiesCount - 1),
+      },
+    })),
+    onSettled: async () => {
       if (workspaceId) {
         await Promise.all([
           invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
@@ -3652,11 +3773,10 @@ export function useDeleteMovementMutation(workspaceId?: number, userId?: string)
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<MovementDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      movements: snap.movements.filter((m) => m.id !== input.movementId),
+    })),
   });
 }
 
@@ -3845,11 +3965,10 @@ export function useDeleteObligationMutation(workspaceId?: number, userId?: strin
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<ObligationDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      obligations: snap.obligations.filter((o) => o.id !== input.obligationId),
+    })),
   });
 }
 
@@ -4163,11 +4282,10 @@ export function useDeleteSubscriptionMutation(workspaceId?: number, userId?: str
         throw error;
       }
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    ...optimisticDelete<SubscriptionDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      subscriptions: snap.subscriptions.filter((s) => s.id !== input.subscriptionId),
+    })),
   });
 }
 

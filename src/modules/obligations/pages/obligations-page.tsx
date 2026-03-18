@@ -1,10 +1,10 @@
 import {
-  AlertTriangle,
   ArrowDownCircle,
   ArrowUpCircle,
   Check,
   ChevronDown,
   CircleDollarSign,
+  Download,
   Eye,
   Landmark,
   LoaderCircle,
@@ -27,7 +27,9 @@ import type {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
@@ -37,6 +39,8 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -795,6 +799,21 @@ function getEventLabel(eventType: ObligationSummary["events"][number]["eventType
   }
 }
 
+function getEventIcon(eventType: string) {
+  switch (eventType) {
+    case "opening": return "🏦";
+    case "payment": return "💳";
+    case "principal_increase": return "📈";
+    case "principal_decrease": return "📉";
+    case "interest": return "📊";
+    case "fee": return "🧾";
+    case "discount": return "🏷️";
+    case "adjustment": return "⚙️";
+    case "writeoff": return "✂️";
+    default: return "📌";
+  }
+}
+
 function getObligationAmountDisplay(
   obligations: ObligationSummary[],
   amountKind: "principal" | "pending",
@@ -1046,106 +1065,6 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
   );
 }
 
-function DeleteDialog({
-  isDeleting,
-  obligation,
-  onCancel,
-  onConfirm,
-}: {
-  isDeleting: boolean;
-  obligation: ObligationSummary;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const visual = getDirectionVisual(obligation.direction);
-  const Icon = visual.icon;
-
-  return (
-    <div className="fixed inset-0 z-[90] isolate flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/66 before:backdrop-blur-2xl before:content-[''] sm:p-6">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/18 bg-[#07101a]/96 p-6 shadow-[0_35px_120px_rgba(0,0,0,0.58)] sm:p-7">
-        <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/18 blur-3xl" />
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4566d6]/12 blur-3xl" />
-
-        <div className="relative">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-[#f27a86]/20 bg-[#f27a86]/10 text-[#ffb4bc]">
-              <AlertTriangle className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center rounded-full border border-[#f27a86]/18 bg-[#f27a86]/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
-                Eliminar registro
-              </div>
-              <h3 className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">
-                Confirma antes de borrarlo
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-storm">
-                Esto elimina el credito o deuda junto con su historial de eventos. Si tiene
-                movimientos financieros vinculados, primero tendras que resolverlos.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-7 rounded-[28px] border border-white/10 bg-black/20 p-4 sm:p-5">
-            <div className="flex items-start gap-4">
-              <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-white/10 text-white"
-                style={{
-                  background: `linear-gradient(160deg, ${visual.color}, rgba(8,13,20,0.72))`,
-                }}
-              >
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-semibold text-ink">{obligation.title}</p>
-                <p className="mt-1 text-sm text-storm">{obligation.counterparty}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                    {getDirectionLabel(obligation.direction)}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                    {formatCurrency(obligation.pendingAmount, obligation.currencyCode)} pendientes
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                    {obligation.events.length} eventos
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button
-              disabled={isDeleting}
-              onClick={onCancel}
-              type="button"
-              variant="ghost"
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="bg-[#f27a86] text-white hover:bg-[#ff8e98] focus-visible:outline-[#f27a86]"
-              disabled={isDeleting}
-              onClick={onConfirm}
-              type="button"
-            >
-              {isDeleting ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar definitivamente
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PaymentDialog({
   feedback,
@@ -2544,6 +2463,52 @@ function EditorDialog({
               </div>
             </div>
 
+            {/* ── Historial de cambios (solo en modo edición) ── */}
+            {!isCreateMode && selectedObligation && selectedObligation.events.length > 0 ? (
+              <div className="border-t border-white/8 px-4 py-6 sm:px-6">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/75">
+                  Historial de cambios
+                </p>
+                <ol aria-label="Historial de cambios" className="mt-4 space-y-0">
+                  {selectedObligation.events.map((ev, idx) => (
+                    <li className="relative flex gap-4" key={ev.id}>
+                      {/* Connector line */}
+                      {idx < selectedObligation.events.length - 1 ? (
+                        <div aria-hidden="true" className="absolute left-[17px] top-9 h-full w-px bg-white/8" />
+                      ) : null}
+                      {/* Icon dot */}
+                      <div
+                        aria-hidden="true"
+                        className="relative z-10 mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#080d14] text-sm"
+                      >
+                        {getEventIcon(ev.eventType)}
+                      </div>
+                      {/* Content */}
+                      <div className="mb-5 min-w-0 flex-1 rounded-[18px] border border-white/8 bg-white/[0.025] px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-ink">
+                              {getEventLabel(ev.eventType)}
+                              {ev.installmentNo ? (
+                                <span className="ml-2 text-xs text-storm/70">#{ev.installmentNo}</span>
+                              ) : null}
+                            </p>
+                            <p className="mt-0.5 text-xs text-storm">{formatDate(ev.eventDate)}</p>
+                          </div>
+                          <span className="shrink-0 text-sm font-semibold text-ink">
+                            {formatCurrency(ev.amount, selectedObligation.currencyCode)}
+                          </span>
+                        </div>
+                        {ev.reason ?? ev.description ? (
+                          <p className="mt-2 text-xs leading-5 text-storm">{ev.reason ?? ev.description}</p>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+
             <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm leading-7 text-storm">
@@ -2593,6 +2558,61 @@ function EditorDialog({
   );
 }
 
+function ObligationsLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[280px] rounded-[32px]" />
+      <div className="grid gap-4 xl:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div className="shimmer-surface h-[220px] rounded-[30px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCSV(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadObligationsCSV(obligations: ObligationSummary[], filename: string) {
+  const headers = ["Titulo", "Direccion", "Tipo origen", "Contraparte", "Estado", "Moneda", "Principal", "Pendiente", "% avance", "Fecha inicio", "Fecha vencimiento", "Cuota", "Num cuotas", "Tasa interes", "Pagos realizados", "Descripcion", "Notas"];
+  const rows = obligations.map((o) => [
+    escapeCSV(o.title),
+    escapeCSV(o.direction),
+    escapeCSV(o.originType),
+    escapeCSV(o.counterparty),
+    escapeCSV(o.status),
+    escapeCSV(o.currencyCode),
+    escapeCSV(o.principalAmount),
+    escapeCSV(o.pendingAmount),
+    escapeCSV(o.progressPercent.toFixed(1)),
+    escapeCSV(o.startDate),
+    escapeCSV(o.dueDate ?? ""),
+    escapeCSV(o.installmentAmount ?? ""),
+    escapeCSV(o.installmentCount ?? ""),
+    escapeCSV(o.interestRate ?? ""),
+    escapeCSV(o.paymentCount),
+    escapeCSV(o.description ?? ""),
+    escapeCSV(o.notes ?? ""),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+}
+
 export function ObligationsPage() {
   const { profile, user } = useAuth();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
@@ -2616,6 +2636,13 @@ export function ObligationsPage() {
   const [principalAdjustmentFeedback, setPrincipalAdjustmentFeedback] =
     useState<FeedbackState | null>(null);
   const [shareDialogFeedback, setShareDialogFeedback] = useState<FeedbackState | null>(null);
+  const obligationColumns: ColumnDef[] = [
+    { key: "contraparte", label: "Contraparte" },
+    { key: "direccion", label: "Direccion" },
+    { key: "principal", label: "Principal" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-obligations", obligationColumns);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useViewMode("obligations");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -2636,6 +2663,8 @@ export function ObligationsPage() {
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
   useSuccessToast(pageFeedback, {
     clear: () => setPageFeedback(null),
   });
@@ -3066,6 +3095,10 @@ export function ObligationsPage() {
     const normalizedSearch = searchValue.trim().toLowerCase();
 
     return obligations.filter((obligation) => {
+      if (hiddenIds.has(obligation.id)) {
+        return false;
+      }
+
       const matchesDirection =
         directionFilter === "all" || obligation.direction === directionFilter;
       const matchesStatus = statusFilter === "all" || obligation.status === statusFilter;
@@ -3095,7 +3128,12 @@ export function ObligationsPage() {
 
       return searchableText.includes(normalizedSearch);
     });
-  }, [directionFilter, obligations, searchValue, statusFilter]);
+  }, [directionFilter, hiddenIds, obligations, searchValue, statusFilter]);
+
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredObligations);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
   const filteredSharedObligations = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase();
 
@@ -3655,28 +3693,38 @@ export function ObligationsPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!activeWorkspace || !deleteTarget) {
-      return;
-    }
+  function handleDelete() {
+    if (!activeWorkspace || !deleteTarget) return;
+    const targetId = deleteTarget.id;
+    setDeleteTargetId(null);
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Crédito/Deuda eliminado",
+      onCommit: () =>
+        deleteMutation.mutateAsync({ obligationId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
+  }
 
+  async function confirmBulkDelete() {
+    if (!activeWorkspace || selectedCount === 0) return;
+    setIsBulkDeleting(true);
     try {
-      await deleteMutation.mutateAsync({
-        obligationId: deleteTarget.id,
-        workspaceId: activeWorkspace.id,
-      });
-      setPageFeedback({
-        tone: "success",
-        title: "Registro eliminado",
-        description: "La cartera se actualizo y el registro ya no aparece en la lista.",
-      });
-      setDeleteTargetId(null);
-    } catch (error) {
-      setPageFeedback({
-        tone: "error",
-        title: "No pudimos eliminar el registro",
-        description: getQueryErrorMessage(error, "Revisa si tiene movimientos vinculados."),
-      });
+      for (const id of Array.from(selectedIds)) {
+        await deleteMutation.mutateAsync({ obligationId: id, workspaceId: activeWorkspace.id });
+      }
+      clearAll();
+    } catch (err) {
+      setPageFeedback({ tone: "error", title: "Error al eliminar", description: getQueryErrorMessage(err, "Algunos registros no pudieron eliminarse.") });
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
     }
   }
 
@@ -3688,10 +3736,7 @@ export function ObligationsPage() {
           eyebrow="cartera"
           title="Cargando creditos y deudas"
         />
-        <DataState
-          description="Buscando tu espacio actual y sus registros financieros."
-          title="Sincronizando cartera"
-        />
+        <ObligationsLoadingSkeleton />
       </div>
     );
   }
@@ -3737,10 +3782,7 @@ export function ObligationsPage() {
           eyebrow="cartera"
           title="Cargando creditos y deudas"
         />
-        <DataState
-          description="Consultando saldos, fechas y avance de cada registro."
-          title="Preparando el modulo"
-        />
+        <ObligationsLoadingSkeleton />
       </div>
     );
   }
@@ -3768,6 +3810,21 @@ export function ObligationsPage() {
         actions={
           <>
             <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            {viewMode === "table" ? (
+              <ColumnPicker columns={obligationColumns} visible={colVis} onToggle={toggleCol} />
+            ) : null}
+            <Button
+              onClick={() =>
+                downloadObligationsCSV(
+                  filteredObligations,
+                  `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
             <Button onClick={openCreateEditor}>
               <Plus className="mr-2 h-4 w-4" />
               Nuevo credito o deuda
@@ -4139,19 +4196,18 @@ export function ObligationsPage() {
           {filteredObligations.length === 0 ? (
             <DataState
               action={
-                <Button
-                  onClick={() => {
-                    setSearchValue("");
-                    setDirectionFilter("all");
-                    setStatusFilter("all");
-                  }}
-                  variant="secondary"
-                >
-                  Quitar filtros
-                </Button>
+                obligations.length === 0 ? (
+                  <Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primero</Button>
+                ) : hasActiveFilters ? (
+                  <Button onClick={() => { setSearchValue(""); setDirectionFilter("all"); setStatusFilter("all"); }} variant="secondary">Quitar filtros</Button>
+                ) : undefined
               }
-              description="No encontramos creditos o deudas que coincidan con la busqueda o los filtros actuales."
-              title="Sin resultados para mostrar"
+              description={
+                obligations.length === 0
+                  ? "Todavia no hay creditos ni deudas registrados en este workspace."
+                  : "No hay registros que coincidan con la busqueda o los filtros actuales."
+              }
+              title={obligations.length === 0 ? "Sin creditos ni deudas todavia" : "Sin resultados"}
             />
           ) : (
             viewMode === "list" ? (
@@ -4162,6 +4218,7 @@ export function ObligationsPage() {
                   const statusOption = getStatusOption(obligation.status);
                   return (
                     <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={obligation.id}>
+                      <SelectionCheckbox ariaLabel={`Seleccionar ${obligation.title}`} checked={selectedIds.has(obligation.id)} onChange={() => toggleSelect(obligation.id)} />
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
                         <DirectionIcon className="h-4 w-4" />
                       </div>
@@ -4184,10 +4241,13 @@ export function ObligationsPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10 bg-white/[0.02]">
+                      <th className="px-3 py-3 w-10">
+                        <SelectionCheckbox ariaLabel="Seleccionar todos" checked={allSelected} indeterminate={someSelected} onChange={allSelected ? clearAll : selectAll} />
+                      </th>
                       <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Registro</th>
-                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Contraparte</th>
-                      <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Direccion</th>
-                      <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Principal</th>
+                      <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("contraparte", "hidden sm:table-cell")}`}>Contraparte</th>
+                      <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("direccion", "hidden md:table-cell")}`}>Direccion</th>
+                      <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("principal", "hidden md:table-cell")}`}>Principal</th>
                       <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Pendiente</th>
                       <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                       <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
@@ -4200,6 +4260,9 @@ export function ObligationsPage() {
                       const statusOption = getStatusOption(obligation.status);
                       return (
                         <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredObligations.length - 1 ? "border-b-0" : ""}`} key={obligation.id}>
+                          <td className="px-3 py-3.5 w-10">
+                            <SelectionCheckbox ariaLabel={`Seleccionar ${obligation.title}`} checked={selectedIds.has(obligation.id)} onChange={() => toggleSelect(obligation.id)} />
+                          </td>
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${directionVisual.color}, rgba(8,13,20,0.72))` }}>
@@ -4208,9 +4271,9 @@ export function ObligationsPage() {
                               <p className="font-medium text-ink">{obligation.title}</p>
                             </div>
                           </td>
-                          <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{obligation.counterparty}</td>
-                          <td className="px-5 py-3.5 hidden md:table-cell"><StatusBadge status={getDirectionLabel(obligation.direction)} tone={getDirectionTone(obligation.direction)} /></td>
-                          <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(obligation.currentPrincipalAmount ?? obligation.principalAmount, obligation.currencyCode)}</td>
+                          <td className={`px-5 py-3.5 text-storm ${cv("contraparte", "hidden sm:table-cell")}`}>{obligation.counterparty}</td>
+                          <td className={`px-5 py-3.5 ${cv("direccion", "hidden md:table-cell")}`}><StatusBadge status={getDirectionLabel(obligation.direction)} tone={getDirectionTone(obligation.direction)} /></td>
+                          <td className={`px-5 py-3.5 text-right text-storm ${cv("principal", "hidden md:table-cell")}`}>{formatCurrency(obligation.currentPrincipalAmount ?? obligation.principalAmount, obligation.currencyCode)}</td>
                           <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</td>
                           <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} /></td>
                           <td className="px-5 py-3.5 text-right">
@@ -4230,8 +4293,21 @@ export function ObligationsPage() {
                 const statusOption = getStatusOption(obligation.status);
                 const lastEvent = obligation.events[0] ?? null;
                 const currentShare = shareByObligationId.get(obligation.id);
+                const isSelected = selectedIds.has(obligation.id);
+                const longPressHandlers = createLongPressHandlers(() => toggleSelect(obligation.id));
 
                 return (
+                  <div
+                    className={`relative ${isSelected ? "ring-2 ring-pine/30 rounded-[32px]" : ""}`}
+                    key={obligation.id}
+                    onClick={(e) => {
+                      if (wasRecentLongPress()) return;
+                      if (selectedCount === 0) return;
+                      if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                      toggleSelect(obligation.id);
+                    }}
+                    {...longPressHandlers}
+                  >
                   <SurfaceCard
                     action={
                       <div className="flex flex-wrap gap-2">
@@ -4253,7 +4329,6 @@ export function ObligationsPage() {
                     }
                     className="glass-panel animate-rise-in rounded-[32px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20"
                     description={obligation.counterparty}
-                    key={obligation.id}
                     title={obligation.title}
                   >
                     <div className="space-y-5">
@@ -4367,38 +4442,53 @@ export function ObligationsPage() {
                         <div className="rounded-[24px] border border-white/10 bg-black/10 p-4">
                           <div className="flex items-center justify-between gap-3">
                             <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Historial reciente
+                              Historial de cambios
                             </p>
-                            {obligation.events.length > 3 ? (
-                              <span className="text-xs text-storm">
-                                {obligation.events.length - 3} mas
-                              </span>
-                            ) : null}
+                            <button
+                              className="text-xs text-pine hover:text-pine/80 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-pine/50 rounded"
+                              onClick={() => setExpandedHistoryId(expandedHistoryId === obligation.id ? null : obligation.id)}
+                              type="button"
+                            >
+                              {expandedHistoryId === obligation.id
+                                ? "Ver menos"
+                                : `Ver todo (${obligation.events.length})`}
+                            </button>
                           </div>
-                          <div className="mt-3 space-y-3">
-                            {obligation.events.slice(0, 3).map((eventItem) => (
+                          <div className="mt-3 space-y-2">
+                            {(expandedHistoryId === obligation.id
+                              ? obligation.events
+                              : obligation.events.slice(0, 3)
+                            ).map((eventItem, idx) => (
                               <div
-                                className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
+                                className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
                                 key={eventItem.id}
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-ink">
-                                      {getEventLabel(eventItem.eventType)}
-                                    </p>
-                                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-storm/75">
-                                      {formatDate(eventItem.eventDate)}
-                                    </p>
+                                <span className="text-base leading-none mt-0.5" aria-hidden="true">
+                                  {getEventIcon(eventItem.eventType)}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-ink">
+                                        {getEventLabel(eventItem.eventType)}
+                                        {eventItem.installmentNo ? (
+                                          <span className="ml-2 text-xs text-storm/70">#{eventItem.installmentNo}</span>
+                                        ) : null}
+                                      </p>
+                                      <p className="mt-0.5 text-xs uppercase tracking-[0.18em] text-storm/75">
+                                        {formatDate(eventItem.eventDate)}
+                                      </p>
+                                    </div>
+                                    <span className="text-sm font-semibold text-ink shrink-0">
+                                      {formatCurrency(eventItem.amount, obligation.currencyCode)}
+                                    </span>
                                   </div>
-                                  <span className="text-sm font-semibold text-ink">
-                                    {formatCurrency(eventItem.amount, obligation.currencyCode)}
-                                  </span>
+                                  {eventItem.reason ? (
+                                    <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.reason}</p>
+                                  ) : eventItem.description ? (
+                                    <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.description}</p>
+                                  ) : null}
                                 </div>
-                                {eventItem.reason ? (
-                                  <p className="mt-2 text-sm leading-7 text-storm">{eventItem.reason}</p>
-                                ) : eventItem.description ? (
-                                  <p className="mt-2 text-sm leading-7 text-storm">{eventItem.description}</p>
-                                ) : null}
                               </div>
                             ))}
                           </div>
@@ -4456,6 +4546,7 @@ export function ObligationsPage() {
                       </div>
                     </div>
                   </SurfaceCard>
+                  </div>
                 );
               })}
             </section>
@@ -4463,6 +4554,16 @@ export function ObligationsPage() {
           )}
         </>
       )}
+
+      <BulkActionBar
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={() => setShowBulkDeleteConfirm(true)}
+        onExport={() => downloadObligationsCSV(selectedItems, `creditos-deudas-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredObligations.length}
+      />
 
       {sharedObligationsQuery.isLoading ? (
         <SurfaceCard
@@ -4691,38 +4792,53 @@ export function ObligationsPage() {
                       <div className="rounded-[24px] border border-white/10 bg-black/10 p-4">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Historial reciente
+                            Historial de cambios
                           </p>
-                          {obligation.events.length > 3 ? (
-                            <span className="text-xs text-storm">
-                              {obligation.events.length - 3} mas
-                            </span>
-                          ) : null}
+                          <button
+                            className="text-xs text-pine hover:text-pine/80 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-pine/50 rounded"
+                            onClick={() => setExpandedHistoryId(expandedHistoryId === obligation.id ? null : obligation.id)}
+                            type="button"
+                          >
+                            {expandedHistoryId === obligation.id
+                              ? "Ver menos"
+                              : `Ver todo (${obligation.events.length})`}
+                          </button>
                         </div>
-                        <div className="mt-3 space-y-3">
-                          {obligation.events.slice(0, 3).map((eventItem) => (
+                        <div className="mt-3 space-y-2">
+                          {(expandedHistoryId === obligation.id
+                            ? obligation.events
+                            : obligation.events.slice(0, 3)
+                          ).map((eventItem, idx) => (
                             <div
-                              className="rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
+                              className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
                               key={eventItem.id}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-ink">
-                                    {getEventLabel(eventItem.eventType)}
-                                  </p>
-                                  <p className="mt-1 text-xs uppercase tracking-[0.18em] text-storm/75">
-                                    {formatDate(eventItem.eventDate)}
-                                  </p>
+                              <span className="text-base leading-none mt-0.5" aria-hidden="true">
+                                {getEventIcon(eventItem.eventType)}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-ink">
+                                      {getEventLabel(eventItem.eventType)}
+                                      {eventItem.installmentNo ? (
+                                        <span className="ml-2 text-xs text-storm/70">#{eventItem.installmentNo}</span>
+                                      ) : null}
+                                    </p>
+                                    <p className="mt-0.5 text-xs uppercase tracking-[0.18em] text-storm/75">
+                                      {formatDate(eventItem.eventDate)}
+                                    </p>
+                                  </div>
+                                  <span className="text-sm font-semibold text-ink shrink-0">
+                                    {formatCurrency(eventItem.amount, obligation.currencyCode)}
+                                  </span>
                                 </div>
-                                <span className="text-sm font-semibold text-ink">
-                                  {formatCurrency(eventItem.amount, obligation.currencyCode)}
-                                </span>
+                                {eventItem.reason ? (
+                                  <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.reason}</p>
+                                ) : eventItem.description ? (
+                                  <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.description}</p>
+                                ) : null}
                               </div>
-                              {eventItem.reason ? (
-                                <p className="mt-2 text-sm leading-7 text-storm">{eventItem.reason}</p>
-                              ) : eventItem.description ? (
-                                <p className="mt-2 text-sm leading-7 text-storm">{eventItem.description}</p>
-                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -4824,9 +4940,10 @@ export function ObligationsPage() {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteDialog
+        <DeleteConfirmDialog
+          badge="Eliminar registro"
+          description="Esto elimina el credito o deuda junto con su historial de eventos. Si tiene movimientos financieros vinculados, primero tendras que resolverlos."
           isDeleting={isDeleting}
-          obligation={deleteTarget}
           onCancel={() => {
             if (!isDeleting) {
               setDeleteTargetId(null);
@@ -4835,7 +4952,37 @@ export function ObligationsPage() {
           onConfirm={() => {
             void handleDelete();
           }}
-        />
+        >
+          {(() => {
+            const visual = getDirectionVisual(deleteTarget.direction);
+            const Icon = visual.icon;
+            return (
+              <div className="flex items-start gap-4">
+                <div
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-white/10 text-white"
+                  style={{ background: `linear-gradient(160deg, ${visual.color}, rgba(8,13,20,0.72))` }}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-lg font-semibold text-ink">{deleteTarget.title}</p>
+                  <p className="mt-1 text-sm text-storm">{deleteTarget.counterparty}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                      {getDirectionLabel(deleteTarget.direction)}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
+                      {formatCurrency(deleteTarget.pendingAmount, deleteTarget.currencyCode)} pendientes
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
+                      {deleteTarget.events.length} eventos
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DeleteConfirmDialog>
       ) : null}
 
       {shareTarget ? (
@@ -4853,6 +5000,32 @@ export function ObligationsPage() {
           onSubmit={handleSubmitShareInvite}
           updateFormState={updateShareDialogFormState}
         />
+      ) : null}
+
+      {showBulkDeleteConfirm ? (
+        <div
+          aria-labelledby="obl-bulk-title"
+          aria-modal="true"
+          className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink" id="obl-bulk-title">
+              Eliminar {selectedCount} registro{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Esta accion eliminara permanentemente los registros seleccionados. No se puede deshacer.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

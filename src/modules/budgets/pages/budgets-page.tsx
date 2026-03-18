@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  Download,
   LoaderCircle,
   PencilLine,
   PiggyBank,
@@ -16,8 +17,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
@@ -994,65 +999,6 @@ function BudgetEditorDialog({
   );
 }
 
-function DeleteBudgetDialog({
-  budget,
-  isDeleting,
-  onClose,
-  onConfirm,
-}: {
-  budget: DisplayBudgetOverview;
-  isDeleting: boolean;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-[rgba(4,8,16,0.72)] backdrop-blur-[18px]" />
-      <div className="absolute inset-0 overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center px-4 py-10">
-          <div className="relative w-full max-w-2xl rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,12,20,0.98),rgba(9,14,24,0.96))] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.55)] sm:p-8">
-        <div className="flex items-start gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-ember/20 bg-ember/12 text-ember">
-            <Trash2 className="h-7 w-7" />
-          </div>
-          <div>
-            <StatusBadge status="Eliminar presupuesto" tone="warning" />
-            <h2 className="mt-4 font-display text-4xl font-semibold text-ink">Confirma antes de borrarlo</h2>
-            <p className="mt-4 text-sm leading-8 text-storm">
-              Se perdera el tope configurado, pero no tus movimientos reales. Si prefieres conservar el historial visual, puedes dejarlo inactivo.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-          <p className="font-display text-2xl font-semibold text-ink">{budget.name}</p>
-          <p className="mt-2 text-sm text-storm">{budget.scopeLabel}</p>
-          <p className="mt-4 text-sm text-storm">
-            {formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)} usados de{" "}
-            {formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}
-          </p>
-          {budget.isConvertedDisplay ? (
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm/75">
-              Vista actual en {budget.displayCurrencyCode}. Regla creada en {budget.currencyCode}.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-8 flex flex-wrap justify-end gap-3">
-          <Button onClick={onClose} type="button" variant="ghost">
-            Cancelar
-          </Button>
-          <Button disabled={isDeleting} onClick={() => void onConfirm()} type="button" variant="primary">
-            {isDeleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Eliminar definitivamente
-          </Button>
-        </div>
-      </div>
-      </div>
-      </div>
-    </div>
-  );
-}
 
 function StatCard({
   description,
@@ -1070,6 +1016,57 @@ function StatCard({
       <p className="mt-2 text-sm leading-7 text-storm">{description}</p>
     </div>
   );
+}
+
+function BudgetsLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[180px] rounded-[32px]" />
+      <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div className="shimmer-surface h-[280px] rounded-[30px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCSV(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadBudgetsCSV(budgets: BudgetOverview[], filename: string) {
+  const headers = ["Nombre", "Alcance", "Categoria", "Cuenta", "Moneda", "Periodo inicio", "Periodo fin", "Limite", "Gastado", "Restante", "% usado", "Activo", "Notas"];
+  const rows = budgets.map((b) => [
+    escapeCSV(b.name),
+    escapeCSV(b.scopeLabel),
+    escapeCSV(b.categoryName ?? ""),
+    escapeCSV(b.accountName ?? ""),
+    escapeCSV(b.currencyCode),
+    escapeCSV(b.periodStart),
+    escapeCSV(b.periodEnd),
+    escapeCSV(b.limitAmount),
+    escapeCSV(b.spentAmount),
+    escapeCSV(b.remainingAmount),
+    escapeCSV(b.usedPercent.toFixed(1)),
+    escapeCSV(b.isActive ? "Si" : "No"),
+    escapeCSV(b.notes ?? ""),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
 }
 
 export function BudgetsPage() {
@@ -1110,6 +1107,15 @@ export function BudgetsPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
+  const budgetColumns: ColumnDef[] = [
+    { key: "periodo", label: "Período" },
+    { key: "limite", label: "Límite" },
+    { key: "consumido", label: "Consumido" },
+    { key: "restante", label: "Restante" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-budgets", budgetColumns);
   const [viewMode, setViewMode] = useViewMode("budgets");
   const [formState, setFormState] = useState<BudgetFormState>(() =>
     createDefaultFormState(activeWorkspace),
@@ -1177,6 +1183,10 @@ export function BudgetsPage() {
 
     return [...displayBudgets]
       .filter((budget) => {
+        if (hiddenIds.has(budget.id)) {
+          return false;
+        }
+
         if (scopeFilter !== "all" && budget.scopeKind !== scopeFilter) {
           return false;
         }
@@ -1225,7 +1235,31 @@ export function BudgetsPage() {
           new Date(left.periodEnd).getTime() - new Date(right.periodEnd).getTime()
         );
       });
-  }, [displayBudgets, scopeFilter, statusFilter, showCurrentOnly, search]);
+  }, [displayBudgets, hiddenIds, scopeFilter, statusFilter, showCurrentOnly, search]);
+
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredBudgets);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
+
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
+    try {
+      for (const id of Array.from(selectedIds)) {
+        await deleteMutation.mutateAsync({ budgetId: id as number, workspaceId: activeWorkspace!.id });
+      }
+      clearAll();
+    } catch (err) {
+      setPageFeedback({ tone: "error", title: "Error al eliminar", description: getQueryErrorMessage(err) });
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  }
 
   const currentActiveBudgets = useMemo(
     () => displayBudgets.filter((budget) => budget.isActive && isBudgetCurrent(budget)),
@@ -1455,29 +1489,23 @@ export function BudgetsPage() {
     }
   }
 
-  async function handleDeleteBudget() {
-    if (!activeWorkspace || !user?.id || !deleteTarget) {
-      return;
-    }
-
-    try {
-      await deleteMutation.mutateAsync({
-        budgetId: deleteTarget.id,
-        workspaceId: activeWorkspace.id,
-      });
-      setDeleteTargetId(null);
-      setPageFeedback({
-        tone: "success",
-        title: "Presupuesto eliminado",
-        description: "Los movimientos se conservaron intactos; solo retiramos la regla de control.",
-      });
-    } catch (error) {
-      setPageFeedback({
-        tone: "error",
-        title: "No pudimos eliminar el presupuesto",
-        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
-      });
-    }
+  function handleDeleteBudget() {
+    if (!activeWorkspace || !deleteTarget) return;
+    const targetId = deleteTarget.id;
+    setDeleteTargetId(null);
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Presupuesto eliminado",
+      onCommit: () =>
+        deleteMutation.mutateAsync({ budgetId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
   }
 
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
@@ -1534,7 +1562,7 @@ export function BudgetsPage() {
           eyebrow="planificación"
           title={`${activeWorkspace.name}, bajo control`}
         />
-        <DataState description="Cargando reglas y consumo del workspace..." title="Preparando presupuestos" />
+        <BudgetsLoadingSkeleton />
       </div>
     );
   }
@@ -1562,6 +1590,21 @@ export function BudgetsPage() {
         actions={
           <>
             <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            {viewMode === "table" ? (
+              <ColumnPicker columns={budgetColumns} visible={colVis} onToggle={toggleCol} />
+            ) : null}
+            <Button
+              onClick={() =>
+                downloadBudgetsCSV(
+                  filteredBudgets,
+                  `presupuestos-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
             <Button onClick={openCreateEditor}>
               <Plus className="h-4 w-4" />
               Nuevo presupuesto
@@ -1616,6 +1659,7 @@ export function BudgetsPage() {
         />
       </section>
 
+      {budgets.length > 0 ? (
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <SurfaceCard
           action={<ReceiptText className="h-5 w-5 text-pine" />}
@@ -1734,6 +1778,7 @@ export function BudgetsPage() {
           )}
         </SurfaceCard>
       </section>
+      ) : null}
 
       <SurfaceCard
         action={<StatusBadge status={`${filteredBudgets.length} visibles`} tone="info" />}
@@ -1770,6 +1815,7 @@ export function BudgetsPage() {
           <div className="space-y-3">
             {filteredBudgets.map((budget) => (
               <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={budget.id}>
+                <SelectionCheckbox ariaLabel={`Seleccionar ${budget.name}`} checked={selectedIds.has(budget.id)} onChange={() => toggleSelect(budget.id)} />
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-pine">
                   {budget.scopeKind === "account" || budget.scopeKind === "category_account" ? <Wallet className="h-4 w-4" /> : <PiggyBank className="h-4 w-4" />}
                 </div>
@@ -1799,11 +1845,14 @@ export function BudgetsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="px-3 py-3 w-10">
+                    <SelectionCheckbox ariaLabel="Seleccionar todos" checked={allSelected} indeterminate={someSelected} onChange={allSelected ? clearAll : selectAll} />
+                  </th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Presupuesto</th>
-                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Período</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Límite</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Consumido</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Restante</th>
+                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("periodo", "hidden sm:table-cell")}`}>Período</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("limite")}`}>Límite</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("consumido")}`}>Consumido</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("restante")}`}>Restante</th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                   <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
                 </tr>
@@ -1811,14 +1860,17 @@ export function BudgetsPage() {
               <tbody>
                 {filteredBudgets.map((budget, index) => (
                   <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredBudgets.length - 1 ? "border-b-0" : ""}`} key={budget.id}>
+                    <td className="px-3 py-3.5 w-10">
+                      <SelectionCheckbox ariaLabel={`Seleccionar ${budget.name}`} checked={selectedIds.has(budget.id)} onChange={() => toggleSelect(budget.id)} />
+                    </td>
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-ink">{budget.name}</p>
                       <p className="text-xs text-storm">{budget.scopeLabel}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}</td>
-                    <td className="px-5 py-3.5 text-right font-semibold text-ink">{formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}</td>
-                    <td className="px-5 py-3.5 text-right text-ink">{formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)}</td>
-                    <td className={`px-5 py-3.5 text-right font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"}`}>{formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}</td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("periodo", "hidden sm:table-cell")}`}>{formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}</td>
+                    <td className={`px-5 py-3.5 text-right font-semibold text-ink ${cv("limite")}`}>{formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}</td>
+                    <td className={`px-5 py-3.5 text-right text-ink ${cv("consumido")}`}>{formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)}</td>
+                    <td className={`px-5 py-3.5 text-right font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"} ${cv("restante")}`}>{formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} /></td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex justify-end gap-2">
@@ -1836,11 +1888,20 @@ export function BudgetsPage() {
             {filteredBudgets.map((budget) => {
               const progressWidth = Math.min(Math.max(budget.usedPercent, 2), 100);
               const remainingTone = budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine";
+              const isSelected = selectedIds.has(budget.id);
+              const longPressHandlers = createLongPressHandlers(() => toggleSelect(budget.id));
 
               return (
                 <article
-                  className="rounded-[30px] border border-white/10 bg-white/[0.03] p-5"
+                  className={`relative rounded-[30px] border border-white/10 bg-white/[0.03] p-5 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
                   key={budget.id}
+                  onClick={(e) => {
+                    if (wasRecentLongPress()) return;
+                    if (selectedCount === 0) return;
+                    if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                    toggleSelect(budget.id);
+                  }}
+                  {...longPressHandlers}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
@@ -1978,6 +2039,36 @@ export function BudgetsPage() {
         )}
       </SurfaceCard>
 
+      <BulkActionBar
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadBudgetsCSV(selectedItems, `presupuestos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredBudgets.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="budget-bulk-title">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink" id="budget-bulk-title">
+              Eliminar {selectedCount} presupuesto{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Esta accion eliminara permanentemente los presupuestos seleccionados. No se puede deshacer.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {isEditorOpen ? (
         <BudgetEditorDialog
           accounts={accounts}
@@ -2003,12 +2094,27 @@ export function BudgetsPage() {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteBudgetDialog
-          budget={deleteTarget}
+        <DeleteConfirmDialog
+          badge="Eliminar presupuesto"
+          description="Se perdera el tope configurado, pero no tus movimientos reales. Si prefieres conservar el historial visual, puedes dejarlo inactivo."
           isDeleting={isDeleting}
-          onClose={() => setDeleteTargetId(null)}
-          onConfirm={handleDeleteBudget}
-        />
+          onCancel={() => setDeleteTargetId(null)}
+          onConfirm={() => void handleDeleteBudget()}
+        >
+          <div>
+            <p className="font-display text-2xl font-semibold text-ink">{deleteTarget.name}</p>
+            <p className="mt-2 text-sm text-storm">{deleteTarget.scopeLabel}</p>
+            <p className="mt-4 text-sm text-storm">
+              {formatCurrency(deleteTarget.displaySpentAmount, deleteTarget.displayCurrencyCode)} usados de{" "}
+              {formatCurrency(deleteTarget.displayLimitAmount, deleteTarget.displayCurrencyCode)}
+            </p>
+            {deleteTarget.isConvertedDisplay ? (
+              <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm/75">
+                Vista actual en {deleteTarget.displayCurrencyCode}. Regla creada en {deleteTarget.currencyCode}.
+              </p>
+            ) : null}
+          </div>
+        </DeleteConfirmDialog>
       ) : null}
     </div>
   );

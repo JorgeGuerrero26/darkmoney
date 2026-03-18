@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { formatCurrency } from "../../lib/formatting/money";
 import type { WorkspaceSnapshot } from "../../services/queries/workspace-data";
@@ -12,8 +12,7 @@ import type {
 } from "../../types/domain";
 import type { PendingInvite } from "../auth/invite-resume";
 import { usePendingInvite } from "../auth/invite-resume";
-
-const SMART_NOTIFICATION_READS_STORAGE_KEY = "darkmoney.notifications.smartReads";
+import { useNotificationReads } from "./notification-reads-context";
 
 type SmartNotificationTone = "info" | "success" | "warning" | "danger" | "neutral";
 
@@ -31,8 +30,6 @@ export type InboxNotification = {
   tone: SmartNotificationTone;
   href: string;
 };
-
-type SmartNotificationReadMap = Record<string, string>;
 
 function startOfDay(date: Date) {
   const next = new Date(date);
@@ -62,34 +59,6 @@ function toTimestamp(date: string, hour = 9) {
   const next = new Date(`${date}T00:00:00`);
   next.setHours(hour, 0, 0, 0);
   return next.toISOString();
-}
-
-function readSmartNotificationReadMap(): SmartNotificationReadMap {
-  if (typeof window === "undefined") {
-    return {};
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(SMART_NOTIFICATION_READS_STORAGE_KEY);
-
-    if (!rawValue) {
-      return {};
-    }
-
-    const parsedValue = JSON.parse(rawValue) as unknown;
-
-    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
-      return {};
-    }
-
-    return Object.fromEntries(
-      Object.entries(parsedValue as Record<string, unknown>).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    );
-  } catch {
-    return {};
-  }
 }
 
 function sortNotifications(notifications: InboxNotification[]) {
@@ -338,6 +307,215 @@ function buildSmartNotifications(
     });
   }
 
+  // ── Cuenta en saldo negativo ───────────────────────────────────────────────
+  const negativeAccounts = snapshot.accounts.filter(
+    (a: AccountSummary) => !a.isArchived && a.currentBalance < 0,
+  );
+  for (const account of negativeAccounts) {
+    notifications.push({
+      id: `smart:account-negative:${account.id}:${Math.round(account.currentBalance * 100)}`,
+      source: "smart",
+      title: "Cuenta en saldo negativo",
+      body: `${account.name} tiene un saldo de ${formatCurrency(account.currentBalance, account.currencyCode)}. Revisa si hay movimientos sin registrar.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "account",
+      channel: "in_app",
+      readAt: null,
+      tone: "danger",
+      href: "/app/accounts",
+    });
+  }
+
+  // ── Sin movimientos en los últimos 30 días ────────────────────────────────
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recentMovements = snapshot.movements.filter(
+    (m: MovementRecord) =>
+      m.status !== "voided" && new Date(m.occurredAt) >= thirtyDaysAgo,
+  );
+  if (snapshot.movements.length > 0 && recentMovements.length === 0) {
+    notifications.push({
+      id: `smart:no-recent-movements:${thirtyDaysAgo.toISOString().slice(0, 10)}`,
+      source: "smart",
+      title: "Sin movimientos recientes",
+      body: "No hay movimientos registrados en los ultimos 30 dias. Puede que tus datos esten desactualizados.",
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "movement",
+      channel: "in_app",
+      readAt: null,
+      tone: "warning",
+      href: "/app/movements",
+    });
+  }
+
+  // ── Gastos superan ingresos este mes ──────────────────────────────────────
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const thisMonthMovements = snapshot.movements.filter(
+    (m: MovementRecord) =>
+      m.status === "posted" && new Date(m.occurredAt) >= startOfMonth,
+  );
+  const monthlyIncome = thisMonthMovements
+    .filter((m: MovementRecord) => m.movementType === "income" || m.movementType === "refund")
+    .reduce((sum: number, m: MovementRecord) => sum + (m.destinationAmount ?? m.sourceAmount ?? 0), 0);
+  const monthlyExpense = thisMonthMovements
+    .filter((m: MovementRecord) => m.movementType === "expense")
+    .reduce((sum: number, m: MovementRecord) => sum + (m.sourceAmount ?? 0), 0);
+  if (monthlyExpense > 0 && monthlyIncome > 0 && monthlyExpense > monthlyIncome * 1.2) {
+    const baseCurrency = snapshot.workspace.baseCurrencyCode;
+    notifications.push({
+      id: `smart:expense-over-income:${startOfMonth.toISOString().slice(0, 7)}`,
+      source: "smart",
+      title: "Gastos superan ingresos este mes",
+      body: `Este mes gastaste ${formatCurrency(monthlyExpense, baseCurrency)} y recibiste ${formatCurrency(monthlyIncome, baseCurrency)}. Tu balance mensual es negativo.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "movement",
+      channel: "in_app",
+      readAt: null,
+      tone: "warning",
+      href: "/app/movements",
+    });
+  }
+
+  // ── Movimientos en borrador sin confirmar (> 7 días) ─────────────────────
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const staleDraftMovements = snapshot.movements.filter(
+    (m: MovementRecord) =>
+      (m.status === "draft" || m.status === "pending") &&
+      new Date(m.occurredAt) < sevenDaysAgo,
+  );
+  if (staleDraftMovements.length > 0) {
+    notifications.push({
+      id: `smart:stale-drafts:${staleDraftMovements.length}:${sevenDaysAgo.toISOString().slice(0, 10)}`,
+      source: "smart",
+      title: `${staleDraftMovements.length} movimiento${staleDraftMovements.length > 1 ? "s" : ""} sin confirmar`,
+      body: `Tenes movimientos en borrador o pendientes de hace mas de una semana que aun no se aplicaron al historial.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "movement",
+      channel: "in_app",
+      readAt: null,
+      tone: "warning",
+      href: "/app/movements",
+    });
+  }
+
+  // ── Obligación en draft (nunca activada) ──────────────────────────────────
+  const draftObligations = snapshot.obligations.filter(
+    (o: ObligationSummary) => o.status === "draft",
+  );
+  if (draftObligations.length > 0) {
+    notifications.push({
+      id: `smart:draft-obligations:${draftObligations.length}`,
+      source: "smart",
+      title: `${draftObligations.length} credito${draftObligations.length > 1 ? "s/deudas" : "/deuda"} sin activar`,
+      body: `Tenes registros en borrador que aun no se activaron. Activalos para que aparezcan en tu seguimiento.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "obligation",
+      channel: "in_app",
+      readAt: null,
+      tone: "info",
+      href: "/app/obligations",
+    });
+  }
+
+  // ── Obligación vencida hace más de 30 días sin acción ────────────────────
+  const overdueObligations = snapshot.obligations.filter((o: ObligationSummary) => {
+    if (o.status === "paid" || o.status === "cancelled" || !o.dueDate) return false;
+    const diffDays = getDaysDifference(o.dueDate);
+    return diffDays < -30;
+  });
+  if (overdueObligations.length > 0) {
+    const first = overdueObligations[0];
+    notifications.push({
+      id: `smart:overdue-obligations:${overdueObligations.length}:${startOfMonth.toISOString().slice(0, 7)}`,
+      source: "smart",
+      title: overdueObligations.length === 1 ? "Credito/Deuda muy vencido" : `${overdueObligations.length} creditos/deudas muy vencidos`,
+      body: overdueObligations.length === 1
+        ? `${first.title} lleva mas de 30 dias vencido sin que se registre ningun movimiento.`
+        : `Tenes ${overdueObligations.length} registros vencidos hace mas de un mes sin actividad reciente.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "obligation",
+      channel: "in_app",
+      readAt: null,
+      tone: "danger",
+      href: "/app/obligations",
+    });
+  }
+
+  // ── Suscripción sin renovar hace más de 15 días ───────────────────────────
+  const staleSubs = snapshot.subscriptions.filter((s: SubscriptionSummary) => {
+    if (s.status !== "active") return false;
+    return getDaysDifference(s.nextDueDate) < -15;
+  });
+  if (staleSubs.length > 0) {
+    notifications.push({
+      id: `smart:stale-subscriptions:${staleSubs.length}`,
+      source: "smart",
+      title: `${staleSubs.length} suscripcion${staleSubs.length > 1 ? "es" : ""} sin renovar`,
+      body: `${staleSubs.length > 1 ? "Varias suscripciones activas llevan" : `${staleSubs[0].name} lleva`} mas de 15 dias vencidas sin que se registre su renovacion.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "subscription",
+      channel: "in_app",
+      readAt: null,
+      tone: "warning",
+      href: "/app/subscriptions",
+    });
+  }
+
+  // ── Presupuesto activo sin uso a mitad del periodo ────────────────────────
+  const unusedBudgets = snapshot.budgets.filter((b: BudgetOverview) => {
+    if (!b.isActive || b.movementCount > 0) return false;
+    const periodStart = new Date(b.periodStart).getTime();
+    const periodEnd = new Date(b.periodEnd).getTime();
+    const midpoint = periodStart + (periodEnd - periodStart) / 2;
+    return today.getTime() > midpoint;
+  });
+  if (unusedBudgets.length > 0) {
+    notifications.push({
+      id: `smart:unused-budgets:${unusedBudgets.map((b: BudgetOverview) => b.id).join("-")}`,
+      source: "smart",
+      title: `${unusedBudgets.length} presupuesto${unusedBudgets.length > 1 ? "s" : ""} sin movimientos`,
+      body: `Ya pasaste la mitad del periodo y ${unusedBudgets.length > 1 ? "algunos presupuestos no tienen" : `"${unusedBudgets[0].name}" no tiene`} ningun gasto registrado. Puede que no este bien configurado.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "budget",
+      channel: "in_app",
+      readAt: null,
+      tone: "info",
+      href: "/app/budgets",
+    });
+  }
+
+  // ── Movimientos sin contraparte (≥ 5) ────────────────────────────────────
+  const noCounterpartyMovements = snapshot.movements.filter(
+    (m: MovementRecord) =>
+      m.status !== "voided" &&
+      m.movementType !== "transfer" &&
+      !m.counterpartyId,
+  );
+  if (noCounterpartyMovements.length >= 5) {
+    notifications.push({
+      id: `smart:no-counterparty:${noCounterpartyMovements.length}`,
+      source: "smart",
+      title: "Movimientos sin contraparte",
+      body: `${noCounterpartyMovements.length} movimientos no tienen contraparte asignada. Asignarla mejora tus reportes y filtros.`,
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "quality",
+      channel: "in_app",
+      readAt: null,
+      tone: "info",
+      href: "/app/movements",
+    });
+  }
+
   return notifications;
 }
 
@@ -380,21 +558,8 @@ export function useNotificationInbox({
   snapshot?: WorkspaceSnapshot | null;
   workspaceName?: string | null;
 }) {
-  const [smartReadMap, setSmartReadMap] = useState<SmartNotificationReadMap>(
-    readSmartNotificationReadMap,
-  );
+  const { smartReadMap, markSmartAsRead } = useNotificationReads();
   const pendingInvite = usePendingInvite();
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(
-      SMART_NOTIFICATION_READS_STORAGE_KEY,
-      JSON.stringify(smartReadMap),
-    );
-  }, [smartReadMap]);
 
   const smartNotifications = useMemo(
     () => [
@@ -431,25 +596,12 @@ export function useNotificationInbox({
   function markSmartNotificationsAsRead(ids?: string[]) {
     const targetIds =
       ids?.length
-        ? ids.filter((id) => !id.startsWith("smart:invite:"))
+        ? ids
         : smartNotifications
             .filter((notification) => notification.kind !== "invite")
             .map((notification) => notification.id);
 
-    if (!targetIds.length) {
-      return;
-    }
-
-    const now = new Date().toISOString();
-    setSmartReadMap((currentValue) => {
-      const nextValue = { ...currentValue };
-
-      for (const id of targetIds) {
-        nextValue[id] = now;
-      }
-
-      return nextValue;
-    });
+    markSmartAsRead(targetIds);
   }
 
   return {

@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowUpCircle,
@@ -7,6 +6,7 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
+  Download,
   Filter,
   LoaderCircle,
   PencilLine,
@@ -28,7 +28,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
@@ -36,6 +38,8 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatMovementStatusLabel, formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -663,7 +667,7 @@ type MovementEditorDialogProps = {
   errorMessage: string;
   formState: MovementFormState;
   invalidFields: Set<string>;
-  handleDeleteMovement: () => Promise<void>;
+  handleDeleteMovement: () => void;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -681,126 +685,6 @@ type MovementEditorDialogProps = {
   ) => void;
 };
 
-type DeleteMovementConfirmDialogProps = {
-  movement: MovementRecord;
-  isDeleting: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-function DeleteMovementConfirmDialog({
-  isDeleting,
-  movement,
-  onCancel,
-  onConfirm,
-}: DeleteMovementConfirmDialogProps) {
-  const movementVisual = getMovementVisualPreset(movement.movementType);
-  const movementTypeOption = getMovementTypeOption(movement.movementType);
-  const movementStatusOption = getMovementStatusOption(movement.status);
-  const occurredAtLabel = formatDateTime(movement.occurredAt);
-
-  return (
-    <div className="absolute inset-0 z-[90] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-md sm:p-6">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/18 bg-[#07101a]/96 p-6 shadow-[0_35px_120px_rgba(0,0,0,0.58)] sm:p-7">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/18 blur-3xl" />
-          <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4566d6]/12 blur-3xl" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_26%,transparent_78%,rgba(255,255,255,0.02))]" />
-        </div>
-
-        <div className="relative">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-[#f27a86]/20 bg-[#f27a86]/10 text-[#ffb4bc] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <AlertTriangle className="h-6 w-6" />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center rounded-full border border-[#f27a86]/18 bg-[#f27a86]/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
-                Eliminar movimiento
-              </div>
-
-              <h3 className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">
-                Confirma antes de borrarlo
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-storm">
-                Esta accion elimina el movimiento de tu historial y no se puede deshacer. Si esta
-                relacionado con una obligacion o suscripcion, conviene revisar primero esas
-                dependencias.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-7 rounded-[28px] border border-white/10 bg-black/20 p-4 sm:p-5">
-            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-              Registro seleccionado
-            </p>
-            <div className="mt-4 flex items-start gap-4">
-              <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-white/10 text-white shadow-[0_15px_40px_rgba(0,0,0,0.22)]"
-                style={{
-                  background: `linear-gradient(160deg, ${movementVisual.color}, rgba(8, 13, 20, 0.72))`,
-                }}
-              >
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-semibold text-ink">{movement.description}</p>
-                <p className="mt-1 text-sm text-storm">{occurredAtLabel}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                    {movementTypeOption.label}
-                  </span>
-                  <span
-                    className="rounded-full border px-3 py-1 text-xs"
-                    style={{
-                      borderColor: `${getMovementStatusColor(movement.status)}55`,
-                      backgroundColor: `${getMovementStatusColor(movement.status)}18`,
-                      color: "#f5f7fb",
-                    }}
-                  >
-                    {movementStatusOption.label}
-                  </span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                    {movement.category}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button
-              disabled={isDeleting}
-              onClick={onCancel}
-              type="button"
-              variant="ghost"
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="bg-[#f27a86] text-white hover:bg-[#ff8e98] focus-visible:outline-[#f27a86]"
-              disabled={isDeleting}
-              onClick={onConfirm}
-              type="button"
-            >
-              {isDeleting ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar definitivamente
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-        </div>
-      </div>
-    );
-}
 
 function MovementEditorDialog({
   accounts,
@@ -890,6 +774,52 @@ function MovementEditorDialog({
     selectedDestinationAccount?.currencyCode ??
     selectedSourceAccount?.currencyCode ??
     baseCurrencyCode;
+
+  const balanceImpacts = useMemo(() => {
+    const impacts: Array<{
+      account: AccountSummary;
+      delta: number;
+      projectedBalance: number;
+    }> = [];
+    const srcAmt = sourceAmount ?? 0;
+    const dstAmt = destinationAmount ?? 0;
+
+    if (expenseLikeMovementTypes.has(formState.movementType)) {
+      if (selectedSourceAccount && srcAmt > 0) {
+        impacts.push({
+          account: selectedSourceAccount,
+          delta: -srcAmt,
+          projectedBalance: selectedSourceAccount.currentBalance - srcAmt,
+        });
+      }
+    } else if (incomeLikeMovementTypes.has(formState.movementType)) {
+      if (selectedDestinationAccount && dstAmt > 0) {
+        impacts.push({
+          account: selectedDestinationAccount,
+          delta: dstAmt,
+          projectedBalance: selectedDestinationAccount.currentBalance + dstAmt,
+        });
+      }
+    } else if (formState.movementType === "transfer") {
+      if (selectedSourceAccount && srcAmt > 0) {
+        impacts.push({
+          account: selectedSourceAccount,
+          delta: -srcAmt,
+          projectedBalance: selectedSourceAccount.currentBalance - srcAmt,
+        });
+      }
+      if (selectedDestinationAccount && dstAmt > 0 && selectedDestinationAccount.id !== selectedSourceAccount?.id) {
+        impacts.push({
+          account: selectedDestinationAccount,
+          delta: dstAmt,
+          projectedBalance: selectedDestinationAccount.currentBalance + dstAmt,
+        });
+      }
+    }
+
+    return impacts;
+  }, [formState.movementType, selectedSourceAccount, selectedDestinationAccount, sourceAmount, destinationAmount]);
+
   const movementTypeOption = getMovementTypeOption(formState.movementType);
   const movementStatusOption = getMovementStatusOption(formState.status);
   const selectedCategory =
@@ -1173,6 +1103,66 @@ function MovementEditorDialog({
                       </p>
                     </div>
                   </div>
+
+                  {balanceImpacts.length > 0 ? (
+                    <div className="mt-4 sm:mt-5 rounded-[16px] sm:rounded-[20px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                          Impacto en cuentas
+                        </p>
+                        {formState.status !== "posted" ? (
+                          <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.18em] text-amber-400/80">
+                            {formState.status === "planned"
+                              ? "planeado"
+                              : formState.status === "pending"
+                                ? "pendiente"
+                                : "anulado"}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 space-y-2 sm:space-y-3">
+                        {balanceImpacts.map(({ account, delta, projectedBalance }) => (
+                          <div key={account.id}>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              <div
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: account.color }}
+                              />
+                              <span className="min-w-0 flex-1 truncate text-xs sm:text-sm text-storm">
+                                {account.name}
+                              </span>
+                              <div className="flex shrink-0 items-center gap-1 sm:gap-2 text-xs sm:text-sm">
+                                <span className="text-storm/70">
+                                  {formatCurrency(account.currentBalance, account.currencyCode)}
+                                </span>
+                                <span className="text-storm/40">→</span>
+                                <span className={delta >= 0 ? "font-medium text-pine" : "font-medium text-ember"}>
+                                  {formatCurrency(projectedBalance, account.currencyCode)}
+                                </span>
+                                <span
+                                  className={`rounded-full px-1.5 py-0.5 text-[0.65rem] font-medium ${delta >= 0 ? "bg-pine/15 text-pine" : "bg-ember/15 text-ember"}`}
+                                >
+                                  {delta >= 0 ? "+" : ""}
+                                  {formatCurrency(delta, account.currencyCode)}
+                                </span>
+                              </div>
+                            </div>
+                            {projectedBalance < 0 && formState.status === "posted" ? (
+                              <p className="mt-1 pl-5 text-[0.65rem] font-medium text-ember">
+                                Esta cuenta quedaria en negativo al aplicar este movimiento.
+                              </p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      {formState.status !== "posted" ? (
+                        <p className="mt-3 text-[0.65rem] sm:text-xs leading-5 text-storm/55">
+                          Este movimiento aun no esta aplicado. El saldo real solo cambia cuando el estado es
+                          &ldquo;Aplicado&rdquo;.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               </section>
@@ -1551,9 +1541,10 @@ function MovementEditorDialog({
           </form>
 
           {isDeleteConfirmOpen && selectedMovement ? (
-            <DeleteMovementConfirmDialog
+            <DeleteConfirmDialog
+              badge="Eliminar movimiento"
+              description="Esta accion elimina el movimiento de tu historial y no se puede deshacer. Si esta relacionado con una obligacion o suscripcion, conviene revisar primero esas dependencias."
               isDeleting={isSaving}
-              movement={selectedMovement}
               onCancel={() => {
                 if (!isSaving) {
                   setIsDeleteConfirmOpen(false);
@@ -1563,7 +1554,38 @@ function MovementEditorDialog({
                 setIsDeleteConfirmOpen(false);
                 void handleDeleteMovement();
               }}
-            />
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-white/10 text-white shadow-[0_15px_40px_rgba(0,0,0,0.22)]"
+                  style={{ background: `linear-gradient(160deg, ${getMovementVisualPreset(selectedMovement.movementType).color}, rgba(8, 13, 20, 0.72))` }}
+                >
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-lg font-semibold text-ink">{selectedMovement.description}</p>
+                  <p className="mt-1 text-sm text-storm">{formatDateTime(selectedMovement.occurredAt)}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                      {getMovementTypeOption(selectedMovement.movementType).label}
+                    </span>
+                    <span
+                      className="rounded-full border px-3 py-1 text-xs"
+                      style={{
+                        borderColor: `${getMovementStatusColor(selectedMovement.status)}55`,
+                        backgroundColor: `${getMovementStatusColor(selectedMovement.status)}18`,
+                        color: "#f5f7fb",
+                      }}
+                    >
+                      {getMovementStatusOption(selectedMovement.status).label}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
+                      {selectedMovement.category}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </DeleteConfirmDialog>
           ) : null}
         </div>
       </div>
@@ -1572,12 +1594,80 @@ function MovementEditorDialog({
   );
 }
 
+function MovementsLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[300px] rounded-[32px]" />
+      <div className="space-y-3">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div className="shimmer-surface h-[72px] rounded-[22px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadMovementsCSV(movements: MovementRecord[], filename: string) {
+  const headers = [
+    "Fecha",
+    "Tipo",
+    "Estado",
+    "Descripcion",
+    "Categoria",
+    "Contraparte",
+    "Cuenta origen",
+    "Monto origen",
+    "Moneda origen",
+    "Cuenta destino",
+    "Monto destino",
+    "Moneda destino",
+    "Notas",
+  ];
+  const escape = (v: string | number | null | undefined) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return s.includes(",") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  const rows = movements.map((m) => [
+    escape(m.occurredAt),
+    escape(m.movementType),
+    escape(m.status),
+    escape(m.description),
+    escape(m.category?.name ?? ""),
+    escape(m.counterparty?.name ?? ""),
+    escape(m.sourceAccountName ?? ""),
+    escape(m.sourceAmount ?? ""),
+    escape(m.sourceCurrencyCode ?? ""),
+    escape(m.destinationAccountName ?? ""),
+    escape(m.destinationAmount ?? ""),
+    escape(m.destinationCurrencyCode ?? ""),
+    escape(m.notes ?? ""),
+  ]);
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function MovementsPage() {
   const { profile, user } = useAuth();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const snapshot = snapshotQuery.data;
+  const movementColumns: ColumnDef[] = [
+    { key: "tipo", label: "Tipo" },
+    { key: "estado", label: "Estado" },
+    { key: "cuenta_origen", label: "Cuenta origen" },
+    { key: "fecha", label: "Fecha" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-movements", movementColumns);
   const [viewMode, setViewMode] = useViewMode("movements");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -1594,6 +1684,8 @@ export function MovementsPage() {
     });
   }
   const [selectedMovementId, setSelectedMovementId] = useState<number | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
   const [formState, setFormState] = useState<MovementFormState>(() => createDefaultMovementFormState());
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -1637,6 +1729,10 @@ export function MovementsPage() {
     const normalizedSearch = searchValue.trim().toLowerCase();
 
     return snapshot.movements.filter((movement) => {
+      if (hiddenIds.has(movement.id)) {
+        return false;
+      }
+
       const matchesSearch =
         !normalizedSearch ||
         movement.description.toLowerCase().includes(normalizedSearch) ||
@@ -1650,7 +1746,10 @@ export function MovementsPage() {
 
       return matchesSearch && matchesStatus && matchesType;
     });
-  }, [searchValue, snapshot, statusFilter, typeFilter]);
+  }, [hiddenIds, searchValue, snapshot, statusFilter, typeFilter]);
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredMovements);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const statusFilterPickerOptions = [
     {
       value: "all",
@@ -1700,10 +1799,7 @@ export function MovementsPage() {
           eyebrow="movimientos"
           title="Cargando movimientos"
         />
-        <DataState
-          description="Buscando tu espacio activo y cargando tus movimientos."
-          title="Sincronizando movimientos"
-        />
+        <MovementsLoadingSkeleton />
       </div>
     );
   }
@@ -1749,10 +1845,7 @@ export function MovementsPage() {
           eyebrow="movimientos"
           title="Cargando movimientos"
         />
-        <DataState
-          description="Cargando montos, cuentas y fechas de tus movimientos."
-          title="Leyendo movimientos"
-        />
+        <MovementsLoadingSkeleton />
       </div>
     );
   }
@@ -2087,30 +2180,43 @@ export function MovementsPage() {
     }
   }
 
-  async function handleDeleteMovement() {
-    if (!activeWorkspace || !selectedMovement) {
-      return;
-    }
+  function handleDeleteMovement() {
+    if (!activeWorkspace || !selectedMovement) return;
+    const targetId = selectedMovement.id;
+    setIsEditorOpen(false);
+    setSelectedMovementId(null);
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Movimiento eliminado",
+      onCommit: () =>
+        deleteMovementMutation.mutateAsync({ movementId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
+  }
 
-    setFeedbackMessage("");
-    setErrorMessage("");
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
 
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
     try {
-      await deleteMovementMutation.mutateAsync({
-        movementId: selectedMovement.id,
-        workspaceId: activeWorkspace.id,
-      });
-
-      setFeedbackMessage("Movimiento eliminado correctamente.");
-      setIsEditorOpen(false);
-      setSelectedMovementId(null);
-    } catch (error) {
-      setErrorMessage(
-        getQueryErrorMessage(
-          error,
-          "No pudimos eliminar el movimiento. Si tiene relaciones activas, revisa primero sus dependencias.",
-        ),
-      );
+      for (const id of Array.from(selectedIds)) {
+        await deleteMovementMutation.mutateAsync({ movementId: id, workspaceId: activeWorkspace!.id });
+      }
+      clearAll();
+    } catch (err) {
+      setErrorMessage(getQueryErrorMessage(err));
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
     }
   }
 
@@ -2121,6 +2227,21 @@ export function MovementsPage() {
           actions={
             <>
               <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <Button
+                onClick={() =>
+                  downloadMovementsCSV(
+                    filteredMovements,
+                    `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
               <Button onClick={openCreateEditor}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nuevo movimiento
@@ -2242,6 +2363,10 @@ export function MovementsPage() {
                 const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
                 return (
                   <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-3.5 transition hover:border-white/16" key={movement.id}>
+                    <SelectionCheckbox
+                      checked={selectedIds.has(movement.id)}
+                      onChange={() => toggleSelect(movement.id)}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-ink">{movement.description}</p>
                       <p className="text-xs text-storm">{movement.category} · {movement.counterparty} · {formatDateTime(movement.occurredAt)}</p>
@@ -2261,12 +2386,20 @@ export function MovementsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10 bg-white/[0.02]">
+                    <th className="w-10 px-4 py-3">
+                      <SelectionCheckbox
+                        ariaLabel="Seleccionar todos"
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={() => (allSelected ? clearAll() : selectAll())}
+                      />
+                    </th>
                     <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Descripcion</th>
-                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
-                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Estado</th>
-                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Cuenta origen</th>
+                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
+                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("estado", "hidden sm:table-cell")}`}>Estado</th>
+                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("cuenta_origen", "hidden md:table-cell")}`}>Cuenta origen</th>
                     <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
-                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Fecha</th>
+                    <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("fecha", "hidden md:table-cell")}`}>Fecha</th>
                     <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
                   </tr>
                 </thead>
@@ -2276,12 +2409,19 @@ export function MovementsPage() {
                     const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
                     return (
                       <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredMovements.length - 1 ? "border-b-0" : ""}`} key={movement.id}>
+                        <td className="w-10 px-4 py-3.5">
+                          <SelectionCheckbox
+                            ariaLabel={`Seleccionar ${movement.description}`}
+                            checked={selectedIds.has(movement.id)}
+                            onChange={() => toggleSelect(movement.id)}
+                          />
+                        </td>
                         <td className="px-5 py-3.5 font-medium text-ink">{movement.description}</td>
-                        <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} /></td>
-                        <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
-                        <td className="px-5 py-3.5 text-storm hidden md:table-cell">{movement.sourceAccountName ?? "-"}</td>
+                        <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} /></td>
+                        <td className={`px-5 py-3.5 ${cv("estado", "hidden sm:table-cell")}`}><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
+                        <td className={`px-5 py-3.5 text-storm ${cv("cuenta_origen", "hidden md:table-cell")}`}>{movement.sourceAccountName ?? "-"}</td>
                         <td className="px-5 py-3.5 text-right font-medium text-ink">{movement.sourceAmount !== null ? formatCurrency(movement.sourceAmount, sourceCurrencyCode) : "-"}</td>
-                        <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatDateTime(movement.occurredAt)}</td>
+                        <td className={`px-5 py-3.5 text-right text-storm ${cv("fecha", "hidden md:table-cell")}`}>{formatDateTime(movement.occurredAt)}</td>
                         <td className="px-5 py-3.5 text-right">
                           <Button className="py-1.5 text-xs" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
                         </td>
@@ -2298,11 +2438,20 @@ export function MovementsPage() {
                 const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
                 const destinationCurrencyCode =
                   movement.destinationCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
+                const isSelected = selectedIds.has(movement.id);
+                const longPressHandlers = createLongPressHandlers(() => toggleSelect(movement.id));
 
                 return (
                   <article
-                    className="glass-panel-soft rounded-[28px] p-5 transition duration-200 hover:border-white/16"
+                    className={`glass-panel-soft relative rounded-[28px] p-5 transition duration-200 hover:border-white/16 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
                     key={movement.id}
+                    onClick={(e) => {
+                      if (wasRecentLongPress()) return;
+                      if (selectedCount === 0) return;
+                      if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                      toggleSelect(movement.id);
+                    }}
+                    {...longPressHandlers}
                   >
                     <div className="flex flex-col gap-5">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -2523,6 +2672,35 @@ export function MovementsPage() {
           onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
           onKeepEditing={() => setShowUnsavedDialog(false)}
         />
+      ) : null}
+      <BulkActionBar
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadMovementsCSV(selectedItems, `movimientos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredMovements.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink">
+              Eliminar {selectedCount} movimiento{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Esta accion eliminara permanentemente los elementos seleccionados y no se puede deshacer.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   );

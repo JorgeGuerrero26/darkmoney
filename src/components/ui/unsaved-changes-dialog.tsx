@@ -1,7 +1,8 @@
 import { AlertTriangle } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { Button } from "./button";
+import { useFocusTrap } from "./use-focus-trap";
 
 type UnsavedChangesDialogProps = {
   onDiscard: () => void;
@@ -9,6 +10,9 @@ type UnsavedChangesDialogProps = {
 };
 
 export function UnsavedChangesDialog({ onDiscard, onKeepEditing }: UnsavedChangesDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -32,7 +36,7 @@ export function UnsavedChangesDialog({ onDiscard, onKeepEditing }: UnsavedChange
         onClick={onKeepEditing}
       />
 
-      <div className="relative w-full max-w-sm rounded-[28px] border border-white/10 bg-shell/95 p-6 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+      <div ref={dialogRef} className="relative w-full max-w-sm rounded-[28px] border border-white/10 bg-shell/95 p-6 shadow-[0_32px_80px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-[#f27a86]/24 bg-[#f27a86]/12">
             <AlertTriangle className="h-6 w-6 text-[#ffb4bc]" />

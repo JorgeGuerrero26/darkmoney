@@ -1,8 +1,8 @@
 import {
-  AlertTriangle,
   CalendarClock,
   Check,
   ChevronDown,
+  Download,
   LoaderCircle,
   PencilLine,
   Plus,
@@ -22,7 +22,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
@@ -30,6 +32,8 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -470,85 +474,6 @@ function ToggleRow({
   );
 }
 
-function DeleteDialog({
-  isDeleting,
-  onCancel,
-  onConfirm,
-  subscription,
-}: {
-  isDeleting: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-  subscription: SubscriptionSummary;
-}) {
-  return (
-    <div className="fixed inset-0 z-[90] isolate flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-md before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/66 before:backdrop-blur-2xl before:content-[''] sm:p-6">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/18 bg-[#07101a]/96 p-6 shadow-[0_35px_120px_rgba(0,0,0,0.58)] sm:p-7">
-        <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/18 blur-3xl" />
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4566d6]/12 blur-3xl" />
-        <div className="relative">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-[#f27a86]/20 bg-[#f27a86]/10 text-[#ffb4bc]">
-              <AlertTriangle className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center rounded-full border border-[#f27a86]/18 bg-[#f27a86]/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
-                Eliminar suscripcion
-              </div>
-              <h3 className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">
-                Confirma antes de borrarla
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-storm">
-                Esto elimina la suscripcion y su calendario asociado. Si ya tiene movimientos
-                vinculados, primero tendras que resolverlos.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-7 rounded-[28px] border border-white/10 bg-black/20 p-4 sm:p-5">
-            <p className="truncate text-lg font-semibold text-ink">{subscription.name}</p>
-            <p className="mt-1 text-sm text-storm">{subscription.vendor}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                {formatCurrency(subscription.amount, subscription.currencyCode)}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                {subscription.frequencyLabel}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                {formatDate(subscription.nextDueDate)}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button disabled={isDeleting} onClick={onCancel} type="button" variant="ghost">
-              Cancelar
-            </Button>
-            <Button
-              className="bg-[#f27a86] text-white hover:bg-[#ff8e98] focus-visible:outline-[#f27a86]"
-              disabled={isDeleting}
-              onClick={onConfirm}
-              type="button"
-            >
-              {isDeleting ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar definitivamente
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function EditorDialog({
   accounts,
@@ -904,6 +829,58 @@ function EditorDialog({
   );
 }
 
+function SubscriptionsLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[200px] rounded-[32px]" />
+      <div className="grid gap-4 xl:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div className="shimmer-surface h-[260px] rounded-[30px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCSV(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadSubscriptionsCSV(subscriptions: SubscriptionSummary[], filename: string) {
+  const headers = ["Nombre", "Proveedor", "Estado", "Monto", "Moneda", "Frecuencia", "Categoria", "Cuenta", "Inicio", "Proximo vencimiento", "Fin", "Auto movimiento", "Descripcion", "Notas"];
+  const rows = subscriptions.map((s) => [
+    escapeCSV(s.name),
+    escapeCSV(s.vendor),
+    escapeCSV(s.status),
+    escapeCSV(s.amount),
+    escapeCSV(s.currencyCode),
+    escapeCSV(s.frequencyLabel),
+    escapeCSV(s.categoryName ?? ""),
+    escapeCSV(s.accountName ?? ""),
+    escapeCSV(s.startDate),
+    escapeCSV(s.nextDueDate),
+    escapeCSV(s.endDate ?? ""),
+    escapeCSV(s.autoCreateMovement ? "Si" : "No"),
+    escapeCSV(s.description ?? ""),
+    escapeCSV(s.notes ?? ""),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+}
+
 export function SubscriptionsPage() {
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -916,6 +893,12 @@ export function SubscriptionsPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const subscriptionColumns: ColumnDef[] = [
+    { key: "proveedor", label: "Proveedor" },
+    { key: "frecuencia", label: "Frecuencia" },
+    { key: "proximo_cobro", label: "Próximo cobro" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-subscriptions", subscriptionColumns);
   const [viewMode, setViewMode] = useViewMode("subscriptions");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -933,6 +916,11 @@ export function SubscriptionsPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [frequencyFilter, setFrequencyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [formState, setFormState] = useState<SubscriptionFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -950,6 +938,28 @@ export function SubscriptionsPage() {
     deleteTargetId === null
       ? null
       : subscriptions.find((subscription) => subscription.id === deleteTargetId) ?? null;
+
+  const hasActiveFilters = searchQuery.trim() !== "" || frequencyFilter !== "all" || statusFilter !== "all";
+  const filteredSubscriptions = useMemo(() => {
+    let result = subscriptions.filter((s) => !hiddenIds.has(s.id));
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          (s.vendor ?? "").toLowerCase().includes(q) ||
+          (s.categoryName ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (frequencyFilter !== "all") {
+      result = result.filter((s) => s.frequency === frequencyFilter);
+    }
+    if (statusFilter !== "all") {
+      result = result.filter((s) => s.status === statusFilter);
+    }
+    return result;
+  }, [subscriptions, hiddenIds, searchQuery, frequencyFilter, statusFilter]);
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredSubscriptions);
 
   useEffect(() => {
     if (!isEditorOpen) {
@@ -1003,6 +1013,8 @@ export function SubscriptionsPage() {
 
   const isSavingEditor = createMutation.isPending || updateMutation.isPending;
   const isDeleting = deleteMutation.isPending;
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const dueSoonCount = subscriptions.filter((subscription) => {
     const differenceInMs =
       new Date(subscription.nextDueDate).getTime() - new Date().setHours(0, 0, 0, 0);
@@ -1220,28 +1232,42 @@ export function SubscriptionsPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!activeWorkspace || !deleteTarget) {
-      return;
-    }
+  function handleDelete() {
+    if (!activeWorkspace || !deleteTarget) return;
+    const targetId = deleteTarget.id;
+    setDeleteTargetId(null);
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Suscripción eliminada",
+      onCommit: () =>
+        deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
+  }
 
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
+
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
     try {
-      await deleteMutation.mutateAsync({
-        subscriptionId: deleteTarget.id,
-        workspaceId: activeWorkspace.id,
-      });
-      setFeedback({
-        tone: "success",
-        title: "Suscripcion eliminada",
-        description: "La lista y el radar de vencimientos se actualizaron correctamente.",
-      });
-      setDeleteTargetId(null);
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        title: "No pudimos eliminar la suscripcion",
-        description: getQueryErrorMessage(error, "Revisa si tiene movimientos vinculados."),
-      });
+      for (const id of Array.from(selectedIds)) {
+        await deleteMutation.mutateAsync({ subscriptionId: id, workspaceId: activeWorkspace!.id });
+      }
+      clearAll();
+    } catch (err) {
+      setFeedback({ tone: "error", title: "Error", description: getQueryErrorMessage(err) });
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
     }
   }
 
@@ -1249,7 +1275,7 @@ export function SubscriptionsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos preparando los pagos recurrentes del workspace activo." eyebrow="suscripciones" title="Cargando suscripciones" />
-        <DataState description="Buscando tu espacio actual y sus pagos recurrentes." title="Sincronizando suscripciones" />
+        <SubscriptionsLoadingSkeleton />
       </div>
     );
   }
@@ -1276,7 +1302,7 @@ export function SubscriptionsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos cargando tus pagos recurrentes y sus proximos vencimientos." eyebrow="suscripciones" title="Cargando suscripciones" />
-        <DataState description="Consultando proveedor, monto, frecuencia y siguiente cobro." title="Preparando el modulo" />
+        <SubscriptionsLoadingSkeleton />
       </div>
     );
   }
@@ -1296,6 +1322,21 @@ export function SubscriptionsPage() {
         actions={
           <>
             <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            {viewMode === "table" ? (
+              <ColumnPicker columns={subscriptionColumns} visible={colVis} onToggle={toggleCol} />
+            ) : null}
+            <Button
+              onClick={() =>
+                downloadSubscriptionsCSV(
+                  filteredSubscriptions,
+                  `suscripciones-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
             <Button onClick={openCreateEditor}>
               <Plus className="mr-2 h-4 w-4" />
               Nueva suscripcion
@@ -1318,14 +1359,69 @@ export function SubscriptionsPage() {
         </div>
       </SurfaceCard>
 
+      {subscriptions.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+            <input
+              className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nombre, proveedor o categoria..."
+              type="text"
+              value={searchQuery}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["all", "active", "paused", "cancelled"] as const).map((s) => (
+              <button
+                className={`rounded-full border px-3 py-2 text-xs font-medium transition ${statusFilter === s ? "border-pine/30 bg-pine/15 text-pine" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                type="button"
+              >
+                {s === "all" ? "Todos" : s === "active" ? "Activa" : s === "paused" ? "Pausada" : "Cancelada"}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {([{v:"all",l:"Frec."},{v:"daily",l:"Diaria"},{v:"weekly",l:"Semanal"},{v:"monthly",l:"Mensual"},{v:"quarterly",l:"Trimestral"},{v:"yearly",l:"Anual"},{v:"custom",l:"Custom"}] as const).map(({v, l}) => (
+              <button
+                className={`rounded-full border px-3 py-2 text-xs font-medium transition ${frequencyFilter === v ? "border-[#4566d6]/30 bg-[#4566d6]/15 text-[#8a9fff]" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
+                key={v}
+                onClick={() => setFrequencyFilter(v)}
+                type="button"
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+          {hasActiveFilters ? (
+            <button
+              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+              onClick={() => { setSearchQuery(""); setFrequencyFilter("all"); setStatusFilter("all"); }}
+              type="button"
+            >
+              <X className="inline-block mr-1 h-3 w-3" />
+              Limpiar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {viewMode === "list" ? (
         <div className="space-y-3">
           {subscriptions.length === 0 ? (
             <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
-          ) : subscriptions.map((subscription) => {
+          ) : filteredSubscriptions.length === 0 ? (
+            <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
+          ) : filteredSubscriptions.map((subscription) => {
             const statusOption = getStatusOption(subscription.status);
             return (
               <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={subscription.id}>
+                <SelectionCheckbox
+                  checked={selectedIds.has(subscription.id)}
+                  onChange={() => toggleSelect(subscription.id)}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink">{subscription.name}</p>
                   <p className="text-xs text-storm">{subscription.vendor}{subscription.categoryName ? ` · ${subscription.categoryName}` : ""} · {subscription.frequencyLabel}</p>
@@ -1345,25 +1441,44 @@ export function SubscriptionsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-white/[0.02]">
+                <th className="w-10 px-4 py-3.5">
+                  <SelectionCheckbox
+                    ariaLabel="Seleccionar todas"
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onChange={() => (allSelected ? clearAll() : selectAll())}
+                  />
+                </th>
                 <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Nombre</th>
-                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Proveedor</th>
-                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Frecuencia</th>
+                <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("proveedor", "hidden sm:table-cell")}`}>Proveedor</th>
+                <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("frecuencia", "hidden md:table-cell")}`}>Frecuencia</th>
                 <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
-                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Proximo cobro</th>
+                <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("proximo_cobro", "hidden md:table-cell")}`}>Próximo cobro</th>
                 <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                 <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {subscriptions.map((subscription, index) => {
+              {subscriptions.length === 0 ? (
+                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={8}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" /></td></tr>
+              ) : filteredSubscriptions.length === 0 ? (
+                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={8}><DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" /></td></tr>
+              ) : filteredSubscriptions.map((subscription, index) => {
                 const statusOption = getStatusOption(subscription.status);
                 return (
-                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === subscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
+                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredSubscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
+                    <td className="w-10 px-4 py-4">
+                      <SelectionCheckbox
+                        ariaLabel={`Seleccionar ${subscription.name}`}
+                        checked={selectedIds.has(subscription.id)}
+                        onChange={() => toggleSelect(subscription.id)}
+                      />
+                    </td>
                     <td className="px-5 py-3.5 font-medium text-ink">{subscription.name}</td>
-                    <td className="px-5 py-3.5 text-storm hidden sm:table-cell">{subscription.vendor}</td>
-                    <td className="px-5 py-3.5 text-storm hidden md:table-cell">{subscription.frequencyLabel}</td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("proveedor", "hidden sm:table-cell")}`}>{subscription.vendor}</td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("frecuencia", "hidden md:table-cell")}`}>{subscription.frequencyLabel}</td>
                     <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</td>
-                    <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatDate(subscription.nextDueDate)}</td>
+                    <td className={`px-5 py-3.5 text-right text-storm ${cv("proximo_cobro", "hidden md:table-cell")}`}>{formatDate(subscription.nextDueDate)}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} /></td>
                     <td className="px-5 py-3.5 text-right">
                       <Button className="py-1.5 text-xs" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
@@ -1376,15 +1491,29 @@ export function SubscriptionsPage() {
         </div>
       ) : (
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceCard action={<StatusBadge status={`${subscriptions.length} activas o registradas`} tone="success" />} description="Cada tarjeta representa una suscripcion real con sus datos principales y sus acciones." title="Pagos recurrentes">
+        <SurfaceCard action={<StatusBadge status={`${filteredSubscriptions.length} de ${subscriptions.length} registradas`} tone="success" />} description="Cada tarjeta representa una suscripcion real con sus datos principales y sus acciones." title="Pagos recurrentes">
           {subscriptions.length === 0 ? (
             <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
+          ) : filteredSubscriptions.length === 0 ? (
+            <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
           ) : (
             <div className="space-y-4">
-              {subscriptions.map((subscription) => {
+              {filteredSubscriptions.map((subscription) => {
                 const statusOption = getStatusOption(subscription.status);
+                const isSelected = selectedIds.has(subscription.id);
+                const longPressHandlers = createLongPressHandlers(() => toggleSelect(subscription.id));
                 return (
-                  <article className="glass-panel-soft rounded-[30px] p-5 transition duration-200 hover:border-white/16" key={subscription.id}>
+                  <article
+                    className={`relative glass-panel-soft rounded-[30px] p-5 transition duration-200 hover:border-white/16 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
+                    key={subscription.id}
+                    onClick={(e) => {
+                      if (wasRecentLongPress()) return;
+                      if (selectedCount === 0) return;
+                      if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                      toggleSelect(subscription.id);
+                    }}
+                    {...longPressHandlers}
+                  >
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap gap-2">
@@ -1475,7 +1604,9 @@ export function SubscriptionsPage() {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteDialog
+        <DeleteConfirmDialog
+          badge="Eliminar suscripción"
+          description="Esto elimina la suscripcion y su calendario asociado. Si ya tiene movimientos vinculados, primero tendras que resolverlos."
           isDeleting={isDeleting}
           onCancel={() => {
             if (!isDeleting) {
@@ -1485,8 +1616,53 @@ export function SubscriptionsPage() {
           onConfirm={() => {
             void handleDelete();
           }}
-          subscription={deleteTarget}
-        />
+        >
+          <div>
+            <p className="truncate text-lg font-semibold text-ink">{deleteTarget.name}</p>
+            <p className="mt-1 text-sm text-storm">{deleteTarget.vendor}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
+                {formatCurrency(deleteTarget.amount, deleteTarget.currencyCode)}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
+                {deleteTarget.frequencyLabel}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
+                {formatDate(deleteTarget.nextDueDate)}
+              </span>
+            </div>
+          </div>
+        </DeleteConfirmDialog>
+      ) : null}
+
+      <BulkActionBar
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadSubscriptionsCSV(selectedItems, `suscripciones-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredSubscriptions.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="sub-bulk-title">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 id="sub-bulk-title" className="font-display text-xl font-semibold text-ink">
+              Eliminar {selectedCount} suscripcion{selectedCount !== 1 ? "es" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Esta accion eliminara permanentemente las suscripciones seleccionadas. No se puede deshacer.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

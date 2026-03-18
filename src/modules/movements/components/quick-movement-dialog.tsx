@@ -1373,6 +1373,84 @@ export function QuickMovementDialog({
                             </div>
                           ) : null}
 
+                          {isTransfer ? (
+                            <>
+                              {selectedSourceAccount ? (
+                                <div className={`rounded-[16px] sm:rounded-[24px] border bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur ${computedAmount > 0 && selectedSourceAccount.currentBalance - computedAmount < 0 ? "border-red-400/30 bg-red-400/5" : "border-white/10"}`}>
+                                  <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                                    Saldo proyectado · {selectedSourceAccount.name}
+                                  </p>
+                                  <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
+                                    {formatCurrency(selectedSourceAccount.currentBalance, selectedSourceAccount.currencyCode)}
+                                  </p>
+                                  <p className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${computedAmount > 0 ? "text-red-400" : "text-storm"}`}>
+                                    {formatCurrency(
+                                      computedAmount > 0
+                                        ? selectedSourceAccount.currentBalance - computedAmount
+                                        : selectedSourceAccount.currentBalance,
+                                      selectedSourceAccount.currencyCode,
+                                    )}
+                                  </p>
+                                  {computedAmount > 0 && selectedSourceAccount.currentBalance - computedAmount < 0 ? (
+                                    <p className="mt-2 text-[0.65rem] font-medium text-red-400/90">
+                                      Saldo insuficiente. Esta cuenta quedaria en negativo.
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                              {selectedDestinationAccount ? (
+                                <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
+                                  <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                                    Saldo proyectado · {selectedDestinationAccount.name}
+                                  </p>
+                                  <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
+                                    {formatCurrency(selectedDestinationAccount.currentBalance, selectedDestinationAccount.currencyCode)}
+                                  </p>
+                                  <p className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${computedDestinationAmount > 0 ? "text-emerald-400" : "text-storm"}`}>
+                                    {formatCurrency(
+                                      computedDestinationAmount > 0
+                                        ? selectedDestinationAccount.currentBalance + computedDestinationAmount
+                                        : selectedDestinationAccount.currentBalance,
+                                      selectedDestinationAccount.currencyCode,
+                                    )}
+                                  </p>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : selectedAccount ? (
+                            <div className={`rounded-[16px] sm:rounded-[24px] border bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur ${computedAmount > 0 && kind === "expense" && selectedAccount.currentBalance - computedAmount < 0 ? "border-red-400/30 bg-red-400/5" : "border-white/10"}`}>
+                              <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                                Saldo proyectado · {selectedAccount.name}
+                              </p>
+                              <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
+                                {formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}
+                              </p>
+                              <p
+                                className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${
+                                  computedAmount > 0
+                                    ? kind === "expense"
+                                      ? "text-red-400"
+                                      : "text-emerald-400"
+                                    : "text-storm"
+                                }`}
+                              >
+                                {formatCurrency(
+                                  computedAmount > 0
+                                    ? kind === "expense"
+                                      ? selectedAccount.currentBalance - computedAmount
+                                      : selectedAccount.currentBalance + computedAmount
+                                    : selectedAccount.currentBalance,
+                                  selectedAccount.currencyCode,
+                                )}
+                              </p>
+                              {computedAmount > 0 && kind === "expense" && selectedAccount.currentBalance - computedAmount < 0 ? (
+                                <p className="mt-2 text-[0.65rem] font-medium text-red-400/90">
+                                  Saldo insuficiente. Esta cuenta quedaria en negativo.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+
                           <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
                             <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                               Lectura rapida

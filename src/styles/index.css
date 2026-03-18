@@ -132,7 +132,7 @@
       rgba(255, 255, 255, 0.04) 70%,
       transparent 100%
     );
-    animation: shimmer-slide 1.8s ease-in-out infinite;
+    animation: shimmer-slide 1.8s linear infinite;
   }
 }
 
@@ -259,4 +259,30 @@
 .field-error-ring > *:first-child {
   border-color: rgba(239, 68, 68, 0.5) !important;
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.09) !important;
+}
+
+/* Accessibility: focus-visible for interactive elements */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(107, 228, 197, 0.5);
+  outline-offset: 2px;
+}
+
+/* Skip to content link */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: #0d1520;
+  color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  transition: top 0.1s;
+}
+.skip-to-content:focus {
+  top: 1rem;
 }

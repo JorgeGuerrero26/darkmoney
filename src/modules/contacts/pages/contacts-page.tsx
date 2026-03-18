@@ -2,6 +2,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Building2,
+  Download,
   Fingerprint,
   Landmark,
   LoaderCircle,
@@ -26,6 +27,8 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
@@ -427,8 +430,14 @@ function DeleteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
   return (
-    <div className="fixed inset-0 z-[90] isolate flex items-center justify-center bg-[#01050b]/84 p-4 backdrop-blur-lg before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#01050b]/70 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div role="dialog" aria-modal="true" aria-labelledby="contact-delete-title" className="fixed inset-0 z-[90] isolate flex items-center justify-center bg-[#01050b]/84 p-4 backdrop-blur-lg before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#01050b]/70 before:backdrop-blur-2xl before:content-[''] sm:p-6">
       <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/22 bg-[linear-gradient(160deg,rgba(11,17,26,0.995),rgba(8,12,19,0.985))] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.68)] sm:p-7">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(242,122,134,0.12),transparent_28%),radial-gradient(circle_at_88%_14%,rgba(69,102,214,0.10),transparent_22%)]" />
         <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/16 blur-3xl" />
@@ -442,7 +451,7 @@ function DeleteDialog({
               <div className="inline-flex items-center rounded-full border border-[#f27a86]/22 bg-[#34161d]/82 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
                 Eliminar contacto
               </div>
-              <h3 className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">Confirma antes de borrarlo</h3>
+              <h3 id="contact-delete-title" className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">Confirma antes de borrarlo</h3>
               <p className="mt-3 text-sm leading-7 text-storm">
                 Si este contacto ya se usa en movimientos, creditos, deudas o suscripciones, lo mas sano suele ser archivarlo.
               </p>
@@ -461,7 +470,7 @@ function DeleteDialog({
           </div>
           <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button disabled={isDeleting} onClick={onCancel} type="button" variant="ghost">Cancelar</Button>
-            <Button className="bg-[#f27a86] text-white hover:bg-[#ff8e98] focus-visible:outline-[#f27a86]" disabled={isDeleting} onClick={onConfirm} type="button">
+            <Button className="!bg-[#f27a86] !text-white hover:!bg-[#ff8e98] focus-visible:outline-[#f27a86]" disabled={isDeleting} onClick={onConfirm} type="button">
               {isDeleting ? (
                 <>
                   <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -481,6 +490,56 @@ function DeleteDialog({
   );
 }
 
+function ContactsLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[200px] rounded-[32px]" />
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div className="shimmer-surface h-[72px] rounded-[22px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCSV(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadContactsCSV(contacts: CounterpartyOverview[], filename: string) {
+  const headers = ["Nombre", "Tipo", "Roles", "Telefono", "Email", "Documento", "Por cobrar", "Por pagar", "Neto pendiente", "Movimientos", "Archivado", "Notas"];
+  const rows = contacts.map((c) => [
+    escapeCSV(c.name),
+    escapeCSV(c.type),
+    escapeCSV(c.roles.join("; ")),
+    escapeCSV(c.phone ?? ""),
+    escapeCSV(c.email ?? ""),
+    escapeCSV(c.documentNumber ?? ""),
+    escapeCSV(c.receivablePendingTotal),
+    escapeCSV(c.payablePendingTotal),
+    escapeCSV(c.netPendingAmount),
+    escapeCSV(c.movementCount),
+    escapeCSV(c.isArchived ? "Si" : "No"),
+    escapeCSV(c.notes ?? ""),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+}
+
 export function ContactsPage() {
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -494,6 +553,12 @@ export function ContactsPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const contactColumns: ColumnDef[] = [
+    { key: "tipo", label: "Tipo" },
+    { key: "por_cobrar", label: "Por cobrar" },
+    { key: "por_pagar", label: "Por pagar" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-contacts", contactColumns);
   const [viewMode, setViewMode] = useViewMode("contacts");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -578,6 +643,30 @@ export function ContactsPage() {
       );
     });
   }, [contactsWithExposure, roleFilter, search, showArchived]);
+
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredContacts);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
+
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
+    try {
+      for (const id of Array.from(selectedIds)) {
+        await archiveMutation.mutateAsync({ counterpartyId: id, workspaceId: activeWorkspace!.id, userId: user!.id, isArchived: true });
+      }
+      clearAll();
+    } catch (err) {
+      setFeedback({ tone: "error", title: "Error al archivar", description: getQueryErrorMessage(err) });
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  }
 
   const totalActiveContacts = contacts.filter((contact) => !contact.isArchived).length;
   const totalArchivedContacts = contacts.filter((contact) => contact.isArchived).length;
@@ -705,7 +794,7 @@ export function ContactsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos preparando los contactos del workspace activo." eyebrow="contactos" title="Cargando contactos" />
-        <DataState description="Buscando tu espacio actual y sus relaciones principales." title="Sincronizando contactos" />
+        <ContactsLoadingSkeleton />
       </div>
     );
   }
@@ -732,7 +821,7 @@ export function ContactsPage() {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos cargando las relaciones clave del workspace y su actividad reciente." eyebrow="contactos" title="Cargando contactos" />
-        <DataState description="Consultando roles, exposicion y ultima actividad." title="Preparando el modulo" />
+        <ContactsLoadingSkeleton />
       </div>
     );
   }
@@ -758,7 +847,7 @@ export function ContactsPage() {
   return (
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
-        actions={<><ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} /><Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button></>}
+        actions={<><ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />{viewMode === "table" ? <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} /> : null}<Button onClick={() => downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)} variant="ghost"><Download className="mr-2 h-4 w-4" />Exportar CSV</Button><Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button></>}
         description="Gestiona clientes, proveedores, bancos y relaciones clave del workspace para entender mejor quien te debe, a quien le debes y con quien se mueve tu dinero."
         eyebrow="contactos"
         title="Contactos"
@@ -788,6 +877,7 @@ export function ContactsPage() {
         </div>
       </SurfaceCard>
 
+      {contacts.length > 0 ? (
       <SurfaceCard description="Filtra por nombre, rol o estado para encontrar rapido a cada contacto." title="Explorar contactos">
         <div className="grid gap-4 lg:grid-cols-[1.5fr_0.9fr_0.6fr]">
           <Input onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, email, rol o documento..." type="text" value={search} />
@@ -800,9 +890,14 @@ export function ContactsPage() {
           </Button>
         </div>
       </SurfaceCard>
+      ) : null}
 
       {filteredContacts.length === 0 ? (
-        <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer contacto</Button>} description="Aun no tienes contactos que coincidan con ese filtro dentro del workspace." title="Sin resultados para mostrar" />
+        <DataState
+          action={contacts.length === 0 ? <Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer contacto</Button> : undefined}
+          description={contacts.length === 0 ? "Todavia no hay contactos registrados en este workspace." : "Prueba cambiando el texto de busqueda o los filtros."}
+          title={contacts.length === 0 ? "Sin contactos todavia" : "Sin resultados"}
+        />
       ) : (
         viewMode === "list" ? (
           <div className="space-y-3">
@@ -811,6 +906,7 @@ export function ContactsPage() {
               const TypeIcon = typeDefinition.icon;
               return (
                 <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={contact.id}>
+                  <SelectionCheckbox ariaLabel={`Seleccionar ${contact.name}`} checked={selectedIds.has(contact.id)} onChange={() => toggleSelect(contact.id)} />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
                     <TypeIcon className="h-4 w-4" />
                   </div>
@@ -833,10 +929,13 @@ export function ContactsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="px-3 py-3 w-10">
+                    <SelectionCheckbox ariaLabel="Seleccionar todos" checked={allSelected} indeterminate={someSelected} onChange={allSelected ? clearAll : selectAll} />
+                  </th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Contacto</th>
-                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Por cobrar</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Por pagar</th>
+                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_cobrar", "hidden md:table-cell")}`}>Por cobrar</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_pagar", "hidden md:table-cell")}`}>Por pagar</th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                   <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
                 </tr>
@@ -847,6 +946,9 @@ export function ContactsPage() {
                   const TypeIcon = typeDefinition.icon;
                   return (
                     <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredContacts.length - 1 ? "border-b-0" : ""}`} key={contact.id}>
+                      <td className="px-3 py-3.5 w-10">
+                        <SelectionCheckbox ariaLabel={`Seleccionar ${contact.name}`} checked={selectedIds.has(contact.id)} onChange={() => toggleSelect(contact.id)} />
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
@@ -855,9 +957,9 @@ export function ContactsPage() {
                           <p className="font-medium text-ink">{contact.name}</p>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={typeDefinition.label} tone="neutral" /></td>
-                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</td>
-                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</td>
+                      <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={typeDefinition.label} tone="neutral" /></td>
+                      <td className={`px-5 py-3.5 text-right text-storm ${cv("por_cobrar", "hidden md:table-cell")}`}>{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</td>
+                      <td className={`px-5 py-3.5 text-right text-storm ${cv("por_pagar", "hidden md:table-cell")}`}>{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</td>
                       <td className="px-5 py-3.5">{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}</td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex justify-end gap-2">
@@ -877,9 +979,22 @@ export function ContactsPage() {
             const typeDefinition = getTypeDefinition(contact.type);
             const TypeIcon = typeDefinition.icon;
             const hasNetPositive = contact.receivablePendingInBase >= contact.payablePendingInBase;
+            const isSelected = selectedIds.has(contact.id);
+            const longPressHandlers = createLongPressHandlers(() => toggleSelect(contact.id));
 
             return (
-              <SurfaceCard action={<div className="flex flex-wrap gap-2"><StatusBadge status={typeDefinition.label} tone="neutral" />{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}</div>} className="glass-panel animate-rise-in rounded-[32px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20" description={contact.roles.length > 0 ? contact.roles.map((role) => getRoleDefinition(role).label).join(" · ") : "Sin roles definidos aun"} key={contact.id} title={contact.name}>
+              <div
+                className={`relative ${isSelected ? "ring-2 ring-pine/30 rounded-[32px]" : ""}`}
+                key={contact.id}
+                onClick={(e) => {
+                  if (wasRecentLongPress()) return;
+                  if (selectedCount === 0) return;
+                  if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                  toggleSelect(contact.id);
+                }}
+                {...longPressHandlers}
+              >
+              <SurfaceCard action={<div className="flex flex-wrap gap-2"><StatusBadge status={typeDefinition.label} tone="neutral" />{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}</div>} className="glass-panel animate-rise-in rounded-[32px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20" description={contact.roles.length > 0 ? contact.roles.map((role) => getRoleDefinition(role).label).join(" · ") : "Sin roles definidos aun"} title={contact.name}>
                 <div className="space-y-5">
                   <div className="flex items-start gap-4">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}><TypeIcon className="h-6 w-6" /></div>
@@ -912,11 +1027,44 @@ export function ContactsPage() {
                   </div>
                 </div>
               </SurfaceCard>
+              </div>
             );
           })}
         </section>
         )
       )}
+
+      <BulkActionBar
+        deleteLabel="Archivar"
+        deletingLabel="Archivando..."
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadContactsCSV(selectedItems, `contactos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredContacts.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div role="dialog" aria-modal="true" aria-labelledby="contact-bulk-title" className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 id="contact-bulk-title" className="font-display text-xl font-semibold text-ink">
+              Archivar {selectedCount} contacto{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Los contactos seleccionados seran archivados y dejaran de aparecer en el flujo principal. Podras reactivarlos despues.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Archivando..." : `Archivar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isEditorOpen ? <ContactEditorDialog clearFieldError={clearFieldError} closeEditor={requestCloseEditor} feedback={feedback} formState={formState} invalidFields={invalidFields} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
 

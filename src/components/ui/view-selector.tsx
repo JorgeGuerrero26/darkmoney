@@ -1,5 +1,6 @@
 import { LayoutGrid, List, Table2 } from "lucide-react";
-import { useEffect, useState } from "react";
+
+import { useUserPreferences } from "../../modules/notifications/user-preferences-context";
 
 export type ViewMode = "grid" | "list" | "table";
 
@@ -9,32 +10,10 @@ const VIEW_MODES: Array<{ value: ViewMode; icon: typeof LayoutGrid; label: strin
   { value: "table", icon: Table2, label: "Tabla" },
 ];
 
-function getStorageKey(module: string) {
-  return `dm_view_${module}`;
-}
-
 export function useViewMode(module: string, defaultMode: ViewMode = "grid") {
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try {
-      const stored = localStorage.getItem(getStorageKey(module));
-      if (stored === "grid" || stored === "list" || stored === "table") {
-        return stored;
-      }
-    } catch {
-      // ignore
-    }
-    return defaultMode;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(getStorageKey(module), viewMode);
-    } catch {
-      // ignore
-    }
-  }, [module, viewMode]);
-
-  return [viewMode, setViewMode] as const;
+  const { viewModes, setViewMode } = useUserPreferences();
+  const mode = (viewModes[module] as ViewMode | undefined) ?? defaultMode;
+  return [mode, (m: ViewMode) => setViewMode(module, m)] as const;
 }
 
 type ViewSelectorProps = {

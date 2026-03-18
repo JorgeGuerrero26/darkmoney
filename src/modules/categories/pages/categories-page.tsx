@@ -4,6 +4,7 @@ import {
   Banknote,
   BriefcaseBusiness,
   CarFront,
+  Download,
   Dumbbell,
   FileText,
   Fuel,
@@ -37,12 +38,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import type { CategoryKind, CategoryOverview } from "../../../types/domain";
@@ -617,87 +622,6 @@ function CategoryEditorDialog({
   );
 }
 
-function DeleteDialog({
-  category,
-  isDeleting,
-  onCancel,
-  onConfirm,
-}: {
-  category: CategoryOverview;
-  isDeleting: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const iconDefinition = getIconDefinition(category.icon);
-  const PreviewIcon = iconDefinition.icon;
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-xl">
-      <div className="w-full max-w-[720px] rounded-[38px] border border-white/12 bg-[#090e16]/96 p-6 shadow-[0_40px_130px_rgba(0,0,0,0.62)] sm:p-7">
-        <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-[#ff9ca6]/18 bg-[#ff9ca6]/10 text-[#ffb4bc]">
-            <Trash2 className="h-6 w-6" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-[#ffb4bc]/30 bg-[#ff9ca6]/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
-                Eliminar categoria
-              </span>
-            </div>
-            <h3 className="mt-4 font-display text-4xl font-semibold text-ink">Confirma antes de borrarla</h3>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-storm">
-              Si esta categoria ya se usa para ordenar movimientos o suscripciones, lo mas sano suele ser
-              desactivarla en lugar de borrarla.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-7 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-          <div className="flex items-start gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-white/10 text-white"
-              style={{ background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}
-            >
-              <PreviewIcon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-semibold text-ink">{category.name}</p>
-              <p className="mt-2 text-sm text-storm">
-                {getKindDefinition(category.kind).label} - {category.movementCount} movimientos -{" "}
-                {category.subscriptionCount} suscripciones
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <StatusBadge
-                  status={category.isActive ? "Activa" : "Inactiva"}
-                  tone={category.isActive ? "success" : "neutral"}
-                />
-                {category.isSystem ? <StatusBadge status="Base" tone="warning" /> : null}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
-          <Button disabled={isDeleting} onClick={onCancel} variant="ghost">
-            Cancelar
-          </Button>
-          <Button
-            className="bg-[#ff8794] text-white hover:brightness-105 focus-visible:outline-[#ff8794]"
-            disabled={isDeleting}
-            onClick={onConfirm}
-          >
-            {isDeleting ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="mr-2 h-4 w-4" />
-            )}
-            Eliminar definitivamente
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function StatCard({
   description,
@@ -717,6 +641,51 @@ function StatCard({
   );
 }
 
+function CategoriesLoadingSkeleton() {
+  return (
+    <>
+      <div className="shimmer-surface h-[200px] rounded-[32px]" />
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div className="shimmer-surface h-[64px] rounded-[22px]" key={i} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCSV(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadCategoriesCSV(categories: CategoryOverview[], filename: string) {
+  const headers = ["Nombre", "Tipo", "Categoria padre", "Activa", "Movimientos", "Suscripciones", "Ultima actividad"];
+  const rows = categories.map((c) => [
+    escapeCSV(c.name),
+    escapeCSV(c.kind),
+    escapeCSV(c.parentName ?? ""),
+    escapeCSV(c.isActive ? "Si" : "No"),
+    escapeCSV(c.movementCount),
+    escapeCSV(c.subscriptionCount),
+    escapeCSV(c.lastActivityAt ?? ""),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+}
+
 export function CategoriesPage() {
   const { user } = useAuth();
   const {
@@ -734,6 +703,11 @@ export function CategoriesPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
+  const categoryColumns: ColumnDef[] = [
+    { key: "tipo", label: "Tipo" },
+    { key: "movimientos", label: "Movimientos" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-categories", categoryColumns);
   const [viewMode, setViewMode] = useViewMode("categories");
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -761,11 +735,19 @@ export function CategoriesPage() {
   const isSavingEditor = createMutation.isPending || updateMutation.isPending;
   const isDeleting = deleteMutation.isPending;
   const isToggling = toggleMutation.isPending;
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
 
   const filteredCategories = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     return categories.filter((category) => {
+      if (hiddenIds.has(category.id)) {
+        return false;
+      }
+
       if (!showInactive && !category.isActive) {
         return false;
       }
@@ -785,7 +767,8 @@ export function CategoriesPage() {
         (category.icon ?? "").toLowerCase().includes(normalizedSearch)
       );
     });
-  }, [categories, kindFilter, search, showInactive]);
+  }, [categories, hiddenIds, kindFilter, search, showInactive]);
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredCategories);
 
   const topCategories = useMemo(
     () =>
@@ -958,28 +941,42 @@ export function CategoriesPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!activeWorkspace || !deleteTarget) {
-      return;
-    }
+  function handleDelete() {
+    if (!activeWorkspace || !deleteTarget) return;
+    const targetId = deleteTarget.id;
+    setDeleteTargetId(null);
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Categoría eliminada",
+      onCommit: () =>
+        deleteMutation.mutateAsync({ categoryId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
+  }
 
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
+
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
     try {
-      await deleteMutation.mutateAsync({
-        categoryId: deleteTarget.id,
-        workspaceId: activeWorkspace.id,
-      });
-      setFeedback({
-        tone: "success",
-        title: "Categoria eliminada",
-        description: "Ya no aparece dentro del workspace activo.",
-      });
-      setDeleteTargetId(null);
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        title: "No pudimos eliminar la categoria",
-        description: getQueryErrorMessage(error, "Desactivarla suele ser la opcion mas segura si ya tiene historial."),
-      });
+      for (const id of Array.from(selectedIds)) {
+        await toggleMutation.mutateAsync({ categoryId: id, workspaceId: activeWorkspace!.id, userId: user!.id, isActive: false });
+      }
+      clearAll();
+    } catch (err) {
+      setFeedback({ tone: "error", title: "Error", description: getQueryErrorMessage(err) });
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
     }
   }
 
@@ -991,10 +988,7 @@ export function CategoriesPage() {
           eyebrow="categorias"
           title="Cargando categorias"
         />
-        <DataState
-          description="Buscando tu espacio actual y sus familias de clasificacion."
-          title="Sincronizando categorias"
-        />
+        <CategoriesLoadingSkeleton />
       </div>
     );
   }
@@ -1040,10 +1034,7 @@ export function CategoriesPage() {
           eyebrow="categorias"
           title="Cargando categorias"
         />
-        <DataState
-          description="Consultando orden, actividad y uso dentro del workspace."
-          title="Preparando el modulo"
-        />
+        <CategoriesLoadingSkeleton />
       </div>
     );
   }
@@ -1071,6 +1062,21 @@ export function CategoriesPage() {
         actions={
           <>
             <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            {viewMode === "table" ? (
+              <ColumnPicker columns={categoryColumns} visible={colVis} onToggle={toggleCol} />
+            ) : null}
+            <Button
+              onClick={() =>
+                downloadCategoriesCSV(
+                  filteredCategories,
+                  `categorias-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
             <Button onClick={openCreateEditor}>
               <Plus className="mr-2 h-4 w-4" />
               Nueva categoria
@@ -1189,6 +1195,7 @@ export function CategoriesPage() {
         </div>
       </SurfaceCard>
 
+      {categories.length > 0 ? (
       <SurfaceCard
         description="Filtra por nombre, tipo o estado para encontrar rapido la categoria que quieres ajustar."
         title="Explorar categorias"
@@ -1227,17 +1234,24 @@ export function CategoriesPage() {
           </Button>
         </div>
       </SurfaceCard>
+      ) : null}
 
       {filteredCategories.length === 0 ? (
         <DataState
           action={
-            <Button onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Crear primera categoria
-            </Button>
+            categories.length === 0 ? (
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Crear primera categoria
+              </Button>
+            ) : undefined
           }
-          description="Aun no tienes categorias que coincidan con ese filtro dentro del workspace."
-          title="Sin resultados para mostrar"
+          description={
+            categories.length === 0
+              ? "Todavia no hay categorias registradas en este workspace."
+              : "Prueba cambiando el texto de busqueda o los filtros."
+          }
+          title={categories.length === 0 ? "Sin categorias todavia" : "Sin resultados"}
         />
       ) : (
         viewMode === "list" ? (
@@ -1248,6 +1262,10 @@ export function CategoriesPage() {
               const CategoryIcon = iconDefinition.icon;
               return (
                 <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={category.id}>
+                  <SelectionCheckbox
+                    checked={selectedIds.has(category.id)}
+                    onChange={() => toggleSelect(category.id)}
+                  />
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}>
                     <CategoryIcon className="h-4 w-4" />
                   </div>
@@ -1268,10 +1286,18 @@ export function CategoriesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="w-10 px-4 py-3.5">
+                    <SelectionCheckbox
+                      ariaLabel="Seleccionar todas"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={() => (allSelected ? clearAll() : selectAll())}
+                    />
+                  </th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Categoria</th>
-                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden sm:table-cell">Tipo</th>
+                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 hidden md:table-cell">Movimientos</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("movimientos", "hidden md:table-cell")}`}>Movimientos</th>
                   <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
                 </tr>
               </thead>
@@ -1282,6 +1308,13 @@ export function CategoriesPage() {
                   const CategoryIcon = iconDefinition.icon;
                   return (
                     <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredCategories.length - 1 ? "border-b-0" : ""}`} key={category.id}>
+                      <td className="w-10 px-4 py-4">
+                        <SelectionCheckbox
+                          ariaLabel={`Seleccionar ${category.name}`}
+                          checked={selectedIds.has(category.id)}
+                          onChange={() => toggleSelect(category.id)}
+                        />
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}>
@@ -1293,9 +1326,9 @@ export function CategoriesPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 hidden sm:table-cell"><StatusBadge status={kindDefinition.label} tone={kindDefinition.tone} /></td>
+                      <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={kindDefinition.label} tone={kindDefinition.tone} /></td>
                       <td className="px-5 py-3.5"><StatusBadge status={category.isActive ? "Activa" : "Inactiva"} tone={category.isActive ? "success" : "neutral"} /></td>
-                      <td className="px-5 py-3.5 text-right text-storm hidden md:table-cell">{category.movementCount}</td>
+                      <td className={`px-5 py-3.5 text-right text-storm ${cv("movimientos", "hidden md:table-cell")}`}>{category.movementCount}</td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex justify-end gap-2">
                           <Button className="py-1.5 text-xs" onClick={() => openEditEditor(category)} variant="ghost">Editar</Button>
@@ -1314,8 +1347,21 @@ export function CategoriesPage() {
             const kindDefinition = getKindDefinition(category.kind);
             const iconDefinition = getIconDefinition(category.icon);
             const CategoryIcon = iconDefinition.icon;
+            const isSelected = selectedIds.has(category.id);
+            const longPressHandlers = createLongPressHandlers(() => toggleSelect(category.id));
 
             return (
+              <div
+                className={`relative ${isSelected ? "ring-2 ring-pine/30 rounded-[32px]" : ""}`}
+                key={category.id}
+                onClick={(e) => {
+                  if (wasRecentLongPress()) return;
+                  if (selectedCount === 0) return;
+                  if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                  toggleSelect(category.id);
+                }}
+                {...longPressHandlers}
+              >
               <SurfaceCard
                 action={
                   <div className="flex flex-wrap gap-2">
@@ -1333,7 +1379,6 @@ export function CategoriesPage() {
                     ? `Depende de ${category.parentName}`
                     : "Categoria principal lista para organizar el workspace"
                 }
-                key={category.id}
                 title={category.name}
               >
                 <div className="space-y-5">
@@ -1414,6 +1459,7 @@ export function CategoriesPage() {
                   </div>
                 </div>
               </SurfaceCard>
+              </div>
             );
           })}
         </section>
@@ -1444,8 +1490,9 @@ export function CategoriesPage() {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteDialog
-          category={deleteTarget}
+        <DeleteConfirmDialog
+          badge="Eliminar categoría"
+          description="Si esta categoria ya se usa para ordenar movimientos o suscripciones, lo mas sano suele ser desactivarla en lugar de borrarla."
           isDeleting={isDeleting}
           onCancel={() => {
             if (!isDeleting) {
@@ -1455,7 +1502,68 @@ export function CategoriesPage() {
           onConfirm={() => {
             void handleDelete();
           }}
-        />
+        >
+          {(() => {
+            const iconDefinition = getIconDefinition(deleteTarget.icon);
+            const PreviewIcon = iconDefinition.icon;
+            return (
+              <div className="flex items-start gap-4">
+                <div
+                  className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-white/10 text-white"
+                  style={{ background: `linear-gradient(160deg, ${deleteTarget.color ?? "#64748B"}, rgba(8,13,20,0.72))` }}
+                >
+                  <PreviewIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-2xl font-semibold text-ink">{deleteTarget.name}</p>
+                  <p className="mt-2 text-sm text-storm">
+                    {getKindDefinition(deleteTarget.kind).label} - {deleteTarget.movementCount} movimientos -{" "}
+                    {deleteTarget.subscriptionCount} suscripciones
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <StatusBadge
+                      status={deleteTarget.isActive ? "Activa" : "Inactiva"}
+                      tone={deleteTarget.isActive ? "success" : "neutral"}
+                    />
+                    {deleteTarget.isSystem ? <StatusBadge status="Base" tone="warning" /> : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DeleteConfirmDialog>
+      ) : null}
+
+      <BulkActionBar
+        deleteLabel="Desactivar"
+        deletingLabel="Desactivando..."
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadCategoriesCSV(selectedItems, `categorias-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredCategories.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="cat-bulk-confirm-title">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink" id="cat-bulk-confirm-title">
+              Desactivar {selectedCount} categoria{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Las categorias seleccionadas seran desactivadas y no apareceran en nuevos registros. Podras reactivarlas despues.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Desactivando..." : `Desactivar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

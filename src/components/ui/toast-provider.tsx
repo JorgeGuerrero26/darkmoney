@@ -228,6 +228,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
                 </div>
 
                 <button
+                  aria-label="Cerrar notificación"
                   className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
                   onClick={() => dismissToast(toast.id)}
                   type="button"

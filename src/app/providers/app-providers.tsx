@@ -3,6 +3,7 @@ import type { PropsWithChildren } from "react";
 import { useState } from "react";
 
 import { ToastProvider } from "../../components/ui/toast-provider";
+import { UndoQueueProvider } from "../../components/ui/undo-queue";
 import { AuthProvider } from "../../modules/auth/auth-context";
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -23,7 +24,9 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <UndoQueueProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </UndoQueueProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

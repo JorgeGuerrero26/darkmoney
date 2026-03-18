@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   CreditCard,
+  Download,
   Landmark,
   LoaderCircle,
   PiggyBank,
@@ -22,13 +23,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
+import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
@@ -1456,6 +1461,7 @@ function AccountEditorDialog({
   );
 }
 
+
 function AccountArchiveDialog({
   account,
   isSaving,
@@ -1469,9 +1475,13 @@ function AccountArchiveDialog({
 }) {
   const nextArchivedValue = !account.isArchived;
   const AccountIcon = getAccountIcon(account.icon, account.type);
-
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-xl">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="acc-archive-title">
       <div className="w-full max-w-[720px] rounded-[38px] border border-white/12 bg-[#090e16]/96 p-6 shadow-[0_40px_130px_rgba(0,0,0,0.62)] sm:p-7">
         <div className="flex items-start gap-4">
           <div
@@ -1495,7 +1505,7 @@ function AccountArchiveDialog({
                 {nextArchivedValue ? "Archivar cuenta" : "Reactivar cuenta"}
               </span>
             </div>
-            <h3 className="mt-4 font-display text-4xl font-semibold text-ink">
+            <h3 className="mt-4 font-display text-4xl font-semibold text-ink" id="acc-archive-title">
               {nextArchivedValue ? "Confirma antes de archivarla" : "Confirma antes de reactivarla"}
             </h3>
             <p className="mt-4 max-w-2xl text-base leading-8 text-storm">
@@ -1561,6 +1571,39 @@ function AccountArchiveDialog({
   );
 }
 
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escape(v: string | number | boolean | null | undefined): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return s.includes(",") || s.includes('"') || s.includes("\n")
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function downloadAccountsCSV(accounts: AccountSummary[], filename: string) {
+  const headers = ["Nombre", "Tipo", "Moneda", "Saldo actual", "Saldo inicial", "En patrimonio neto", "Archivada", "Ultima actividad"];
+  const rows = accounts.map((a) => [
+    escape(a.name),
+    escape(a.type),
+    escape(a.currencyCode),
+    escape(a.currentBalance),
+    escape(a.openingBalance),
+    escape(a.includeInNetWorth ? "Si" : "No"),
+    escape(a.isArchived ? "Si" : "No"),
+    escape(a.lastActivity),
+  ]);
+  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+}
+
 export function AccountsPage() {
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -1582,9 +1625,23 @@ export function AccountsPage() {
   const [editorMode, setEditorMode] = useState<AccountEditorMode>("create");
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const { schedule } = useUndoQueue();
   const [showArchived, setShowArchived] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const accountColumns: ColumnDef[] = [
+    { key: "tipo", label: "Tipo" },
+    { key: "saldo", label: "Saldo actual" },
+    { key: "moneda", label: "Moneda" },
+    { key: "estado", label: "Estado" },
+  ];
+  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-accounts", accountColumns);
   const [viewMode, setViewMode] = useViewMode("accounts");
   const [formState, setFormState] = useState<AccountFormState>(() =>
     createDefaultFormState(profile?.baseCurrencyCode ?? "USD"),
@@ -1611,6 +1668,24 @@ export function AccountsPage() {
   const visibleAccounts = showArchived
     ? snapshot?.accounts ?? []
     : (snapshot?.accounts.filter((account) => !account.isArchived) ?? []);
+  const hasActiveFilters = searchQuery.trim() !== "" || typeFilter !== "all";
+  const filteredAccounts = useMemo(() => {
+    let result = visibleAccounts.filter((a) => !hiddenIds.has(a.id));
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.currencyCode.toLowerCase().includes(q) ||
+          getTypePreset(a.type).label.toLowerCase().includes(q),
+      );
+    }
+    if (typeFilter !== "all") {
+      result = result.filter((a) => a.type === typeFilter);
+    }
+    return result;
+  }, [visibleAccounts, hiddenIds, searchQuery, typeFilter]);
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredAccounts);
   const activeAccounts = snapshot?.accounts.filter((account) => !account.isArchived) ?? [];
   const archivedAccounts = snapshot?.accounts.filter((account) => account.isArchived) ?? [];
   const netWorthAccounts = activeAccounts.filter((account) => account.includeInNetWorth);
@@ -1874,40 +1949,51 @@ export function AccountsPage() {
     setArchiveTargetId(account.id);
   }
 
-  async function handleDeleteAccount() {
-    if (!activeWorkspace || !selectedAccount) {
-      return;
-    }
+  function handleDeleteAccount() {
+    if (!activeWorkspace || !selectedAccount) return;
+    setShowDeleteDialog(true);
+  }
 
-    const confirmed = window.confirm(
-      `Vas a eliminar permanentemente "${selectedAccount.name}". Esta accion no se puede deshacer.`,
-    );
+  async function handleBulkDelete() {
+    if (selectedCount === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }
 
-    if (!confirmed) {
-      return;
-    }
-
-    setFeedbackMessage("");
-    setErrorMessage("");
-
+  async function confirmBulkDelete() {
+    setIsBulkDeleting(true);
     try {
-      await deleteAccountMutation.mutateAsync({
-        accountId: selectedAccount.id,
-        workspaceId: activeWorkspace.id,
-      });
-
-      clearPersistedAccountEditorState();
-      setFeedbackMessage("Cuenta eliminada correctamente.");
-      setIsEditorOpen(false);
-      setSelectedAccountId(null);
-    } catch (error) {
-      setErrorMessage(
-        getQueryErrorMessage(
-          error,
-          "No pudimos eliminar la cuenta. Si tiene movimientos asociados, primero conviene archivarla.",
-        ),
-      );
+      for (const id of Array.from(selectedIds)) {
+        await archiveAccountMutation.mutateAsync({ accountId: id, isArchived: true, userId: user!.id, workspaceId: activeWorkspace!.id });
+      }
+      clearAll();
+    } catch (err) {
+      setErrorMessage(getQueryErrorMessage(err));
+    } finally {
+      setIsBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
     }
+  }
+
+  function handleConfirmDeleteAccount() {
+    if (!activeWorkspace || !selectedAccount) return;
+    const targetId = selectedAccount.id;
+    setShowDeleteDialog(false);
+    setIsEditorOpen(false);
+    setSelectedAccountId(null);
+    clearPersistedAccountEditorState();
+    setHiddenIds((prev) => new Set([...prev, targetId]));
+    schedule({
+      label: "Cuenta eliminada permanentemente",
+      onCommit: () =>
+        deleteAccountMutation.mutateAsync({ accountId: targetId, workspaceId: activeWorkspace.id }),
+      onUndo: () => {
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+      },
+    });
   }
 
   if (workspaceError) {
@@ -1991,6 +2077,21 @@ export function AccountsPage() {
           actions={
             <>
               <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={accountColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <Button
+                onClick={() =>
+                  downloadAccountsCSV(
+                    filteredAccounts,
+                    `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
               <Button
                 onClick={() => setShowArchived((currentValue) => !currentValue)}
                 variant="ghost"
@@ -2028,6 +2129,44 @@ export function AccountsPage() {
             tone="error"
           />
         ) : null}
+
+        {visibleAccounts.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+              <input
+                className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar cuenta..."
+                type="text"
+                value={searchQuery}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {([{v:"all",l:"Todos"},{v:"cash",l:"Efectivo"},{v:"bank",l:"Banco"},{v:"savings",l:"Ahorros"},{v:"credit_card",l:"Tarjeta"},{v:"investment",l:"Inversion"},{v:"loan_wallet",l:"Prestamos"}] as const).map(({v, l}) => (
+                <button
+                  className={`rounded-full border px-3 py-2 text-xs font-medium transition ${typeFilter === v ? "border-pine/30 bg-pine/15 text-pine" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
+                  key={v}
+                  onClick={() => setTypeFilter(v)}
+                  type="button"
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            {hasActiveFilters ? (
+              <button
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                onClick={() => { setSearchQuery(""); setTypeFilter("all"); }}
+                type="button"
+              >
+                <X className="inline-block mr-1 h-3 w-3" />
+                Limpiar
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {visibleAccounts.length === 0 ? (
           <DataState
             action={<Button onClick={openCreateEditor}>Crear primera cuenta</Button>}
@@ -2038,9 +2177,11 @@ export function AccountsPage() {
             }
             title={showArchived ? "No hay cuentas archivadas" : "No hay cuentas reales todavia"}
           />
+        ) : filteredAccounts.length === 0 ? (
+          <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
         ) : viewMode === "list" ? (
           <div className="space-y-3">
-            {visibleAccounts.map((account) => {
+            {filteredAccounts.map((account) => {
               const AccountIcon = getAccountIcon(account.icon, account.type);
               const typeLabel = getTypePreset(account.type).label;
 
@@ -2049,6 +2190,10 @@ export function AccountsPage() {
                   className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16"
                   key={account.id}
                 >
+                  <SelectionCheckbox
+                    checked={selectedIds.has(account.id)}
+                    onChange={() => toggleSelect(account.id)}
+                  />
                   <div
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white"
                     style={{ backgroundColor: account.color }}
@@ -2081,16 +2226,24 @@ export function AccountsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10">
+                  <th className="w-10 px-4 py-3.5">
+                    <SelectionCheckbox
+                      ariaLabel="Seleccionar todas"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={() => (allSelected ? clearAll() : selectAll())}
+                    />
+                  </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Cuenta</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Tipo</th>
-                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Saldo actual</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Moneda</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Estado</th>
+                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("tipo")}`}>Tipo</th>
+                  <th className={`px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("saldo")}`}>Saldo actual</th>
+                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("moneda")}`}>Moneda</th>
+                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("estado")}`}>Estado</th>
                   <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleAccounts.map((account) => {
+                {filteredAccounts.map((account) => {
                   const AccountIcon = getAccountIcon(account.icon, account.type);
                   const typeLabel = getTypePreset(account.type).label;
 
@@ -2099,6 +2252,13 @@ export function AccountsPage() {
                       className="border-b border-white/[0.06] transition last:border-0 hover:bg-white/[0.02]"
                       key={account.id}
                     >
+                      <td className="w-10 px-4 py-4">
+                        <SelectionCheckbox
+                          ariaLabel={`Seleccionar ${account.name}`}
+                          checked={selectedIds.has(account.id)}
+                          onChange={() => toggleSelect(account.id)}
+                        />
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div
@@ -2110,12 +2270,12 @@ export function AccountsPage() {
                           <span className="font-medium text-ink">{account.name}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-storm">{typeLabel}</td>
-                      <td className="px-5 py-4 text-right font-semibold text-ink">
+                      <td className={`px-5 py-4 text-storm ${cv("tipo")}`}>{typeLabel}</td>
+                      <td className={`px-5 py-4 text-right font-semibold text-ink ${cv("saldo")}`}>
                         {formatCurrency(account.currentBalance, account.currencyCode)}
                       </td>
-                      <td className="px-5 py-4 text-storm">{account.currencyCode}</td>
-                      <td className="px-5 py-4">
+                      <td className={`px-5 py-4 text-storm ${cv("moneda")}`}>{account.currencyCode}</td>
+                      <td className={`px-5 py-4 ${cv("estado")}`}>
                         <div className="flex flex-wrap gap-1.5">
                           <StatusBadge
                             status={account.includeInNetWorth ? "incluida" : "fuera de patrimonio"}
@@ -2141,13 +2301,22 @@ export function AccountsPage() {
           </div>
         ) : (
           <section className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-            {visibleAccounts.map((account) => {
+            {filteredAccounts.map((account) => {
               const AccountIcon = getAccountIcon(account.icon, account.type);
+              const isSelected = selectedIds.has(account.id);
+              const longPressHandlers = createLongPressHandlers(() => toggleSelect(account.id));
 
               return (
                 <article
-                  className="glass-panel animate-rise-in rounded-[30px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20"
+                  className={`relative glass-panel animate-rise-in rounded-[30px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
                   key={account.id}
+                  onClick={(e) => {
+                    if (wasRecentLongPress()) return;
+                    if (selectedCount === 0) return;
+                    if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                    toggleSelect(account.id);
+                  }}
+                  {...longPressHandlers}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
@@ -2281,6 +2450,72 @@ export function AccountsPage() {
             void handleConfirmArchiveToggle();
           }}
         />
+      ) : null}
+
+      {showDeleteDialog && selectedAccount ? (
+        <DeleteConfirmDialog
+          badge="Eliminar cuenta"
+          description="Esto elimina la cuenta permanentemente. Si tiene movimientos vinculados, primero tendras que resolverlos."
+          isDeleting={deleteAccountMutation.isPending}
+          onCancel={() => {
+            if (!deleteAccountMutation.isPending) {
+              setShowDeleteDialog(false);
+            }
+          }}
+          onConfirm={() => {
+            void handleConfirmDeleteAccount();
+          }}
+        >
+          {(() => {
+            const AccountIcon = getAccountIcon(selectedAccount.icon, selectedAccount.type);
+            return (
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] text-white" style={{ backgroundColor: selectedAccount.color }}>
+                    <AccountIcon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">{selectedAccount.name}</p>
+                    <p className="text-sm text-storm">{getTypePreset(selectedAccount.type).label} · {selectedAccount.currencyCode}</p>
+                  </div>
+                </div>
+                <p className="mt-4 font-display text-2xl font-semibold text-ink">{formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}</p>
+              </div>
+            );
+          })()}
+        </DeleteConfirmDialog>
+      ) : null}
+
+      <BulkActionBar
+        deleteLabel="Archivar"
+        deletingLabel="Archivando..."
+        isDeleting={isBulkDeleting}
+        onClearAll={clearAll}
+        onDelete={handleBulkDelete}
+        onExport={() => downloadAccountsCSV(selectedItems, `cuentas-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onSelectAll={selectAll}
+        selectedCount={selectedCount}
+        totalCount={filteredAccounts.length}
+      />
+      {showBulkDeleteConfirm ? (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="acc-bulk-title">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink" id="acc-bulk-title">
+              Archivar {selectedCount} cuenta{selectedCount !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Las cuentas seleccionadas seran archivadas y dejaran de aparecer en el flujo principal. Podras reactivarlas despues.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Archivando..." : `Archivar ${selectedCount}`}
+              </Button>
+              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   );

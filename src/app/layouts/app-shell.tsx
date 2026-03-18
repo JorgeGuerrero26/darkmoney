@@ -35,6 +35,8 @@ import {
   type QuickMovementKind,
 } from "../../modules/movements/components/quick-movement-dialog";
 import { useNotificationInbox } from "../../modules/notifications/use-notification-inbox";
+import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
+import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
@@ -47,7 +49,7 @@ import { useWorkspaceStore } from "../../stores/workspace-store";
 import type { Workspace } from "../../types/domain";
 
 const navigation = [
-  { to: "/app", label: "Dashboard", icon: LayoutGrid },
+  { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/app/accounts", label: "Cuentas", icon: Wallet },
   { to: "/app/movements", label: "Movimientos", icon: Gauge },
   { to: "/app/categories", label: "Categorías", icon: Shapes },
@@ -206,6 +208,9 @@ function WorkspacePicker({
   return (
     <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
       <button
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label="Seleccionar workspace activo"
         className={`flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-3.5 py-3 text-left text-ink transition duration-200 hover:border-white/16 hover:bg-white/[0.06] ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
@@ -249,7 +254,7 @@ function WorkspacePicker({
             />
           </div>
 
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
+          <div aria-label="Lista de workspaces" className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1" role="listbox">
             {filteredWorkspaces.length ? (
               filteredWorkspaces.map((workspace) => {
                 const isSelected = workspace.id === activeWorkspaceId;
@@ -257,12 +262,14 @@ function WorkspacePicker({
 
                 return (
                   <button
+                    aria-selected={isSelected}
                     className="flex w-full items-center justify-between gap-3 rounded-[16px] border border-white/5 bg-white/[0.03] px-3.5 py-2.5 text-left transition duration-200 hover:border-white/10 hover:bg-white/[0.06]"
                     key={workspace.id}
                     onClick={() => {
                       onChange(workspace.id);
                       setIsOpen(false);
                     }}
+                    role="option"
                     type="button"
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -301,6 +308,25 @@ function WorkspacePicker({
 }
 
 export function AppShell() {
+  const { user } = useAuth();
+  const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
+
+  return (
+    <NotificationReadsProvider
+      initialSmartReads={notificationPreferencesQuery.data?.smartReads}
+      userId={user?.id}
+    >
+      <UserPreferencesProvider
+        initialUiPrefs={notificationPreferencesQuery.data?.uiPrefs}
+        userId={user?.id}
+      >
+        <AppShellContent />
+      </UserPreferencesProvider>
+    </NotificationReadsProvider>
+  );
+}
+
+function AppShellContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
@@ -404,6 +430,9 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-glow text-ink">
+      <a className="skip-to-content" href="#main-content">
+        Saltar al contenido principal
+      </a>
       {sidebarOpen ? (
         <button
           aria-label="Cerrar menú"
@@ -415,6 +444,7 @@ export function AppShell() {
 
       <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:gap-5 lg:px-4 lg:py-4">
         <aside
+          aria-label="Menú principal"
           className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-6 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:static lg:overflow-visible lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
@@ -526,7 +556,7 @@ export function AppShell() {
               </div>
             </div>
 
-            <nav className="mt-8 space-y-2">
+            <nav aria-label="Navegación principal" className="mt-8 space-y-2">
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const isNotificationsItem = item.to === "/app/notifications";
@@ -544,6 +574,7 @@ export function AppShell() {
                       }`
                     }
                     aria-label={isSidebarCollapsed ? item.label : undefined}
+                    end={"end" in item ? item.end : undefined}
                     key={item.to}
                     onClick={() => setSidebarOpen(false)}
                     to={item.to}
@@ -608,8 +639,8 @@ export function AppShell() {
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0">
-          <header className="glass-panel-strong rounded-[30px] p-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0" id="main-content">
+          <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
                 <button

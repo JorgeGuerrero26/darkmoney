@@ -54,7 +54,10 @@ export function FormFeedbackBanner({
 
   return (
     <div
+      aria-atomic="true"
+      aria-live={tone === "error" ? "assertive" : "polite"}
       className={`relative overflow-hidden rounded-[30px] border px-4 py-4 shadow-[0_22px_60px_rgba(0,0,0,0.28)] sm:px-5 sm:py-5 ${toneStyle.container} ${className}`}
+      role={tone === "error" ? "alert" : "status"}
     >
       <div className="pointer-events-none absolute inset-0">
         <div className={`absolute -left-10 top-0 h-24 w-24 rounded-full blur-3xl ${toneStyle.glow}`} />
@@ -79,11 +82,12 @@ export function FormFeedbackBanner({
 
         {onDismiss ? (
           <button
+            aria-label="Cerrar aviso"
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
             onClick={onDismiss}
             type="button"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : null}
       </div>
