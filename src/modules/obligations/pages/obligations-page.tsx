@@ -1,6 +1,7 @@
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  BarChart3,
   Check,
   ChevronDown,
   CircleDollarSign,
@@ -55,6 +56,7 @@ import type {
   ObligationSummary,
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
+import { ObligationAnalyticsModal } from "../components/obligation-analytics-modal";
 import { AttachmentGallery } from "../../attachments/components/attachment-gallery";
 import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
 import {
@@ -2663,6 +2665,7 @@ export function ObligationsPage() {
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [analyticsObligationId, setAnalyticsObligationId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   useSuccessToast(pageFeedback, {
@@ -4231,6 +4234,7 @@ export function ObligationsPage() {
                         <p className="text-xs text-storm">pendiente</p>
                       </div>
                       <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
+                      <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsObligationId(obligation.id)} variant="ghost">Análisis</Button>
                       <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(obligation)} variant="ghost">Ver</Button>
                     </article>
                   );
@@ -4277,7 +4281,10 @@ export function ObligationsPage() {
                           <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</td>
                           <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} /></td>
                           <td className="px-5 py-3.5 text-right">
-                            <Button className="py-1.5 text-xs" onClick={() => openEditEditor(obligation)} variant="ghost">Ver</Button>
+                            <div className="flex justify-end gap-2">
+                              <Button className="py-1.5 text-xs" onClick={() => setAnalyticsObligationId(obligation.id)} variant="ghost">Análisis</Button>
+                              <Button className="py-1.5 text-xs" onClick={() => openEditEditor(obligation)} variant="ghost">Ver</Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4529,6 +4536,13 @@ export function ObligationsPage() {
                           </Button>
                         ) : null}
                         <Button
+                          onClick={() => setAnalyticsObligationId(obligation.id)}
+                          variant="ghost"
+                        >
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          Ver análisis
+                        </Button>
+                        <Button
                           onClick={() => openEditEditor(obligation)}
                           variant="secondary"
                         >
@@ -4554,6 +4568,17 @@ export function ObligationsPage() {
           )}
         </>
       )}
+
+      {analyticsObligationId !== null ? (() => {
+        const analyticsObligation = obligations.find((o) => o.id === analyticsObligationId);
+        return analyticsObligation ? (
+          <ObligationAnalyticsModal
+            baseCurrencyCode={baseCurrencyCode}
+            obligation={analyticsObligation}
+            onClose={() => setAnalyticsObligationId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         isDeleting={isBulkDeleting}

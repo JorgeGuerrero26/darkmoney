@@ -1,6 +1,7 @@
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  BarChart3,
   Building2,
   Download,
   Fingerprint,
@@ -35,6 +36,7 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import type { CounterpartyOverview, CounterpartyRoleType, CounterpartySummary } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { ContactAnalyticsModal } from "../components/contact-analytics-modal";
 import {
   getQueryErrorMessage,
   type CounterpartyFormInput,
@@ -579,6 +581,7 @@ export function ContactsPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [analyticsContactId, setAnalyticsContactId] = useState<number | null>(null);
   const [formState, setFormState] = useState<ContactFormState>(createDefaultFormState());
 
   const contacts = contactsQuery.data ?? [];
@@ -919,6 +922,7 @@ export function ContactsPage() {
                     <p className="text-xs text-storm">por cobrar</p>
                   </div>
                   {contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}
+                  <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsContactId(contact.id)} variant="ghost">Análisis</Button>
                   <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
                 </article>
               );
@@ -963,6 +967,7 @@ export function ContactsPage() {
                       <td className="px-5 py-3.5">{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}</td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex justify-end gap-2">
+                          <Button className="py-1.5 text-xs" onClick={() => setAnalyticsContactId(contact.id)} variant="ghost">Análisis</Button>
                           <Button className="py-1.5 text-xs" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
                           <Button className="py-1.5 text-xs" disabled={isArchiving} onClick={() => { void handleArchive(contact, !contact.isArchived); }} variant="ghost">{contact.isArchived ? "Reactivar" : "Archivar"}</Button>
                         </div>
@@ -1021,6 +1026,7 @@ export function ContactsPage() {
 
                   {contact.notes ? <div className="rounded-[24px] border border-white/10 bg-black/15 p-4"><p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Notas</p><p className="mt-2 text-sm leading-7 text-storm">{contact.notes}</p></div> : null}
                   <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                    <Button onClick={() => setAnalyticsContactId(contact.id)} variant="ghost"><BarChart3 className="mr-2 h-4 w-4" />Ver análisis</Button>
                     <Button onClick={() => openEditEditor(contact)} variant="secondary"><PencilLine className="mr-2 h-4 w-4" />Editar</Button>
                     <Button disabled={isArchiving} onClick={() => { void handleArchive(contact, !contact.isArchived); }} variant="ghost">{contact.isArchived ? "Reactivar" : "Archivar"}</Button>
                     <Button className="text-[#ffb4bc] hover:text-white" onClick={() => setDeleteTargetId(contact.id)} variant="ghost"><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>
@@ -1033,6 +1039,18 @@ export function ContactsPage() {
         </section>
         )
       )}
+
+      {analyticsContactId !== null ? (() => {
+        const analyticsContact = contactsWithExposure.find((c) => c.id === analyticsContactId);
+        return analyticsContact ? (
+          <ContactAnalyticsModal
+            baseCurrencyCode={baseCurrencyCode}
+            contact={analyticsContact}
+            movements={snapshot?.movements ?? []}
+            onClose={() => setAnalyticsContactId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         deleteLabel="Archivar"

@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   CalendarClock,
   Check,
   ChevronDown,
@@ -46,6 +47,7 @@ import type {
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { SubscriptionAnalyticsModal } from "../components/subscription-analytics-modal";
 import {
   getQueryErrorMessage,
   type SubscriptionFormInput,
@@ -916,6 +918,7 @@ export function SubscriptionsPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [analyticsSubscriptionId, setAnalyticsSubscriptionId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   const [searchQuery, setSearchQuery] = useState("");
@@ -1431,6 +1434,7 @@ export function SubscriptionsPage() {
                   <p className="text-xs text-storm">{formatDate(subscription.nextDueDate)}</p>
                 </div>
                 <StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} />
+                <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost">Análisis</Button>
                 <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
               </article>
             );
@@ -1481,7 +1485,10 @@ export function SubscriptionsPage() {
                     <td className={`px-5 py-3.5 text-right text-storm ${cv("proximo_cobro", "hidden md:table-cell")}`}>{formatDate(subscription.nextDueDate)}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} /></td>
                     <td className="px-5 py-3.5 text-right">
-                      <Button className="py-1.5 text-xs" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
+                      <div className="flex justify-end gap-2">
+                        <Button className="py-1.5 text-xs" onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost">Análisis</Button>
+                        <Button className="py-1.5 text-xs" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1535,6 +1542,7 @@ export function SubscriptionsPage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className="text-xs uppercase tracking-[0.18em] text-storm">Auto movimiento</p><p className="mt-2 text-sm font-medium text-ink">{subscription.autoCreateMovement ? "Activo" : "Desactivado"}</p></div>
                     </div>
                     <div className="mt-5 flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                      <Button onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost"><BarChart3 className="mr-2 h-4 w-4" />Ver análisis</Button>
                       <Button onClick={() => openEditEditor(subscription)} variant="secondary"><PencilLine className="mr-2 h-4 w-4" />Editar</Button>
                       <Button className="text-[#ffb4bc] hover:text-white" onClick={() => setDeleteTargetId(subscription.id)} variant="ghost"><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>
                     </div>
@@ -1634,6 +1642,18 @@ export function SubscriptionsPage() {
           </div>
         </DeleteConfirmDialog>
       ) : null}
+
+      {analyticsSubscriptionId !== null ? (() => {
+        const analyticsSub = subscriptions.find((s) => s.id === analyticsSubscriptionId);
+        return analyticsSub ? (
+          <SubscriptionAnalyticsModal
+            baseCurrencyCode={baseCurrencyCode}
+            movements={snapshot?.movements ?? []}
+            subscription={analyticsSub}
+            onClose={() => setAnalyticsSubscriptionId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         isDeleting={isBulkDeleting}

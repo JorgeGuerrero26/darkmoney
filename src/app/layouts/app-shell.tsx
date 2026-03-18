@@ -639,7 +639,7 @@ function AppShellContent() {
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0" id="main-content">
+        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0" id="main-content" tabIndex={-1}>
           <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
@@ -725,7 +725,7 @@ function AppShellContent() {
           </header>
 
           <Outlet />
-        </div>
+        </main>
       </div>
 
       {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data ? (
