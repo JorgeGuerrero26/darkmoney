@@ -1,6 +1,7 @@
 import {
   Archive,
   Banknote,
+  BarChart3,
   BriefcaseBusiness,
   Check,
   ChevronDown,
@@ -39,6 +40,7 @@ import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import type { AccountSummary } from "../../../types/domain";
 import {
   getQueryErrorMessage,
@@ -1627,6 +1629,7 @@ export function AccountsPage() {
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
   const { schedule } = useUndoQueue();
   const [showArchived, setShowArchived] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -2212,6 +2215,14 @@ export function AccountsPage() {
                   </p>
                   <Button
                     className="shrink-0 py-1.5 text-xs"
+                    onClick={() => setAnalyticsAccountId(account.id)}
+                    variant="ghost"
+                  >
+                    <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                    Análisis
+                  </Button>
+                  <Button
+                    className="shrink-0 py-1.5 text-xs"
                     onClick={() => openEditEditor(account)}
                     variant="ghost"
                   >
@@ -2285,13 +2296,23 @@ export function AccountsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Button
-                          className="py-1.5 text-xs"
-                          onClick={() => openEditEditor(account)}
-                          variant="ghost"
-                        >
-                          Editar
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            className="py-1.5 text-xs"
+                            onClick={() => setAnalyticsAccountId(account.id)}
+                            variant="ghost"
+                          >
+                            <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                            Análisis
+                          </Button>
+                          <Button
+                            className="py-1.5 text-xs"
+                            onClick={() => openEditEditor(account)}
+                            variant="ghost"
+                          >
+                            Editar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2372,6 +2393,14 @@ export function AccountsPage() {
                         {account.isArchived ? "Activar" : "Archivar"}
                       </Button>
                     </div>
+                    <Button
+                      className="w-full justify-center gap-2"
+                      onClick={() => setAnalyticsAccountId(account.id)}
+                      variant="ghost"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Ver análisis
+                    </Button>
                   </div>
                 </article>
               );
@@ -2485,6 +2514,17 @@ export function AccountsPage() {
           })()}
         </DeleteConfirmDialog>
       ) : null}
+
+      {analyticsAccountId !== null && snapshot ? (() => {
+        const analyticsAccount = snapshot.accounts.find((a) => a.id === analyticsAccountId);
+        return analyticsAccount ? (
+          <AccountAnalyticsModal
+            account={analyticsAccount}
+            movements={snapshot.movements}
+            onClose={() => setAnalyticsAccountId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         deleteLabel="Archivar"

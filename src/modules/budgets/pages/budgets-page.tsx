@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Check,
   ChevronDown,
   Download,
@@ -43,6 +44,7 @@ import {
 import type { BudgetOverview, CategorySummary, ExchangeRateSummary, Workspace } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { BudgetAnalyticsModal } from "../components/budget-analytics-modal";
 
 type EditorMode = "create" | "edit";
 type ScopeFilter = "all" | BudgetOverview["scopeKind"];
@@ -1107,6 +1109,7 @@ export function BudgetsPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [analyticsBudgetId, setAnalyticsBudgetId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   const budgetColumns: ColumnDef[] = [
@@ -1835,6 +1838,7 @@ export function BudgetsPage() {
                 </div>
                 <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
                 <div className="flex shrink-0 gap-2">
+                  <Button className="py-1.5 text-xs" onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">Análisis</Button>
                   <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">Editar</Button>
                 </div>
               </article>
@@ -1874,6 +1878,7 @@ export function BudgetsPage() {
                     <td className="px-5 py-3.5"><StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} /></td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex justify-end gap-2">
+                        <Button className="py-1.5 text-xs" onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">Análisis</Button>
                         <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">Editar</Button>
                         <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => void handleToggleBudget(budget)} variant="ghost">{budget.isActive ? "Desactivar" : "Activar"}</Button>
                       </div>
@@ -2012,6 +2017,10 @@ export function BudgetsPage() {
                   </div>
 
                   <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                    <Button onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">
+                      <BarChart3 className="h-4 w-4" />
+                      Ver análisis
+                    </Button>
                     <Button onClick={() => openEditEditor(budget)} variant="ghost">
                       <PencilLine className="h-4 w-4" />
                       Editar
@@ -2038,6 +2047,18 @@ export function BudgetsPage() {
           </div>
         )}
       </SurfaceCard>
+
+      {analyticsBudgetId !== null ? (() => {
+        const analyticsBudget = displayBudgets.find((b) => b.id === analyticsBudgetId);
+        return analyticsBudget ? (
+          <BudgetAnalyticsModal
+            budget={analyticsBudget}
+            displayCurrencyCode={displayCurrencyCode}
+            movements={snapshot?.movements ?? []}
+            onClose={() => setAnalyticsBudgetId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         isDeleting={isBulkDeleting}

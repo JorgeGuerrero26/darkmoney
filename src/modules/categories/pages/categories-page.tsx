@@ -2,6 +2,7 @@ import {
   BadgeDollarSign,
   BadgePercent,
   Banknote,
+  BarChart3,
   BriefcaseBusiness,
   CarFront,
   Download,
@@ -53,10 +54,12 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import type { CategoryKind, CategoryOverview } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { CategoryAnalyticsModal } from "../components/category-analytics-modal";
 import {
   getQueryErrorMessage,
   type CategoryFormInput,
   useCategoriesOverviewQuery,
+  useWorkspaceSnapshotQuery,
   useCreateCategoryMutation,
   useDeleteCategoryMutation,
   useToggleCategoryMutation,
@@ -687,13 +690,14 @@ function downloadCategoriesCSV(categories: CategoryOverview[], filename: string)
 }
 
 export function CategoriesPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const {
     activeWorkspace,
     error: workspaceError,
     isLoading: isWorkspacesLoading,
   } = useActiveWorkspace();
   const categoriesQuery = useCategoriesOverviewQuery(activeWorkspace?.id);
+  const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const createMutation = useCreateCategoryMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateCategoryMutation(activeWorkspace?.id, user?.id);
   const toggleMutation = useToggleCategoryMutation(activeWorkspace?.id, user?.id);
@@ -728,6 +732,7 @@ export function CategoriesPage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [analyticsCategoryId, setAnalyticsCategoryId] = useState<number | null>(null);
   const categories = categoriesQuery.data ?? [];
   const [formState, setFormState] = useState<CategoryFormState>(() => createDefaultFormState(categories));
   const selectedCategory = categories.find((category) => category.id === selectedCategoryId) ?? null;
@@ -1276,6 +1281,10 @@ export function CategoriesPage() {
                   <div className="hidden sm:flex flex-wrap gap-2">
                     <StatusBadge status={category.isActive ? "Activa" : "Inactiva"} tone={category.isActive ? "success" : "neutral"} />
                   </div>
+                  <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsCategoryId(category.id)} variant="ghost">
+                    <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                    Análisis
+                  </Button>
                   <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(category)} variant="ghost">Editar</Button>
                 </article>
               );
@@ -1331,6 +1340,10 @@ export function CategoriesPage() {
                       <td className={`px-5 py-3.5 text-right text-storm ${cv("movimientos", "hidden md:table-cell")}`}>{category.movementCount}</td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex justify-end gap-2">
+                          <Button className="py-1.5 text-xs" onClick={() => setAnalyticsCategoryId(category.id)} variant="ghost">
+                            <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                            Análisis
+                          </Button>
                           <Button className="py-1.5 text-xs" onClick={() => openEditEditor(category)} variant="ghost">Editar</Button>
                           <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => void handleToggleCategory(category)} variant="ghost">{category.isActive ? "Desactivar" : "Reactivar"}</Button>
                         </div>
@@ -1435,6 +1448,10 @@ export function CategoriesPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                    <Button onClick={() => setAnalyticsCategoryId(category.id)} variant="ghost">
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Ver análisis
+                    </Button>
                     <Button onClick={() => openEditEditor(category)} variant="secondary">
                       <PencilLine className="mr-2 h-4 w-4" />
                       Editar
@@ -1533,6 +1550,18 @@ export function CategoriesPage() {
           })()}
         </DeleteConfirmDialog>
       ) : null}
+
+      {analyticsCategoryId !== null && snapshotQuery.data ? (() => {
+        const cat = categories.find((c) => c.id === analyticsCategoryId);
+        return cat ? (
+          <CategoryAnalyticsModal
+            baseCurrencyCode={snapshotQuery.data.workspace.baseCurrencyCode}
+            category={cat}
+            movements={snapshotQuery.data.movements}
+            onClose={() => setAnalyticsCategoryId(null)}
+          />
+        ) : null;
+      })() : null}
 
       <BulkActionBar
         deleteLabel="Desactivar"

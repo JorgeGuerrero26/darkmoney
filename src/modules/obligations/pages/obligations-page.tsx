@@ -4458,7 +4458,7 @@ export function ObligationsPage() {
                             {(expandedHistoryId === obligation.id
                               ? obligation.events
                               : obligation.events.slice(0, 3)
-                            ).map((eventItem, idx) => (
+                            ).map((eventItem) => (
                               <div
                                 className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
                                 key={eventItem.id}
@@ -4808,7 +4808,7 @@ export function ObligationsPage() {
                           {(expandedHistoryId === obligation.id
                             ? obligation.events
                             : obligation.events.slice(0, 3)
-                          ).map((eventItem, idx) => (
+                          ).map((eventItem) => (
                             <div
                               className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
                               key={eventItem.id}

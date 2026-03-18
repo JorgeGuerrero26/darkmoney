@@ -384,7 +384,7 @@ function buildSmartNotifications(
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const staleDraftMovements = snapshot.movements.filter(
     (m: MovementRecord) =>
-      (m.status === "draft" || m.status === "pending") &&
+      (m.status === "planned" || m.status === "pending") &&
       new Date(m.occurredAt) < sevenDaysAgo,
   );
   if (staleDraftMovements.length > 0) {

@@ -2807,7 +2807,7 @@ export function useSaveNotificationPreferencesMutation(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: NotificationPreferences) => {
+    mutationFn: async (input: Pick<NotificationPreferences, "inAppEnabled" | "emailEnabled" | "pushEnabled">) => {
       if (!userId) {
         throw new Error("No hay sesion activa.");
       }
