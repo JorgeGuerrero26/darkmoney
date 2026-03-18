@@ -210,7 +210,7 @@ type BudgetAnalyticsModalProps = {
 export function BudgetAnalyticsModal({
   budget,
   movements,
-  displayCurrencyCode,
+  displayCurrencyCode: _displayCurrencyCode,
   onClose,
 }: BudgetAnalyticsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
