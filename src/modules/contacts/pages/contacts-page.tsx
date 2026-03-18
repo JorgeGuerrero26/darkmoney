@@ -11,6 +11,7 @@ import {
   PencilLine,
   Phone,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   UserRound,
@@ -883,7 +884,20 @@ export function ContactsPage() {
       {contacts.length > 0 ? (
       <SurfaceCard description="Filtra por nombre, rol o estado para encontrar rapido a cada contacto." title="Explorar contactos">
         <div className="grid gap-4 lg:grid-cols-[1.5fr_0.9fr_0.6fr]">
-          <Input onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, email, rol o documento..." type="text" value={search} />
+          <div className="flex items-center gap-2">
+            <button
+              className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              disabled={snapshotQuery.isFetching}
+              onClick={() => snapshotQuery.refetch()}
+              title="Actualizar"
+              type="button"
+            >
+              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+            </button>
+            <div className="flex-1">
+              <Input onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, email, rol o documento..." type="text" value={search} />
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setRoleFilter("all")} variant={roleFilter === "all" ? "primary" : "ghost"}>Todos</Button>
             {roleOptions.map((option) => <Button key={option.value} onClick={() => setRoleFilter(option.value)} variant={roleFilter === option.value ? "primary" : "ghost"}>{option.label}</Button>)}

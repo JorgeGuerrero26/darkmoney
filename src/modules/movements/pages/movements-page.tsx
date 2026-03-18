@@ -12,6 +12,7 @@ import {
   PencilLine,
   Plus,
   ReceiptText,
+  RefreshCw,
   Search,
   Sparkles,
   Trash2,
@@ -2281,14 +2282,25 @@ export function MovementsPage() {
           title="Explorar movimientos"
         >
           <div className="grid gap-4 lg:grid-cols-[1.35fr_0.75fr_0.9fr_auto]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-              <EditorInput
-                className="pl-11"
-                onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="Buscar por descripcion, categoria, cuenta o contraparte..."
-                value={searchValue}
-              />
+            <div className="flex items-center gap-2">
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+                <EditorInput
+                  className="pl-11 sm:pl-11"
+                  onChange={(event) => setSearchValue(event.target.value)}
+                  placeholder="Buscar por descripcion, categoria, cuenta o contraparte..."
+                  value={searchValue}
+                />
+              </div>
             </div>
 
             <SearchablePicker

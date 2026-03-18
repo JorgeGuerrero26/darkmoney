@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   PencilLine,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -1364,6 +1365,15 @@ export function SubscriptionsPage() {
 
       {subscriptions.length > 0 ? (
         <div className="flex flex-wrap gap-2">
+          <button
+            className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+            disabled={snapshotQuery.isFetching}
+            onClick={() => snapshotQuery.refetch()}
+            title="Actualizar"
+            type="button"
+          >
+            <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+          </button>
           <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
             <input

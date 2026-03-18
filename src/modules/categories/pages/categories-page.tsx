@@ -24,6 +24,7 @@ import {
   Plane,
   Plus,
   ReceiptText,
+  RefreshCw,
   RotateCcw,
   Shapes,
   Shirt,
@@ -1206,12 +1207,25 @@ export function CategoriesPage() {
         title="Explorar categorias"
       >
         <div className="grid gap-4 lg:grid-cols-[1.5fr_0.95fr_0.55fr]">
-          <Input
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por nombre, tipo o categoria padre..."
-            type="text"
-            value={search}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              disabled={snapshotQuery.isFetching}
+              onClick={() => snapshotQuery.refetch()}
+              title="Actualizar"
+              type="button"
+            >
+              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+            </button>
+            <div className="flex-1">
+              <Input
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por nombre, tipo o categoria padre..."
+                type="text"
+                value={search}
+              />
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => setKindFilter("all")}

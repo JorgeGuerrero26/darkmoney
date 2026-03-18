@@ -8,6 +8,7 @@ import {
   PiggyBank,
   Plus,
   ReceiptText,
+  RefreshCw,
   Search,
   Trash2,
   Wallet,
@@ -1670,14 +1671,25 @@ export function BudgetsPage() {
           title="Explorar presupuestos"
         >
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_auto]">
-            <label className="block">
-              <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Buscar</span>
-              <Input
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Ej. Salud, tarjeta principal, tope pareja..."
-                value={search}
-              />
-            </label>
+            <div className="flex items-end gap-2">
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+              <label className="block flex-1">
+                <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Buscar</span>
+                <Input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Ej. Salud, tarjeta principal, tope pareja..."
+                  value={search}
+                />
+              </label>
+            </div>
 
             <label className="block">
               <span className="mb-3 block text-xs uppercase tracking-[0.22em] text-storm">Alcance</span>

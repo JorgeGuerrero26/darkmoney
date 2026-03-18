@@ -14,6 +14,7 @@ import {
   Minus,
   PencilLine,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Trash2,
@@ -4088,14 +4089,25 @@ export function ObligationsPage() {
               <div className="space-y-4">
                 <label className="block">
                   <span className={labelClassName}>Buscar registro</span>
-                  <div className="relative mt-3">
-                    <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-storm/75" />
-                    <Input
-                      className="pl-12"
-                      onChange={(event) => setSearchValue(event.target.value)}
-                      placeholder="Busca por titulo, contraparte o cuenta..."
-                      value={searchValue}
-                    />
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                      disabled={snapshotQuery.isFetching}
+                      onClick={() => snapshotQuery.refetch()}
+                      title="Actualizar"
+                      type="button"
+                    >
+                      <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+                    </button>
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-storm/75" />
+                      <Input
+                        className="pl-12"
+                        onChange={(event) => setSearchValue(event.target.value)}
+                        placeholder="Busca por titulo, contraparte o cuenta..."
+                        value={searchValue}
+                      />
+                    </div>
                   </div>
                 </label>
 

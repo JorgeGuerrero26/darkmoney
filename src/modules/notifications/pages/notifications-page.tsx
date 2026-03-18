@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, MailWarning, Sparkles } from "lucide-react";
+import { Bell, CheckCheck, MailWarning, RefreshCw, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -175,15 +175,26 @@ export function NotificationsPage() {
         title="Bandeja unificada"
       >
         <div className="grid gap-4 lg:grid-cols-[1.1fr_auto]">
-          <label className="block">
-            <span className="mb-3 block text-xs uppercase tracking-[0.18em] text-storm">Buscar</span>
-            <input
-              className="field-dark"
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Ej. suscripción, Kevin, presupuesto, pago..."
-              value={search}
-            />
-          </label>
+          <div className="flex items-end gap-2">
+            <button
+              className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              disabled={snapshotQuery.isFetching || notificationsQuery.isFetching}
+              onClick={() => { void snapshotQuery.refetch(); void notificationsQuery.refetch(); }}
+              title="Actualizar"
+              type="button"
+            >
+              <RefreshCw className={`h-4 w-4${(snapshotQuery.isFetching || notificationsQuery.isFetching) ? " animate-spin" : ""}`} />
+            </button>
+            <label className="block flex-1">
+              <span className="mb-3 block text-xs uppercase tracking-[0.18em] text-storm">Buscar</span>
+              <input
+                className="field-dark"
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Ej. suscripción, Kevin, presupuesto, pago..."
+                value={search}
+              />
+            </label>
+          </div>
           <div>
             <span className="mb-3 block text-xs uppercase tracking-[0.18em] text-storm">Filtro</span>
             <div className="flex flex-wrap gap-2">

@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronRight,
   PiggyBank,
+  RefreshCw,
   Sparkles,
   WalletCards,
 } from "lucide-react";
@@ -3055,7 +3056,16 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <div className="flex flex-col gap-3">
+          <>
+            <Button
+              disabled={snapshotQuery.isFetching}
+              onClick={() => snapshotQuery.refetch()}
+              variant="ghost"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              Actualizar
+            </Button>
+            <div className="flex flex-col gap-3">
             <SegmentedControl
               onChange={setComparisonPreset}
               options={comparisonOptions}
@@ -3075,7 +3085,8 @@ export function DashboardPage() {
               }))}
               value={topCount}
             />
-          </div>
+            </div>
+          </>
         }
         description="Tu dinero ya tiene suficiente contexto. Aquí lo convertimos en decisiones: cuánto tienes, quién te debe, en qué se te va más, y si realmente estás ahorrando mejor que antes."
         eyebrow="resumen"
