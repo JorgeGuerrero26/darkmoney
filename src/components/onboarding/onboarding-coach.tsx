@@ -199,7 +199,8 @@ export function OnboardingCoach({
       return;
     }
 
-    const el = document.getElementById(step.focusButtonId);
+    const focusButtonId = step.focusButtonId;
+    const el = document.getElementById(focusButtonId);
     if (!(el instanceof HTMLElement)) {
       setHighlight(null);
       return;
@@ -219,7 +220,7 @@ export function OnboardingCoach({
     });
 
     function onResize() {
-      const nextEl = document.getElementById(step.focusButtonId);
+      const nextEl = document.getElementById(focusButtonId);
       if (!(nextEl instanceof HTMLElement)) return;
       const nextRect = nextEl.getBoundingClientRect();
       setHighlight({

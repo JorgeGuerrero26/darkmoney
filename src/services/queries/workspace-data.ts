@@ -1486,12 +1486,14 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     }
   }
 
-  const categories = categoryRows.map<CategorySummary>((row) => ({
-    id: row.id,
-    name: row.name,
-    kind: row.kind,
-    isActive: row.is_active,
-  }));
+  const categories = [...categoryRows]
+    .sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }))
+    .map<CategorySummary>((row) => ({
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      isActive: row.is_active,
+    }));
   const counterparties = counterpartyRows.map<CounterpartySummary>((row) => ({
     id: row.id,
     name: row.name,
@@ -2279,26 +2281,28 @@ async function fetchCategoriesOverview(workspaceId: number) {
     usageByCategoryId.set(subscriptionRow.category_id, currentUsage);
   }
 
-  return categoryRows.map<CategoryOverview>((row) => {
-    const usage = usageByCategoryId.get(row.id);
+  return [...categoryRows]
+    .sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }))
+    .map<CategoryOverview>((row) => {
+      const usage = usageByCategoryId.get(row.id);
 
-    return {
-      id: row.id,
-      workspaceId: row.workspace_id,
-      name: row.name,
-      kind: row.kind,
-      isActive: row.is_active,
-      parentId: row.parent_id,
-      parentName: row.parent_id ? categoryNameMap.get(row.parent_id) ?? null : null,
-      color: row.color,
-      icon: row.icon,
-      sortOrder: row.sort_order,
-      isSystem: row.is_system,
-      movementCount: usage?.movementCount ?? 0,
-      subscriptionCount: usage?.subscriptionCount ?? 0,
-      lastActivityAt: usage?.lastActivityAt ?? row.updated_at ?? row.created_at,
-    };
-  });
+      return {
+        id: row.id,
+        workspaceId: row.workspace_id,
+        name: row.name,
+        kind: row.kind,
+        isActive: row.is_active,
+        parentId: row.parent_id,
+        parentName: row.parent_id ? categoryNameMap.get(row.parent_id) ?? null : null,
+        color: row.color,
+        icon: row.icon,
+        sortOrder: row.sort_order,
+        isSystem: row.is_system,
+        movementCount: usage?.movementCount ?? 0,
+        subscriptionCount: usage?.subscriptionCount ?? 0,
+        lastActivityAt: usage?.lastActivityAt ?? row.updated_at ?? row.created_at,
+      };
+    });
 }
 
 async function invalidateWorkspaceSnapshot(

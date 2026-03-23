@@ -475,25 +475,27 @@ function filterCategoriesForMovementType(
   movementType: MovementType,
   selectedCategoryId: number | null,
 ) {
-  return categories.filter((category) => {
-    if (selectedCategoryId === category.id) {
+  return categories
+    .filter((category) => {
+      if (selectedCategoryId === category.id) {
+        return true;
+      }
+
+      if (!category.isActive) {
+        return false;
+      }
+
+      if (expenseLikeMovementTypes.has(movementType)) {
+        return category.kind === "expense" || category.kind === "both";
+      }
+
+      if (incomeLikeMovementTypes.has(movementType)) {
+        return category.kind === "income" || category.kind === "both";
+      }
+
       return true;
-    }
-
-    if (!category.isActive) {
-      return false;
-    }
-
-    if (expenseLikeMovementTypes.has(movementType)) {
-      return category.kind === "expense" || category.kind === "both";
-    }
-
-    if (incomeLikeMovementTypes.has(movementType)) {
-      return category.kind === "income" || category.kind === "both";
-    }
-
-    return true;
-  });
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
 }
 
 function MovementField({ children, errorKey, hint, invalidFields, label }: MovementFieldProps) {

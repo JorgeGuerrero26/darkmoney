@@ -266,21 +266,23 @@ function filterQuickCategories(
     return [];
   }
 
-  return categories.filter((category) => {
-    if (selectedCategoryId === category.id) {
-      return true;
-    }
+  return categories
+    .filter((category) => {
+      if (selectedCategoryId === category.id) {
+        return true;
+      }
 
-    if (!category.isActive) {
-      return false;
-    }
+      if (!category.isActive) {
+        return false;
+      }
 
-    if (kind === "expense") {
-      return category.kind === "expense" || category.kind === "both";
-    }
+      if (kind === "expense") {
+        return category.kind === "expense" || category.kind === "both";
+      }
 
-    return category.kind === "income" || category.kind === "both";
-  });
+      return category.kind === "income" || category.kind === "both";
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
 }
 
 function buildQuickMovementDescription(
