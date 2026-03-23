@@ -42,6 +42,7 @@ import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { TruncatedDescription } from "../../../components/ui/truncated-description";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
@@ -928,14 +929,14 @@ function Picker({
       ref={containerRef}
     >
       <button
-        className={`${fieldClassName} flex min-h-[5.25rem] items-start justify-between gap-3 py-3.5 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`${fieldClassName} flex h-16 items-center justify-between gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
       >
-        <span className="flex min-w-0 items-start gap-3">
+        <span className="flex min-w-0 items-center gap-3">
           <span
-            className="mt-0.5 flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+            className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
             style={{
               backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
               borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
@@ -945,15 +946,16 @@ function Picker({
             {selectedOption?.leadingLabel ?? "?"}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block whitespace-normal text-sm font-semibold leading-6 text-ink">
+            <span className="block truncate text-sm font-semibold text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
+            <TruncatedDescription
+              className="mt-1 text-xs text-storm"
+              text={selectedOption ? selectedOption.description : placeholderDescription}
+            />
           </span>
         </span>
-        <ChevronDown className={`mt-2 h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen ? (
@@ -977,7 +979,7 @@ function Picker({
 
                 return (
                   <button
-                    className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
+                    className="flex w-full items-center justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
                     key={option.value}
                     onClick={() => {
                       onChange(option.value);
@@ -985,9 +987,9 @@ function Picker({
                     }}
                     type="button"
                   >
-                    <span className="flex min-w-0 items-start gap-3">
+                    <span className="flex min-w-0 items-center gap-3">
                       <span
-                        className="mt-0.5 flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+                        className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
                         style={{
                           backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
                           borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
@@ -997,12 +999,13 @@ function Picker({
                         {option.leadingLabel}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block whitespace-normal font-medium leading-6 text-ink">
+                        <span className="block truncate font-medium text-ink">
                           {option.label}
                         </span>
-                        <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-                          {option.description}
-                        </span>
+                        <TruncatedDescription
+                          className="mt-1 text-xs text-storm"
+                          text={option.description}
+                        />
                       </span>
                     </span>
                     {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
@@ -1598,6 +1601,9 @@ function ShareInviteDialog({
   ) => void;
 }) {
   const shareStateLabel = currentShare ? getShareStatusLabel(currentShare.status) : "Sin invitacion activa";
+  const isSharePending = currentShare?.status === "pending";
+  const primaryShareActionLabel = isSharePending ? "Reenviar invitacion" : "Enviar invitacion";
+  const primaryShareActionLoadingLabel = isSharePending ? "Reenviando..." : "Enviando...";
 
   return (
     <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
@@ -1623,10 +1629,20 @@ function ShareInviteDialog({
                     Asigna este registro a una cuenta DarkMoney
                   </h2>
                   <p className="mt-4 max-w-2xl text-base leading-9 text-storm">
-                    La persona recibira un correo para aceptar el acceso. Cuando confirme, vera
-                    este credito o deuda dentro de su modulo, con historial, saldo pendiente y
-                    progreso, pero sin poder editarlo. Solo una persona puede quedar asociada a la
-                    vez.
+                    {isSharePending ? (
+                      <>
+                        La invitacion ya esta enviada y sigue <span className="text-ink">pendiente de aceptar</span>.
+                        Puedes reenviar el correo con el mismo boton de abajo (por si no lo vio o expiro el enlace).
+                        Tambien puedes cambiar el correo para invitar a otra persona.
+                      </>
+                    ) : (
+                      <>
+                        La persona recibira un correo para aceptar el acceso. Cuando confirme, vera
+                        este credito o deuda dentro de su modulo, con historial, saldo pendiente y
+                        progreso, pero sin poder editarlo. Solo una persona puede quedar asociada a la
+                        vez.
+                      </>
+                    )}
                   </p>
                 </div>
 
@@ -1729,8 +1745,17 @@ function ShareInviteDialog({
             <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm leading-7 text-storm">
-                  El usuario invitado no necesita Modo Pro para ver el registro compartido. Solo
-                  necesita aceptar el acceso desde el correo.
+                  {isSharePending ? (
+                    <>
+                      El invitado no necesita Modo Pro. Si ya acepto, el estado pasara a Compartida; si
+                      sigue pendiente, el reenvio le manda otro correo con el mismo enlace de confirmacion.
+                    </>
+                  ) : (
+                    <>
+                      El usuario invitado no necesita Modo Pro para ver el registro compartido. Solo
+                      necesita aceptar el acceso desde el correo.
+                    </>
+                  )}
                 </p>
                 <div className="flex flex-col-reverse gap-3 sm:flex-row">
                   <Button
@@ -1748,12 +1773,12 @@ function ShareInviteDialog({
                     {isSaving ? (
                       <>
                         <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        Enviando...
+                        {primaryShareActionLoadingLabel}
                       </>
                     ) : (
                       <>
                         <MailPlus className="mr-2 h-4 w-4" />
-                        Enviar invitacion
+                        {primaryShareActionLabel}
                       </>
                     )}
                   </Button>
@@ -2667,6 +2692,7 @@ export function ObligationsPage() {
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [analyticsObligationId, setAnalyticsObligationId] = useState<number | null>(null);
+  const [analyticsSharedObligationId, setAnalyticsSharedObligationId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   useSuccessToast(pageFeedback, {
@@ -4378,7 +4404,7 @@ export function ObligationsPage() {
                               <p className="font-medium text-ink">
                                 {currentShare.status === "accepted"
                                   ? `Compartida con ${currentShare.invitedDisplayName ?? currentShare.invitedEmail}`
-                                  : `Invitacion enviada a ${currentShare.invitedDisplayName ?? currentShare.invitedEmail}`}
+                                  : `Invitacion pendiente para ${currentShare.invitedDisplayName ?? currentShare.invitedEmail}`}
                               </p>
                               <p className="mt-1 text-storm">
                                 {currentShare.status === "accepted"
@@ -4544,7 +4570,11 @@ export function ObligationsPage() {
                             variant="secondary"
                           >
                             <MailPlus className="mr-2 h-4 w-4" />
-                            {currentShare ? "Gestionar acceso" : "Compartir"}
+                            {currentShare
+                              ? currentShare.status === "pending"
+                                ? "Reenviar invitacion"
+                                : "Gestionar acceso"
+                              : "Compartir"}
                           </Button>
                         ) : null}
                         <Button
@@ -4588,6 +4618,17 @@ export function ObligationsPage() {
             baseCurrencyCode={baseCurrencyCode}
             obligation={analyticsObligation}
             onClose={() => setAnalyticsObligationId(null)}
+          />
+        ) : null;
+      })() : null}
+
+      {analyticsSharedObligationId !== null ? (() => {
+        const analyticsSharedObligation = sharedObligations.find((o) => o.id === analyticsSharedObligationId);
+        return analyticsSharedObligation ? (
+          <ObligationAnalyticsModal
+            baseCurrencyCode={baseCurrencyCode}
+            obligation={analyticsSharedObligation}
+            onClose={() => setAnalyticsSharedObligationId(null)}
           />
         ) : null;
       })() : null}
@@ -4831,21 +4872,12 @@ export function ObligationsPage() {
                           <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
                             Historial de cambios
                           </p>
-                          <button
-                            className="text-xs text-pine hover:text-pine/80 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-pine/50 rounded"
-                            onClick={() => setExpandedHistoryId(expandedHistoryId === obligation.id ? null : obligation.id)}
-                            type="button"
-                          >
-                            {expandedHistoryId === obligation.id
-                              ? "Ver menos"
-                              : `Ver todo (${obligation.events.length})`}
-                          </button>
+                          <span className="text-xs text-storm/60">
+                            {obligation.events.length} evento{obligation.events.length !== 1 ? "s" : ""}
+                          </span>
                         </div>
                         <div className="mt-3 space-y-2">
-                          {(expandedHistoryId === obligation.id
-                            ? obligation.events
-                            : obligation.events.slice(0, 3)
-                          ).map((eventItem) => (
+                          {obligation.events.slice(0, 2).map((eventItem) => (
                             <div
                               className="flex items-start gap-3 rounded-[18px] border border-white/8 bg-white/[0.03] px-3 py-3"
                               key={eventItem.id}
@@ -4883,6 +4915,13 @@ export function ObligationsPage() {
                     ) : null}
 
                     <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                      <Button
+                        onClick={() => setAnalyticsSharedObligationId(obligation.id)}
+                        variant="secondary"
+                      >
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Ver análisis
+                      </Button>
                       <Button
                         disabled
                         variant="secondary"

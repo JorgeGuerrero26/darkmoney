@@ -1382,7 +1382,8 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
         "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, counterparty_id, obligation_id, subscription_id, metadata",
       )
       .eq("workspace_id", workspace.id)
-      .order("occurred_at", { ascending: false }),
+      .order("occurred_at", { ascending: false })
+      .order("id", { ascending: false }),
     client
       .from("v_budget_progress")
       .select(

@@ -74,6 +74,20 @@ type DailySavingsPoint = {
   previousCumulative: number;
 };
 
+type DailyFlowPoint = {
+  key: string;
+  label: string;
+  fullLabel: string;
+  currentDate: Date;
+  previousDate: Date;
+  daily: number;
+  cumulative: number;
+  previousDaily: number;
+  previousCumulative: number;
+};
+
+type ChronologicalTrendTab = "savings" | "expense" | "income" | "transfer";
+
 type CategoryComparisonItem = {
   key: string;
   name: string;
@@ -270,7 +284,12 @@ const dashboardModeOptions: Array<{ value: DashboardMode; label: string; helper:
 
 const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
   { id: "overview_kpis", label: "Resumen principal", helper: "KPIs y mini indicadores", modes: ["simple", "advanced"] },
-  { id: "savings_trend", label: "Ahorro cronológico", helper: "evolución y ritmo", modes: ["simple", "advanced"] },
+  {
+    id: "savings_trend",
+    label: "Cronológicos del período",
+    helper: "ahorro, gastos, ingresos y transferencias con detalle por día",
+    modes: ["simple", "advanced"],
+  },
   { id: "period_radar", label: "Radar del período", helper: "lecturas rápidas", modes: ["advanced"] },
   { id: "budget_snapshot", label: "Presupuestos", helper: "topes, uso y alertas", modes: ["simple", "advanced"] },
   { id: "obligation_watch", label: "Cartera", helper: "vencimientos y aging", modes: ["advanced"] },
@@ -667,6 +686,17 @@ function getExpenseAmount(movement: MovementRecord) {
   );
 }
 
+function getTransferLineAmount(movement: MovementRecord) {
+  return Math.max(
+    0,
+    movement.sourceAmountInBaseCurrency ??
+      movement.sourceAmount ??
+      movement.destinationAmountInBaseCurrency ??
+      movement.destinationAmount ??
+      0,
+  );
+}
+
 function classifyMovement(
   movement: MovementRecord,
 ): { kind: "income" | "expense"; amount: number } | null {
@@ -700,6 +730,28 @@ function classifyMovement(
   }
 
   return null;
+}
+
+function pickExpenseDailyAmount(movement: MovementRecord): number | null {
+  const classified = classifyMovement(movement);
+
+  return classified?.kind === "expense" ? classified.amount : null;
+}
+
+function pickIncomeDailyAmount(movement: MovementRecord): number | null {
+  const classified = classifyMovement(movement);
+
+  return classified?.kind === "income" ? classified.amount : null;
+}
+
+function pickTransferDailyAmount(movement: MovementRecord): number | null {
+  if (movement.status !== "posted" || movement.movementType !== "transfer") {
+    return null;
+  }
+
+  const amount = getTransferLineAmount(movement);
+
+  return amount > 0 ? amount : null;
 }
 
 function classifyScheduledMovement(
@@ -836,6 +888,71 @@ function buildSavingsSeries(
       net,
       cumulative: runningCurrent,
       previousNet,
+      previousCumulative: runningPrevious,
+    };
+  });
+}
+
+function buildDailyFlowSeries(
+  movements: MovementRecord[],
+  comparison: ComparisonDefinition,
+  pickDaily: (movement: MovementRecord) => number | null,
+): DailyFlowPoint[] {
+  const length = getDateDiffInclusive(comparison.current.start, comparison.current.end);
+  const series = Array.from({ length }, (_, index) => {
+    const currentDate = addDays(comparison.current.start, index);
+    const previousDate = addDays(comparison.previous.start, index);
+
+    return {
+      key: toLocalDateKey(currentDate),
+      label:
+        length <= 10
+          ? weekdayLabels[(currentDate.getDay() + 6) % 7]
+          : shortDateFormatter.format(currentDate),
+      fullLabel: fullDateFormatter.format(currentDate),
+      currentDate,
+      previousDate,
+      daily: 0,
+      cumulative: 0,
+      previousDaily: 0,
+      previousCumulative: 0,
+    } satisfies DailyFlowPoint;
+  });
+
+  const currentIndexByDate = new Map(series.map((item, index) => [toLocalDateKey(item.currentDate), index]));
+  const previousIndexByDate = new Map(series.map((item, index) => [toLocalDateKey(item.previousDate), index]));
+
+  for (const movement of movements) {
+    const amount = pickDaily(movement);
+
+    if (amount === null || amount <= 0) {
+      continue;
+    }
+
+    const movementDate = new Date(movement.occurredAt);
+    const currentIndex = currentIndexByDate.get(toLocalDateKey(movementDate));
+
+    if (currentIndex !== undefined) {
+      series[currentIndex].daily += amount;
+    }
+
+    const previousIndex = previousIndexByDate.get(toLocalDateKey(movementDate));
+
+    if (previousIndex !== undefined) {
+      series[previousIndex].previousDaily += amount;
+    }
+  }
+
+  let runningCurrent = 0;
+  let runningPrevious = 0;
+
+  return series.map((item) => {
+    runningCurrent += item.daily;
+    runningPrevious += item.previousDaily;
+
+    return {
+      ...item,
+      cumulative: runningCurrent,
       previousCumulative: runningPrevious,
     };
   });
@@ -1796,16 +1913,386 @@ function getChangeTone(value: number) {
   return "neutral";
 }
 
+const FLOW_CHART_THEME = {
+  expense: {
+    line: "rgba(225, 112, 85, 0.95)",
+    fillTop: "rgba(225, 112, 85, 0.26)",
+    fillBottom: "rgba(225, 112, 85, 0.02)",
+    gradientId: "dashboard-flow-expense-fill",
+    accentClass: "text-ember",
+    panelClass: "border-ember/18 bg-ember/10",
+  },
+  income: {
+    line: "rgba(56, 161, 105, 0.95)",
+    fillTop: "rgba(56, 161, 105, 0.28)",
+    fillBottom: "rgba(56, 161, 105, 0.02)",
+    gradientId: "dashboard-flow-income-fill",
+    accentClass: "text-pine",
+    panelClass: "border-pine/18 bg-pine/10",
+  },
+  transfer: {
+    line: "rgba(212, 175, 55, 0.95)",
+    fillTop: "rgba(212, 175, 55, 0.24)",
+    fillBottom: "rgba(212, 175, 55, 0.02)",
+    gradientId: "dashboard-flow-transfer-fill",
+    accentClass: "text-gold",
+    panelClass: "border-gold/18 bg-gold/10",
+  },
+} as const;
+
+function ChronologicalMovementList({
+  title,
+  emptyHint,
+  movements,
+  currencyCode,
+  resolveAmount,
+}: {
+  title: string;
+  emptyHint: string;
+  movements: MovementRecord[];
+  currencyCode: string;
+  resolveAmount: (movement: MovementRecord) => number;
+}) {
+  if (!movements.length) {
+    return (
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
+        <p className="mt-2 text-sm text-storm">{emptyHint}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
+      <ul className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+        {movements.map((movement) => (
+          <li
+            className="flex items-start justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 py-2"
+            key={movement.id}
+          >
+            <div className="min-w-0">
+              <p className="truncate font-medium text-ink">
+                {movement.description || movement.counterparty || "Sin descripción"}
+              </p>
+              <p className="mt-0.5 text-xs text-storm">
+                {[movement.category, movement.counterparty].filter(Boolean).join(" · ") ||
+                  movement.movementType}
+              </p>
+            </div>
+            <p className="shrink-0 font-display text-sm font-semibold text-ink">
+              {formatCurrency(resolveAmount(movement), currencyCode)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DayMovementsBreakdown({
+  movements,
+  currencyCode,
+  withTopDivider = true,
+}: {
+  movements: MovementRecord[];
+  currencyCode: string;
+  withTopDivider?: boolean;
+}) {
+  const income: MovementRecord[] = [];
+  const expense: MovementRecord[] = [];
+  const transfers: MovementRecord[] = [];
+
+  for (const movement of movements) {
+    if (movement.movementType === "transfer") {
+      transfers.push(movement);
+      continue;
+    }
+
+    const classified = classifyMovement(movement);
+
+    if (classified?.kind === "income") {
+      income.push(movement);
+    } else if (classified?.kind === "expense") {
+      expense.push(movement);
+    }
+  }
+
+  return (
+    <div
+      className={
+        withTopDivider ? "space-y-5 border-t border-white/8 pt-5" : "space-y-5"
+      }
+    >
+      <p className="text-sm font-semibold text-ink">Movimientos del día seleccionado</p>
+      <div className="grid gap-5 md:grid-cols-3">
+        <ChronologicalMovementList
+          currencyCode={currencyCode}
+          emptyHint="Sin ingresos este día."
+          movements={income}
+          resolveAmount={getIncomeAmount}
+          title="Ingresos"
+        />
+        <ChronologicalMovementList
+          currencyCode={currencyCode}
+          emptyHint="Sin gastos este día."
+          movements={expense}
+          resolveAmount={getExpenseAmount}
+          title="Gastos"
+        />
+        <ChronologicalMovementList
+          currencyCode={currencyCode}
+          emptyHint="Sin transferencias este día."
+          movements={transfers}
+          resolveAmount={getTransferLineAmount}
+          title="Transferencias"
+        />
+      </div>
+    </div>
+  );
+}
+
+function FlowLineChart({
+  variant,
+  points,
+  selectedIndex,
+  onSelect,
+  currencyCode,
+  movementsForDay,
+  chartTitle,
+  dailyLabel,
+  comparisonDailyLabel,
+}: {
+  variant: keyof typeof FLOW_CHART_THEME;
+  points: DailyFlowPoint[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  currencyCode: string;
+  movementsForDay: MovementRecord[];
+  chartTitle: string;
+  dailyLabel: string;
+  comparisonDailyLabel: string;
+}) {
+  const theme = FLOW_CHART_THEME[variant];
+
+  if (!points.length) {
+    return (
+      <DataState
+        description="Necesitamos movimientos aplicados dentro del período para dibujar la evolución diaria."
+        title="Aún no hay trazo para este período"
+      />
+    );
+  }
+
+  const width = 760;
+  const height = 260;
+  const paddingX = 22;
+  const paddingY = 24;
+  const values = points.flatMap((point) => [point.cumulative, point.previousCumulative, 0]);
+  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values);
+  const range = Math.max(1, maxValue - minValue);
+  const stepX = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0;
+  const getY = (value: number) => paddingY + ((maxValue - value) / range) * (height - paddingY * 2);
+  const currentPath = points
+    .map((point, index) => `${paddingX + stepX * index},${getY(point.cumulative)}`)
+    .join(" ");
+  const previousPath = points
+    .map((point, index) => `${paddingX + stepX * index},${getY(point.previousCumulative)}`)
+    .join(" ");
+  const areaPath = `${paddingX},${height - paddingY} ${currentPath} ${
+    paddingX + stepX * (points.length - 1)
+  },${height - paddingY}`;
+  const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
+  const selected = points[selectedIndex];
+
+  return (
+    <>
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="glass-panel-soft rounded-[28px] p-4">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-storm">{chartTitle}</p>
+              <p className="mt-2 text-sm text-storm">
+                Toca un punto para ver el detalle de ese día frente al período anterior.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-storm">
+              <span className="inline-flex items-center gap-2 rounded-full border border-pine/20 bg-pine/10 px-3 py-1">
+                <span className="h-2 w-2 rounded-full bg-pine" style={{ backgroundColor: theme.line }} />
+                Periodo actual
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                <span className="h-2 w-2 rounded-full bg-white/60" />
+                Comparación
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
+            <div className="hidden gap-2 lg:flex lg:flex-col lg:justify-between">
+              {axisSteps.map((value, index) => (
+                <span className="text-xs text-storm" key={`flow-axis-${index}`}>
+                  {formatCurrency(value, currencyCode)}
+                </span>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <svg className="min-w-[680px]" height={height} viewBox={`0 0 ${width} ${height}`}>
+                <defs>
+                  <linearGradient id={theme.gradientId} x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={theme.fillTop} />
+                    <stop offset="100%" stopColor={theme.fillBottom} />
+                  </linearGradient>
+                </defs>
+                {[0, 0.5, 1].map((step) => (
+                  <line
+                    key={`flow-grid-${step}`}
+                    stroke="rgba(255,255,255,0.08)"
+                    strokeDasharray="4 6"
+                    x1={paddingX}
+                    x2={width - paddingX}
+                    y1={paddingY + (height - paddingY * 2) * step}
+                    y2={paddingY + (height - paddingY * 2) * step}
+                  />
+                ))}
+                <polygon fill={`url(#${theme.gradientId})`} points={areaPath} />
+                <polyline
+                  fill="none"
+                  points={previousPath}
+                  stroke="rgba(255,255,255,0.48)"
+                  strokeDasharray="7 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3"
+                />
+                <polyline
+                  fill="none"
+                  points={currentPath}
+                  stroke={theme.line}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                />
+                {points.map((point, index) => {
+                  const x = paddingX + stepX * index;
+                  const isSelected = index === selectedIndex;
+
+                  return (
+                    <g key={point.key}>
+                      <circle
+                        cx={x}
+                        cy={getY(point.previousCumulative)}
+                        fill="rgba(255,255,255,0.3)"
+                        r="4"
+                      />
+                      <circle
+                        className="cursor-pointer"
+                        cx={x}
+                        cy={getY(point.cumulative)}
+                        fill={isSelected ? "rgba(255,255,255,1)" : theme.line}
+                        onClick={() => onSelect(index)}
+                        r={isSelected ? 7 : 5}
+                        stroke={isSelected ? theme.line : "rgba(255,255,255,0.12)"}
+                        strokeWidth="2"
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4 text-xs text-storm">
+            {points
+              .filter((_, index) => {
+                if (points.length <= 5) {
+                  return true;
+                }
+
+                const step = Math.max(1, Math.floor((points.length - 1) / 4));
+                return index === 0 || index === points.length - 1 || index % step === 0;
+              })
+              .map((point) => (
+                <span key={`flow-tick-${point.key}`}>{point.label}</span>
+              ))}
+          </div>
+        </div>
+
+        <div className="glass-panel-soft rounded-[28px] p-5">
+          {selected ? (
+            <>
+              <p className="text-xs uppercase tracking-[0.22em] text-storm">Detalle del día</p>
+              <h4 className="mt-3 font-display text-3xl font-semibold text-ink">{selected.fullLabel}</h4>
+              <p className="mt-2 text-sm text-storm">
+                Frente a {fullDateFormatter.format(selected.previousDate)}
+              </p>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <div className={`rounded-[22px] border p-4 ${theme.panelClass}`}>
+                  <p className={`text-xs uppercase tracking-[0.18em] ${theme.accentClass}`}>{dailyLabel}</p>
+                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {formatCurrency(selected.daily, currencyCode)}
+                  </p>
+                  <p className="mt-2 text-sm text-storm">
+                    Acumulado en el período {formatCurrency(selected.cumulative, currencyCode)}.
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">{comparisonDailyLabel}</p>
+                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {formatCurrency(selected.previousDaily, currencyCode)}
+                  </p>
+                  <p className="mt-2 text-sm text-storm">
+                    Acumulado comparativo {formatCurrency(selected.previousCumulative, currencyCode)}.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-ink">Cambio frente al comparativo (día)</p>
+                  <DeltaBadge currencyCode={currencyCode} inverse={false} value={selected.daily - selected.previousDaily} />
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {selected ? (
+        <div className="glass-panel-soft mt-6 rounded-[28px] p-5">
+          <ChronologicalMovementList
+            currencyCode={currencyCode}
+            emptyHint="No hubo movimientos de este tipo ese día."
+            movements={movementsForDay}
+            resolveAmount={
+              variant === "income"
+                ? getIncomeAmount
+                : variant === "expense"
+                  ? getExpenseAmount
+                  : getTransferLineAmount
+            }
+            title="Movimientos ese día"
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function SavingsLineChart({
   points,
   selectedIndex,
   onSelect,
   currencyCode,
+  dayMovements,
 }: {
   points: DailySavingsPoint[];
   selectedIndex: number;
   onSelect: (index: number) => void;
   currencyCode: string;
+  dayMovements: MovementRecord[];
 }) {
   if (!points.length) {
     return (
@@ -1838,7 +2325,8 @@ function SavingsLineChart({
   const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+    <>
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
       <div className="glass-panel-soft rounded-[28px] p-4">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
@@ -2003,6 +2491,16 @@ function SavingsLineChart({
         ) : null}
       </div>
     </div>
+      {points[selectedIndex] ? (
+        <div className="glass-panel-soft mt-6 rounded-[28px] p-5">
+          <DayMovementsBreakdown
+            currencyCode={currencyCode}
+            movements={dayMovements}
+            withTopDivider={false}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -2023,6 +2521,7 @@ export function DashboardPage() {
   const [comparisonPreset, setComparisonPreset] = useState<ComparisonPreset>("month");
   const [topCount, setTopCount] = useState<number>(8);
   const [selectedTrendIndex, setSelectedTrendIndex] = useState<number | null>(null);
+  const [chronologicalTrendTab, setChronologicalTrendTab] = useState<ChronologicalTrendTab>("savings");
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [selectedReceivableKey, setSelectedReceivableKey] = useState<string | null>(null);
@@ -2445,6 +2944,9 @@ export function DashboardPage() {
   const currentTotals = buildPeriodTotals(currentPeriodMovements);
   const previousTotals = buildPeriodTotals(previousPeriodMovements);
   const savingsSeries = buildSavingsSeries(postedMovements, comparison);
+  const expenseFlowSeries = buildDailyFlowSeries(postedMovements, comparison, pickExpenseDailyAmount);
+  const incomeFlowSeries = buildDailyFlowSeries(postedMovements, comparison, pickIncomeDailyAmount);
+  const transferFlowSeries = buildDailyFlowSeries(postedMovements, comparison, pickTransferDailyAmount);
   const allCategoryComparison = buildCategoryComparison(currentPeriodMovements, previousPeriodMovements);
   const visibleCategories = allCategoryComparison.slice(0, topCount);
   const accountsBreakdown = buildAccountBreakdown(visibleAccounts, currentPeriodMovements);
@@ -2539,6 +3041,21 @@ export function DashboardPage() {
     selectedTrendIndex !== null && selectedTrendIndex < savingsSeries.length
       ? selectedTrendIndex
       : Math.max(savingsSeries.length - 1, 0);
+  const selectedChronologicalDayKey = savingsSeries[selectedTrendSafeIndex]?.key ?? "";
+  const movementsForSelectedChronologicalDay = !selectedChronologicalDayKey
+    ? []
+    : postedMovements.filter(
+        (movement) => toLocalDateKey(new Date(movement.occurredAt)) === selectedChronologicalDayKey,
+      );
+  const expenseMovementsSelectedDay = movementsForSelectedChronologicalDay.filter(
+    (movement) => pickExpenseDailyAmount(movement) !== null,
+  );
+  const incomeMovementsSelectedDay = movementsForSelectedChronologicalDay.filter(
+    (movement) => pickIncomeDailyAmount(movement) !== null,
+  );
+  const transferMovementsSelectedDay = movementsForSelectedChronologicalDay.filter(
+    (movement) => movement.status === "posted" && movement.movementType === "transfer",
+  );
   const selectedCategory =
     visibleCategories.find((item) => item.key === selectedCategoryKey) ?? visibleCategories[0] ?? null;
   const selectedAccount =
@@ -3535,15 +4052,77 @@ export function DashboardPage() {
         {isWidgetVisible("savings_trend") ? (
         <SurfaceCard
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
-          description="Así evolucionó tu ahorro día a día durante el período actual frente a su comparativo directo."
-          title="Ahorro cronológico"
+          description="Ahorro neto, gastos, ingresos y transferencias día a día. Toca un día para ver los movimientos que lo componen."
+          title="Cronológicos del período"
         >
-          <SavingsLineChart
-            currencyCode={displayCurrencyCode}
-            onSelect={setSelectedTrendIndex}
-            points={savingsSeries}
-            selectedIndex={selectedTrendSafeIndex}
-          />
+          <div className="mb-6 flex flex-wrap gap-2">
+            {(
+              [
+                { id: "savings" as const, label: "Ahorro neto" },
+                { id: "expense" as const, label: "Gastos" },
+                { id: "income" as const, label: "Ingresos" },
+                { id: "transfer" as const, label: "Transferencias" },
+              ] as const
+            ).map((tab) => (
+              <Button
+                className="rounded-full px-4 py-2 text-xs uppercase tracking-[0.14em]"
+                key={tab.id}
+                onClick={() => setChronologicalTrendTab(tab.id)}
+                type="button"
+                variant={chronologicalTrendTab === tab.id ? "primary" : "ghost"}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+          {chronologicalTrendTab === "savings" ? (
+            <SavingsLineChart
+              currencyCode={displayCurrencyCode}
+              dayMovements={movementsForSelectedChronologicalDay}
+              onSelect={setSelectedTrendIndex}
+              points={savingsSeries}
+              selectedIndex={selectedTrendSafeIndex}
+            />
+          ) : null}
+          {chronologicalTrendTab === "expense" ? (
+            <FlowLineChart
+              chartTitle="Gastos acumulados"
+              comparisonDailyLabel="Comparación (día homólogo)"
+              currencyCode={displayCurrencyCode}
+              dailyLabel="Gasto del día"
+              movementsForDay={expenseMovementsSelectedDay}
+              onSelect={setSelectedTrendIndex}
+              points={expenseFlowSeries}
+              selectedIndex={selectedTrendSafeIndex}
+              variant="expense"
+            />
+          ) : null}
+          {chronologicalTrendTab === "income" ? (
+            <FlowLineChart
+              chartTitle="Ingresos acumulados"
+              comparisonDailyLabel="Comparación (día homólogo)"
+              currencyCode={displayCurrencyCode}
+              dailyLabel="Ingreso del día"
+              movementsForDay={incomeMovementsSelectedDay}
+              onSelect={setSelectedTrendIndex}
+              points={incomeFlowSeries}
+              selectedIndex={selectedTrendSafeIndex}
+              variant="income"
+            />
+          ) : null}
+          {chronologicalTrendTab === "transfer" ? (
+            <FlowLineChart
+              chartTitle="Transferencias acumuladas"
+              comparisonDailyLabel="Comparación (día homólogo)"
+              currencyCode={displayCurrencyCode}
+              dailyLabel="Transferido este día"
+              movementsForDay={transferMovementsSelectedDay}
+              onSelect={setSelectedTrendIndex}
+              points={transferFlowSeries}
+              selectedIndex={selectedTrendSafeIndex}
+              variant="transfer"
+            />
+          ) : null}
         </SurfaceCard>
         ) : null}
 

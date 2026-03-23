@@ -40,6 +40,7 @@ import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { TruncatedDescription } from "../../../components/ui/truncated-description";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatMovementStatusLabel, formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
@@ -169,10 +170,28 @@ const movementTypeOptions = [
 ] as const;
 
 const movementStatusOptions = [
-  { value: "planned" as const, label: "Planeado", description: "Aun no impacta balances." },
-  { value: "pending" as const, label: "Pendiente", description: "Esperando confirmacion." },
-  { value: "posted" as const, label: "Aplicado", description: "Ya impacta cuentas y reportes." },
-  { value: "voided" as const, label: "Anulado", description: "Se conserva para trazabilidad." },
+  {
+    value: "planned" as const,
+    label: "Planeado",
+    description:
+      "Compromiso con fecha: aún no mueve el saldo. Úsalo para lo que planeas hacer en el calendario.",
+  },
+  {
+    value: "pending" as const,
+    label: "Pendiente",
+    description:
+      "Registro que ya ocurrió o está por cerrarse y falta confirmar como aplicado para que actualice el saldo.",
+  },
+  {
+    value: "posted" as const,
+    label: "Aplicado",
+    description: "Confirmado: ya impacta cuentas, saldos y reportes como movimiento real.",
+  },
+  {
+    value: "voided" as const,
+    label: "Anulado",
+    description: "No cuenta en saldos; se mantiene solo para historial y trazabilidad.",
+  },
 ] as const;
 
 const expenseLikeMovementTypes = new Set<MovementType>([
@@ -574,9 +593,10 @@ function SearchablePicker({
             <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-0.5 sm:mt-1 block truncate text-[0.65rem] sm:text-xs text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
+            <TruncatedDescription
+              className="mt-0.5 sm:mt-1 text-[0.65rem] sm:text-xs text-storm"
+              text={selectedOption ? selectedOption.description : placeholderDescription}
+            />
           </span>
         </span>
         <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
@@ -631,9 +651,10 @@ function SearchablePicker({
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate font-medium text-ink">{option.label}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">
-                          {option.description}
-                        </span>
+                        <TruncatedDescription
+                          className="mt-1 text-xs text-storm"
+                          text={option.description}
+                        />
                       </span>
                     </span>
                     {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}

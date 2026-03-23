@@ -160,10 +160,10 @@ En las tablas colaborativas el antiguo `user_id` se renombra a `created_by_user_
 
 | Valor | Descripcion |
 |---|---|
-| `planned` | Planeado |
-| `pending` | Pendiente |
-| `posted` | Aplicado o confirmado |
-| `voided` | Anulado |
+| `planned` | Planeado: compromiso con fecha; no mueve saldo hasta pasar a aplicado |
+| `pending` | Pendiente: falta confirmacion para aplicar al saldo (distinto del sentido operativo de notificaciones `pending`) |
+| `posted` | Aplicado o confirmado: ya impacta saldos y reportes |
+| `voided` | Anulado: conservado solo para trazabilidad |
 
 ### `obligation_direction`
 

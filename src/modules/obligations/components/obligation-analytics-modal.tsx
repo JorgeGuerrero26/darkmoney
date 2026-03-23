@@ -1,5 +1,7 @@
 import {
   BarChart3,
+  CheckCircle2,
+  Circle,
   X,
 } from "lucide-react";
 import { useMemo, useRef } from "react";
@@ -190,6 +192,20 @@ export function ObligationAnalyticsModal({
     [obligation.events],
   );
 
+  // ── installment grid ───────────────────────────────────────────────────────
+  const paidInstallmentNos = useMemo(
+    () => new Set(paymentEvents.map((e) => e.installmentNo).filter((n): n is number => n != null)),
+    [paymentEvents],
+  );
+
+  const paymentByInstallmentNo = useMemo(() => {
+    const map = new Map<number, typeof paymentEvents[number]>();
+    for (const e of paymentEvents) {
+      if (e.installmentNo != null) map.set(e.installmentNo, e);
+    }
+    return map;
+  }, [paymentEvents]);
+
   return (
     <div
       className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -313,6 +329,83 @@ export function ObligationAnalyticsModal({
               No hay eventos registrados para este crédito/deuda.
             </div>
           )}
+
+          {/* installment detail */}
+          {(obligation.installmentCount != null && obligation.installmentCount > 1) || paymentEvents.length > 0 ? (
+            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-storm">Detalle de cuotas</p>
+
+              {obligation.installmentCount != null && obligation.installmentCount > 1 ? (
+                <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {Array.from({ length: obligation.installmentCount }, (_, i) => i + 1).map((n) => {
+                    const paid = paidInstallmentNos.has(n);
+                    const ev = paymentByInstallmentNo.get(n);
+                    return (
+                      <div
+                        className="group relative flex flex-col items-center gap-1.5 rounded-[14px] border p-2.5 transition"
+                        key={n}
+                        style={{
+                          borderColor: paid ? `${color}33` : "rgba(255,255,255,0.06)",
+                          background: paid ? `${color}0d` : "rgba(255,255,255,0.015)",
+                        }}
+                        title={ev ? `${formatDate(ev.eventDate)} · ${formatCurrency(ev.amount, currencyCode)}` : `Cuota ${n} pendiente`}
+                      >
+                        {paid ? (
+                          <CheckCircle2 className="h-4 w-4" style={{ color }} />
+                        ) : (
+                          <Circle className="h-4 w-4 text-storm/30" />
+                        )}
+                        <span
+                          className="text-[0.6rem] font-semibold"
+                          style={{ color: paid ? color : "rgba(255,255,255,0.3)" }}
+                        >
+                          #{n}
+                        </span>
+                        {ev ? (
+                          <span className="text-[0.55rem] text-storm/60">{formatDate(ev.eventDate)}</span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {paymentEvents.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-[0.65rem] uppercase tracking-[0.15em] text-storm/60">
+                    Pagos registrados ({paymentEvents.length})
+                  </p>
+                  {[...paymentEvents]
+                    .sort((a, b) => b.eventDate.localeCompare(a.eventDate))
+                    .map((e) => (
+                      <div
+                        className="flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+                        key={e.id}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color }} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-ink">
+                              {e.installmentNo != null ? `Cuota #${e.installmentNo}` : "Pago"}
+                            </p>
+                            <p className="text-[0.65rem] text-storm">
+                              {formatDate(e.eventDate)}
+                              {e.reason ? ` · ${e.reason}` : ""}
+                              {e.description && !e.reason ? ` · ${e.description}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="shrink-0 font-semibold text-sm" style={{ color }}>
+                          {formatCurrency(e.amount, currencyCode)}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-storm/60">Aún no hay pagos registrados.</p>
+              )}
+            </div>
+          ) : null}
 
           {/* notes */}
           {obligation.notes && (

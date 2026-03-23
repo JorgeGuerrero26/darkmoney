@@ -291,18 +291,45 @@ function buildSmartNotifications(
       movement.destinationAmount ?? 0,
       movement.sourceAmount ?? 0,
     );
+    const movementDate = movement.occurredAt.slice(0, 10);
+    const diffDays = getDaysDifference(movementDate);
+    const whenLabel =
+      diffDays === 0 ? "hoy" : diffDays === 1 ? "mañana" : `en ${diffDays} días`;
+    const currency = movement.destinationCurrencyCode ?? movement.sourceCurrencyCode ?? "PEN";
+    const amountLabel = formatCurrency(amount, currency);
+    const isPlanned = movement.status === "planned";
+
+    const title = isPlanned
+      ? diffDays === 0
+        ? isIncome
+          ? "Ingreso planeado para hoy"
+          : "Movimiento planeado para hoy"
+        : isIncome
+          ? "Ingreso planeado próximo"
+          : "Movimiento planeado próximo"
+      : diffDays === 0
+        ? isIncome
+          ? "Ingreso pendiente de aplicar (hoy)"
+          : "Movimiento pendiente de aplicar (hoy)"
+        : isIncome
+          ? "Ingreso pendiente de aplicar"
+          : "Movimiento pendiente de aplicar";
+
+    const body = isPlanned
+      ? `${movement.description} por ${amountLabel} está calendarizado para ${whenLabel}. Aún no mueve el saldo hasta que lo marques como aplicado en Movimientos.`
+      : `${movement.description} por ${amountLabel} corresponde a ${whenLabel} y sigue sin aplicarse al saldo. Confírmalo cuando ya sea efectivo.`;
 
     notifications.push({
       id: `smart:scheduled-movement:${movement.id}:${movement.occurredAt}:${movement.status}`,
       source: "smart",
-      title: isIncome ? "Ingreso pendiente cercano" : "Movimiento pendiente cercano",
-      body: `${movement.description} por ${formatCurrency(amount, movement.destinationCurrencyCode ?? movement.sourceCurrencyCode ?? "PEN")} esta programado para los proximos dias.`,
+      title,
+      body,
       status: "pending",
       scheduledFor: movement.occurredAt,
       kind: "movement",
       channel: "in_app",
       readAt: null,
-      tone: "info",
+      tone: isPlanned && diffDays === 0 ? "warning" : "info",
       href: "/app/movements",
     });
   }

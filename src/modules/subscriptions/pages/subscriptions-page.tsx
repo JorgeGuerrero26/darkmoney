@@ -35,6 +35,7 @@ import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { TruncatedDescription } from "../../../components/ui/truncated-description";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -336,9 +337,10 @@ function Picker({
             <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-0.5 sm:mt-1 block truncate text-[0.65rem] sm:text-xs text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
+            <TruncatedDescription
+              className="mt-0.5 sm:mt-1 text-[0.65rem] sm:text-xs text-storm"
+              text={selectedOption ? selectedOption.description : placeholderDescription}
+            />
           </span>
         </span>
         <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
@@ -386,9 +388,10 @@ function Picker({
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate font-medium text-ink">{option.label}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">
-                          {option.description}
-                        </span>
+                        <TruncatedDescription
+                          className="mt-1 text-xs text-storm"
+                          text={option.description}
+                        />
                       </span>
                     </span>
                     {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
