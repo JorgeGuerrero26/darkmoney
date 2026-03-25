@@ -130,7 +130,7 @@ Deno.serve(async (request) => {
   }
 
   try {
-    const entitlement = resolveEntitlementFromLemonSubscription(subscription);
+    const entitlement = resolveEntitlementFromLemonSubscription(subscription, eventName);
     const { error } = await adminClient.from("user_entitlements").upsert(
       {
         user_id: userId,

@@ -150,8 +150,30 @@ export async function cancelLemonSqueezySubscription(subscriptionId: string) {
   return response.data ?? null;
 }
 
-function resolveSubscriptionStatus(status?: string | null) {
-  const normalizedStatus = status?.trim().toLowerCase() ?? null;
+function resolveStatusFromEventName(eventName?: string | null) {
+  switch (eventName?.trim().toLowerCase()) {
+    case "subscription_cancelled":
+      return "cancelled";
+    case "subscription_expired":
+      return "expired";
+    case "subscription_paused":
+      return "paused";
+    case "subscription_unpaused":
+      return "active";
+    case "subscription_payment_failed":
+      return "past_due";
+    case "subscription_payment_success":
+    case "subscription_payment_recovered":
+    case "subscription_resumed":
+      return "active";
+    default:
+      return null;
+  }
+}
+
+function resolveSubscriptionStatus(status?: string | null, eventName?: string | null) {
+  const eventStatus = resolveStatusFromEventName(eventName);
+  const normalizedStatus = eventStatus ?? status?.trim().toLowerCase() ?? null;
   const canAccessStatuses = new Set([
     "on_trial",
     "active",
@@ -167,9 +189,15 @@ function resolveSubscriptionStatus(status?: string | null) {
   };
 }
 
-export function resolveEntitlementFromLemonSubscription(subscription: LemonSqueezySubscription | null) {
+export function resolveEntitlementFromLemonSubscription(
+  subscription: LemonSqueezySubscription | null,
+  eventName?: string | null,
+) {
   const attributes = subscription?.attributes ?? null;
-  const { normalizedStatus, proAccessEnabled } = resolveSubscriptionStatus(attributes?.status);
+  const { normalizedStatus, proAccessEnabled } = resolveSubscriptionStatus(
+    attributes?.status,
+    eventName,
+  );
 
   return {
     planCode: proAccessEnabled ? "pro" : "free",
