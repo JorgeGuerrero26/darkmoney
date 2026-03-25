@@ -2,7 +2,7 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
   createAdminClient,
   getAuthenticatedUser,
-} from "../_shared/mercado-pago.ts";
+} from "../_shared/billing.ts";
 
 type ShareRow = {
   id: number;

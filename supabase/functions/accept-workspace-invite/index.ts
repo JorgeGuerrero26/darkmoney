@@ -1,5 +1,5 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { createAdminClient, getAuthenticatedUser } from "../_shared/mercado-pago.ts";
+import { createAdminClient, getAuthenticatedUser } from "../_shared/billing.ts";
 
 type WorkspaceInvitationRow = {
   id: number;

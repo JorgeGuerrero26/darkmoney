@@ -1,5 +1,5 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { createAdminClient } from "../_shared/mercado-pago.ts";
+import { createAdminClient } from "../_shared/billing.ts";
 
 type ShareRow = {
   id: number;

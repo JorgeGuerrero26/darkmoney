@@ -1,12 +1,14 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
-  cancelMercadoPagoPreapproval,
   createAdminClient,
   getAuthenticatedUser,
   isAdminOverrideEmail,
-  resolveEntitlementFromPreapproval,
   upsertBillingEvent,
-} from "../_shared/mercado-pago.ts";
+} from "../_shared/billing.ts";
+import {
+  cancelLemonSqueezySubscription,
+  resolveEntitlementFromLemonSubscription,
+} from "../_shared/lemon-squeezy.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -43,18 +45,18 @@ Deno.serve(async (request) => {
       throw entitlementError;
     }
 
-    if (!entitlement?.provider_subscription_id || entitlement.billing_provider !== "mercado_pago") {
+    if (!entitlement?.provider_subscription_id || entitlement.billing_provider !== "lemon_squeezy") {
       return jsonResponse(
         {
           error:
-            "No encontramos una suscripcion activa de Mercado Pago asociada a esta cuenta.",
+            "No encontramos una suscripcion activa de Lemon Squeezy asociada a esta cuenta.",
         },
         { status: 400 },
       );
     }
 
-    const preapproval = await cancelMercadoPagoPreapproval(entitlement.provider_subscription_id);
-    const resolvedEntitlement = resolveEntitlementFromPreapproval(preapproval);
+    const subscription = await cancelLemonSqueezySubscription(entitlement.provider_subscription_id);
+    const resolvedEntitlement = resolveEntitlementFromLemonSubscription(subscription);
     const { error: upsertError } = await adminClient.from("user_entitlements").upsert(
       {
         user_id: user.id,
@@ -68,12 +70,12 @@ Deno.serve(async (request) => {
           resolvedEntitlement.providerSubscriptionId ?? entitlement.provider_subscription_id,
         current_period_start: resolvedEntitlement.currentPeriodStart,
         current_period_end: resolvedEntitlement.currentPeriodEnd,
-        cancel_at_period_end: false,
+        cancel_at_period_end: resolvedEntitlement.cancelAtPeriodEnd,
         manual_override: false,
         metadata: {
           cancelled_by_user: true,
           cancelled_at: new Date().toISOString(),
-          mercado_pago_status: preapproval.status ?? null,
+          lemon_squeezy_status: subscription?.attributes?.status ?? null,
         },
       },
       { onConflict: "user_id" },
@@ -84,12 +86,13 @@ Deno.serve(async (request) => {
     }
 
     await upsertBillingEvent(adminClient, {
+      provider: "lemon_squeezy",
       providerEventId: entitlement.provider_subscription_id,
       providerEventType: "subscription_cancelled_by_user",
       userId: user.id,
-      externalReference: preapproval.external_reference ?? `dm-pro:${user.id}`,
+      externalReference: `dm-pro:${user.id}`,
       payload: {
-        preapproval,
+        subscription,
         cancelledAt: new Date().toISOString(),
       },
       processed: true,
@@ -97,8 +100,8 @@ Deno.serve(async (request) => {
     });
 
     return jsonResponse({
-      provider: "mercado_pago",
-      billingStatus: preapproval.status ?? "cancelled",
+      provider: "lemon_squeezy",
+      billingStatus: subscription?.attributes?.status ?? "cancelled",
       proAccessEnabled: resolvedEntitlement.proAccessEnabled,
     });
   } catch (error) {

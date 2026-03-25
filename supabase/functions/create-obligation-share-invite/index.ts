@@ -6,7 +6,7 @@ import {
   getAuthenticatedUser,
   isAdminOverrideEmail,
   resolveAppUrl,
-} from "../_shared/mercado-pago.ts";
+} from "../_shared/billing.ts";
 
 type InviteLookupRow = {
   user_id: string;

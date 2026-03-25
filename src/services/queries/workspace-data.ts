@@ -2389,11 +2389,11 @@ export function getQueryErrorMessage(
     }
 
     if (
-      loweredMessage.includes("invalid value for back_url") ||
       loweredMessage.includes("app_url publica") ||
-      (loweredMessage.includes("mercado pago") && loweredMessage.includes("back_url"))
+      loweredMessage.includes("lemon_squeezy") ||
+      loweredMessage.includes("lemon squeezy")
     ) {
-      return `${error.message} Revisa el secret APP_URL en Supabase Functions y usa una URL https publica, sin espacios, query ni hash.`;
+      return `${error.message} Revisa los secrets de Lemon Squeezy y APP_URL en Supabase Functions.`;
     }
 
     return error.message;
@@ -2577,7 +2577,7 @@ export function useStartProCheckoutMutation(userId?: string) {
       const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
         "create-pro-checkout",
         {
-          provider: "mercado_pago",
+          provider: "lemon_squeezy",
           appUrl: input.appUrl,
           workspaceId: input.workspaceId ?? null,
         },
@@ -2591,12 +2591,12 @@ export function useStartProCheckoutMutation(userId?: string) {
             : null;
 
       if (!checkoutUrl) {
-        throw new Error("Mercado Pago no devolvio una URL valida para continuar el checkout.");
+        throw new Error("Lemon Squeezy no devolvio una URL valida para continuar el checkout.");
       }
 
       return {
         checkoutUrl,
-        provider: typeof data?.provider === "string" ? data.provider : "mercado_pago",
+        provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
         subscriptionId: typeof data?.subscriptionId === "string" ? data.subscriptionId : null,
         billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
       } satisfies StartProCheckoutResult;
@@ -2617,12 +2617,12 @@ export function useCancelProSubscriptionMutation(userId?: string) {
       const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
         "cancel-pro-subscription",
         {
-          provider: "mercado_pago",
+          provider: "lemon_squeezy",
         },
       );
 
       return {
-        provider: typeof data?.provider === "string" ? data.provider : "mercado_pago",
+        provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
         billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
         proAccessEnabled: Boolean(data?.proAccessEnabled),
       } satisfies CancelProSubscriptionResult;

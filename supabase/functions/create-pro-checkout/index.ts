@@ -1,15 +1,13 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
   createAdminClient,
-  createMercadoPagoPreapproval,
   getAuthenticatedUser,
-  getMercadoPagoPlanAmount,
-  getMercadoPagoPlanCurrency,
   isAdminOverrideEmail,
   normalizePublicAppUrl,
   resolveAppUrl,
   upsertBillingEvent,
-} from "../_shared/mercado-pago.ts";
+} from "../_shared/billing.ts";
+import { createLemonSqueezyCheckout } from "../_shared/lemon-squeezy.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -34,7 +32,7 @@ Deno.serve(async (request) => {
       return jsonResponse(
         {
           error:
-            "Tu cuenta administradora ya tiene acceso total. No necesita abrir un checkout de Mercado Pago.",
+            "Tu cuenta administradora ya tiene acceso total. No necesita abrir un checkout de Lemon Squeezy.",
         },
         { status: 400 },
       );
@@ -47,12 +45,15 @@ Deno.serve(async (request) => {
       normalizePublicAppUrl(request.headers.get("origin")) ??
       resolveAppUrl(request, explicitAppUrl);
     const adminClient = createAdminClient();
-    const externalReference = `dm-pro:${user.id}`;
-    const preapproval = await createMercadoPagoPreapproval({
-      amount: getMercadoPagoPlanAmount(),
+    const checkout = await createLemonSqueezyCheckout({
       appUrl,
+      userId: user.id,
       payerEmail: user.email,
-      externalReference,
+      payerName:
+        ((user.user_metadata ?? {}) as { full_name?: string }).full_name?.trim() ??
+        user.email.split("@")[0] ??
+        "Usuario DarkMoney",
+      workspaceId: typeof body?.workspaceId === "number" ? body.workspaceId : null,
     });
 
     const { error: entitlementError } = await adminClient.from("user_entitlements").upsert(
@@ -60,15 +61,15 @@ Deno.serve(async (request) => {
         user_id: user.id,
         plan_code: "free",
         pro_access_enabled: false,
-        billing_provider: "mercado_pago",
-        billing_status: preapproval.status ?? "checkout_pending",
-        provider_subscription_id: preapproval.id ?? null,
+        billing_provider: "lemon_squeezy",
+        billing_status: "checkout_created",
+        provider_subscription_id: null,
         metadata: {
-          checkout_provider: "mercado_pago",
+          checkout_provider: "lemon_squeezy",
           last_checkout_at: new Date().toISOString(),
-          last_checkout_url: preapproval.init_point ?? null,
-          plan_currency: getMercadoPagoPlanCurrency(),
-          plan_amount: getMercadoPagoPlanAmount(),
+          last_checkout_id: checkout.id,
+          last_checkout_url: checkout.url,
+          test_mode: checkout.testMode,
         },
       },
       {
@@ -81,30 +82,31 @@ Deno.serve(async (request) => {
     }
 
     await upsertBillingEvent(adminClient, {
-      providerEventId: preapproval.id ?? null,
+      provider: "lemon_squeezy",
+      providerEventId: checkout.id ?? null,
       providerEventType: "checkout_created",
       userId: user.id,
-      externalReference,
+      externalReference: `dm-pro:${user.id}`,
       payload: {
         request: {
           appUrl,
           workspaceId: body?.workspaceId ?? null,
         },
-        response: preapproval,
+        response: checkout,
       },
       processed: true,
       processedAt: new Date().toISOString(),
     });
 
-    if (!preapproval.init_point) {
-      throw new Error("Mercado Pago no devolvio init_point para continuar.");
+    if (!checkout.url) {
+      throw new Error("Lemon Squeezy no devolvio una URL valida para continuar.");
     }
 
     return jsonResponse({
-      provider: "mercado_pago",
-      checkoutUrl: preapproval.init_point,
-      subscriptionId: preapproval.id ?? null,
-      billingStatus: preapproval.status ?? null,
+      provider: "lemon_squeezy",
+      checkoutUrl: checkout.url,
+      subscriptionId: null,
+      billingStatus: "checkout_created",
     });
   } catch (error) {
     return jsonResponse(
@@ -112,7 +114,7 @@ Deno.serve(async (request) => {
         error:
           error instanceof Error
             ? error.message
-            : "No pudimos crear el checkout Pro en Mercado Pago.",
+            : "No pudimos crear el checkout Pro en Lemon Squeezy.",
       },
       { status: 500 },
     );

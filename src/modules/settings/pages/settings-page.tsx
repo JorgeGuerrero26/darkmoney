@@ -525,9 +525,9 @@ export function SettingsPage() {
     const query = new URLSearchParams(location.search);
     const billingStatus = query.get("billing");
 
-    if (billingStatus === "mercadopago") {
+    if (billingStatus === "lemonsqueezy") {
       setBillingFeedbackMessage(
-        "Volviste desde Mercado Pago. Cuando el proveedor confirme la suscripción, DarkMoney actualizará tu acceso Pro automáticamente.",
+        "Volviste desde Lemon Squeezy. Cuando el proveedor confirme la suscripcion, DarkMoney actualizara tu acceso Pro automaticamente.",
       );
     }
   }, [location.search]);
@@ -590,7 +590,7 @@ export function SettingsPage() {
       setBillingErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos iniciar el checkout de Mercado Pago para DarkMoney Pro.",
+          "No pudimos iniciar el checkout de Lemon Squeezy para DarkMoney Pro.",
         ),
       );
     }
@@ -704,17 +704,17 @@ export function SettingsPage() {
       : "Plan Free";
   const proStatusTone = isAdminOverride || entitlement?.proAccessEnabled ? "success" : "warning";
   const providerLabel =
-    entitlement?.billingProvider === "mercado_pago"
-      ? "Mercado Pago"
+    entitlement?.billingProvider === "lemon_squeezy"
+      ? "Lemon Squeezy"
       : entitlement?.billingProvider
         ? entitlement.billingProvider
         : "Sin proveedor";
   const canCancelProPlan =
     !isAdminOverride &&
     Boolean(entitlement?.providerSubscriptionId) &&
-    entitlement?.billingProvider === "mercado_pago" &&
+    entitlement?.billingProvider === "lemon_squeezy" &&
     (entitlement?.proAccessEnabled ||
-      ["authorized", "pending", "paused"].includes(entitlement?.billingStatus ?? ""));
+      ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? ""));
 
   return (
     <div className="space-y-6 pb-8">
@@ -890,17 +890,17 @@ export function SettingsPage() {
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-storm">
                   {isAdminOverride
-                    ? "Esta cuenta entra por override administrativo, así que no necesita pasar por Mercado Pago para probar funciones premium."
+                    ? "Esta cuenta entra por override administrativo, asi que no necesita pasar por Lemon Squeezy para probar funciones premium."
                     : canAccessProFeatures
-                      ? "Tu acceso ya está activo. Si vuelves desde Mercado Pago, el estado se refrescará automáticamente cuando llegue la confirmación."
-                      : "Este flujo creará una suscripción mensual en Mercado Pago. Cuando la autorización quede activa, DarkMoney te habilitará automáticamente el modo Pro."}
+                      ? "Tu acceso ya esta activo. Si vuelves desde Lemon Squeezy, el estado se refrescara automaticamente cuando llegue la confirmacion."
+                      : "Este flujo creara una suscripcion en Lemon Squeezy. Cuando la suscripcion quede activa, DarkMoney te habilitara automaticamente el modo Pro."}
                 </p>
 
                 {billingErrorMessage ? (
                   <FormFeedbackBanner
                     className="mt-5"
                     description={billingErrorMessage}
-                    title="No pudimos abrir Mercado Pago"
+                    title="No pudimos abrir Lemon Squeezy"
                   />
                 ) : null}
                 {billingFeedbackMessage ? (
@@ -934,7 +934,7 @@ export function SettingsPage() {
                     }
                     badgeLabel="Confirmación"
                     className="mt-5"
-                    description="La cancelación se enviará a Mercado Pago y DarkMoney actualizará tu acceso Pro con la respuesta real del proveedor."
+                    description="La cancelacion se enviara a Lemon Squeezy y DarkMoney actualizara tu acceso Pro con la respuesta real del proveedor."
                     title="Vas a cancelar la suscripción de DarkMoney Pro"
                   />
                 ) : null}
@@ -946,7 +946,7 @@ export function SettingsPage() {
                       onClick={() => void handleStartProCheckout()}
                     >
                       {startProCheckoutMutation.isPending
-                        ? "Abriendo Mercado Pago..."
+                        ? "Abriendo Lemon Squeezy..."
                         : "Activar DarkMoney Pro"}
                     </Button>
                   ) : null}
@@ -980,14 +980,14 @@ export function SettingsPage() {
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Estado actual</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
                     {entitlement?.billingStatus
-                      ? `Mercado Pago reporta el estado "${entitlement.billingStatus}".`
-                      : "Todavía no hay una suscripción asociada a esta cuenta."}
+                      ? `Lemon Squeezy reporta el estado "${entitlement.billingStatus}".`
+                      : "Todavia no hay una suscripcion asociada a esta cuenta."}
                   </p>
                 </div>
                 <div className="glass-panel-soft rounded-[24px] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Siguiente paso</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
-                    Si activás el plan, DarkMoney habilitará las funciones premium en cuanto Mercado Pago confirme el pago.
+                    Si activas el plan, DarkMoney habilitara las funciones premium en cuanto Lemon Squeezy confirme la suscripcion.
                   </p>
                 </div>
               </div>

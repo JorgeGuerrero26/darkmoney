@@ -35,5 +35,5 @@ verify_jwt = false
 [functions.get-obligation-share-invite]
 verify_jwt = false
 
-[functions.mercado-pago-webhook]
+[functions.lemon-squeezy-webhook]
 verify_jwt = false

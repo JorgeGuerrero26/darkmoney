@@ -510,12 +510,12 @@ Entitlements globales del producto para habilitar funciones premium como `Modo P
 
 ### `billing_events`
 
-Bitacora tecnica de checkout, webhooks y sincronizaciones con proveedores de cobro como Mercado Pago.
+Bitacora tecnica de checkout, webhooks y sincronizaciones con proveedores de cobro como Lemon Squeezy.
 
 | Campo | Tipo | Nulo | Descripcion |
 |---|---|---|---|
 | `id` | `bigint` | No | Identificador del evento registrado |
-| `provider` | `text` | No | Proveedor externo, por ahora `mercado_pago` |
+| `provider` | `text` | No | Proveedor externo, por ahora `lemon_squeezy` |
 | `provider_event_id` | `text` | Si | ID externo del evento o recurso recibido |
 | `provider_event_type` | `text` | Si | Tipo de evento informado por el proveedor |
 | `user_id` | `uuid` | Si | Usuario impactado, si pudo resolverse |
