@@ -1,0 +1,39 @@
+# Estas funciones validan manualmente al usuario dentro del handler
+# usando getAuthenticatedUser(request), asi que no necesitan que el
+# gateway de Edge Functions fuerce verify_jwt.
+
+[functions.create-pro-checkout]
+verify_jwt = false
+
+[functions.cancel-pro-subscription]
+verify_jwt = false
+
+[functions.create-shared-workspace]
+verify_jwt = false
+
+[functions.get-workspace-collaboration]
+verify_jwt = false
+
+[functions.create-workspace-invitation]
+verify_jwt = false
+
+[functions.accept-workspace-invite]
+verify_jwt = false
+
+[functions.create-obligation-share-invite]
+verify_jwt = false
+
+[functions.accept-obligation-share]
+verify_jwt = false
+
+[functions.list-shared-obligations]
+verify_jwt = false
+
+[functions.get-workspace-invite]
+verify_jwt = false
+
+[functions.get-obligation-share-invite]
+verify_jwt = false
+
+[functions.mercado-pago-webhook]
+verify_jwt = false

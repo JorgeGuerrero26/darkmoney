@@ -6,6 +6,7 @@ import {
   getMercadoPagoPlanAmount,
   getMercadoPagoPlanCurrency,
   isAdminOverrideEmail,
+  normalizePublicAppUrl,
   resolveAppUrl,
   upsertBillingEvent,
 } from "../_shared/mercado-pago.ts";
@@ -40,10 +41,11 @@ Deno.serve(async (request) => {
     }
 
     const body = await request.json().catch(() => ({}));
-    const appUrl = resolveAppUrl(
-      request,
-      typeof body?.appUrl === "string" ? body.appUrl : null,
-    );
+    const explicitAppUrl = typeof body?.appUrl === "string" ? body.appUrl : null;
+    const appUrl =
+      normalizePublicAppUrl(explicitAppUrl) ??
+      normalizePublicAppUrl(request.headers.get("origin")) ??
+      resolveAppUrl(request, explicitAppUrl);
     const adminClient = createAdminClient();
     const externalReference = `dm-pro:${user.id}`;
     const preapproval = await createMercadoPagoPreapproval({
