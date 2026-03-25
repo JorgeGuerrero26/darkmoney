@@ -1,6 +1,7 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { sendTransactionalEmail } from "../_shared/email.ts";
 import {
+  buildAppNavigationUrl,
   createAdminClient,
   getAuthenticatedUser,
   isAdminOverrideEmail,
@@ -117,7 +118,7 @@ function buildInviteEmail(input: {
   );
   const dueDateLabel = escapeHtml(formatDate(input.obligation.due_date));
   const shareUrl = escapeHtml(input.shareUrl);
-  const bannerUrl = `${input.appUrl}/banner-darkmoney.png`;
+  const bannerUrl = buildAppNavigationUrl(input.appUrl, "banner-darkmoney.png");
   const bannerUrlEscaped = escapeHtml(bannerUrl);
   const messageBlock = input.message
     ? `
@@ -364,7 +365,10 @@ Deno.serve(async (request) => {
         alreadyAccepted: true,
         shareId: existingShare.id,
         status: existingShare.status,
-        shareUrl: `${resolveAppUrl(request, typeof body?.appUrl === "string" ? body.appUrl : null)}/share/obligations/${existingShare.token}`,
+        shareUrl: buildAppNavigationUrl(
+          resolveAppUrl(request, typeof body?.appUrl === "string" ? body.appUrl : null),
+          `share/obligations/${existingShare.token}`,
+        ),
         emailSent: false,
         invitedEmail,
         invitedDisplayName: invitedUser.full_name,
@@ -419,7 +423,7 @@ Deno.serve(async (request) => {
       request,
       typeof body?.appUrl === "string" ? body.appUrl : null,
     );
-    const shareUrl = `${appUrl}/share/obligations/${savedShare.token}`;
+    const shareUrl = buildAppNavigationUrl(appUrl, `share/obligations/${savedShare.token}`);
     const emailTemplate = buildInviteEmail({
       appUrl,
       shareUrl,

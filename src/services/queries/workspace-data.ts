@@ -2388,6 +2388,14 @@ export function getQueryErrorMessage(
       return `${fallback} Revisa las politicas RLS de Supabase para este usuario.`;
     }
 
+    if (
+      loweredMessage.includes("invalid value for back_url") ||
+      loweredMessage.includes("app_url publica") ||
+      (loweredMessage.includes("mercado pago") && loweredMessage.includes("back_url"))
+    ) {
+      return `${error.message} Revisa el secret APP_URL en Supabase Functions y usa una URL https publica, sin espacios, query ni hash.`;
+    }
+
     return error.message;
   }
 

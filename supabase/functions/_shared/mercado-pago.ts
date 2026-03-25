@@ -79,51 +79,77 @@ export function getMercadoPagoWebhookSecret() {
   return Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET")?.trim() ?? "";
 }
 
+export function normalizePublicAppUrl(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!/^https?:\/\//i.test(trimmedValue)) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    const hostname = url.hostname.trim().toLowerCase();
+    const isLocalhost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost");
+
+    if (url.protocol !== "https:" || isLocalhost) {
+      return null;
+    }
+
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+export function buildAppNavigationUrl(appUrl: string, relativePath: string) {
+  const normalizedAppUrl = normalizePublicAppUrl(appUrl);
+
+  if (!normalizedAppUrl) {
+    throw new Error(
+      "No pudimos construir una APP_URL publica valida. Revisa APP_URL en Supabase Functions.",
+    );
+  }
+
+  const baseUrl = new URL(normalizedAppUrl.endsWith("/") ? normalizedAppUrl : `${normalizedAppUrl}/`);
+  const normalizedRelativePath = relativePath.replace(/^\/+/, "");
+  return new URL(normalizedRelativePath, baseUrl).toString();
+}
+
 export function resolveAppUrl(request: Request, explicitAppUrl?: string | null) {
-  const normalizeCandidate = (value?: string | null) => {
-    if (!value || !/^https?:\/\//i.test(value)) {
-      return null;
-    }
-
-    try {
-      const url = new URL(value);
-      const hostname = url.hostname.trim().toLowerCase();
-      const isLocalhost =
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname === "::1" ||
-        hostname.endsWith(".localhost");
-
-      if (url.protocol !== "https:" || isLocalhost) {
-        return null;
-      }
-
-      return value.replace(/\/$/, "");
-    } catch {
-      return null;
-    }
-  };
-
-  const configuredAppUrl = normalizeCandidate(Deno.env.get("APP_URL"));
+  const configuredAppUrl = normalizePublicAppUrl(Deno.env.get("APP_URL"));
 
   if (configuredAppUrl) {
     return configuredAppUrl;
   }
 
-  const normalizedExplicitAppUrl = normalizeCandidate(explicitAppUrl);
+  const normalizedExplicitAppUrl = normalizePublicAppUrl(explicitAppUrl);
 
   if (normalizedExplicitAppUrl) {
     return normalizedExplicitAppUrl;
   }
 
-  const normalizedOriginHeader = normalizeCandidate(request.headers.get("origin"));
+  const normalizedOriginHeader = normalizePublicAppUrl(request.headers.get("origin"));
 
   if (normalizedOriginHeader) {
     return normalizedOriginHeader;
   }
 
   throw new Error(
-    "No pudimos resolver una APP_URL publica y segura para Mercado Pago. Configura APP_URL con una URL https real, por ejemplo https://darkmoney.company.",
+    "No pudimos resolver una APP_URL publica y segura para Mercado Pago. Configura APP_URL en Supabase Functions con una URL https real, sin query ni espacios, por ejemplo https://app.darkmoney.pe.",
   );
 }
 
@@ -199,7 +225,7 @@ export async function createMercadoPagoPreapproval(input: {
       reason: "DarkMoney Pro mensual",
       external_reference: input.externalReference,
       payer_email: input.payerEmail,
-      back_url: `${input.appUrl}/app/settings?billing=mercadopago`,
+      back_url: buildAppNavigationUrl(input.appUrl, "app/settings?billing=mercadopago"),
       notification_url: `${supabaseUrl}/functions/v1/mercado-pago-webhook`,
       status: "pending",
       auto_recurring: {

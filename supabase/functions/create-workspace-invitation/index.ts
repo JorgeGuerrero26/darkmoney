@@ -1,6 +1,7 @@
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { sendTransactionalEmail } from "../_shared/email.ts";
 import {
+  buildAppNavigationUrl,
   createAdminClient,
   getAuthenticatedUser,
   resolveAppUrl,
@@ -83,7 +84,7 @@ function buildWorkspaceInviteEmail(input: {
   const invitedDisplayName = escapeHtml(input.invitedDisplayName);
   const roleLabel = escapeHtml(getRoleLabel(input.role));
   const inviteUrl = escapeHtml(input.inviteUrl);
-  const bannerUrl = escapeHtml(`${input.appUrl}/banner-darkmoney.png`);
+  const bannerUrl = escapeHtml(buildAppNavigationUrl(input.appUrl, "banner-darkmoney.png"));
   const messageBlock = input.note
     ? `
       <div style="margin-top:24px;border-radius:22px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);padding:20px 22px;">
@@ -333,7 +334,7 @@ Deno.serve(async (request) => {
 
     const savedInvitation = savedInvitationData as ExistingInvitationRow;
     const appUrl = resolveAppUrl(request, typeof body?.appUrl === "string" ? body.appUrl : null);
-    const inviteUrl = `${appUrl}/share/workspaces/${savedInvitation.token}`;
+    const inviteUrl = buildAppNavigationUrl(appUrl, `share/workspaces/${savedInvitation.token}`);
     const emailTemplate = buildWorkspaceInviteEmail({
       appUrl,
       inviteUrl,

@@ -160,10 +160,10 @@ En las tablas colaborativas el antiguo `user_id` se renombra a `created_by_user_
 
 | Valor | Descripcion |
 |---|---|
-| `planned` | Planeado: compromiso con fecha; no mueve saldo hasta pasar a aplicado |
-| `pending` | Pendiente: falta confirmacion para aplicar al saldo (distinto del sentido operativo de notificaciones `pending`) |
-| `posted` | Aplicado o confirmado: ya impacta saldos y reportes |
-| `voided` | Anulado: conservado solo para trazabilidad |
+| `planned` | Planeado |
+| `pending` | Pendiente |
+| `posted` | Aplicado o confirmado |
+| `voided` | Anulado |
 
 ### `obligation_direction`
 
@@ -734,6 +734,9 @@ Preferencias personales de notificacion.
 | `in_app_enabled` | `boolean` | No | Permite notificaciones en app |
 | `push_enabled` | `boolean` | No | Permite push |
 | `email_enabled` | `boolean` | No | Permite correo |
+| `push_token` | `text` | Si | Token Expo Push del dispositivo registrado. Null si el usuario no concedio permisos |
+| `platform` | `text` | Si | Plataforma del dispositivo: `ios` o `android` |
+| `is_active` | `boolean` | No | Indica si el token sigue activo. Se pone en false cuando el OS revoca el token (default `true`) |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
@@ -747,6 +750,7 @@ Bandeja de notificaciones por usuario.
 | `user_id` | `uuid` | No | Usuario destinatario |
 | `channel` | `notification_channel` | No | Canal de envio |
 | `status` | `notification_status` | No | Estado de la notificacion |
+| `kind` | `text` | Si | Tipo funcional de la notificacion: `budget_alert`, `subscription_reminder`, `obligation_due`, `obligation_overdue`, `system` |
 | `title` | `text` | No | Titulo visible |
 | `body` | `text` | No | Contenido o mensaje |
 | `scheduled_for` | `timestamptz` | No | Fecha y hora programada |
@@ -757,6 +761,8 @@ Bandeja de notificaciones por usuario.
 | `payload` | `jsonb` | No | Informacion adicional JSON |
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
+
+**Indice unico:** `uq_notifications_user_entity_kind` sobre `(user_id, related_entity_type, related_entity_id, kind)` (parcial: solo cuando los tres ultimos no son NULL). Permite hacer upsert idempotente desde el cliente para evitar duplicados aunque el generador de notificaciones se ejecute multiples veces.
 
 ### `activity_log`
 

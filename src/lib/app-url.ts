@@ -4,7 +4,10 @@ function normalizeAppUrl(value?: string | null) {
   }
 
   try {
-    const url = new URL(value);
+    const url = new URL(value.trim());
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
     return url.toString().replace(/\/$/, "");
   } catch {
     return null;
@@ -26,4 +29,3 @@ export function getPublicAppUrl() {
 
   return "https://darkmoney.company";
 }
-
