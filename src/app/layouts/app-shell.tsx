@@ -17,6 +17,7 @@ import {
   Search,
   Settings,
   Shapes,
+  Sparkles,
   Users,
   Wallet,
   X,
@@ -42,11 +43,13 @@ import {
   getQueryErrorMessage,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
+  useCurrentUserEntitlementQuery,
   useWorkspaceSnapshotQuery,
 } from "../../services/queries/workspace-data";
 import { isSupabaseConfigured } from "../../services/supabase/client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import type { Workspace } from "../../types/domain";
+import { PRO_ADMIN_EMAIL } from "../../modules/shared/use-pro-feature-access";
 
 const navigation = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
@@ -60,6 +63,48 @@ const navigation = [
   { to: "/app/notifications", label: "Notificaciones", icon: Bell },
   { to: "/app/settings", label: "Configuración", icon: Settings },
 ];
+
+const PRO_BANNER_DISMISS_PREFIX = "darkmoney.pro-banner.dismissed-until";
+const PRO_BANNER_SNOOZE_DAYS = 7;
+
+function normalizeEmail(email?: string | null) {
+  return email?.trim().toLowerCase() ?? "";
+}
+
+function getProBannerDismissKey(userId?: string) {
+  return `${PRO_BANNER_DISMISS_PREFIX}:${userId ?? "anonymous"}`;
+}
+
+function readDismissedProBannerUntil(userId?: string) {
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    return window.localStorage.getItem(getProBannerDismissKey(userId));
+  } catch {
+    return null;
+  }
+}
+
+function writeDismissedProBannerUntil(userId?: string, value?: string | null) {
+  if (!userId) {
+    return;
+  }
+
+  try {
+    const storageKey = getProBannerDismissKey(userId);
+
+    if (!value) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+
+    window.localStorage.setItem(storageKey, value);
+  } catch {
+    // ignore
+  }
+}
 
 function buildInitials(value: string | null | undefined, fallback: string) {
   const initials = value
@@ -330,6 +375,7 @@ function AppShellContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
+  const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { profile, signOut, user } = useAuth();
@@ -346,8 +392,10 @@ function AppShellContent() {
   const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const notificationsQuery = useNotificationsQuery(user?.id);
   const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
+  const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const notificationInbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
+    entitlement: entitlementQuery.data,
     snapshot: workspaceSnapshotQuery.data,
     workspaceName: activeWorkspace?.name,
   });
@@ -355,6 +403,9 @@ function AppShellContent() {
     notificationPreferencesQuery.data?.inAppEnabled === false ? 0 : notificationInbox.unreadCount;
   const currentUserName = profile?.fullName ?? user?.email?.split("@")[0] ?? "Usuario";
   const currentUserEmail = profile?.email ?? user?.email ?? "";
+  const isAdminOverride = normalizeEmail(currentUserEmail) === normalizeEmail(PRO_ADMIN_EMAIL);
+  const hasProAccess = isAdminOverride || Boolean(entitlementQuery.data?.proAccessEnabled);
+  const normalizedBillingStatus = entitlementQuery.data?.billingStatus?.trim().toLowerCase() ?? null;
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
   const workspaceInitials = buildInitials(activeWorkspace?.name, "WS");
   const workspaceErrorMessage = error
@@ -395,6 +446,29 @@ function AppShellContent() {
   const canUseQuickMovement =
     Boolean(activeWorkspace && user?.id && workspaceSnapshotQuery.data) &&
     !workspaceSnapshotQuery.isLoading;
+  const proBannerContent = useMemo(() => {
+    if (normalizedBillingStatus === "expired") {
+      return {
+        badge: "PRO VENCIDO",
+        title: "Tu acceso premium ya se puede recuperar",
+        description:
+          "Vuelve a DarkMoney Pro para reactivar el dashboard avanzado, comprobantes y alertas premium sin perder tu contexto.",
+        ctaLabel: "Reactivar Pro",
+      };
+    }
+
+    return {
+      badge: "MODO FREE",
+      title: "Lleva DarkMoney un nivel más arriba",
+      description:
+        "Activa DarkMoney Pro para desbloquear dashboard avanzado, Aprendiendo de ti, comprobantes y más señales inteligentes.",
+      ctaLabel: "Ver DarkMoney Pro",
+    };
+  }, [normalizedBillingStatus]);
+  const shouldShowProBanner =
+    !entitlementQuery.isLoading &&
+    !hasProAccess &&
+    !isProBannerDismissed;
 
   useEffect(() => {
     const EDGE_ZONE = 32;
@@ -427,6 +501,35 @@ function AppShellContent() {
       document.removeEventListener("touchend", onTouchEnd);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setIsProBannerDismissed(false);
+      return;
+    }
+
+    if (hasProAccess) {
+      writeDismissedProBannerUntil(user.id, null);
+      setIsProBannerDismissed(true);
+      return;
+    }
+
+    const dismissedUntil = readDismissedProBannerUntil(user.id);
+    const dismissedUntilTimestamp = dismissedUntil ? new Date(dismissedUntil).getTime() : NaN;
+    setIsProBannerDismissed(Boolean(dismissedUntil && dismissedUntilTimestamp > Date.now()));
+  }, [hasProAccess, user?.id]);
+
+  function handleDismissProBanner() {
+    if (!user?.id) {
+      setIsProBannerDismissed(true);
+      return;
+    }
+
+    const dismissedUntil = new Date();
+    dismissedUntil.setDate(dismissedUntil.getDate() + PRO_BANNER_SNOOZE_DAYS);
+    writeDismissedProBannerUntil(user.id, dismissedUntil.toISOString());
+    setIsProBannerDismissed(true);
+  }
 
   return (
     <div className="min-h-screen bg-glow text-ink">
@@ -723,6 +826,47 @@ function AppShellContent() {
               </div>
             ) : null}
           </header>
+
+          {shouldShowProBanner ? (
+            <section className="animate-rise-in overflow-hidden rounded-[30px] border border-pine/16 bg-[linear-gradient(135deg,rgba(10,18,30,0.96),rgba(11,24,33,0.98)_38%,rgba(16,46,40,0.94)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+              <div className="flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-start gap-4">
+                  <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-pine/18 bg-pine/12 text-pine sm:flex">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={proBannerContent.badge} tone="info" />
+                      <StatusBadge status="DarkMoney Pro" tone="success" />
+                    </div>
+                    <h2 className="mt-3 font-display text-2xl font-semibold tracking-[-0.04em] text-ink">
+                      {proBannerContent.title}
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-7 text-storm">
+                      {proBannerContent.description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                  <Button
+                    className="min-w-[10.5rem]"
+                    onClick={() => navigate("/app/settings")}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {proBannerContent.ctaLabel}
+                  </Button>
+                  <Button
+                    onClick={handleDismissProBanner}
+                    variant="ghost"
+                  >
+                    <X className="h-4 w-4" />
+                    Cerrar
+                  </Button>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           <Outlet />
         </main>

@@ -9,6 +9,7 @@ import type {
   NotificationItem,
   ObligationSummary,
   SubscriptionSummary,
+  UserEntitlementSummary,
 } from "../../types/domain";
 import type { PendingInvite } from "../auth/invite-resume";
 import { usePendingInvite } from "../auth/invite-resume";
@@ -546,6 +547,114 @@ function buildSmartNotifications(
   return notifications;
 }
 
+function buildBillingNotifications(
+  entitlement: UserEntitlementSummary | null | undefined,
+): InboxNotification[] {
+  if (!entitlement?.billingProvider) {
+    return [];
+  }
+
+  const notifications: InboxNotification[] = [];
+  const billingStatus = entitlement.billingStatus?.trim().toLowerCase() ?? null;
+  const currentPeriodEnd = entitlement.currentPeriodEnd;
+  const daysRemaining = currentPeriodEnd ? getDaysDifference(currentPeriodEnd) : null;
+
+  if (
+    currentPeriodEnd &&
+    daysRemaining !== null &&
+    daysRemaining >= 0 &&
+    daysRemaining <= 3 &&
+    ["active", "on_trial", "paused"].includes(billingStatus ?? "")
+  ) {
+    const whenLabel =
+      daysRemaining === 0
+        ? "hoy"
+        : daysRemaining === 1
+          ? "manana"
+          : `en ${daysRemaining} dias`;
+
+    notifications.push({
+      id: `smart:billing-renewal:${billingStatus}:${currentPeriodEnd.slice(0, 10)}`,
+      source: "smart",
+      title:
+        daysRemaining === 0
+          ? "Tu DarkMoney Pro se renueva hoy"
+          : daysRemaining === 1
+            ? "Tu DarkMoney Pro se renueva manana"
+            : `Tu DarkMoney Pro se renueva en ${daysRemaining} dias`,
+      body: `Tu suscripcion con ${entitlement.billingProvider === "lemon_squeezy" ? "Lemon Squeezy" : "tu proveedor"} se renueva ${whenLabel}. Ten saldo disponible o revisa tu metodo de pago para no perder acceso.`,
+      status: "pending",
+      scheduledFor: currentPeriodEnd,
+      kind: "billing",
+      channel: "in_app",
+      readAt: null,
+      tone: daysRemaining <= 1 ? "warning" : "info",
+      href: "/app/settings",
+    });
+  }
+
+  if (currentPeriodEnd && daysRemaining !== null && daysRemaining >= 0 && entitlement.cancelAtPeriodEnd) {
+    notifications.push({
+      id: `smart:billing-ending:${billingStatus}:${currentPeriodEnd.slice(0, 10)}`,
+      source: "smart",
+      title:
+        daysRemaining === 0
+          ? "Tu DarkMoney Pro termina hoy"
+          : daysRemaining === 1
+            ? "Tu DarkMoney Pro termina manana"
+            : `Tu DarkMoney Pro termina en ${daysRemaining} dias`,
+      body: `La suscripcion ya esta cancelada y no se renovara automaticamente. Tu acceso quedara activo hasta ${currentPeriodEnd.slice(0, 10)}.`,
+      status: "pending",
+      scheduledFor: currentPeriodEnd,
+      kind: "plan",
+      channel: "in_app",
+      readAt: null,
+      tone: daysRemaining <= 1 ? "danger" : "warning",
+      href: "/app/settings",
+    });
+  }
+
+  if (billingStatus === "past_due" || billingStatus === "unpaid") {
+    notifications.push({
+      id: `smart:billing-collection:${billingStatus}:${currentPeriodEnd ?? "no-end"}`,
+      source: "smart",
+      title: billingStatus === "past_due" ? "No pudimos renovar tu Pro" : "Tu Pro quedo impago",
+      body:
+        billingStatus === "past_due"
+          ? "El ultimo cobro no entro correctamente. Revisa tu tarjeta o tus fondos para evitar que DarkMoney Pro expire."
+          : "La suscripcion sigue impaga. Si no se recupera, DarkMoney Pro terminara cuando el proveedor cierre el ciclo de cobro.",
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "billing",
+      channel: "in_app",
+      readAt: null,
+      tone: billingStatus === "past_due" ? "warning" : "danger",
+      href: "/app/settings",
+    });
+  }
+
+  if (billingStatus === "expired") {
+    notifications.push({
+      id: `smart:billing-expired:${currentPeriodEnd ?? "no-end"}`,
+      source: "smart",
+      title: "Tu DarkMoney Pro vencio",
+      body:
+        currentPeriodEnd
+          ? `El acceso premium termino el ${currentPeriodEnd.slice(0, 10)}. Si quieres recuperarlo, puedes activarlo de nuevo desde Configuracion.`
+          : "El acceso premium ya termino. Si quieres recuperarlo, puedes activarlo de nuevo desde Configuracion.",
+      status: "pending",
+      scheduledFor: new Date().toISOString(),
+      kind: "plan",
+      channel: "in_app",
+      readAt: null,
+      tone: "danger",
+      href: "/app/settings",
+    });
+  }
+
+  return notifications;
+}
+
 function buildPendingInviteNotifications(
   pendingInvite: PendingInvite | null,
 ): InboxNotification[] {
@@ -580,10 +689,12 @@ export function useNotificationInbox({
   databaseNotifications,
   snapshot,
   workspaceName,
+  entitlement,
 }: {
   databaseNotifications: NotificationItem[];
   snapshot?: WorkspaceSnapshot | null;
   workspaceName?: string | null;
+  entitlement?: UserEntitlementSummary | null;
 }) {
   const { smartReadMap, markSmartAsRead } = useNotificationReads();
   const pendingInvite = usePendingInvite();
@@ -591,9 +702,10 @@ export function useNotificationInbox({
   const smartNotifications = useMemo(
     () => [
       ...buildPendingInviteNotifications(pendingInvite),
+      ...buildBillingNotifications(entitlement),
       ...buildSmartNotifications(snapshot, workspaceName),
     ],
-    [pendingInvite, snapshot, workspaceName],
+    [entitlement, pendingInvite, snapshot, workspaceName],
   );
 
   const mergedNotifications = useMemo(() => {

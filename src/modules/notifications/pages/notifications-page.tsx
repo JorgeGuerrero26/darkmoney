@@ -20,6 +20,7 @@ import {
   getQueryErrorMessage,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
+  useCurrentUserEntitlementQuery,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
   useWorkspaceSnapshotQuery,
@@ -56,6 +57,7 @@ export function NotificationsPage() {
   const notificationsQuery = useNotificationsQuery(user?.id);
   const preferencesQuery = useNotificationPreferencesQuery(user?.id);
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllReadMutation = useMarkAllNotificationsReadMutation(user?.id);
   const markSingleReadMutation = useMarkNotificationReadMutation(user?.id);
   const [filter, setFilter] = useState<NotificationFilter>("all");
@@ -63,6 +65,7 @@ export function NotificationsPage() {
 
   const inbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
+    entitlement: entitlementQuery.data,
     snapshot: snapshotQuery.data,
     workspaceName: activeWorkspace?.name,
   });

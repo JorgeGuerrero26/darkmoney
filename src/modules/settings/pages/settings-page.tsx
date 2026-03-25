@@ -110,6 +110,43 @@ function getWorkspaceInvitationStatusTone(status: "pending" | "accepted" | "decl
   }
 }
 
+function startOfLocalDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function getDaysUntilDate(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const today = startOfLocalDay(new Date()).getTime();
+  const targetDate = startOfLocalDay(new Date(value)).getTime();
+  return Math.round((targetDate - today) / 86400000);
+}
+
+function formatDaysRemainingLabel(daysRemaining: number | null) {
+  if (daysRemaining === null) {
+    return "Sin fecha reportada";
+  }
+
+  if (daysRemaining < 0) {
+    const elapsedDays = Math.abs(daysRemaining);
+    return elapsedDays === 1 ? "Vencio hace 1 dia" : `Vencio hace ${elapsedDays} dias`;
+  }
+
+  if (daysRemaining === 0) {
+    return "Vence hoy";
+  }
+
+  if (daysRemaining === 1) {
+    return "Queda 1 dia";
+  }
+
+  return `Quedan ${daysRemaining} dias`;
+}
+
 function NotificationPreferenceCard({
   checked,
   description,
@@ -709,12 +746,65 @@ export function SettingsPage() {
       : entitlement?.billingProvider
         ? entitlement.billingProvider
         : "Sin proveedor";
+  const normalizedBillingStatus = entitlement?.billingStatus?.trim().toLowerCase() ?? null;
+  const daysRemaining = getDaysUntilDate(entitlement?.currentPeriodEnd);
   const canCancelProPlan =
     !isAdminOverride &&
     Boolean(entitlement?.providerSubscriptionId) &&
     entitlement?.billingProvider === "lemon_squeezy" &&
     (entitlement?.proAccessEnabled ||
       ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? ""));
+  const currentPeriodBadge = isAdminOverride
+    ? { status: "Acceso por override admin", tone: "success" as const }
+    : entitlement?.currentPeriodEnd
+      ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
+        ? { status: `Vencio ${formatDate(entitlement.currentPeriodEnd)}`, tone: "warning" as const }
+        : entitlement?.cancelAtPeriodEnd
+          ? { status: `Termina ${formatDate(entitlement.currentPeriodEnd)}`, tone: "warning" as const }
+          : { status: `Renueva ${formatDate(entitlement.currentPeriodEnd)}`, tone: "info" as const }
+      : null;
+  const remainingDaysBadge =
+    !isAdminOverride && entitlement?.currentPeriodEnd
+      ? {
+          status: formatDaysRemainingLabel(daysRemaining),
+          tone:
+            normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
+              ? ("warning" as const)
+              : daysRemaining !== null && daysRemaining <= 1
+                ? ("warning" as const)
+                : ("neutral" as const),
+        }
+      : null;
+  const periodSummary = isAdminOverride
+    ? "Esta cuenta entra por override administrativo y siempre mantiene acceso premium para pruebas internas."
+    : entitlement?.currentPeriodEnd
+      ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
+        ? `Tu ultimo periodo premium termino el ${formatDate(entitlement.currentPeriodEnd)}.`
+        : entitlement?.cancelAtPeriodEnd
+          ? `La suscripcion ya esta cancelada y seguira activa hasta el ${formatDate(entitlement.currentPeriodEnd)}.`
+          : daysRemaining === 0
+            ? `Tu suscripcion se renueva hoy, ${formatDate(entitlement.currentPeriodEnd)}.`
+            : daysRemaining === 1
+              ? `Tu suscripcion se renueva manana, ${formatDate(entitlement.currentPeriodEnd)}.`
+              : `Tu suscripcion esta vigente y el siguiente corte es el ${formatDate(entitlement.currentPeriodEnd)}.`
+      : "Todavia no hay un ciclo premium reportado para esta cuenta.";
+  const statusSummary = entitlement?.billingStatus
+    ? `Lemon Squeezy reporta el estado "${entitlement.billingStatus}".`
+    : "Todavia no hay una suscripcion asociada a esta cuenta.";
+  const nextStepSummary = isAdminOverride
+    ? "No necesitas pagar ni reactivar nada mientras esta cuenta siga en modo administrador."
+    : normalizedBillingStatus === "expired"
+      ? "Como la suscripcion ya expiro, hoy el camino para volver a Pro es activarla de nuevo desde este panel."
+      : entitlement?.cancelAtPeriodEnd && entitlement?.currentPeriodEnd
+        ? `No se renovara automaticamente despues del ${formatDate(entitlement.currentPeriodEnd)}. Si luego quieres volver, podras activarla otra vez desde aqui.`
+        : normalizedBillingStatus === "past_due" || normalizedBillingStatus === "unpaid"
+          ? "Si el cobro se recupera, DarkMoney ajustara el acceso automaticamente cuando llegue el webhook de pago recuperado o exitoso."
+          : entitlement?.providerSubscriptionId
+            ? "Si Lemon Squeezy renueva, reanuda o recupera el pago, DarkMoney actualizara tu acceso automaticamente en segundo plano."
+            : "Si activas el plan, DarkMoney habilitara las funciones premium en cuanto Lemon Squeezy confirme la suscripcion.";
+  const subscriptionAlertsSummary = isAdminOverride
+    ? "Las alertas de suscripcion no se aplican a cuentas con override administrativo."
+    : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos dias para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripcion expira.";
 
   return (
     <div className="space-y-6 pb-8">
@@ -874,10 +964,16 @@ export function SettingsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={proStatusLabel} tone={proStatusTone} />
                   <StatusBadge status={`Proveedor ${providerLabel}`} tone="neutral" />
-                  {entitlement?.currentPeriodEnd ? (
+                  {currentPeriodBadge ? (
                     <StatusBadge
-                      status={`Vigente hasta ${formatDate(entitlement.currentPeriodEnd)}`}
-                      tone="info"
+                      status={currentPeriodBadge.status}
+                      tone={currentPeriodBadge.tone}
+                    />
+                  ) : null}
+                  {remainingDaysBadge ? (
+                    <StatusBadge
+                      status={remainingDaysBadge.status}
+                      tone={remainingDaysBadge.tone}
                     />
                   ) : null}
                 </div>
@@ -977,17 +1073,35 @@ export function SettingsPage() {
                   </p>
                 </div>
                 <div className="glass-panel-soft rounded-[24px] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Estado actual</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Pro desde</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
-                    {entitlement?.billingStatus
-                      ? `Lemon Squeezy reporta el estado "${entitlement.billingStatus}".`
-                      : "Todavia no hay una suscripcion asociada a esta cuenta."}
+                    {entitlement?.currentPeriodStart
+                      ? `Tu cuenta premium corre desde el ${formatDate(entitlement.currentPeriodStart)}.`
+                      : "Todavia no hay una fecha de inicio premium registrada para esta cuenta."}
                   </p>
                 </div>
                 <div className="glass-panel-soft rounded-[24px] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Siguiente paso</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Ciclo actual</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
-                    Si activas el plan, DarkMoney habilitara las funciones premium en cuanto Lemon Squeezy confirme la suscripcion.
+                    {periodSummary}
+                  </p>
+                </div>
+                <div className="glass-panel-soft rounded-[24px] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Estado actual</p>
+                  <p className="mt-3 text-sm leading-7 text-ink">
+                    {statusSummary}
+                  </p>
+                </div>
+                <div className="glass-panel-soft rounded-[24px] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Renovacion y reactivacion</p>
+                  <p className="mt-3 text-sm leading-7 text-ink">
+                    {nextStepSummary}
+                  </p>
+                </div>
+                <div className="glass-panel-soft rounded-[24px] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Alertas Pro</p>
+                  <p className="mt-3 text-sm leading-7 text-ink">
+                    {subscriptionAlertsSummary}
                   </p>
                 </div>
               </div>

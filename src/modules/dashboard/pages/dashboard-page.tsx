@@ -3573,14 +3573,16 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
-          <>
+          <div className="flex flex-wrap items-start gap-3">
             <Button
+              aria-label={snapshotQuery.isFetching ? "Actualizando dashboard" : "Actualizar dashboard"}
+              className="h-12 w-12 shrink-0 rounded-[18px] px-0"
               disabled={snapshotQuery.isFetching}
               onClick={() => snapshotQuery.refetch()}
+              title={snapshotQuery.isFetching ? "Actualizando dashboard" : "Actualizar dashboard"}
               variant="ghost"
             >
-              <RefreshCw className={`mr-2 h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              Actualizar
+              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
             </Button>
             <div className="flex flex-col gap-3">
             <SegmentedControl
@@ -3603,7 +3605,7 @@ export function DashboardPage() {
               value={topCount}
             />
             </div>
-          </>
+          </div>
         }
         description="Tu dinero ya tiene suficiente contexto. Aquí lo convertimos en decisiones: cuánto tienes, quién te debe, en qué se te va más, y si realmente estás ahorrando mejor que antes."
         eyebrow="resumen"

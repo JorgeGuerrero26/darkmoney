@@ -97,6 +97,10 @@ export function formatNotificationKindLabel(kind: string) {
       return "Flujo futuro";
     case "alert":
       return "Alerta";
+    case "billing":
+      return "Facturacion Pro";
+    case "plan":
+      return "Suscripcion Pro";
     case "counterparty":
       return "Contacto";
     case "system":
