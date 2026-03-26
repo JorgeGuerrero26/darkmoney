@@ -570,8 +570,8 @@ function buildBillingNotifications(
       daysRemaining === 0
         ? "hoy"
         : daysRemaining === 1
-          ? "manana"
-          : `en ${daysRemaining} dias`;
+        ? "mañana"
+          : `en ${daysRemaining} días`;
 
     notifications.push({
       id: `smart:billing-renewal:${billingStatus}:${currentPeriodEnd.slice(0, 10)}`,
@@ -580,8 +580,8 @@ function buildBillingNotifications(
         daysRemaining === 0
           ? "Tu DarkMoney Pro se renueva hoy"
           : daysRemaining === 1
-            ? "Tu DarkMoney Pro se renueva manana"
-            : `Tu DarkMoney Pro se renueva en ${daysRemaining} dias`,
+            ? "Tu DarkMoney Pro se renueva mañana"
+            : `Tu DarkMoney Pro se renueva en ${daysRemaining} días`,
       body: `Tu suscripcion con ${entitlement.billingProvider === "lemon_squeezy" ? "Lemon Squeezy" : "tu proveedor"} se renueva ${whenLabel}. Ten saldo disponible o revisa tu metodo de pago para no perder acceso.`,
       status: "pending",
       scheduledFor: currentPeriodEnd,
@@ -601,8 +601,8 @@ function buildBillingNotifications(
         daysRemaining === 0
           ? "Tu DarkMoney Pro termina hoy"
           : daysRemaining === 1
-            ? "Tu DarkMoney Pro termina manana"
-            : `Tu DarkMoney Pro termina en ${daysRemaining} dias`,
+            ? "Tu DarkMoney Pro termina mañana"
+            : `Tu DarkMoney Pro termina en ${daysRemaining} días`,
       body: `La suscripcion ya esta cancelada y no se renovara automaticamente. Tu acceso quedara activo hasta ${currentPeriodEnd.slice(0, 10)}.`,
       status: "pending",
       scheduledFor: currentPeriodEnd,

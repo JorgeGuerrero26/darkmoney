@@ -133,7 +133,7 @@ function formatDaysRemainingLabel(daysRemaining: number | null) {
 
   if (daysRemaining < 0) {
     const elapsedDays = Math.abs(daysRemaining);
-    return elapsedDays === 1 ? "Vencio hace 1 dia" : `Vencio hace ${elapsedDays} dias`;
+    return elapsedDays === 1 ? "Venció hace 1 día" : `Venció hace ${elapsedDays} días`;
   }
 
   if (daysRemaining === 0) {
@@ -141,10 +141,10 @@ function formatDaysRemainingLabel(daysRemaining: number | null) {
   }
 
   if (daysRemaining === 1) {
-    return "Queda 1 dia";
+    return "Queda 1 día";
   }
 
-  return `Quedan ${daysRemaining} dias`;
+  return `Quedan ${daysRemaining} días`;
 }
 
 function getFriendlyBillingStatus(status?: string | null) {
@@ -877,7 +877,7 @@ export function SettingsPage() {
           : daysRemaining === 0
             ? `Tu suscripcion se renueva hoy, ${formatDate(entitlement.currentPeriodEnd)}.`
             : daysRemaining === 1
-              ? `Tu suscripcion se renueva manana, ${formatDate(entitlement.currentPeriodEnd)}.`
+              ? `Tu suscripción se renueva mañana, ${formatDate(entitlement.currentPeriodEnd)}.`
               : `Tu suscripcion esta vigente y el siguiente corte es el ${formatDate(entitlement.currentPeriodEnd)}.`
       : "Todavia no hay un ciclo premium reportado para esta cuenta.";
   const statusSummary = isAdminOverride
@@ -898,7 +898,7 @@ export function SettingsPage() {
             : "Si activas el plan, DarkMoney habilitara las funciones premium en cuanto Lemon Squeezy confirme la suscripcion.";
   const subscriptionAlertsSummary = isAdminOverride
     ? "Las alertas de suscripcion no se aplican a cuentas con override administrativo."
-    : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos dias para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripcion expira.";
+    : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos días para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripción expira.";
   const primaryProActionLabel =
     normalizedBillingStatus === "checkout_created"
       ? "Continuar activacion Pro"
@@ -1226,7 +1226,7 @@ export function SettingsPage() {
                       </p>
                     </div>
                     <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
-                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Dias restantes</p>
+                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Días restantes</p>
                       <p className="mt-2 text-sm font-medium text-ink">
                         {remainingDaysBadge?.status ?? "Sin cuenta regresiva disponible"}
                       </p>
