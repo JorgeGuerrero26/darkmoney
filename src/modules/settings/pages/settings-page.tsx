@@ -147,6 +147,76 @@ function formatDaysRemainingLabel(daysRemaining: number | null) {
   return `Quedan ${daysRemaining} dias`;
 }
 
+function getFriendlyBillingStatus(status?: string | null) {
+  const normalizedStatus = status?.trim().toLowerCase() ?? null;
+
+  switch (normalizedStatus) {
+    case "checkout_created":
+      return {
+        label: "Activacion pendiente",
+        tone: "info" as const,
+        description:
+          "Ya abriste el proceso premium. Solo falta que Lemon Squeezy confirme el checkout para activar DarkMoney Pro.",
+      };
+    case "on_trial":
+      return {
+        label: "Prueba activa",
+        tone: "success" as const,
+        description:
+          "Tu acceso premium esta corriendo correctamente en periodo de prueba.",
+      };
+    case "active":
+      return {
+        label: "Suscripcion activa",
+        tone: "success" as const,
+        description:
+          "Tu acceso premium esta activo y la renovacion automatica sigue encendida.",
+      };
+    case "paused":
+      return {
+        label: "Suscripcion pausada",
+        tone: "warning" as const,
+        description:
+          "La suscripcion esta pausada por ahora. Conviene revisar el portal del proveedor si quieres retomarla.",
+      };
+    case "past_due":
+      return {
+        label: "Pago pendiente",
+        tone: "warning" as const,
+        description:
+          "El ultimo cobro no entro correctamente. Revisa tarjeta o fondos para no perder el acceso premium.",
+      };
+    case "unpaid":
+      return {
+        label: "Pago no completado",
+        tone: "danger" as const,
+        description:
+          "La suscripcion quedo impaga. Si el cobro no se recupera, DarkMoney Pro terminara automaticamente.",
+      };
+    case "cancelled":
+      return {
+        label: "Renovacion cancelada",
+        tone: "warning" as const,
+        description:
+          "La renovacion automatica ya esta apagada. Tu acceso seguira activo solo hasta el final del ciclo actual.",
+      };
+    case "expired":
+      return {
+        label: "Suscripcion vencida",
+        tone: "danger" as const,
+        description:
+          "El acceso premium ya termino. Puedes activarlo otra vez cuando quieras desde este panel.",
+      };
+    default:
+      return {
+        label: "Sin suscripcion activa",
+        tone: "neutral" as const,
+        description:
+          "Todavia no hay una suscripcion premium confirmada para esta cuenta.",
+      };
+  }
+}
+
 function NotificationPreferenceCard({
   checked,
   description,
@@ -564,7 +634,7 @@ export function SettingsPage() {
 
     if (billingStatus === "lemonsqueezy") {
       setBillingFeedbackMessage(
-        "Volviste desde Lemon Squeezy. Cuando el proveedor confirme la suscripcion, DarkMoney actualizara tu acceso Pro automaticamente.",
+        "Volviste del checkout premium. Si ya completaste el pago, DarkMoney actualizara tu acceso automaticamente en cuanto Lemon Squeezy lo confirme.",
       );
     }
   }, [location.search]);
@@ -639,10 +709,11 @@ export function SettingsPage() {
 
     try {
       const response = await cancelProSubscriptionMutation.mutateAsync();
+      const friendlyStatus = getFriendlyBillingStatus(response.billingStatus);
       setShowCancelConfirmation(false);
       setBillingFeedbackMessage(
         response.billingStatus
-          ? `Tu suscripción se actualizó con estado "${response.billingStatus}". DarkMoney ajustó tu acceso Pro con esa respuesta.`
+          ? `${friendlyStatus.label}. DarkMoney ya ajusto tu acceso premium con la respuesta real del proveedor.`
           : "La suscripción de DarkMoney Pro fue cancelada correctamente.",
       );
     } catch (error) {
@@ -734,12 +805,6 @@ export function SettingsPage() {
   const isCreatingSharedWorkspace = createSharedWorkspaceMutation.isPending;
   const isInvitingMember = createWorkspaceInvitationMutation.isPending;
   const entitlement = entitlementQuery.data;
-  const proStatusLabel = isAdminOverride
-    ? "Admin con acceso total"
-    : entitlement?.proAccessEnabled
-      ? "DarkMoney Pro activo"
-      : "Plan Free";
-  const proStatusTone = isAdminOverride || entitlement?.proAccessEnabled ? "success" : "warning";
   const providerLabel =
     entitlement?.billingProvider === "lemon_squeezy"
       ? "Lemon Squeezy"
@@ -747,7 +812,30 @@ export function SettingsPage() {
         ? entitlement.billingProvider
         : "Sin proveedor";
   const normalizedBillingStatus = entitlement?.billingStatus?.trim().toLowerCase() ?? null;
+  const friendlyBillingStatus = getFriendlyBillingStatus(entitlement?.billingStatus);
   const daysRemaining = getDaysUntilDate(entitlement?.currentPeriodEnd);
+  const proStatusLabel = isAdminOverride
+    ? "Admin con acceso total"
+    : entitlement?.proAccessEnabled
+      ? "DarkMoney Pro activo"
+      : normalizedBillingStatus === "checkout_created"
+        ? "Activacion en curso"
+        : normalizedBillingStatus === "past_due"
+          ? "Pago pendiente"
+          : normalizedBillingStatus === "unpaid"
+            ? "Cobro no completado"
+            : normalizedBillingStatus === "cancelled" && entitlement?.currentPeriodEnd && (daysRemaining === null || daysRemaining >= 0)
+              ? "Activo hasta fin de ciclo"
+              : "Plan Free";
+  const proStatusTone = isAdminOverride || entitlement?.proAccessEnabled
+    ? "success"
+    : normalizedBillingStatus === "checkout_created"
+      ? "info"
+      : normalizedBillingStatus === "past_due" || normalizedBillingStatus === "cancelled"
+        ? "warning"
+        : normalizedBillingStatus === "unpaid" || normalizedBillingStatus === "expired"
+          ? "danger"
+          : "warning";
   const canCancelProPlan =
     !isAdminOverride &&
     Boolean(entitlement?.providerSubscriptionId) &&
@@ -756,6 +844,8 @@ export function SettingsPage() {
       ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? ""));
   const currentPeriodBadge = isAdminOverride
     ? { status: "Acceso por override admin", tone: "success" as const }
+    : normalizedBillingStatus === "checkout_created"
+      ? { status: "Confirmacion pendiente", tone: "info" as const }
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
         ? { status: `Vencio ${formatDate(entitlement.currentPeriodEnd)}`, tone: "warning" as const }
@@ -764,7 +854,7 @@ export function SettingsPage() {
           : { status: `Renueva ${formatDate(entitlement.currentPeriodEnd)}`, tone: "info" as const }
       : null;
   const remainingDaysBadge =
-    !isAdminOverride && entitlement?.currentPeriodEnd
+    !isAdminOverride && entitlement?.currentPeriodEnd && normalizedBillingStatus !== "checkout_created"
       ? {
           status: formatDaysRemainingLabel(daysRemaining),
           tone:
@@ -777,6 +867,8 @@ export function SettingsPage() {
       : null;
   const periodSummary = isAdminOverride
     ? "Esta cuenta entra por override administrativo y siempre mantiene acceso premium para pruebas internas."
+    : normalizedBillingStatus === "checkout_created"
+      ? "Tu activacion premium ya fue iniciada. Cuando Lemon Squeezy confirme el checkout, DarkMoney encendera el acceso Pro automaticamente."
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
         ? `Tu ultimo periodo premium termino el ${formatDate(entitlement.currentPeriodEnd)}.`
@@ -788,11 +880,13 @@ export function SettingsPage() {
               ? `Tu suscripcion se renueva manana, ${formatDate(entitlement.currentPeriodEnd)}.`
               : `Tu suscripcion esta vigente y el siguiente corte es el ${formatDate(entitlement.currentPeriodEnd)}.`
       : "Todavia no hay un ciclo premium reportado para esta cuenta.";
-  const statusSummary = entitlement?.billingStatus
-    ? `Lemon Squeezy reporta el estado "${entitlement.billingStatus}".`
-    : "Todavia no hay una suscripcion asociada a esta cuenta.";
+  const statusSummary = isAdminOverride
+    ? "Tu cuenta entra por acceso administrativo, asi que no depende del proveedor para mantener funciones premium."
+    : friendlyBillingStatus.description;
   const nextStepSummary = isAdminOverride
     ? "No necesitas pagar ni reactivar nada mientras esta cuenta siga en modo administrador."
+    : normalizedBillingStatus === "checkout_created"
+      ? "Si ya pagaste, solo espera la confirmacion del proveedor o vuelve a actualizar en unos segundos. Si cerraste el checkout antes de terminar, puedes retomarlo desde este panel."
     : normalizedBillingStatus === "expired"
       ? "Como la suscripcion ya expiro, hoy el camino para volver a Pro es activarla de nuevo desde este panel."
       : entitlement?.cancelAtPeriodEnd && entitlement?.currentPeriodEnd
@@ -805,6 +899,16 @@ export function SettingsPage() {
   const subscriptionAlertsSummary = isAdminOverride
     ? "Las alertas de suscripcion no se aplican a cuentas con override administrativo."
     : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos dias para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripcion expira.";
+  const primaryProActionLabel =
+    normalizedBillingStatus === "checkout_created"
+      ? "Continuar activacion Pro"
+      : normalizedBillingStatus === "expired"
+        ? "Reactivar DarkMoney Pro"
+        : "Activar DarkMoney Pro";
+  const coverageSummary = currentPeriodBadge?.status ?? friendlyBillingStatus.label;
+  const cycleSummary = entitlement?.currentPeriodStart
+    ? `Desde ${formatDate(entitlement.currentPeriodStart)}`
+    : "Aun sin fecha de inicio";
 
   return (
     <div className="space-y-6 pb-8">
@@ -959,10 +1063,13 @@ export function SettingsPage() {
               tone="error"
             />
           ) : (
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-              <div className="glass-panel-soft rounded-[28px] p-5">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
+              <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(76,109,255,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(107,228,197,0.12),transparent_28%),linear-gradient(160deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)_34%,rgba(5,9,16,0.78)_100%)] p-6">
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_32%,rgba(255,255,255,0.01)_100%)]" />
+                <div className="relative">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={proStatusLabel} tone={proStatusTone} />
+                  <StatusBadge status={friendlyBillingStatus.label} tone={friendlyBillingStatus.tone} />
                   <StatusBadge status={`Proveedor ${providerLabel}`} tone="neutral" />
                   {currentPeriodBadge ? (
                     <StatusBadge
@@ -977,19 +1084,26 @@ export function SettingsPage() {
                     />
                   ) : null}
                 </div>
-                <h3 className="mt-4 font-display text-3xl font-semibold text-ink">
+                <p className="mt-6 text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-storm/70">
+                  Premium access
+                </p>
+                <h3 className="mt-3 max-w-3xl font-display text-4xl font-semibold leading-tight text-ink">
                   {isAdminOverride
                     ? "Tu cuenta administradora ya tiene acceso Pro"
                     : canAccessProFeatures
                       ? "Tu cuenta ya puede usar DarkMoney Pro"
-                      : "Activa DarkMoney Pro para desbloquear el nivel premium"}
+                      : normalizedBillingStatus === "checkout_created"
+                        ? "Tu activacion premium ya esta en marcha"
+                        : "Activa DarkMoney Pro para desbloquear el nivel premium"}
                 </h3>
-                <p className="mt-3 text-sm leading-7 text-storm">
+                <p className="mt-4 max-w-3xl text-sm leading-8 text-storm">
                   {isAdminOverride
                     ? "Esta cuenta entra por override administrativo, asi que no necesita pasar por Lemon Squeezy para probar funciones premium."
                     : canAccessProFeatures
-                      ? "Tu acceso ya esta activo. Si vuelves desde Lemon Squeezy, el estado se refrescara automaticamente cuando llegue la confirmacion."
-                      : "Este flujo creara una suscripcion en Lemon Squeezy. Cuando la suscripcion quede activa, DarkMoney te habilitara automaticamente el modo Pro."}
+                      ? "Tu acceso premium ya esta activo. DarkMoney seguira sincronizando renovaciones, cobros y cambios de estado automaticamente."
+                      : normalizedBillingStatus === "checkout_created"
+                        ? "Ya abriste el checkout premium. Cuando Lemon Squeezy confirme el proceso, DarkMoney activara tu acceso automaticamente."
+                        : "Desbloquea dashboard avanzado, Aprendiendo de ti, comprobantes y alertas premium con una suscripcion conectada a Lemon Squeezy."}
                 </p>
 
                 {billingErrorMessage ? (
@@ -1043,7 +1157,7 @@ export function SettingsPage() {
                     >
                       {startProCheckoutMutation.isPending
                         ? "Abriendo Lemon Squeezy..."
-                        : "Activar DarkMoney Pro"}
+                        : primaryProActionLabel}
                     </Button>
                   ) : null}
                   {canCancelProPlan ? (
@@ -1063,47 +1177,81 @@ export function SettingsPage() {
                     {entitlementQuery.isFetching ? "Actualizando..." : "Actualizar estado"}
                   </Button>
                 </div>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {["Dashboard avanzado", "Aprendiendo de ti", "Comprobantes", "Alertas inteligentes"].map((feature) => (
+                    <span
+                      className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold tracking-[0.18em] text-storm/90"
+                      key={feature}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Estado de cobro</p>
+                    <p className="mt-3 text-lg font-semibold text-ink">{friendlyBillingStatus.label}</p>
+                    <p className="mt-2 text-sm leading-7 text-storm">{statusSummary}</p>
+                  </article>
+                  <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Cobertura</p>
+                    <p className="mt-3 text-lg font-semibold text-ink">{coverageSummary}</p>
+                    <p className="mt-2 text-sm leading-7 text-storm">{periodSummary}</p>
+                  </article>
+                  <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Proveedor</p>
+                    <p className="mt-3 text-lg font-semibold text-ink">{providerLabel}</p>
+                    <p className="mt-2 text-sm leading-7 text-storm">
+                      {entitlement?.providerSubscriptionId
+                        ? "DarkMoney ya tiene una suscripcion enlazada con este proveedor."
+                        : "Todavia no hay una suscripcion enlazada a esta cuenta."}
+                    </p>
+                  </article>
+                </div>
+                </div>
               </div>
 
               <div className="grid gap-3">
-                <div className="glass-panel-soft rounded-[24px] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Incluye</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    Dashboard avanzado, Aprendiendo de ti, comprobantes con imagen y futuras funciones premium.
-                  </p>
-                </div>
-                <div className="glass-panel-soft rounded-[24px] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Pro desde</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    {entitlement?.currentPeriodStart
-                      ? `Tu cuenta premium corre desde el ${formatDate(entitlement.currentPeriodStart)}.`
-                      : "Todavia no hay una fecha de inicio premium registrada para esta cuenta."}
-                  </p>
-                </div>
-                <div className="glass-panel-soft rounded-[24px] p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Ciclo actual</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    {periodSummary}
-                  </p>
-                </div>
-                <div className="glass-panel-soft rounded-[24px] p-4">
+                <article className="glass-panel-soft rounded-[24px] p-5">
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Resumen del ciclo</p>
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
+                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Pro desde</p>
+                      <p className="mt-2 text-sm font-medium text-ink">{cycleSummary}</p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
+                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Siguiente corte</p>
+                      <p className="mt-2 text-sm font-medium text-ink">
+                        {entitlement?.currentPeriodEnd ? formatDate(entitlement.currentPeriodEnd) : "Sin fecha confirmada"}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
+                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Dias restantes</p>
+                      <p className="mt-2 text-sm font-medium text-ink">
+                        {remainingDaysBadge?.status ?? "Sin cuenta regresiva disponible"}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+                <article className="glass-panel-soft rounded-[24px] p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Estado actual</p>
+                  <p className="mt-4 text-lg font-semibold text-ink">{friendlyBillingStatus.label}</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
                     {statusSummary}
                   </p>
-                </div>
-                <div className="glass-panel-soft rounded-[24px] p-4">
+                </article>
+                <article className="glass-panel-soft rounded-[24px] p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Renovacion y reactivacion</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
                     {nextStepSummary}
                   </p>
-                </div>
-                <div className="glass-panel-soft rounded-[24px] p-4">
+                </article>
+                <article className="glass-panel-soft rounded-[24px] p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-storm">Alertas Pro</p>
                   <p className="mt-3 text-sm leading-7 text-ink">
                     {subscriptionAlertsSummary}
                   </p>
-                </div>
+                </article>
               </div>
             </div>
           )}
