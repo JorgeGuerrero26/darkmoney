@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import { AppShell } from "../layouts/app-shell";
 import { AuthShell } from "../layouts/auth-shell";
+import { PublicShell } from "../layouts/public-shell";
 import { RouteErrorPage } from "../../modules/shared/pages/route-error-page";
 import { HomeRedirect } from "../guards/home-redirect";
 import { PublicOnly } from "../guards/public-only";
@@ -44,6 +45,28 @@ export const router = createBrowserRouter([
     path: "/",
     element: <HomeRedirect />,
     errorElement: <RouteErrorPage />,
+  },
+  {
+    element: <PublicShell />,
+    errorElement: <RouteErrorPage />,
+    children: [
+      {
+        path: "pricing",
+        lazy: lazyRoute(() => import("../../modules/public/pages/pricing-page"), "PricingPage"),
+      },
+      {
+        path: "terms",
+        lazy: lazyRoute(() => import("../../modules/public/pages/terms-page"), "TermsPage"),
+      },
+      {
+        path: "privacy",
+        lazy: lazyRoute(() => import("../../modules/public/pages/privacy-page"), "PrivacyPage"),
+      },
+      {
+        path: "refunds",
+        lazy: lazyRoute(() => import("../../modules/public/pages/refunds-page"), "RefundsPage"),
+      },
+    ],
   },
   {
     path: "/auth",
