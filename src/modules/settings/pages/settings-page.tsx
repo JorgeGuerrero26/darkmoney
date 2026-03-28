@@ -1033,9 +1033,6 @@ export function SettingsPage() {
             : isPaddleCheckoutConfigured()
               ? `Si activas el plan, DarkMoney habilitara las funciones premium en cuanto ${configuredCheckoutProviderLabel} confirme la suscripcion.`
               : "Estamos preparando el nuevo checkout premium. En cuanto completes la configuracion de Paddle, el acceso Pro quedara listo desde este panel.";
-  const subscriptionAlertsSummary = isAdminOverride
-    ? "Las alertas de suscripcion no se aplican a cuentas con override administrativo."
-    : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos días para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripción expira.";
   const primaryProActionLabel =
     normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? "Continuar activacion Pro"
