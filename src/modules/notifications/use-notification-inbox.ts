@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { getBillingProviderLabel } from "../../lib/billing-provider";
 import { formatCurrency } from "../../lib/formatting/money";
 import type { WorkspaceSnapshot } from "../../services/queries/workspace-data";
 import type {
@@ -582,7 +583,7 @@ function buildBillingNotifications(
           : daysRemaining === 1
             ? "Tu DarkMoney Pro se renueva mañana"
             : `Tu DarkMoney Pro se renueva en ${daysRemaining} días`,
-      body: `Tu suscripcion con ${entitlement.billingProvider === "lemon_squeezy" ? "Lemon Squeezy" : "tu proveedor"} se renueva ${whenLabel}. Ten saldo disponible o revisa tu metodo de pago para no perder acceso.`,
+      body: `Tu suscripcion con ${getBillingProviderLabel(entitlement.billingProvider)} se renueva ${whenLabel}. Ten saldo disponible o revisa tu metodo de pago para no perder acceso.`,
       status: "pending",
       scheduledFor: currentPeriodEnd,
       kind: "billing",

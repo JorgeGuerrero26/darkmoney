@@ -1,4 +1,5 @@
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { PUBLIC_CONTACT } from "../../../lib/public-contact";
 
 const privacySections = [
   {
@@ -39,7 +40,7 @@ const privacySections = [
   {
     title: "8. Contacto",
     body:
-      "Si tienes preguntas sobre privacidad o tratamiento de datos, puedes comunicarte por los canales oficiales publicados en DarkMoney.",
+      `Si tienes preguntas sobre privacidad o tratamiento de datos, puedes comunicarte a ${PUBLIC_CONTACT.supportEmail}, al telefono ${PUBLIC_CONTACT.supportPhoneDisplay} o por los canales publicos de DarkMoney. ${PUBLIC_CONTACT.taxIdLabel} ${PUBLIC_CONTACT.taxIdValue}.`,
   },
 ];
 

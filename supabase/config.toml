@@ -8,6 +8,9 @@ verify_jwt = false
 [functions.cancel-pro-subscription]
 verify_jwt = false
 
+[functions.cancel-paddle-subscription]
+verify_jwt = false
+
 [functions.create-shared-workspace]
 verify_jwt = false
 
@@ -36,4 +39,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.lemon-squeezy-webhook]
+verify_jwt = false
+
+[functions.paddle-webhook]
 verify_jwt = false

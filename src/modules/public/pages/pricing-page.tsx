@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { PUBLIC_CONTACT } from "../../../lib/public-contact";
 
 const freeFeatures = [
   "Cuentas, movimientos y categorias",
@@ -134,6 +135,9 @@ export function PricingPage() {
             </Link>
             <Link to="/refunds">
               <Button variant="ghost">Refunds</Button>
+            </Link>
+            <Link to={PUBLIC_CONTACT.claimsBookPath}>
+              <Button variant="ghost">Libro de reclamaciones</Button>
             </Link>
           </div>
         </SurfaceCard>

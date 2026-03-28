@@ -22,6 +22,17 @@ Copia `.env.example` a `.env` y completa:
 ```env
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_PUBLIC_APP_URL=https://darkmoney.company
+VITE_PADDLE_CLIENT_TOKEN=
+VITE_PADDLE_PRO_PRICE_ID=
+VITE_PADDLE_ENV=sandbox
+```
+
+Para el nuevo checkout de Paddle tambien necesitas configurar en Supabase Functions:
+
+```txt
+PADDLE_API_KEY
+PADDLE_WEBHOOK_SECRET
 ```
 
 ## Comandos

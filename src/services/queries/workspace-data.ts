@@ -2390,10 +2390,11 @@ export function getQueryErrorMessage(
 
     if (
       loweredMessage.includes("app_url publica") ||
+      loweredMessage.includes("paddle") ||
       loweredMessage.includes("lemon_squeezy") ||
       loweredMessage.includes("lemon squeezy")
     ) {
-      return `${error.message} Revisa los secrets de Lemon Squeezy y APP_URL en Supabase Functions.`;
+      return `${error.message} Revisa los secrets del proveedor de cobro en Supabase Functions y la configuracion publica del checkout en el frontend.`;
     }
 
     return error.message;
@@ -2623,6 +2624,32 @@ export function useCancelProSubscriptionMutation(userId?: string) {
 
       return {
         provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
+        billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
+        proAccessEnabled: Boolean(data?.proAccessEnabled),
+      } satisfies CancelProSubscriptionResult;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["user-entitlement", userId ?? null],
+      });
+    },
+  });
+}
+
+export function useCancelPaddleSubscriptionMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
+        "cancel-paddle-subscription",
+        {
+          provider: "paddle",
+        },
+      );
+
+      return {
+        provider: typeof data?.provider === "string" ? data.provider : "paddle",
         billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
         proAccessEnabled: Boolean(data?.proAccessEnabled),
       } satisfies CancelProSubscriptionResult;

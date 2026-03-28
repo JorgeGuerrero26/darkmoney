@@ -11,20 +11,22 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { getPublicAppUrl } from "../../../lib/app-url";
+import { getBillingProviderLabel } from "../../../lib/billing-provider";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel, formatWorkspaceRoleLabel } from "../../../lib/formatting/labels";
+import { isPaddleCheckoutConfigured, openPaddleProCheckout } from "../../../lib/paddle";
 import { useAuth } from "../../auth/auth-context";
 import { useProFeatureAccess } from "../../shared/use-pro-feature-access";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   useCreateSharedWorkspaceMutation,
   useCreateWorkspaceInvitationMutation,
+  useCancelPaddleSubscriptionMutation,
   useCancelProSubscriptionMutation,
   getQueryErrorMessage,
   useCurrentUserEntitlementQuery,
   useNotificationPreferencesQuery,
   useSaveNotificationPreferencesMutation,
-  useStartProCheckoutMutation,
   useWorkspaceCollaborationQuery,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
@@ -152,13 +154,15 @@ function getFriendlyBillingStatus(status?: string | null) {
 
   switch (normalizedStatus) {
     case "checkout_created":
+    case "checkout_opened":
       return {
         label: "Activacion pendiente",
         tone: "info" as const,
         description:
-          "Ya abriste el proceso premium. Solo falta que Lemon Squeezy confirme el checkout para activar DarkMoney Pro.",
+          "Ya abriste el proceso premium. Solo falta que el proveedor confirme el cobro para activar DarkMoney Pro.",
       };
     case "on_trial":
+    case "trialing":
       return {
         label: "Prueba activa",
         tone: "success" as const,
@@ -177,7 +181,7 @@ function getFriendlyBillingStatus(status?: string | null) {
         label: "Suscripcion pausada",
         tone: "warning" as const,
         description:
-          "La suscripcion esta pausada por ahora. Conviene revisar el portal del proveedor si quieres retomarla.",
+          "La suscripcion esta pausada por ahora. Conviene revisar el estado del proveedor si quieres retomarla.",
       };
     case "past_due":
       return {
@@ -194,6 +198,7 @@ function getFriendlyBillingStatus(status?: string | null) {
           "La suscripcion quedo impaga. Si el cobro no se recupera, DarkMoney Pro terminara automaticamente.",
       };
     case "cancelled":
+    case "canceled":
       return {
         label: "Renovacion cancelada",
         tone: "warning" as const,
@@ -498,8 +503,8 @@ export function SettingsPage() {
   const preferencesQuery = useNotificationPreferencesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const savePreferencesMutation = useSaveNotificationPreferencesMutation(user?.id);
-  const cancelProSubscriptionMutation = useCancelProSubscriptionMutation(user?.id);
-  const startProCheckoutMutation = useStartProCheckoutMutation(user?.id);
+  const cancelLegacyProSubscriptionMutation = useCancelProSubscriptionMutation(user?.id);
+  const cancelPaddleSubscriptionMutation = useCancelPaddleSubscriptionMutation(user?.id);
   const createSharedWorkspaceMutation = useCreateSharedWorkspaceMutation(user?.id);
   const workspaceCollaborationQuery = useWorkspaceCollaborationQuery(activeWorkspace?.id);
   const createWorkspaceInvitationMutation = useCreateWorkspaceInvitationMutation(activeWorkspace?.id, user?.id);
@@ -516,6 +521,7 @@ export function SettingsPage() {
   const [billingErrorMessage, setBillingErrorMessage] = useState("");
   const [workspaceFeedbackMessage, setWorkspaceFeedbackMessage] = useState("");
   const [workspaceErrorMessage, setWorkspaceErrorMessage] = useState("");
+  const [isOpeningPaddleCheckout, setIsOpeningPaddleCheckout] = useState(false);
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
   const [isInviteMemberOpen, setIsInviteMemberOpen] = useState(false);
@@ -632,7 +638,11 @@ export function SettingsPage() {
     const query = new URLSearchParams(location.search);
     const billingStatus = query.get("billing");
 
-    if (billingStatus === "lemonsqueezy") {
+    if (billingStatus === "paddle") {
+      setBillingFeedbackMessage(
+        "Volviste del checkout premium. Si Paddle ya confirmo el cobro, DarkMoney actualizara tu acceso automaticamente en cuanto llegue el webhook.",
+      );
+    } else if (billingStatus === "lemonsqueezy") {
       setBillingFeedbackMessage(
         "Volviste del checkout premium. Si ya completaste el pago, DarkMoney actualizara tu acceso automaticamente en cuanto Lemon Squeezy lo confirme.",
       );
@@ -687,19 +697,32 @@ export function SettingsPage() {
     setShowCancelConfirmation(false);
 
     try {
-      const response = await startProCheckoutMutation.mutateAsync({
+      if (!user?.id || !user.email) {
+        throw new Error("Necesitamos un usuario con email valido para abrir Paddle.");
+      }
+
+      if (!isPaddleCheckoutConfigured()) {
+        throw new Error(
+          "Falta configurar VITE_PADDLE_CLIENT_TOKEN y VITE_PADDLE_PRO_PRICE_ID para abrir Paddle.",
+        );
+      }
+
+      setIsOpeningPaddleCheckout(true);
+      await openPaddleProCheckout({
         appUrl: getPublicAppUrl(),
+        payerEmail: user.email,
+        userId: user.id,
         workspaceId: activeWorkspace?.id ?? null,
       });
-
-      window.location.assign(response.checkoutUrl);
     } catch (error) {
       setBillingErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos iniciar el checkout de Lemon Squeezy para DarkMoney Pro.",
+          "No pudimos abrir Paddle para activar DarkMoney Pro.",
         ),
       );
+    } finally {
+      setIsOpeningPaddleCheckout(false);
     }
   }
 
@@ -708,7 +731,12 @@ export function SettingsPage() {
     setBillingFeedbackMessage("");
 
     try {
-      const response = await cancelProSubscriptionMutation.mutateAsync();
+      const billingProvider = entitlement?.billingProvider?.trim().toLowerCase() ?? null;
+      const mutation =
+        billingProvider === "paddle"
+          ? cancelPaddleSubscriptionMutation
+          : cancelLegacyProSubscriptionMutation;
+      const response = await mutation.mutateAsync();
       const friendlyStatus = getFriendlyBillingStatus(response.billingStatus);
       setShowCancelConfirmation(false);
       setBillingFeedbackMessage(
@@ -805,33 +833,40 @@ export function SettingsPage() {
   const isCreatingSharedWorkspace = createSharedWorkspaceMutation.isPending;
   const isInvitingMember = createWorkspaceInvitationMutation.isPending;
   const entitlement = entitlementQuery.data;
-  const providerLabel =
-    entitlement?.billingProvider === "lemon_squeezy"
-      ? "Lemon Squeezy"
-      : entitlement?.billingProvider
-        ? entitlement.billingProvider
-        : "Sin proveedor";
+  const configuredCheckoutProviderLabel = isPaddleCheckoutConfigured() ? "Paddle" : "nuevo checkout";
+  const providerLabel = getBillingProviderLabel(
+    entitlement?.billingProvider ?? (isPaddleCheckoutConfigured() ? "paddle" : null),
+  );
+  const normalizedBillingProvider = entitlement?.billingProvider?.trim().toLowerCase() ?? null;
   const normalizedBillingStatus = entitlement?.billingStatus?.trim().toLowerCase() ?? null;
   const friendlyBillingStatus = getFriendlyBillingStatus(entitlement?.billingStatus);
   const daysRemaining = getDaysUntilDate(entitlement?.currentPeriodEnd);
+  const activeCancelMutation =
+    normalizedBillingProvider === "paddle"
+      ? cancelPaddleSubscriptionMutation
+      : cancelLegacyProSubscriptionMutation;
   const proStatusLabel = isAdminOverride
     ? "Admin con acceso total"
     : entitlement?.proAccessEnabled
       ? "DarkMoney Pro activo"
-      : normalizedBillingStatus === "checkout_created"
+      : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
         ? "Activacion en curso"
         : normalizedBillingStatus === "past_due"
           ? "Pago pendiente"
           : normalizedBillingStatus === "unpaid"
             ? "Cobro no completado"
-            : normalizedBillingStatus === "cancelled" && entitlement?.currentPeriodEnd && (daysRemaining === null || daysRemaining >= 0)
+            : (normalizedBillingStatus === "cancelled" || normalizedBillingStatus === "canceled") &&
+                entitlement?.currentPeriodEnd &&
+                (daysRemaining === null || daysRemaining >= 0)
               ? "Activo hasta fin de ciclo"
               : "Plan Free";
   const proStatusTone = isAdminOverride || entitlement?.proAccessEnabled
     ? "success"
-    : normalizedBillingStatus === "checkout_created"
+    : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? "info"
-      : normalizedBillingStatus === "past_due" || normalizedBillingStatus === "cancelled"
+      : normalizedBillingStatus === "past_due" ||
+          normalizedBillingStatus === "cancelled" ||
+          normalizedBillingStatus === "canceled"
         ? "warning"
         : normalizedBillingStatus === "unpaid" || normalizedBillingStatus === "expired"
           ? "danger"
@@ -839,12 +874,17 @@ export function SettingsPage() {
   const canCancelProPlan =
     !isAdminOverride &&
     Boolean(entitlement?.providerSubscriptionId) &&
-    entitlement?.billingProvider === "lemon_squeezy" &&
-    (entitlement?.proAccessEnabled ||
-      ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? ""));
+    (
+      (normalizedBillingProvider === "paddle" &&
+        !entitlement?.cancelAtPeriodEnd &&
+        ["trialing", "active", "paused"].includes(normalizedBillingStatus ?? "")) ||
+      (normalizedBillingProvider === "lemon_squeezy" &&
+        (entitlement?.proAccessEnabled ||
+          ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? "")))
+    );
   const currentPeriodBadge = isAdminOverride
     ? { status: "Acceso por override admin", tone: "success" as const }
-    : normalizedBillingStatus === "checkout_created"
+    : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? { status: "Confirmacion pendiente", tone: "info" as const }
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
@@ -854,7 +894,10 @@ export function SettingsPage() {
           : { status: `Renueva ${formatDate(entitlement.currentPeriodEnd)}`, tone: "info" as const }
       : null;
   const remainingDaysBadge =
-    !isAdminOverride && entitlement?.currentPeriodEnd && normalizedBillingStatus !== "checkout_created"
+    !isAdminOverride &&
+    entitlement?.currentPeriodEnd &&
+    normalizedBillingStatus !== "checkout_created" &&
+    normalizedBillingStatus !== "checkout_opened"
       ? {
           status: formatDaysRemainingLabel(daysRemaining),
           tone:
@@ -867,8 +910,8 @@ export function SettingsPage() {
       : null;
   const periodSummary = isAdminOverride
     ? "Esta cuenta entra por override administrativo y siempre mantiene acceso premium para pruebas internas."
-    : normalizedBillingStatus === "checkout_created"
-      ? "Tu activacion premium ya fue iniciada. Cuando Lemon Squeezy confirme el checkout, DarkMoney encendera el acceso Pro automaticamente."
+    : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
+      ? "Tu activacion premium ya fue iniciada. Cuando el proveedor confirme el checkout, DarkMoney encendera el acceso Pro automaticamente."
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
         ? `Tu ultimo periodo premium termino el ${formatDate(entitlement.currentPeriodEnd)}.`
@@ -885,7 +928,7 @@ export function SettingsPage() {
     : friendlyBillingStatus.description;
   const nextStepSummary = isAdminOverride
     ? "No necesitas pagar ni reactivar nada mientras esta cuenta siga en modo administrador."
-    : normalizedBillingStatus === "checkout_created"
+    : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? "Si ya pagaste, solo espera la confirmacion del proveedor o vuelve a actualizar en unos segundos. Si cerraste el checkout antes de terminar, puedes retomarlo desde este panel."
     : normalizedBillingStatus === "expired"
       ? "Como la suscripcion ya expiro, hoy el camino para volver a Pro es activarla de nuevo desde este panel."
@@ -894,13 +937,15 @@ export function SettingsPage() {
         : normalizedBillingStatus === "past_due" || normalizedBillingStatus === "unpaid"
           ? "Si el cobro se recupera, DarkMoney ajustara el acceso automaticamente cuando llegue el webhook de pago recuperado o exitoso."
           : entitlement?.providerSubscriptionId
-            ? "Si Lemon Squeezy renueva, reanuda o recupera el pago, DarkMoney actualizara tu acceso automaticamente en segundo plano."
-            : "Si activas el plan, DarkMoney habilitara las funciones premium en cuanto Lemon Squeezy confirme la suscripcion.";
+            ? "Si el proveedor renueva, reanuda o recupera el pago, DarkMoney actualizara tu acceso automaticamente en segundo plano."
+            : isPaddleCheckoutConfigured()
+              ? `Si activas el plan, DarkMoney habilitara las funciones premium en cuanto ${configuredCheckoutProviderLabel} confirme la suscripcion.`
+              : "Estamos preparando el nuevo checkout premium. En cuanto completes la configuracion de Paddle, el acceso Pro quedara listo desde este panel.";
   const subscriptionAlertsSummary = isAdminOverride
     ? "Las alertas de suscripcion no se aplican a cuentas con override administrativo."
     : "DarkMoney ya genera alertas dentro de la app cuando quedan pocos días para renovar, cuando el plan se cancela al cierre, si el cobro falla o si la suscripción expira.";
   const primaryProActionLabel =
-    normalizedBillingStatus === "checkout_created"
+    normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? "Continuar activacion Pro"
       : normalizedBillingStatus === "expired"
         ? "Reactivar DarkMoney Pro"
@@ -1092,25 +1137,27 @@ export function SettingsPage() {
                     ? "Tu cuenta administradora ya tiene acceso Pro"
                     : canAccessProFeatures
                       ? "Tu cuenta ya puede usar DarkMoney Pro"
-                      : normalizedBillingStatus === "checkout_created"
+                      : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
                         ? "Tu activacion premium ya esta en marcha"
                         : "Activa DarkMoney Pro para desbloquear el nivel premium"}
                 </h3>
                 <p className="mt-4 max-w-3xl text-sm leading-8 text-storm">
                   {isAdminOverride
-                    ? "Esta cuenta entra por override administrativo, asi que no necesita pasar por Lemon Squeezy para probar funciones premium."
+                    ? "Esta cuenta entra por override administrativo, asi que no necesita pasar por ningun checkout externo para probar funciones premium."
                     : canAccessProFeatures
                       ? "Tu acceso premium ya esta activo. DarkMoney seguira sincronizando renovaciones, cobros y cambios de estado automaticamente."
-                      : normalizedBillingStatus === "checkout_created"
-                        ? "Ya abriste el checkout premium. Cuando Lemon Squeezy confirme el proceso, DarkMoney activara tu acceso automaticamente."
-                        : "Desbloquea dashboard avanzado, Aprendiendo de ti, comprobantes y alertas premium con una suscripcion conectada a Lemon Squeezy."}
+                      : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
+                        ? "Ya abriste el checkout premium. Cuando el proveedor confirme el proceso, DarkMoney activara tu acceso automaticamente."
+                        : isPaddleCheckoutConfigured()
+                          ? "Desbloquea dashboard avanzado, Aprendiendo de ti, comprobantes y alertas premium con una suscripcion conectada a Paddle."
+                          : "El codigo de Lemon queda guardado, pero el nuevo flujo visible ahora se preparara desde Paddle."}
                 </p>
 
                 {billingErrorMessage ? (
                   <FormFeedbackBanner
                     className="mt-5"
                     description={billingErrorMessage}
-                    title="No pudimos abrir Lemon Squeezy"
+                    title="No pudimos abrir Paddle"
                   />
                 ) : null}
                 {billingFeedbackMessage ? (
@@ -1126,15 +1173,15 @@ export function SettingsPage() {
                     action={
                       <div className="flex flex-wrap gap-3">
                         <Button
-                          disabled={cancelProSubscriptionMutation.isPending}
+                          disabled={activeCancelMutation.isPending}
                           onClick={() => void handleCancelProSubscription()}
                         >
-                          {cancelProSubscriptionMutation.isPending
+                          {activeCancelMutation.isPending
                             ? "Cancelando..."
                             : "Confirmar cancelación"}
                         </Button>
                         <Button
-                          disabled={cancelProSubscriptionMutation.isPending}
+                          disabled={activeCancelMutation.isPending}
                           onClick={() => setShowCancelConfirmation(false)}
                           variant="ghost"
                         >
@@ -1144,25 +1191,34 @@ export function SettingsPage() {
                     }
                     badgeLabel="Confirmación"
                     className="mt-5"
-                    description="La cancelacion se enviara a Lemon Squeezy y DarkMoney actualizara tu acceso Pro con la respuesta real del proveedor."
+                    description={`La cancelacion se enviara a ${providerLabel} y DarkMoney actualizara tu acceso Pro con la respuesta real del proveedor.`}
                     title="Vas a cancelar la suscripción de DarkMoney Pro"
+                  />
+                ) : null}
+                {!isAdminOverride && !canAccessProFeatures && !isPaddleCheckoutConfigured() ? (
+                  <FormFeedbackBanner
+                    badgeLabel="Paddle"
+                    className="mt-5"
+                    description="Completa VITE_PADDLE_CLIENT_TOKEN y VITE_PADDLE_PRO_PRICE_ID para habilitar el nuevo checkout premium desde el frontend."
+                    title="Paddle todavia no esta configurado en esta build"
+                    tone="info"
                   />
                 ) : null}
 
                 <div className="mt-5 flex flex-wrap gap-3">
-                  {!isAdminOverride && !canAccessProFeatures ? (
+                  {!isAdminOverride && !canAccessProFeatures && isPaddleCheckoutConfigured() ? (
                     <Button
-                      disabled={startProCheckoutMutation.isPending}
+                      disabled={isOpeningPaddleCheckout}
                       onClick={() => void handleStartProCheckout()}
                     >
-                      {startProCheckoutMutation.isPending
-                        ? "Abriendo Lemon Squeezy..."
+                      {isOpeningPaddleCheckout
+                        ? "Abriendo Paddle..."
                         : primaryProActionLabel}
                     </Button>
                   ) : null}
                   {canCancelProPlan ? (
                     <Button
-                      disabled={cancelProSubscriptionMutation.isPending}
+                      disabled={activeCancelMutation.isPending}
                       onClick={() => setShowCancelConfirmation(true)}
                       variant="secondary"
                     >

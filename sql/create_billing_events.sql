@@ -10,12 +10,12 @@ create table if not exists public.billing_events (
   processing_error text null,
   processed_at timestamptz null,
   created_at timestamptz not null default now(),
-  constraint billing_events_provider_chk check (provider in ('mercado_pago')),
+  constraint billing_events_provider_chk check (provider in ('mercado_pago', 'lemon_squeezy', 'paddle')),
   constraint billing_events_payload_object_chk check (jsonb_typeof(payload) = 'object')
 );
 
 comment on table public.billing_events is
-  'Bitacora tecnica de eventos de cobro y webhooks de proveedores externos como Mercado Pago.';
+  'Bitacora tecnica de eventos de cobro y webhooks de proveedores externos como Mercado Pago, Lemon Squeezy o Paddle.';
 
 comment on column public.billing_events.provider_event_id is
   'ID externo del evento o recurso enviado por el proveedor.';

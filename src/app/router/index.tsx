@@ -66,6 +66,13 @@ export const router = createBrowserRouter([
         path: "refunds",
         lazy: lazyRoute(() => import("../../modules/public/pages/refunds-page"), "RefundsPage"),
       },
+      {
+        path: "libro-reclamaciones",
+        lazy: lazyRoute(
+          () => import("../../modules/public/pages/claim-book-page"),
+          "ClaimBookPage",
+        ),
+      },
     ],
   },
   {

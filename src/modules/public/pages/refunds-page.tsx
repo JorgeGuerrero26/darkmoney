@@ -1,4 +1,5 @@
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { PUBLIC_CONTACT } from "../../../lib/public-contact";
 
 const refundsSections = [
   {
@@ -24,7 +25,7 @@ const refundsSections = [
   {
     title: "5. Solicitudes",
     body:
-      "Si crees que hubo un error de cobro, puedes solicitar revision a traves de los canales oficiales de DarkMoney incluyendo correo de la cuenta, fecha del cargo y una descripcion breve del problema.",
+      `Si crees que hubo un error de cobro, puedes solicitar revision escribiendo a ${PUBLIC_CONTACT.supportEmail} o registrando el caso en el Libro de Reclamaciones de DarkMoney, incluyendo correo de la cuenta, fecha del cargo y una descripcion breve del problema.`,
   },
   {
     title: "6. Tiempos de revision",

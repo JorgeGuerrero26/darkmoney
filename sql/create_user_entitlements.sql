@@ -24,7 +24,7 @@ comment on column public.user_entitlements.pro_access_enabled is
   'Bandera efectiva de acceso Pro. Permite desacoplar el uso de funciones premium del proveedor de cobro.';
 
 comment on column public.user_entitlements.billing_provider is
-  'Proveedor externo de cobro futuro, por ejemplo Stripe o Lemon Squeezy.';
+  'Proveedor externo de cobro futuro, por ejemplo Paddle, Lemon Squeezy o Stripe.';
 
 comment on column public.user_entitlements.manual_override is
   'Permite habilitar o mantener acceso manualmente sin depender del webhook de pago.';

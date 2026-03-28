@@ -13,7 +13,7 @@ export function HomeRedirect() {
   return (
     <Navigate
       replace
-      to={user ? "/app" : "/auth/login"}
+      to={user ? "/app" : "/pricing"}
     />
   );
 }

@@ -1,4 +1,5 @@
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { PUBLIC_CONTACT } from "../../../lib/public-contact";
 
 const termsSections = [
   {
@@ -44,7 +45,7 @@ const termsSections = [
   {
     title: "9. Contacto",
     body:
-      "Para consultas sobre estos terminos o sobre el servicio, puedes escribirnos desde los canales oficiales publicados en DarkMoney.",
+      `Para consultas sobre estos terminos o sobre el servicio, puedes escribirnos a ${PUBLIC_CONTACT.supportEmail}, llamar al ${PUBLIC_CONTACT.supportPhoneDisplay} o ubicar al proveedor en ${PUBLIC_CONTACT.cityCountry}. ${PUBLIC_CONTACT.taxIdLabel} ${PUBLIC_CONTACT.taxIdValue}.`,
   },
 ];
 
