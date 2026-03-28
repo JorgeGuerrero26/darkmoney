@@ -46,6 +46,8 @@ import {
   useCurrentUserEntitlementQuery,
   useWorkspaceSnapshotQuery,
 } from "../../services/queries/workspace-data";
+import { getPublicAppUrl } from "../../lib/app-url";
+import { isPaddleCheckoutConfigured, openPaddleProCheckout } from "../../lib/paddle";
 import { isSupabaseConfigured } from "../../services/supabase/client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import type { Workspace } from "../../types/domain";
@@ -119,12 +121,14 @@ function buildInitials(value: string | null | undefined, fallback: string) {
 
 type IdentityAvatarProps = {
   initials: string;
+  imageUrl?: string | null;
   size?: "compact" | "regular";
   title?: string;
 };
 
 function IdentityAvatar({
   initials,
+  imageUrl,
   size = "regular",
   title,
 }: IdentityAvatarProps) {
@@ -149,11 +153,19 @@ function IdentityAvatar({
       <span
         className={`absolute inset-[4px] ${innerClassName} border border-white/18 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)]`}
       />
-      <span
-        className={`relative z-10 font-display font-semibold tracking-[-0.04em] text-void drop-shadow-[0_1px_0_rgba(255,255,255,0.14)] transition duration-300 ease-out group-hover:scale-[1.05] ${textClassName}`}
-      >
-        {initials}
-      </span>
+      {imageUrl ? (
+        <img
+          alt={title ?? initials}
+          className={`relative z-10 h-full w-full object-cover ${shellClassName}`}
+          src={imageUrl}
+        />
+      ) : (
+        <span
+          className={`relative z-10 font-display font-semibold tracking-[-0.04em] text-void drop-shadow-[0_1px_0_rgba(255,255,255,0.14)] transition duration-300 ease-out group-hover:scale-[1.05] ${textClassName}`}
+        >
+          {initials}
+        </span>
+      )}
     </div>
   );
 }
@@ -376,6 +388,7 @@ function AppShellContent() {
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
+  const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { profile, signOut, user } = useAuth();
@@ -432,6 +445,26 @@ function AppShellContent() {
   async function handleSignOut() {
     await signOut();
     navigate("/auth/login", { replace: true });
+  }
+
+  async function handleOpenProCheckout() {
+    if (!isPaddleCheckoutConfigured() || !user?.id || !user.email) {
+      navigate("/app/settings");
+      return;
+    }
+    try {
+      setIsOpeningProCheckout(true);
+      await openPaddleProCheckout({
+        appUrl: getPublicAppUrl(),
+        payerEmail: user.email,
+        userId: user.id,
+        workspaceId: activeWorkspace?.id ?? null,
+      });
+    } catch {
+      navigate("/app/settings");
+    } finally {
+      setIsOpeningProCheckout(false);
+    }
   }
 
   function openQuickMovement(kind: QuickMovementKind) {
@@ -697,31 +730,49 @@ function AppShellContent() {
               })}
             </nav>
 
-            <div className={`mt-auto rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] p-5 backdrop-blur-2xl ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
-              <p className="text-xs uppercase tracking-[0.22em] text-storm/80">usuario activo</p>
-              <div className="mt-4 flex items-center gap-3">
+            <div className={`mt-auto rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] p-4 backdrop-blur-2xl ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+              <div className="flex items-center gap-3">
                 <IdentityAvatar
+                  imageUrl={profile?.avatarUrl}
                   initials={currentUserInitials}
                   size="compact"
                   title={currentUserName}
                 />
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{currentUserName}</p>
-                  <p className="truncate text-sm text-storm">{currentUserEmail}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{currentUserName}</p>
+                  <p className="truncate text-xs text-storm">{currentUserEmail}</p>
                 </div>
+                <StatusBadge
+                  status={hasProAccess ? "Pro" : "Free"}
+                  tone={hasProAccess ? "success" : "neutral"}
+                />
               </div>
-              <button
-                className="mt-5 inline-flex items-center gap-2 text-sm text-storm underline decoration-white/18 underline-offset-4 transition hover:text-ink"
-                onClick={() => void handleSignOut()}
-                type="button"
-              >
-                <LogOut className="h-4 w-4" />
-                Cerrar sesion
-              </button>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <button
+                  className="inline-flex items-center gap-2 text-sm text-storm transition hover:text-ink"
+                  onClick={() => void handleSignOut()}
+                  type="button"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesion
+                </button>
+                {!hasProAccess && !entitlementQuery.isLoading ? (
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-full border border-pine/25 bg-pine/10 px-3 py-1.5 text-xs font-semibold text-pine transition hover:border-pine/35 hover:bg-pine/15 disabled:opacity-60"
+                    disabled={isOpeningProCheckout}
+                    onClick={() => void handleOpenProCheckout()}
+                    type="button"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {isOpeningProCheckout ? "Abriendo..." : "Activar Pro"}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-auto flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] px-3 py-4 backdrop-blur-2xl`}>
               <IdentityAvatar
+                imageUrl={profile?.avatarUrl}
                 initials={currentUserInitials}
                 size="regular"
                 title={currentUserName}
@@ -851,10 +902,11 @@ function AppShellContent() {
                 <div className="flex flex-wrap items-center gap-3 lg:justify-end">
                   <Button
                     className="min-w-[10.5rem]"
-                    onClick={() => navigate("/app/settings")}
+                    disabled={isOpeningProCheckout}
+                    onClick={() => void handleOpenProCheckout()}
                   >
                     <Sparkles className="h-4 w-4" />
-                    {proBannerContent.ctaLabel}
+                    {isOpeningProCheckout ? "Abriendo..." : proBannerContent.ctaLabel}
                   </Button>
                   <Button
                     onClick={handleDismissProBanner}

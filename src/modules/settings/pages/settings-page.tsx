@@ -1,7 +1,7 @@
-import { BellDot, Briefcase, Check, ChevronDown, LoaderCircle, MailPlus, Plus, Search, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
+import { BellDot, Briefcase, Camera, Check, ChevronDown, LoaderCircle, MailPlus, Plus, Search, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -491,7 +491,8 @@ function WorkspaceDialogShell({
 
 export function SettingsPage() {
   const location = useLocation();
-  const { profile, saveProfile, user } = useAuth();
+  const navigate = useNavigate();
+  const { profile, saveProfile, saveAvatar, user } = useAuth();
   const { canAccessProFeatures, isAdminOverride } = useProFeatureAccess();
   const {
     activeWorkspace,
@@ -519,9 +520,11 @@ export function SettingsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [billingFeedbackMessage, setBillingFeedbackMessage] = useState("");
   const [billingErrorMessage, setBillingErrorMessage] = useState("");
+  const [isBillingAutoRefreshing, setIsBillingAutoRefreshing] = useState(false);
   const [workspaceFeedbackMessage, setWorkspaceFeedbackMessage] = useState("");
   const [workspaceErrorMessage, setWorkspaceErrorMessage] = useState("");
   const [isOpeningPaddleCheckout, setIsOpeningPaddleCheckout] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
   const [isInviteMemberOpen, setIsInviteMemberOpen] = useState(false);
@@ -646,8 +649,74 @@ export function SettingsPage() {
       setBillingFeedbackMessage(
         "Volviste del checkout premium. Si ya completaste el pago, DarkMoney actualizara tu acceso automaticamente en cuanto Lemon Squeezy lo confirme.",
       );
+    } else {
+      setIsBillingAutoRefreshing(false);
+      return;
     }
-  }, [location.search]);
+
+    let isCancelled = false;
+    const timeoutHandles: number[] = [];
+    const syncDelaysMs = [0, 1800, 4200, 8000, 12000];
+
+    const stopAutoSync = (shouldCleanUrl: boolean) => {
+      if (isCancelled) {
+        return;
+      }
+
+      setIsBillingAutoRefreshing(false);
+
+      if (shouldCleanUrl) {
+        navigate(location.pathname, { replace: true });
+      }
+    };
+
+    const runSync = async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      setIsBillingAutoRefreshing(true);
+
+      try {
+        const result = await entitlementQuery.refetch();
+        const latestEntitlement = result.data;
+        const latestBillingStatus = latestEntitlement?.billingStatus?.trim().toLowerCase() ?? null;
+        const hasReachedStableState =
+          Boolean(latestEntitlement?.proAccessEnabled) ||
+          ["expired", "cancelled", "canceled", "past_due", "unpaid"].includes(latestBillingStatus ?? "");
+
+        if (latestEntitlement?.proAccessEnabled) {
+          setBillingFeedbackMessage(
+            "DarkMoney Pro ya quedo activo. Actualizamos tu acceso automaticamente en segundo plano.",
+          );
+        }
+
+        if (hasReachedStableState) {
+          stopAutoSync(true);
+        }
+      } catch {
+        // Si falla un intento puntual, dejamos que los siguientes timeouts sigan intentando.
+      }
+    };
+
+    for (const delay of syncDelaysMs) {
+      timeoutHandles.push(window.setTimeout(() => void runSync(), delay));
+    }
+
+    const finalHandle = window.setTimeout(() => {
+      stopAutoSync(true);
+    }, syncDelaysMs[syncDelaysMs.length - 1] + 2000);
+
+    timeoutHandles.push(finalHandle);
+
+    return () => {
+      isCancelled = true;
+      setIsBillingAutoRefreshing(false);
+      for (const handle of timeoutHandles) {
+        window.clearTimeout(handle);
+      }
+    };
+  }, [entitlementQuery.refetch, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (isCreateWorkspaceOpen) {
@@ -688,6 +757,29 @@ export function SettingsPage() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleAvatarChange(file: File | null) {
+    if (!file) return;
+    setIsUploadingAvatar(true);
+    try {
+      await saveAvatar(file);
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar tu foto de perfil."));
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setIsUploadingAvatar(true);
+    try {
+      await saveAvatar(null);
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos eliminar tu foto de perfil."));
+    } finally {
+      setIsUploadingAvatar(false);
     }
   }
 
@@ -986,6 +1078,69 @@ export function SettingsPage() {
             title="Perfil"
           >
             <div className="grid gap-4">
+              {canAccessProFeatures ? (
+                <div className="flex items-center gap-4 rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-4">
+                  <div className="relative shrink-0">
+                    {profile?.avatarUrl ? (
+                      <img
+                        alt={profile.fullName}
+                        className="h-16 w-16 rounded-[20px] object-cover ring-1 ring-white/10"
+                        src={profile.avatarUrl}
+                      />
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-gradient-to-br from-ember via-[#a8b9ff] to-pine font-display text-xl font-semibold text-void shadow-md">
+                        {profile?.initials ?? "DM"}
+                      </div>
+                    )}
+                    <label
+                      className={`absolute -bottom-1.5 -right-1.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#0d1420] text-storm shadow-md transition hover:text-ink ${isUploadingAvatar ? "pointer-events-none opacity-60" : ""}`}
+                    >
+                      {isUploadingAvatar ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Camera className="h-3.5 w-3.5" />
+                      )}
+                      <input
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        disabled={isUploadingAvatar}
+                        onChange={(event) => {
+                          void handleAvatarChange(event.target.files?.[0] ?? null);
+                          event.currentTarget.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink">Foto de perfil</p>
+                    <p className="mt-1 text-xs leading-5 text-storm">
+                      JPG, PNG o WebP hasta 2 MB. Se recorta al centro en cuadrado automaticamente.
+                    </p>
+                    {profile?.avatarUrl ? (
+                      <button
+                        className="mt-2 text-xs text-rosewood transition hover:opacity-75 disabled:opacity-50"
+                        disabled={isUploadingAvatar}
+                        onClick={() => void handleRemoveAvatar()}
+                        type="button"
+                      >
+                        Eliminar foto
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-[24px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+                    <Camera className="h-4 w-4 text-storm/50" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-storm">Foto de perfil</p>
+                    <p className="text-xs text-storm/55">Disponible con DarkMoney Pro.</p>
+                  </div>
+                </div>
+              )}
+
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-ink">Nombre completo</span>
                 <input
@@ -1114,8 +1269,6 @@ export function SettingsPage() {
                 <div className="relative">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={proStatusLabel} tone={proStatusTone} />
-                  <StatusBadge status={friendlyBillingStatus.label} tone={friendlyBillingStatus.tone} />
-                  <StatusBadge status={`Proveedor ${providerLabel}`} tone="neutral" />
                   {currentPeriodBadge ? (
                     <StatusBadge
                       status={currentPeriodBadge.status}
@@ -1230,7 +1383,11 @@ export function SettingsPage() {
                     onClick={() => void entitlementQuery.refetch()}
                     variant="ghost"
                   >
-                    {entitlementQuery.isFetching ? "Actualizando..." : "Actualizar estado"}
+                    {isBillingAutoRefreshing
+                      ? "Sincronizando..."
+                      : entitlementQuery.isFetching
+                        ? "Actualizando..."
+                        : "Actualizar estado"}
                   </Button>
                 </div>
                 <div className="mt-6 flex flex-wrap gap-2">
@@ -1243,25 +1400,16 @@ export function SettingsPage() {
                     </span>
                   ))}
                 </div>
-                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                <div className="mt-6 grid gap-3 md:grid-cols-2">
                   <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Estado de cobro</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Estado</p>
                     <p className="mt-3 text-lg font-semibold text-ink">{friendlyBillingStatus.label}</p>
                     <p className="mt-2 text-sm leading-7 text-storm">{statusSummary}</p>
                   </article>
                   <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Cobertura</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Vigencia</p>
                     <p className="mt-3 text-lg font-semibold text-ink">{coverageSummary}</p>
                     <p className="mt-2 text-sm leading-7 text-storm">{periodSummary}</p>
-                  </article>
-                  <article className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Proveedor</p>
-                    <p className="mt-3 text-lg font-semibold text-ink">{providerLabel}</p>
-                    <p className="mt-2 text-sm leading-7 text-storm">
-                      {entitlement?.providerSubscriptionId
-                        ? "DarkMoney ya tiene una suscripcion enlazada con este proveedor."
-                        : "Todavia no hay una suscripcion enlazada a esta cuenta."}
-                    </p>
                   </article>
                 </div>
                 </div>
@@ -1269,45 +1417,45 @@ export function SettingsPage() {
 
               <div className="grid gap-3">
                 <article className="glass-panel-soft rounded-[24px] p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Resumen del ciclo</p>
-                  <div className="mt-4 grid gap-3">
-                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
-                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Pro desde</p>
-                      <p className="mt-2 text-sm font-medium text-ink">{cycleSummary}</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Ciclo activo</p>
+                  <div className="mt-4 flex flex-col divide-y divide-white/[0.06]">
+                    <div className="flex items-center justify-between gap-3 pb-3">
+                      <p className="text-xs text-storm">Inicio</p>
+                      <p className="text-sm font-medium text-ink">{cycleSummary}</p>
                     </div>
-                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
-                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Siguiente corte</p>
-                      <p className="mt-2 text-sm font-medium text-ink">
-                        {entitlement?.currentPeriodEnd ? formatDate(entitlement.currentPeriodEnd) : "Sin fecha confirmada"}
+                    <div className="flex items-center justify-between gap-3 py-3">
+                      <p className="text-xs text-storm">Siguiente corte</p>
+                      <p className="text-sm font-medium text-ink">
+                        {entitlement?.currentPeriodEnd ? formatDate(entitlement.currentPeriodEnd) : "—"}
                       </p>
                     </div>
-                    <div className="rounded-[20px] border border-white/10 bg-black/15 px-4 py-3">
-                      <p className="text-[0.72rem] uppercase tracking-[0.18em] text-storm/80">Días restantes</p>
-                      <p className="mt-2 text-sm font-medium text-ink">
-                        {remainingDaysBadge?.status ?? "Sin cuenta regresiva disponible"}
+                    <div className="flex items-center justify-between gap-3 pt-3">
+                      <p className="text-xs text-storm">Dias restantes</p>
+                      <p className="text-sm font-medium text-ink">
+                        {remainingDaysBadge?.status ?? "—"}
                       </p>
                     </div>
                   </div>
                 </article>
+
                 <article className="glass-panel-soft rounded-[24px] p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Estado actual</p>
-                  <p className="mt-4 text-lg font-semibold text-ink">{friendlyBillingStatus.label}</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    {statusSummary}
-                  </p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Que incluye Pro</p>
+                  <ul className="mt-4 flex flex-col gap-2.5">
+                    {["Dashboard avanzado", "Aprendiendo de ti", "Gestion de comprobantes", "Alertas inteligentes", "Mejoras futuras incluidas"].map((feature) => (
+                      <li className="flex items-center gap-2.5 text-sm text-storm" key={feature}>
+                        <Check className="h-3.5 w-3.5 shrink-0 text-pine" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
                 </article>
-                <article className="glass-panel-soft rounded-[24px] p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Renovacion y reactivacion</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    {nextStepSummary}
-                  </p>
-                </article>
-                <article className="glass-panel-soft rounded-[24px] p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-storm">Alertas Pro</p>
-                  <p className="mt-3 text-sm leading-7 text-ink">
-                    {subscriptionAlertsSummary}
-                  </p>
-                </article>
+
+                {nextStepSummary ? (
+                  <article className="glass-panel-soft rounded-[24px] p-5">
+                    <p className="text-xs uppercase tracking-[0.2em] text-storm">Proximos pasos</p>
+                    <p className="mt-3 text-sm leading-7 text-storm">{nextStepSummary}</p>
+                  </article>
+                ) : null}
               </div>
             </div>
           )}

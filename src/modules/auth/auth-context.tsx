@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 import { getPublicAppUrl } from "../../lib/app-url";
+import { deleteAvatar, uploadAvatar } from "./avatar-utils";
 import { supabase, isSupabaseConfigured } from "../../services/supabase/client";
 
 type ProfileRow = {
@@ -10,6 +11,7 @@ type ProfileRow = {
   full_name: string | null;
   base_currency_code: string;
   timezone: string;
+  avatar_url: string | null;
 };
 
 export type AppProfile = {
@@ -19,6 +21,7 @@ export type AppProfile = {
   initials: string;
   baseCurrencyCode: string;
   timezone: string;
+  avatarUrl: string | null;
 };
 
 type SignUpInput = {
@@ -45,6 +48,7 @@ type AuthContextValue = {
   updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   saveProfile: (input: SaveProfileInput) => Promise<void>;
+  saveAvatar: (file: File | null) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,6 +80,7 @@ function buildProfile(row: ProfileRow, user: User): AppProfile {
     initials: initials || "DM",
     baseCurrencyCode: row.base_currency_code,
     timezone: row.timezone,
+    avatarUrl: row.avatar_url ?? null,
   };
 }
 
@@ -96,6 +101,7 @@ function buildFallbackProfile(user: User): AppProfile {
     initials: initials || "DM",
     baseCurrencyCode: "PEN",
     timezone: getDefaultTimezone(),
+    avatarUrl: null,
   };
 }
 
@@ -106,7 +112,7 @@ async function ensureProfile(user: User) {
 
   const { data: existingProfile, error: fetchError } = await supabase
     .from("profiles")
-    .select("id, full_name, base_currency_code, timezone")
+    .select("id, full_name, base_currency_code, timezone, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -128,7 +134,7 @@ async function ensureProfile(user: User) {
   const { data: insertedProfile, error: insertError } = await supabase
     .from("profiles")
     .insert(payload)
-    .select("id, full_name, base_currency_code, timezone")
+    .select("id, full_name, base_currency_code, timezone, avatar_url")
     .single();
 
   if (insertError) {
@@ -345,7 +351,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         base_currency_code: normalizedBaseCurrencyCode,
         timezone: normalizedTimezone,
       })
-      .select("id, full_name, base_currency_code, timezone")
+      .select("id, full_name, base_currency_code, timezone, avatar_url")
       .single();
 
     if (error) {
@@ -384,6 +390,35 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setProfile(buildProfile(data as ProfileRow, user));
   }
 
+  async function saveAvatar(file: File | null) {
+    if (!supabase || !user) {
+      throw new Error("No hay sesion activa.");
+    }
+
+    let avatarUrl: string | null = null;
+
+    if (file) {
+      avatarUrl = await uploadAvatar(user.id, file);
+    } else {
+      try {
+        await deleteAvatar(user.id);
+      } catch {
+        // Si no habia archivo previo en storage, ignoramos el error
+      }
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: avatarUrl })
+      .eq("id", user.id);
+
+    if (error) {
+      throw error;
+    }
+
+    setProfile((current) => (current ? { ...current, avatarUrl } : current));
+  }
+
   const value: AuthContextValue = {
     isConfigured: isSupabaseConfigured,
     isLoading,
@@ -396,6 +431,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     updatePassword,
     signOut,
     saveProfile,
+    saveAvatar,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
