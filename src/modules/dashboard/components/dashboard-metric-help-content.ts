@@ -3,6 +3,13 @@
  * Las claves coinciden con los `metricId` pasados a DashboardHelpTrigger / DashboardKpiHelpWrap.
  */
 
+import {
+  DASHBOARD_HELP_SIMPLE_WORDS,
+  type DashboardMetricSimpleWords,
+} from "./dashboard-metric-help-simple";
+
+export type { DashboardMetricSimpleWords } from "./dashboard-metric-help-simple";
+
 export type DashboardMetricChart =
   | "monthly-net-bars"
   | "income-expense-bars"
@@ -16,6 +23,12 @@ export type DashboardMetricArticle = {
   bullets?: string[];
   example?: string;
   chart?: DashboardMetricChart;
+  /** Si existe, sustituye la entrada automática de `DASHBOARD_HELP_SIMPLE_WORDS` para este id. */
+  simpleWords?: DashboardMetricSimpleWords;
+};
+
+export type DashboardMetricHelpResolved = DashboardMetricArticle & {
+  simpleWords: DashboardMetricSimpleWords;
 };
 
 const a = (article: DashboardMetricArticle): DashboardMetricArticle => article;
@@ -29,7 +42,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     ],
     bullets: [
       "Simple: menos bloques, lectura más rápida.",
-      "Avanzada (Pro): más profundidad operativa y señales.",
+      "Vista avanzada: más profundidad operativa y señales.",
       "Restaurar todo: vuelve a mostrar todos los widgets del modo activo.",
     ],
   }),
@@ -67,6 +80,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     paragraphs: [
       "Resultado neto del período seleccionado (Hoy / Semana / Mes / Últimos 30 días): ingresos aplicados menos gastos aplicados, sin contar transferencias internas como ingreso o gasto.",
       "Si es positivo, en ese corte ganaste más de lo que gastaste; si es negativo, hubo déficit.",
+      "La franja bajo el valor resume la variación porcentual frente al período de referencia (misma etiqueta que el comparativo arriba).",
     ],
     example: "Ingresos S/ 5 000, gastos S/ 4 200 → ahorro del período S/ 800.",
   }),
@@ -491,6 +505,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   widget_future_flow: a({
     title: "Proyección de flujo futuro",
     paragraphs: [
+      "Arriba del detalle por ventana verás la misma lectura de cierre de mes calendario que en Resumen principal: liquidez estimada si se mantiene el ritmo de ingresos y gastos del mes.",
       "Para 7, 15 y 30 días estima entradas y salidas esperadas según compromisos y movimientos programados, y proyecta un saldo después de esas salidas.",
     ],
     bullets: [
@@ -718,9 +733,10 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 
   widget_pro_command_center: a({
-    title: "Acciones y foco (Pro)",
+    title: "Acciones y foco",
     paragraphs: [
       "Agrupa lo operativo: enlaces a tareas concretas (cobrar, pagar, categorizar, presupuestos), un resumen de entradas y salidas en los próximos 7 días (misma lógica que el flujo futuro pero en formato compacto), una estimación simple de liquidez al cierre del mes calendario y una sola recomendación prioritaria para no saturar.",
+      "La bandeja Por revisar (widget aparte) concentra la cola de mantenimiento: categorías, duplicados, metadata, suscripciones y cartera.",
     ],
     bullets: [
       "Las acciones se ordenan por urgencia aproximada; no sustituyen el módulo completo de alertas.",
@@ -728,8 +744,33 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     ],
   }),
 
+  widget_review_inbox: a({
+    title: "Por revisar",
+    paragraphs: [
+      "Lista accionable de pendientes que ensucian datos o decisiones: movimientos sin categoría, pendientes de aplicar, posibles duplicados de gasto, señales de baja confianza en metadata (p. ej. importaciones), suscripciones activas sin cuenta o con vencimiento pasado, obligaciones sin plan claro, cartera viva sin actividad reciente y compromisos vencidos.",
+    ],
+    bullets: [
+      "Solo aparecen filas con conteo mayor que cero; si todo está en cero, la bandeja muestra estado al día.",
+      "Los enlaces llevan a movimientos, suscripciones u obligaciones según el tipo de pendiente.",
+    ],
+  }),
+
+  dashboard_period_close: a({
+    title: "Cierre estimado (mes calendario)",
+    paragraphs: [
+      "Proyecta la liquidez (efectivo, banco y ahorros) al último día del mes en curso extrapolando el neto diario observado en el mes hasta hoy. No sustituye un flujo de caja formal ni incluye inversiones u otras cuentas fuera de liquidez inmediata.",
+    ],
+  }),
+
+  dashboard_goal_simple: a({
+    title: "Meta de ahorro en resumen",
+    paragraphs: [
+      "Muestra el avance del neto del mes calendario frente a la meta guardada (Supabase o respaldo local). La edición del monto sigue en el widget Meta y disciplina.",
+    ],
+  }),
+
   widget_pro_intelligence_digest: a({
-    title: "Insights del período (Pro)",
+    title: "Insights del período",
     paragraphs: [
       "Resume hasta tres señales del motor de aprendizaje, añade lecturas rápidas (concentración en una cuenta, colchón en días) y lista gastos o categorías que se salieron del patrón frente al período anterior.",
       "La fila “Movimientos por revisar” resume pendientes y sin categoría con enlace a movimientos; el detalle sigue en Calidad de datos.",
@@ -737,7 +778,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 
   widget_pro_goals_strip: a({
-    title: "Meta y disciplina (Pro)",
+    title: "Meta y disciplina",
     paragraphs: [
       "La meta de ahorro neto del mes se guarda en Supabase asociada a tu usuario y al workspace. Compara el neto del mes calendario (movimientos aplicados) con ese tope y muestra cuántos días distintos hubo movimientos aplicados en el mes.",
     ],
@@ -748,16 +789,30 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 };
 
-export function getDashboardMetricHelp(metricId: string): DashboardMetricArticle {
+const SIMPLE_FALLBACK: DashboardMetricSimpleWords = {
+  paragraphs: [
+    "Este bloque muestra un número o mensaje sobre tu dinero en el dashboard.",
+    "Todavía estamos completando la explicación más sencilla para este indicador. Leé el texto de arriba: si una palabra suena rara, fijate en el título del bloque en la pantalla principal.",
+  ],
+};
+
+export function getDashboardMetricHelp(metricId: string): DashboardMetricHelpResolved {
   const found = DASHBOARD_METRIC_HELP[metricId];
+  const simple = DASHBOARD_HELP_SIMPLE_WORDS[metricId] ?? SIMPLE_FALLBACK;
+
   if (found) {
-    return found;
+    return {
+      ...found,
+      simpleWords: found.simpleWords ?? simple,
+    };
   }
+
   return {
     title: "Indicador",
     paragraphs: [
       "Todavía no tenemos una guía detallada para este bloque. Mientras tanto, revisa el subtítulo del widget en el dashboard o la sección correspondiente en la app.",
     ],
+    simpleWords: simple,
   };
 }
 
@@ -774,6 +829,8 @@ export const DASHBOARD_INDICATOR_CATALOG: Array<{
   { id: "kpi_period_savings", label: "Ahorro del período", scope: "both" },
   { id: "kpi_income", label: "Ingresos", scope: "both" },
   { id: "kpi_expense", label: "Gastos", scope: "both" },
+  { id: "dashboard_period_close", label: "Cierre estimado (mes calendario)", scope: "both" },
+  { id: "dashboard_goal_simple", label: "Meta de ahorro en resumen", scope: "both" },
   { id: "kpi_real_free_money", label: "Dinero libre real", scope: "both" },
   { id: "kpi_avg_daily_spend", label: "Promedio diario", scope: "both" },
   { id: "kpi_active_subscriptions", label: "Suscripciones activas", scope: "both" },
@@ -798,6 +855,7 @@ export const DASHBOARD_INDICATOR_CATALOG: Array<{
   { id: "adv_bottom_account", label: "Cuenta con menor saldo", scope: "pro" },
   { id: "adv_latest_income", label: "Último ingreso", scope: "pro" },
   { id: "adv_latest_movement", label: "Último movimiento", scope: "pro" },
+  { id: "widget_review_inbox", label: "Por revisar (bandeja)", scope: "both" },
   { id: "widget_savings_trend", label: "Cronológicos del período", scope: "both" },
   { id: "widget_period_radar", label: "Radar del período", scope: "pro" },
   { id: "radar_top_category", label: "Radar: categoría más pesada", scope: "pro" },
@@ -857,7 +915,7 @@ export const DASHBOARD_INDICATOR_CATALOG: Array<{
   { id: "health_next_payable", label: "Salud: próximo a pagar", scope: "pro" },
   { id: "health_next_receivable", label: "Salud: próximo a cobrar", scope: "pro" },
   { id: "widget_activity_timeline", label: "Actividad reciente", scope: "pro" },
-  { id: "widget_pro_command_center", label: "Acciones y foco (Pro)", scope: "pro" },
-  { id: "widget_pro_intelligence_digest", label: "Insights del período (Pro)", scope: "pro" },
-  { id: "widget_pro_goals_strip", label: "Meta y disciplina (Pro)", scope: "pro" },
+  { id: "widget_pro_command_center", label: "Acciones y foco", scope: "pro" },
+  { id: "widget_pro_intelligence_digest", label: "Insights del período", scope: "pro" },
+  { id: "widget_pro_goals_strip", label: "Meta y disciplina", scope: "pro" },
 ];

@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(node scripts/restructure-dashboard.js)",
+      "Bash(mv c:/Users/Adrian/Documents/DarkMoney/scripts/restructure-dashboard.js c:/Users/Adrian/Documents/DarkMoney/scripts/restructure-dashboard.cjs)",
+      "Bash(node scripts/restructure-dashboard.cjs)",
+      "Bash(node remove-old-kpi-blocks.cjs)"
     ]
   }
 }

@@ -6,12 +6,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Info, X } from "lucide-react";
+import { ChevronDown, Info, X } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import {
   getDashboardMetricHelp,
   type DashboardMetricChart,
+  type DashboardMetricSimpleWords,
 } from "./dashboard-metric-help-content";
 
 type DashboardHelpContextValue = {
@@ -101,6 +102,38 @@ function HelpChartDemo({ chart }: { chart: DashboardMetricChart }) {
   return null;
 }
 
+function HelpSimpleBlock({ simple }: { simple: DashboardMetricSimpleWords }) {
+  return (
+    <details className="group mt-6 rounded-2xl border border-gold/20 bg-gold/[0.06] p-4 open:border-gold/35">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
+        <span>{simple.title ?? "Explicación en palabras muy simples"}</span>
+        <ChevronDown
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-gold transition-transform duration-200 group-open:rotate-180"
+        />
+      </summary>
+      <div className="mt-4 space-y-3 text-sm leading-7 text-storm">
+        {simple.paragraphs.map((paragraph, index) => (
+          <p key={index}>{paragraph}</p>
+        ))}
+        {simple.bullets && simple.bullets.length > 0 ? (
+          <ul className="list-disc space-y-2 pl-5">
+            {simple.bullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+        {simple.example ? (
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+            <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold/80">Ejemplo muy simple</p>
+            <p className="mt-2 text-sm leading-7 text-ink/90">{simple.example}</p>
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 function DashboardHelpModal({ id, onClose }: { id: string; onClose: () => void }) {
   const article = getDashboardMetricHelp(id);
 
@@ -116,47 +149,58 @@ function DashboardHelpModal({ id, onClose }: { id: string; onClose: () => void }
     <div
       aria-labelledby="dashboard-metric-help-title"
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center"
+      className="animate-fade-in fixed inset-0 z-[80] isolate flex items-end justify-center bg-black/68 p-4 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-[''] sm:items-center"
+      onClick={onClose}
       role="dialog"
     >
-      <button
-        aria-label="Cerrar"
-        className="absolute inset-0 bg-ink/60 backdrop-blur-sm"
-        onClick={onClose}
-        type="button"
-      />
-      <div className="relative z-[1] max-h-[min(88vh,720px)] w-full max-w-lg overflow-y-auto rounded-[28px] border border-white/12 bg-[#12151c] p-6 shadow-2xl shadow-black/40">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-xl font-semibold text-ink" id="dashboard-metric-help-title">
-            {article.title}
-          </h2>
-          <Button
-            aria-label="Cerrar"
-            className="h-10 w-10 shrink-0 rounded-[14px] px-0"
-            onClick={onClose}
-            variant="ghost"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="mt-4 space-y-4 text-sm leading-7 text-storm">
-          {article.paragraphs.map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-          {article.bullets && article.bullets.length > 0 ? (
-            <ul className="list-disc space-y-2 pl-5">
-              {article.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          ) : null}
-          {article.example ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Ejemplo</p>
-              <p className="mt-2 text-sm leading-7 text-ink/90">{article.example}</p>
+      <div
+        className="flex min-h-full w-full max-w-lg items-end justify-center sm:items-center"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="animate-rise-in relative max-h-[min(88vh,720px)] w-full overflow-y-auto rounded-[28px] border border-white/12 bg-[#0a0f18]/96 p-6 shadow-[0_40px_100px_rgba(0,0,0,0.55)] [transform:translateZ(0)] backdrop-blur-md"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
+            <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-gold/8 blur-3xl" />
+            <div className="absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-pine/10 blur-3xl" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_35%,transparent_70%,rgba(255,255,255,0.02))]" />
+          </div>
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-xl font-semibold text-ink" id="dashboard-metric-help-title">
+                {article.title}
+              </h2>
+              <Button
+                aria-label="Cerrar"
+                className="h-10 w-10 shrink-0 rounded-[14px] px-0"
+                onClick={onClose}
+                variant="ghost"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          ) : null}
-          <HelpChartDemo chart={article.chart ?? null} />
+            <div className="mt-4 space-y-4 text-sm leading-7 text-storm">
+              {article.paragraphs.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+              {article.bullets && article.bullets.length > 0 ? (
+                <ul className="list-disc space-y-2 pl-5">
+                  {article.bullets.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {article.example ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Ejemplo</p>
+                  <p className="mt-2 text-sm leading-7 text-ink/90">{article.example}</p>
+                </div>
+              ) : null}
+              <HelpChartDemo chart={article.chart ?? null} />
+              <HelpSimpleBlock simple={article.simpleWords} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

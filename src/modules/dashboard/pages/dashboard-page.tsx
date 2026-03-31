@@ -54,7 +54,10 @@ import {
   buildUnusualSpendingLines,
   countDistinctPostingDaysThisMonth,
   countDuplicateMovementGroups,
+  countObligationsWithoutRecentActivity,
+  countSubscriptionsNeedingAttention,
   findIdleSubscriptionName,
+  movementNeedsReviewMetadata,
 } from "../lib/pro-dashboard-features";
 import { readMonthlySavingsTarget, writeMonthlySavingsTarget } from "../lib/pro-goal-storage";
 
@@ -185,7 +188,8 @@ type DashboardWidgetId =
   | "activity_timeline"
   | "pro_command_center"
   | "pro_intelligence_digest"
-  | "pro_goals_strip";
+  | "pro_goals_strip"
+  | "review_inbox";
 
 type DashboardWidgetDefinition = {
   id: DashboardWidgetId;
@@ -302,7 +306,13 @@ const dashboardModeOptions: Array<{ value: DashboardMode; label: string; helper:
 ];
 
 const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
-  { id: "overview_kpis", label: "Resumen principal", helper: "KPIs y mini indicadores", modes: ["simple", "advanced"] },
+  {
+    id: "review_inbox",
+    label: "Por revisar",
+    helper: "cola de mantenimiento: categorías, duplicados, suscripciones y cartera",
+    modes: ["simple", "advanced"],
+  },
+  { id: "overview_kpis", label: "Resumen principal", helper: "KPIs, cierre estimado del mes y meta visible", modes: ["simple", "advanced"] },
   {
     id: "savings_trend",
     label: "Cronológicos del período",
@@ -315,7 +325,12 @@ const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
   { id: "future_flow", label: "Flujo futuro", helper: "7, 15 y 30 días", modes: ["advanced"] },
   { id: "alert_center", label: "Alertas", helper: "anomalías y atención", modes: ["advanced"] },
   { id: "workspace_collaboration", label: "Colaboración", helper: "workspace y miembros", modes: ["advanced"] },
-  { id: "data_quality", label: "Calidad del dato", helper: "limpieza del sistema", modes: ["advanced"] },
+  {
+    id: "data_quality",
+    label: "Calidad del dato",
+    helper: "métricas de limpieza; la bandeja “Por revisar” concentra acciones",
+    modes: ["advanced"],
+  },
   { id: "accounts_breakdown", label: "Dinero por cuenta", helper: "saldos y actividad", modes: ["simple", "advanced"] },
   { id: "receivable_leaders", label: "Quienes te deben", helper: "cartera por cobrar", modes: ["simple", "advanced"] },
   { id: "payable_leaders", label: "A quienes debes", helper: "cartera por pagar", modes: ["simple", "advanced"] },
@@ -331,20 +346,20 @@ const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
   { id: "activity_timeline", label: "Actividad reciente", helper: "historial del workspace", modes: ["advanced"] },
   {
     id: "pro_command_center",
-    label: "Acciones y foco Pro",
+    label: "Acciones y foco",
     helper: "qué hacer hoy, presión 7 días, cierre de mes y una recomendación",
     modes: ["advanced"],
   },
   {
     id: "pro_intelligence_digest",
-    label: "Insights del período (Pro)",
+    label: "Insights del período",
     helper: "señales, gasto fuera de patrón y cola de revisión",
     modes: ["advanced"],
   },
   {
     id: "pro_goals_strip",
-    label: "Meta mensual y disciplina (Pro)",
-    helper: "meta de ahorro local y racha de registro",
+    label: "Meta mensual y disciplina",
+    helper: "editar meta de ahorro (sync) y racha de registro",
     modes: ["advanced"],
   },
 ];
@@ -1937,14 +1952,16 @@ function formatDeltaCurrency(amount: number, currencyCode: string) {
   return `${prefix}${formatCurrency(amount, currencyCode)}`;
 }
 
-function formatSignedPercentage(current: number, previous: number) {
+function formatVsPreviousPeriodLabel(current: number, previous: number, previousPeriodLabel: string) {
   if (previous === 0) {
-    return current === 0 ? "Sin cambio" : "Nuevo movimiento";
+    return current === 0 ? `Sin cambio vs ${previousPeriodLabel}` : `Sin referencia en ${previousPeriodLabel}`;
   }
 
-  const delta = ((current - previous) / previous) * 100;
-  const prefix = delta > 0 ? "+" : "";
-  return `${prefix}${Math.round(delta)}%`;
+  const deltaPct = ((current - previous) / previous) * 100;
+  const arrow = deltaPct > 0 ? "↑" : deltaPct < 0 ? "↓" : "→";
+  const prefix = deltaPct > 0 ? "+" : deltaPct < 0 ? "−" : "";
+  const abs = Math.round(Math.abs(deltaPct));
+  return `${arrow} ${prefix}${abs}% vs ${previousPeriodLabel}`;
 }
 
 function getChangeTone(value: number) {
@@ -2581,6 +2598,10 @@ export function DashboardPage() {
   const [proMonthlyGoal, setProMonthlyGoal] = useState<number | null>(null);
   const [proGoalDraft, setProGoalDraft] = useState("");
   const [proGoalSaveError, setProGoalSaveError] = useState<string | null>(null);
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
+  const [activeAccountTypeFilter, setActiveAccountTypeFilter] = useState<string | null>(null);
+  const [activeAccountIdFilter, setActiveAccountIdFilter] = useState<number | null>(null);
+  const [activeObligationStatusFilter, setActiveObligationStatusFilter] = useState<string | null>(null);
   const [displayCurrencyCode, setDisplayCurrencyCode] = useState<string>(() => {
     if (typeof window === "undefined") {
       return "PEN";
@@ -3013,6 +3034,8 @@ export function DashboardPage() {
   const transferFlowSeries = buildDailyFlowSeries(postedMovements, comparison, pickTransferDailyAmount);
   const allCategoryComparison = buildCategoryComparison(currentPeriodMovements, previousPeriodMovements);
   const visibleCategories = allCategoryComparison.slice(0, topCount);
+  const categoryWithLargestExpenseIncrease =
+    [...visibleCategories].sort((a, b) => b.delta - a.delta).find((item) => item.delta > 0) ?? null;
   const accountsBreakdown = buildAccountBreakdown(visibleAccounts, currentPeriodMovements);
   const visibleAccountsBreakdown = accountsBreakdown.slice(0, topCount);
   const receivableLeaders = buildExposureLeaders(displayObligations, "receivable");
@@ -3593,6 +3616,21 @@ export function DashboardPage() {
   const qualityIssuesTotal = qualityItems.reduce((total, item) => total + item.value, 0);
 
   const duplicateExpenseMovementGroups = countDuplicateMovementGroups(postedMovements, classifyMovement);
+  const pendingMovementsForReviewCount = displayMovements.filter((movement) => movement.status === "pending").length;
+  const movementsNeedingMetadataReviewCount = displayMovements.filter((movement) =>
+    movementNeedsReviewMetadata(movement),
+  ).length;
+  const subscriptionsNeedingAttentionCount = countSubscriptionsNeedingAttention(activeSubscriptions);
+  const obligationsStaleActivityCount = countObligationsWithoutRecentActivity(displayObligations);
+  const reviewInboxTotalIssues =
+    uncategorizedMovements.length +
+    pendingMovementsForReviewCount +
+    duplicateExpenseMovementGroups +
+    movementsNeedingMetadataReviewCount +
+    subscriptionsNeedingAttentionCount +
+    obligationsWithoutPlan.length +
+    obligationsStaleActivityCount +
+    overdueObligations.length;
 
   const idleSubscriptionForHint = findIdleSubscriptionName(
     new Date(),
@@ -3675,6 +3713,7 @@ export function DashboardPage() {
   const maxPayable = Math.max(1, ...visiblePayableLeaders.map((item) => item.amount));
   const maxWeekdayAmount = Math.max(1, ...weekdayPattern.map((item) => Math.max(item.income, item.expense)));
   const maxCurrencyExposure = Math.max(1, ...currencyExposure.map((item) => item.amount));
+  const showReviewInboxSection = isWidgetVisible("review_inbox");
   const showSavingsSection = isWidgetVisible("savings_trend") || isWidgetVisible("period_radar");
   const showBudgetSection = isWidgetVisible("budget_snapshot");
   const showPortfolioSection =
@@ -3703,6 +3742,128 @@ export function DashboardPage() {
     (isWidgetVisible("pro_command_center") ||
       isWidgetVisible("pro_intelligence_digest") ||
       isWidgetVisible("pro_goals_strip"));
+
+  // ── Phase 2 & 3: Cross-widget filter derivations ──────────────────────────
+  const distinctCategoryNames = Array.from(
+    new Set(allCategoryComparison.map((item) => item.name)),
+  ).sort();
+
+  const accountTypeFilterOptions: Array<{ value: string; label: string }> = [
+    { value: "cash", label: "Efectivo" },
+    { value: "bank", label: "Banco" },
+    { value: "savings", label: "Ahorros" },
+    { value: "investment", label: "Inversión" },
+    { value: "other", label: "Otro" },
+  ].filter((opt) => visibleAccounts.some((account) => account.type === opt.value));
+
+  // Active account display name for filter badge
+  const activeAccountFilterName =
+    activeAccountIdFilter !== null
+      ? (visibleAccountsBreakdown.find((item) => item.account.id === activeAccountIdFilter)?.account.name ??
+        `Cuenta #${activeAccountIdFilter}`)
+      : null;
+
+  const hasActiveFilters =
+    activeCategoryFilter !== null ||
+    activeAccountTypeFilter !== null ||
+    activeAccountIdFilter !== null ||
+    activeObligationStatusFilter !== null;
+
+  // Combined cross-filter: category + account ID
+  const hasCrossMovementFilter = activeCategoryFilter !== null || activeAccountIdFilter !== null;
+
+  const crossFilteredPostedMovements = hasCrossMovementFilter
+    ? postedMovements.filter((m) => {
+        if (activeCategoryFilter !== null && m.category !== activeCategoryFilter) return false;
+        if (activeAccountIdFilter !== null && m.sourceAccountId !== activeAccountIdFilter) return false;
+        return true;
+      })
+    : postedMovements;
+
+  const crossFilteredCurrentPeriodMovements = hasCrossMovementFilter
+    ? currentPeriodMovements.filter((m) => {
+        if (activeCategoryFilter !== null && m.category !== activeCategoryFilter) return false;
+        if (activeAccountIdFilter !== null && m.sourceAccountId !== activeAccountIdFilter) return false;
+        return true;
+      })
+    : currentPeriodMovements;
+
+  // Savings trend uses combined cross-filter
+  const trendFilteredPostedMovements = crossFilteredPostedMovements;
+
+  const trendFilteredSavingsSeries = hasCrossMovementFilter
+    ? buildSavingsSeries(crossFilteredPostedMovements, comparison)
+    : savingsSeries;
+
+  const trendFilteredExpenseFlowSeries = hasCrossMovementFilter
+    ? buildDailyFlowSeries(crossFilteredPostedMovements, comparison, pickExpenseDailyAmount)
+    : expenseFlowSeries;
+
+  const trendFilteredIncomeFlowSeries = hasCrossMovementFilter
+    ? buildDailyFlowSeries(crossFilteredPostedMovements, comparison, pickIncomeDailyAmount)
+    : incomeFlowSeries;
+
+  // Weekly pattern cross-filtered
+  const crossFilteredWeekdayPattern = hasCrossMovementFilter
+    ? buildWeekdayPattern(crossFilteredCurrentPeriodMovements)
+    : weekdayPattern;
+
+  const crossFilteredSelectedWeekday =
+    crossFilteredWeekdayPattern.find((item) => item.key === selectedWeekdayKey) ??
+    crossFilteredWeekdayPattern[0] ??
+    null;
+
+  const maxCrossFilteredWeekdayAmount = Math.max(
+    ...crossFilteredWeekdayPattern.map((item) => Math.max(item.income, item.expense)),
+    1,
+  );
+
+  // Account type filter applied to accounts breakdown
+  const typeFilteredAccountsBreakdown = activeAccountTypeFilter
+    ? accountsBreakdown.filter((item) => item.account.type === activeAccountTypeFilter).slice(0, topCount)
+    : visibleAccountsBreakdown;
+
+  // Obligation status filter for cartera section
+  const carteraFilteredObligations = (() => {
+    if (activeObligationStatusFilter === null) return null;
+    const todayMs = startOfDay(new Date()).getTime();
+    switch (activeObligationStatusFilter) {
+      case "due_soon":
+        return dueSoonObligations;
+      case "on_track":
+        return onTrackObligations;
+      case "overdue_1_30":
+        return overdueObligations.filter((o) => {
+          if (!o.dueDate) return false;
+          const diff = Math.round((todayMs - startOfDay(new Date(o.dueDate)).getTime()) / 86400000);
+          return diff >= 1 && diff <= 30;
+        });
+      case "overdue_31_60":
+        return overdueObligations.filter((o) => {
+          if (!o.dueDate) return false;
+          const diff = Math.round((todayMs - startOfDay(new Date(o.dueDate)).getTime()) / 86400000);
+          return diff >= 31 && diff <= 60;
+        });
+      case "overdue_61_plus":
+        return overdueObligations.filter((o) => {
+          if (!o.dueDate) return false;
+          const diff = Math.round((todayMs - startOfDay(new Date(o.dueDate)).getTime()) / 86400000);
+          return diff >= 61;
+        });
+      default:
+        return null;
+    }
+  })();
+
+  const carteraReceivableLeaders =
+    carteraFilteredObligations !== null
+      ? buildExposureLeaders(carteraFilteredObligations, "receivable").slice(0, topCount)
+      : visibleReceivableLeaders;
+
+  const carteraPayableLeaders =
+    carteraFilteredObligations !== null
+      ? buildExposureLeaders(carteraFilteredObligations, "payable").slice(0, topCount)
+      : visiblePayableLeaders;
 
   return (
     <DashboardHelpProvider>
@@ -3740,6 +3901,101 @@ export function DashboardPage() {
               }))}
               value={topCount}
             />
+            {distinctCategoryNames.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">Filtrar por categoría</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {distinctCategoryNames.slice(0, 12).map((name) => (
+                    <button
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        activeCategoryFilter === name
+                          ? "border-gold/40 bg-gold/20 text-ink"
+                          : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:bg-white/[0.05]"
+                      }`}
+                      key={name}
+                      onClick={() => setActiveCategoryFilter(activeCategoryFilter === name ? null : name)}
+                      type="button"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {accountTypeFilterOptions.length > 1 ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">Filtrar por tipo de cuenta</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {accountTypeFilterOptions.map((opt) => (
+                    <button
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        activeAccountTypeFilter === opt.value
+                          ? "border-pine/40 bg-pine/20 text-ink"
+                          : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:bg-white/[0.05]"
+                      }`}
+                      key={opt.value}
+                      onClick={() => setActiveAccountTypeFilter(activeAccountTypeFilter === opt.value ? null : opt.value)}
+                      type="button"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {hasActiveFilters ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-[16px] border border-gold/20 bg-gold/8 px-3 py-2">
+                <span className="text-xs text-storm/70">Filtrando:</span>
+                {activeCategoryFilter ? (
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
+                    onClick={() => setActiveCategoryFilter(null)}
+                    type="button"
+                  >
+                    Categoría: {activeCategoryFilter} ×
+                  </button>
+                ) : null}
+                {activeAccountTypeFilter ? (
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full bg-pine/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-pine/35"
+                    onClick={() => setActiveAccountTypeFilter(null)}
+                    type="button"
+                  >
+                    Tipo: {accountTypeFilterOptions.find((o) => o.value === activeAccountTypeFilter)?.label ?? activeAccountTypeFilter} ×
+                  </button>
+                ) : null}
+                {activeAccountIdFilter !== null ? (
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
+                    onClick={() => setActiveAccountIdFilter(null)}
+                    type="button"
+                  >
+                    Cuenta: {activeAccountFilterName} ×
+                  </button>
+                ) : null}
+                {activeObligationStatusFilter !== null ? (
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full bg-ember/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-ember/35"
+                    onClick={() => setActiveObligationStatusFilter(null)}
+                    type="button"
+                  >
+                    Aging: {obligationAgingBuckets.find((b) => b.key === activeObligationStatusFilter)?.label ?? activeObligationStatusFilter} ×
+                  </button>
+                ) : null}
+                <button
+                  className="text-xs text-storm/60 underline hover:text-storm"
+                  onClick={() => {
+                    setActiveCategoryFilter(null);
+                    setActiveAccountTypeFilter(null);
+                    setActiveAccountIdFilter(null);
+                    setActiveObligationStatusFilter(null);
+                  }}
+                  type="button"
+                >
+                  Limpiar todos
+                </button>
+              </div>
+            ) : null}
             </div>
           </div>
         }
@@ -3860,168 +4116,423 @@ export function DashboardPage() {
         </div>
       </SurfaceCard>
 
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          01
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Atención inmediata</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Tareas pendientes, alertas y señales que requieren acción antes de analizar el resto.</p>
+        </div>
+      </div>
+      {showReviewInboxSection ? (
+        <SurfaceCard
+          action={
+            <StatusBadge
+              status={reviewInboxTotalIssues > 0 ? `${reviewInboxTotalIssues} pendientes` : "Al día"}
+              tone={reviewInboxTotalIssues > 0 ? "warning" : "success"}
+            />
+          }
+          description="Cola única para limpiar datos: categorías, duplicados, señales de baja confianza, suscripciones y cartera que piden seguimiento."
+          title="Por revisar"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_review_inbox" />}
+        >
+          {reviewInboxTotalIssues === 0 ? (
+            <DataState
+              description="No detectamos pendientes en estas categorías. Sigue registrando movimientos para mantener el tablero fiable."
+              title="Bandeja vacía"
+              tone="success"
+            />
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {uncategorizedMovements.length > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Sin categoría</p>
+                    <p className="mt-1 text-sm text-storm">Movimientos aplicados que aún no clasificás.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${uncategorizedMovements.length}`} tone="warning" />
+                    <GhostLink label="Ir a movimientos" to="/app/movements" />
+                  </div>
+                </li>
+              ) : null}
+              {pendingMovementsForReviewCount > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Pendientes de aplicar</p>
+                    <p className="mt-1 text-sm text-storm">Aún no impactan el saldo real.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${pendingMovementsForReviewCount}`} tone="warning" />
+                    <GhostLink label="Revisar cola" to="/app/movements" />
+                  </div>
+                </li>
+              ) : null}
+              {duplicateExpenseMovementGroups > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Posibles duplicados</p>
+                    <p className="mt-1 text-sm text-storm">Mismo día, monto y contraparte en gastos.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${duplicateExpenseMovementGroups} grupo(s)`} tone="warning" />
+                    <GhostLink label="Abrir movimientos" to="/app/movements" />
+                  </div>
+                </li>
+              ) : null}
+              {movementsNeedingMetadataReviewCount > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Baja confianza / revisar</p>
+                    <p className="mt-1 text-sm text-storm">Metadata que marca revisión o confianza baja.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${movementsNeedingMetadataReviewCount}`} tone="info" />
+                    <GhostLink label="Ver movimientos" to="/app/movements" />
+                  </div>
+                </li>
+              ) : null}
+              {subscriptionsNeedingAttentionCount > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Suscripciones por confirmar</p>
+                    <p className="mt-1 text-sm text-storm">Sin cuenta ligada o vencimiento ya pasado.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${subscriptionsNeedingAttentionCount}`} tone="warning" />
+                    <GhostLink label="Suscripciones" to="/app/subscriptions" />
+                  </div>
+                </li>
+              ) : null}
+              {obligationsWithoutPlan.length > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Cartera sin plan claro</p>
+                    <p className="mt-1 text-sm text-storm">Saldo vivo sin cuota ni fecha de seguimiento.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${obligationsWithoutPlan.length}`} tone="warning" />
+                    <GhostLink label="Cartera" to="/app/obligations" />
+                  </div>
+                </li>
+              ) : null}
+              {obligationsStaleActivityCount > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Cartera sin movimiento reciente</p>
+                    <p className="mt-1 text-sm text-storm">Más de 50 días sin pagos ni eventos registrados.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${obligationsStaleActivityCount}`} tone="neutral" />
+                    <GhostLink label="Actualizar cartera" to="/app/obligations" />
+                  </div>
+                </li>
+              ) : null}
+              {overdueObligations.length > 0 ? (
+                <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-ember/20 bg-ember/8 px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-ink">Cobros o pagos vencidos</p>
+                    <p className="mt-1 text-sm text-storm">Compromisos con fecha pasada y saldo pendiente.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={`${overdueObligations.length}`} tone="danger" />
+                    <GhostLink label="Resolver" to="/app/obligations" />
+                  </div>
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </SurfaceCard>
+      ) : null}
+
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          02
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Tu posición financiera</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Balances, flujo del período y salud global. El punto de partida para entender cómo estás parado hoy.</p>
+        </div>
+      </div>
       {isWidgetVisible("overview_kpis") ? (
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        <OverviewCard
-          accent="pine"
-          helpMetricId="kpi_total_money"
-          hint="Saldo combinado de tus cuentas activas, convertido a una sola lectura cuando hace falta."
-          icon={<WalletCards className="h-5 w-5" />}
-          label="Dinero total"
-          trendLabel={`${visibleAccounts.length} cuentas activas`}
-          trendTone="success"
-          value={formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
-        />
-        <OverviewCard
-          accent="ink"
-          helpMetricId="kpi_receivable"
-          hint="Plata pendiente de cobro en creditos, ventas a cuotas y otras cuentas por cobrar."
-          icon={<ArrowDownCircle className="h-5 w-5" />}
-          label="Te deben"
-          trendLabel={`${receivableLeaders.length} contactos con saldo`}
-          trendTone="info"
-          value={formatCurrency(receivableDisplay.amount, receivableDisplay.currencyCode)}
-        />
-        <OverviewCard
-          accent="ember"
-          helpMetricId="kpi_payable"
-          hint="Lo que todavía tienes por pagar considerando deudas, compras a cuotas y compromisos vivos."
-          icon={<ArrowUpCircle className="h-5 w-5" />}
-          label="Debes"
-          trendLabel={`${payableLeaders.length} contactos con saldo`}
-          trendTone="warning"
-          value={formatCurrency(payableDisplay.amount, payableDisplay.currencyCode)}
-        />
-        <OverviewCard
-          accent="gold"
-          helpMetricId="kpi_period_savings"
-          hint={`Resultado neto de ${comparison.current.label.toLowerCase()} restando gastos a ingresos.`}
-          icon={<PiggyBank className="h-5 w-5" />}
-          label="Ahorro del período"
-          trendLabel={formatSignedPercentage(currentTotals.net, previousTotals.net)}
-          trendTone={getChangeTone(totalCurrentSavingsDelta)}
-          value={formatCurrency(currentTotals.net, displayCurrencyCode)}
-        />
-        <OverviewCard
-          accent="pine"
-          helpMetricId="kpi_income"
-          hint="Entradas aplicadas dentro del período seleccionado. No cuenta transferencias internas."
-          icon={<ArrowUpRight className="h-5 w-5" />}
-          label="Ingresos"
-          trendLabel={formatSignedPercentage(currentTotals.income, previousTotals.income)}
-          trendTone={getChangeTone(currentTotals.income - previousTotals.income)}
-          value={formatCurrency(currentTotals.income, displayCurrencyCode)}
-        />
-        <OverviewCard
-          accent="ember"
-          helpMetricId="kpi_expense"
-          hint="Salidas aplicadas dentro del período seleccionado, incluyendo pagos recurrentes y obligaciones."
-          icon={<ArrowDownRight className="h-5 w-5" />}
-          label="Gastos"
-          trendLabel={formatSignedPercentage(currentTotals.expense, previousTotals.expense)}
-          trendTone={getChangeTone((currentTotals.expense - previousTotals.expense) * -1)}
-          value={formatCurrency(currentTotals.expense, displayCurrencyCode)}
-        />
+      <section className="grid gap-4">
+        {/* ── Health semaphore banner ─────────────────────────────── */}
+        <div
+          className={`flex flex-wrap items-center gap-4 rounded-[24px] border p-4 ${
+            healthSnapshot.tone === "success"
+              ? "border-pine/25 bg-pine/8"
+              : healthSnapshot.tone === "warning"
+                ? "border-gold/25 bg-gold/8"
+                : "border-ember/25 bg-ember/8"
+          }`}
+        >
+          <span className="text-2xl" role="img" aria-label={healthSnapshot.title}>
+            {healthSnapshot.tone === "success" ? "🟢" : healthSnapshot.tone === "warning" ? "🟡" : "🔴"}
+          </span>
+          <div className="flex-1">
+            <p
+              className={`text-[0.65rem] font-semibold uppercase tracking-[0.22em] ${
+                healthSnapshot.tone === "success"
+                  ? "text-pine"
+                  : healthSnapshot.tone === "warning"
+                    ? "text-gold"
+                    : "text-ember"
+              }`}
+            >
+              Salud financiera — {healthSnapshot.title}
+            </p>
+            <p className="mt-1 text-sm text-storm">{healthSnapshot.description}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <div className="text-right">
+              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm/60">Ahorro %</p>
+              <p className="mt-0.5 text-sm font-semibold text-ink">
+                {healthSnapshot.savingsRate !== null
+                  ? `${(healthSnapshot.savingsRate * 100).toFixed(0)}%`
+                  : "—"}
+              </p>
+              <p className="text-[0.58rem] text-storm/50">Sano: &gt;10%</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm/60">Cobertura</p>
+              <p className="mt-0.5 text-sm font-semibold text-ink">
+                {healthSnapshot.coverageMonths !== null
+                  ? `${healthSnapshot.coverageMonths.toFixed(1)} m`
+                  : "—"}
+              </p>
+              <p className="text-[0.58rem] text-storm/50">Sano: &gt;3 m</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm/60">Deuda/Ing</p>
+              <p className="mt-0.5 text-sm font-semibold text-ink">
+                {healthSnapshot.debtToIncomeRatio !== null
+                  ? `${(healthSnapshot.debtToIncomeRatio * 100).toFixed(0)}%`
+                  : "—"}
+              </p>
+              <p className="text-[0.58rem] text-storm/50">Sano: &lt;40%</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Sub-panel grid ──────────────────────────────────────── */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+
+          {/* LIQUIDEZ */}
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-pine">Liquidez</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">Dinero disponible ahora y por tipo de cuenta.</p>
+            <div className="mt-4 grid gap-3">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_total_money">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Dinero total</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">{visibleAccounts.length} cuentas activas</p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_real_free_money">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Dinero libre real</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(healthSnapshot.realFreeMoney, displayCurrencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">Liquidez menos pagos cercanos 30 d.</p>
+              </DashboardKpiHelpWrap>
+              <div className="grid grid-cols-2 gap-2">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_cash">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Efectivo</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(totalCash, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_bank">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Bancos</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(totalBank, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+              </div>
+            </div>
+          </div>
+
+          {/* FLUJO DEL PERÍODO */}
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-gold">Flujo del período</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">Resultado neto y sus componentes para el corte activo.</p>
+            <div className="mt-4 grid gap-3">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_income">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Ingresos</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(currentTotals.income, displayCurrencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">
+                  {formatVsPreviousPeriodLabel(currentTotals.income, previousTotals.income, comparison.previous.label)}
+                </p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/10 p-3" metricId="kpi_expense">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-ember">Gastos</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(currentTotals.expense, displayCurrencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">
+                  {formatVsPreviousPeriodLabel(currentTotals.expense, previousTotals.expense, comparison.previous.label)}
+                </p>
+              </DashboardKpiHelpWrap>
+              <div className="grid grid-cols-2 gap-2">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/10 p-3" metricId="kpi_period_savings">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Ahorro neto</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(currentTotals.net, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_avg_daily_spend">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Promedio/día</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(averageDailySpend, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+              </div>
+            </div>
+          </div>
+
+          {/* PATRIMONIO */}
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-ink/70">Patrimonio</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">Valor neto ampliado incluyendo lo que te deben y debes.</p>
+            <div className="mt-4 grid gap-3">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="adv_net_worth">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Patrimonio neto</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(expandedNetWorth, displayCurrencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">Caja + cobros pendientes − deudas.</p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_receivable">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Te deben</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(receivableDisplay.amount, receivableDisplay.currencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">{receivableLeaders.length} contactos con saldo pendiente.</p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/10 p-3" metricId="kpi_payable">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-ember">Debes</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {formatCurrency(payableDisplay.amount, payableDisplay.currencyCode)}
+                </p>
+                <p className="mt-1 text-xs text-storm">{payableLeaders.length} contactos con saldo pendiente.</p>
+              </DashboardKpiHelpWrap>
+            </div>
+          </div>
+
+          {/* SALUD */}
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-storm">Salud</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">Métricas de sostenibilidad y riesgo financiero personal.</p>
+            <div className="mt-4 grid gap-3">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_savings_rate">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Cap. ahorro %</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {healthSnapshot.savingsRate !== null
+                    ? `${(healthSnapshot.savingsRate * 100).toFixed(1)}%`
+                    : "Sin dato"}
+                </p>
+                <p className="mt-1 text-xs text-storm">Sano cuando supera el 10% de ingresos.</p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_coverage_months">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Cobertura meses</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {healthSnapshot.coverageMonths !== null
+                    ? `${healthSnapshot.coverageMonths.toFixed(1)} m`
+                    : "Sin dato"}
+                </p>
+                <p className="mt-1 text-xs text-storm">Sano con 3+ meses de gastos en liquidez.</p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_debt_income">
+                <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Ratio deuda/ing</p>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
+                  {healthSnapshot.debtToIncomeRatio !== null
+                    ? `${(healthSnapshot.debtToIncomeRatio * 100).toFixed(0)}%`
+                    : "Sin dato"}
+                </p>
+                <p className="mt-1 text-xs text-storm">Sano por debajo del 40%.</p>
+              </DashboardKpiHelpWrap>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Cierre estimado + meta + categoría que subió ────────── */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="relative rounded-[24px] border border-gold/22 bg-gold/10 p-5">
+            <div className="absolute right-4 top-4 z-[1]">
+              <DashboardHelpTrigger metricId="dashboard_period_close" />
+            </div>
+            <p className="pr-10 text-[0.65rem] uppercase tracking-[0.2em] text-storm">Cierre estimado (mes calendario)</p>
+            <p className="mt-3 font-display text-xl font-semibold leading-snug text-ink sm:text-2xl">
+              Si seguís el ritmo de ingresos y gastos de este mes, tu caja líquida rondaría{" "}
+              {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)} al cierre.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-storm">
+              Proyección a partir del neto diario del mes en curso y saldos de efectivo, banco y ahorros (no incluye
+              cuentas fuera de liquidez inmediata).
+            </p>
+          </div>
+          {proMonthlyGoal !== null && proMonthlyGoal > 0 ? (
+            <div className="relative rounded-[24px] border border-pine/22 bg-pine/10 p-5">
+              <div className="absolute right-4 top-4 z-[1]">
+                <DashboardHelpTrigger metricId="dashboard_goal_simple" />
+              </div>
+              <p className="pr-10 text-[0.65rem] uppercase tracking-[0.2em] text-pine">Meta de ahorro del mes</p>
+              <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                {Math.min(100, Math.max(0, Math.round((currentCalendarMonthNet / proMonthlyGoal) * 100)))}% completada
+              </p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-pine to-emerald-300"
+                  style={{
+                    width: `${Math.min(100, Math.max(4, (currentCalendarMonthNet / proMonthlyGoal) * 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-3 text-sm text-storm">
+                {currentCalendarMonthNet < proMonthlyGoal
+                  ? `Te faltan ${formatCurrency(Math.max(0, proMonthlyGoal - currentCalendarMonthNet), displayCurrencyCode)} para el objetivo (${formatCurrency(currentCalendarMonthNet, displayCurrencyCode)} de ${formatCurrency(proMonthlyGoal, displayCurrencyCode)}).`
+                  : "Objetivo alcanzado o superado en el mes en curso."}
+              </p>
+              {canUseAdvancedDashboard ? (
+                <p className="mt-2 text-xs text-storm/80">
+                  Editá el monto en el widget Meta y disciplina.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Meta de ahorro del mes</p>
+              <p className="mt-3 text-sm leading-6 text-storm">
+                Todavía no hay meta guardada. Podés definirla en el widget{" "}
+                <span className="font-medium text-ink">Meta y disciplina</span> (vista avanzada).
+              </p>
+            </div>
+          )}
+          {categoryWithLargestExpenseIncrease ? (
+            <div className="rounded-[24px] border border-ember/18 bg-ember/8 p-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.2em] text-ember">Categoría que más subió</p>
+              <p className="mt-3 font-display text-xl font-semibold text-ink">{categoryWithLargestExpenseIncrease.name}</p>
+              <p className="mt-2 text-sm text-storm">
+                +{formatCurrency(categoryWithLargestExpenseIncrease.delta, displayCurrencyCode)} vs{" "}
+                {comparison.previous.label}: gastaste {formatCurrency(categoryWithLargestExpenseIncrease.current, displayCurrencyCode)}{" "}
+                frente a {formatCurrency(categoryWithLargestExpenseIncrease.previous, displayCurrencyCode)}.
+              </p>
+              <div className="mt-3">
+                <GhostLink label="Ver comparativo" to="/app/categories" />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+              <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Categoría que más subió</p>
+              <p className="mt-3 text-sm text-storm">No hay alzas de gasto vs el período anterior en el top visible.</p>
+            </div>
+          )}
+        </div>
       </section>
-      ) : null}
-
-      {isWidgetVisible("overview_kpis") ? (
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_real_free_money">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Dinero libre real</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(healthSnapshot.realFreeMoney, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Liquidez menos pagos cercanos en 30 dias.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_avg_daily_spend">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Promedio diario</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(averageDailySpend, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Salida media dentro del corte actual.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_active_subscriptions">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Suscripciones activas</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">{activeSubscriptions.length}</p>
-            <p className="mt-2 text-sm text-storm">
-              Costo mensual aprox. {formatCurrency(monthlyRecurringCost, displayCurrencyCode)}.
-            </p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_upcoming_payments">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos próximos</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(upcomingOutflows, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">{upcomingCommitments.filter((item) => item.kind !== "Por cobrar").length} compromisos cercanos.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_overdue">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Vencido</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(overdueAmount, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">{overdueObligations.length} registros necesitan revision.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_transferred">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Transferido</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(totalTransferredThisPeriod, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">{currentPeriodTransfers.length} transferencias en el corte.</p>
-          </DashboardKpiHelpWrap>
-        </section>
-      ) : null}
-
-      {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="adv_net_worth">
-            <p className="text-xs uppercase tracking-[0.18em] text-pine">Patrimonio neto ampliado</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(expandedNetWorth, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">
-              Caja actual más lo que te deben, menos lo que aún debes.
-            </p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_liquidity">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Liquidez disponible</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(liquidMoneyTotal, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Efectivo, bancos y ahorros listos para moverse.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_cash">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Efectivo</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(totalCash, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Fondos de caja y billeteras visibles.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_bank">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Bancos</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(totalBank, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Saldo disponible en cuentas bancarias activas.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_savings">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Ahorros</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(totalSavings, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">Reservas en cuentas marcadas para ahorrar.</p>
-          </DashboardKpiHelpWrap>
-          <DashboardKpiHelpWrap className="rounded-[24px] border border-gold/18 bg-gold/10 p-4" metricId="adv_projected_cash_30">
-            <p className="text-xs uppercase tracking-[0.18em] text-gold">Caja proyectada 30 dias</p>
-            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-              {formatCurrency(projectedLiquidMoney, displayCurrencyCode)}
-            </p>
-            <p className="mt-2 text-sm text-storm">
-              Considera {formatCurrency(upcomingInflows, displayCurrencyCode)} por entrar y{" "}
-              {formatCurrency(upcomingOutflows, displayCurrencyCode)} por salir.
-            </p>
-          </DashboardKpiHelpWrap>
-        </section>
       ) : null}
 
       {isWidgetVisible("overview_kpis") &&
@@ -4047,41 +4558,15 @@ export function DashboardPage() {
           titleAccessory={<DashboardHelpTrigger metricId="shared_portfolio" />}
         >
           {sharedObligationsQuery.isLoading ? (
-            <DataState
-              description="Estamos trayendo los registros que otros usuarios compartieron contigo."
-              title="Cargando cartera compartida"
-            />
+            <p className="text-sm text-storm">Cargando cartera compartida...</p>
           ) : sharedObligationsQuery.error ? (
-            <DataState
-              description={getQueryErrorMessage(
-                sharedObligationsQuery.error,
-                "No pudimos cargar la cartera compartida contigo.",
-              )}
-              title="No pudimos abrir los compartidos"
-              tone="error"
-            />
+            <p className="text-sm text-ember">No se pudo cargar la cartera compartida.</p>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-4">
-              <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="shared_principal">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal compartido</p>
-                <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                  {formatCurrency(sharedPrincipalDisplay.amount, sharedPrincipalDisplay.currencyCode)}
-                </p>
-                <p className="mt-2 text-sm text-storm">
-                  Base actual de {displaySharedObligations.length} registros en seguimiento.
-                </p>
-              </DashboardKpiHelpWrap>
-              <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="shared_pending">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendiente compartido</p>
-                <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                  {formatCurrency(sharedPendingDisplay.amount, sharedPendingDisplay.currencyCode)}
-                </p>
-                <p className="mt-2 text-sm text-storm">
-                  Exposición viva que ves aparte de tu cartera propia.
-                </p>
-              </DashboardKpiHelpWrap>
+            <div className="grid gap-4 sm:grid-cols-2">
               <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="shared_receivable">
-                <p className="text-xs uppercase tracking-[0.18em] text-pine">Créditos compartidos</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-pine">
+                  Créditos compartidos
+                </p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedReceivableDisplay.amount, sharedReceivableDisplay.currencyCode)}
                 </p>
@@ -4164,7 +4649,7 @@ export function DashboardPage() {
               {latestIncome?.description || latestIncome?.counterparty || "Sin ingresos recientes"}
             </p>
             <p className="mt-2 text-sm text-storm">
-              {latestIncome ? formatDateTime(latestIncome.occurredAt) : "Cuando registres cobros o ingresos, apareceran aqui."}
+              {latestIncome ? formatDateTime(latestIncome.occurredAt) : "Todavía no hay ingresos aplicados."}
             </p>
           </DashboardKpiHelpWrap>
           <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_latest_movement">
@@ -4187,320 +4672,15 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      {showProFocusSection ? (
-        <section
-          className={`grid gap-6 ${
-            isWidgetVisible("pro_command_center") &&
-            isWidgetVisible("pro_intelligence_digest") &&
-            isWidgetVisible("pro_goals_strip")
-              ? "xl:grid-cols-[1.1fr_1fr_0.9fr]"
-              : "xl:grid-cols-1"
-          }`}
-        >
-          {isWidgetVisible("pro_command_center") ? (
-            <SurfaceCard
-              description="Prioridades con enlace directo, presión de la semana, proyección simple a fin de mes y una sola recomendación prioritaria."
-              title="Acciones y foco (Pro)"
-              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_command_center" />}
-            >
-              <div className="grid gap-6">
-                <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Acciones sugeridas</p>
-                  {suggestedProActions.length === 0 ? (
-                    <p className="mt-3 text-sm text-storm">No hay acciones urgentes detectadas. Buen momento para revisar metas o categorías.</p>
-                  ) : (
-                    <ul className="mt-3 grid gap-2">
-                      {suggestedProActions.map((action) => (
-                        <li key={action.key}>
-                          <Link
-                            className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-gold/25 hover:bg-white/[0.05]"
-                            to={action.href}
-                          >
-                            <div className="min-w-0">
-                              <p className="font-semibold text-ink">{action.title}</p>
-                              <p className="mt-1 text-sm leading-6 text-storm">{action.detail}</p>
-                            </div>
-                            <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-storm" />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Próxima presión financiera (7 días)</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-pine">Entra</p>
-                      <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(proWeekPressure.expectedInflow, displayCurrencyCode)}
-                      </p>
-                    </div>
-                    <div className="rounded-[18px] border border-ember/18 bg-ember/10 p-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-ember">Sale</p>
-                      <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(proWeekPressure.expectedOutflow, displayCurrencyCode)}
-                      </p>
-                    </div>
-                    <div className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-storm">Balance neto</p>
-                      <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(
-                          proWeekPressure.expectedInflow - proWeekPressure.expectedOutflow,
-                          displayCurrencyCode,
-                        )}
-                      </p>
-                      <p className="mt-1 text-xs text-storm">
-                        Caja estimada después: {formatCurrency(proWeekPressure.estimatedBalance, displayCurrencyCode)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[22px] border border-gold/20 bg-gold/10 p-4">
-                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Caja estimada a fin de mes</p>
-                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}
-                    </p>
-                    <p className="mt-2 text-xs leading-5 text-storm">
-                      Extrapolación desde tu neto del mes (día {monthEndEstimate.daysElapsedInMonth}): ingresos{" "}
-                      {formatCurrency(monthEndEstimate.incomeMonthToDate, displayCurrencyCode)} · gastos{" "}
-                      {formatCurrency(monthEndEstimate.expenseMonthToDate, displayCurrencyCode)}. No incluye todo lo
-                      impredecible.
-                    </p>
-                  </div>
-                  <div
-                    className={`rounded-[22px] border p-4 ${
-                      primaryProRecommendation.tone === "danger"
-                        ? "border-ember/25 bg-ember/10"
-                        : primaryProRecommendation.tone === "warning"
-                          ? "border-gold/25 bg-gold/10"
-                          : primaryProRecommendation.tone === "success"
-                            ? "border-pine/25 bg-pine/10"
-                            : "border-white/10 bg-white/[0.03]"
-                    }`}
-                  >
-                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Recomendación prioritaria</p>
-                    <p className="mt-3 text-sm leading-7 text-ink">{primaryProRecommendation.text}</p>
-                  </div>
-                </div>
-              </div>
-            </SurfaceCard>
-          ) : null}
-
-          {isWidgetVisible("pro_intelligence_digest") ? (
-            <SurfaceCard
-              description="Resume patrones del período, desvíos y la cola de limpieza sin repetir todo el panel de alertas."
-              title="Insights del período (Pro)"
-              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_intelligence_digest" />}
-            >
-              <div className="grid gap-5">
-                <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Señales automáticas</p>
-                  <div className="mt-3 grid gap-2">
-                    {learningSnapshot.insights.slice(0, 3).map((insight, insightIndex) => (
-                      <article
-                        className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3"
-                        key={`${insight.title}-${insightIndex}`}
-                      >
-                        <p className="font-semibold text-ink">{insight.title}</p>
-                        <p className="mt-1 text-sm leading-6 text-storm">{insight.description}</p>
-                      </article>
-                    ))}
-                    {topBalanceAccount && topBalanceAccount.share >= 0.52 ? (
-                      <article className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
-                        <p className="font-semibold text-ink">Concentración en una cuenta</p>
-                        <p className="mt-1 text-sm leading-6 text-storm">
-                          {topBalanceAccount.account.name} concentra {formatPercentage(topBalanceAccount.share)} del
-                          dinero visible: casi todo el gasto operativo pasa por ahí.
-                        </p>
-                      </article>
-                    ) : null}
-                    {healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14 ? (
-                      <article className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
-                        <p className="font-semibold text-ink">Colchón reciente</p>
-                        <p className="mt-1 text-sm leading-6 text-storm">
-                          Con el ritmo de gasto que miramos, tu liquidez cubre alrededor de{" "}
-                          {(healthSnapshot.coverageMonths * 30).toFixed(0)} días (orden de magnitud).
-                        </p>
-                      </article>
-                    ) : null}
-                    {learningSnapshot.insights.length === 0 &&
-                    !(topBalanceAccount && topBalanceAccount.share >= 0.52) &&
-                    !(healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14) ? (
-                      <p className="text-sm text-storm">Aún no hay suficiente historia para insights automáticos.</p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Gasto fuera de patrón</p>
-                  {unusualSpendingLines.length === 0 ? (
-                    <p className="mt-3 text-sm text-storm">No detectamos categorías ni movimientos claramente fuera de tono.</p>
-                  ) : (
-                    <ul className="mt-3 grid gap-2">
-                      {unusualSpendingLines.map((line) => (
-                        <li
-                          className="rounded-[18px] border border-ember/18 bg-ember/8 px-3 py-2 text-sm text-storm"
-                          key={line.key}
-                        >
-                          <span className="font-semibold text-ink">{line.label}</span> — {line.detail}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                  <div>
-                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Movimientos por revisar</p>
-                    <p className="mt-2 text-sm text-storm">
-                      {uncategorizedMovements.length} sin categoría ·{" "}
-                      {displayMovements.filter((m) => m.status === "pending").length} pendientes de aplicar.
-                    </p>
-                  </div>
-                  <GhostLink label="Ir a movimientos" to="/app/movements" />
-                </div>
-              </div>
-            </SurfaceCard>
-          ) : null}
-
-          {isWidgetVisible("pro_goals_strip") ? (
-            <SurfaceCard
-              description="Meta de ahorro neto del mes guardada en tu cuenta (por usuario y workspace), a partir de los movimientos aplicados del mes calendario."
-              title="Meta y disciplina (Pro)"
-              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_goals_strip" />}
-            >
-              <div className="grid gap-5">
-                <div>
-                  <label className="text-[0.65rem] uppercase tracking-[0.2em] text-storm" htmlFor="pro-monthly-goal">
-                    Meta de ahorro neto del mes ({displayCurrencyCode})
-                  </label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <input
-                      className="min-w-[8rem] flex-1 rounded-[16px] border border-white/12 bg-white/[0.05] px-4 py-2.5 text-ink outline-none focus:border-gold/40"
-                      id="pro-monthly-goal"
-                      inputMode="decimal"
-                      onChange={(event) => {
-                        setProGoalSaveError(null);
-                        setProGoalDraft(event.target.value);
-                      }}
-                      placeholder="Ej. 800"
-                      value={proGoalDraft}
-                    />
-                    <Button
-                      disabled={!user?.id || upsertFinancialGoalMutation.isPending}
-                      onClick={async () => {
-                        if (!user?.id) {
-                          return;
-                        }
-
-                        const normalized = proGoalDraft.replace(",", ".").trim();
-                        const value = Number.parseFloat(normalized);
-                        const workspaceId = snapshot.workspace.id;
-
-                        try {
-                          if (Number.isFinite(value) && value > 0) {
-                            await upsertFinancialGoalMutation.mutateAsync({
-                              workspaceId,
-                              userId: user.id,
-                              monthlySavingsTarget: value,
-                            });
-                            writeMonthlySavingsTarget(workspaceId, null);
-                            setProMonthlyGoal(value);
-                          } else {
-                            await upsertFinancialGoalMutation.mutateAsync({
-                              workspaceId,
-                              userId: user.id,
-                              monthlySavingsTarget: null,
-                            });
-                            writeMonthlySavingsTarget(workspaceId, null);
-                            setProMonthlyGoal(null);
-                            setProGoalDraft("");
-                          }
-
-                          setProGoalSaveError(null);
-                        } catch (error) {
-                          const message = error instanceof Error ? error.message : "";
-                          if (message.includes("workspace_financial_goals")) {
-                            if (Number.isFinite(value) && value > 0) {
-                              writeMonthlySavingsTarget(workspaceId, value);
-                              setProMonthlyGoal(value);
-                            } else {
-                              writeMonthlySavingsTarget(workspaceId, null);
-                              setProMonthlyGoal(null);
-                              setProGoalDraft("");
-                            }
-                            setProGoalSaveError(null);
-                            return;
-                          }
-
-                          setProGoalSaveError(getQueryErrorMessage(error, "No se pudo guardar la meta."));
-                        }
-                      }}
-                      type="button"
-                      variant="primary"
-                    >
-                      {upsertFinancialGoalMutation.isPending ? "Guardando…" : "Guardar"}
-                    </Button>
-                  </div>
-                  {proGoalSaveError ? (
-                    <p className="mt-2 text-sm text-ember" role="alert">
-                      {proGoalSaveError}
-                    </p>
-                  ) : null}
-                </div>
-
-                {proMonthlyGoal !== null && proMonthlyGoal > 0 ? (
-                  <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
-                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-pine">Progreso del mes</p>
-                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                      {formatCurrency(Math.max(0, currentCalendarMonthNet), displayCurrencyCode)}
-                      <span className="text-base font-normal text-storm">
-                        {" "}
-                        / {formatCurrency(proMonthlyGoal, displayCurrencyCode)}
-                      </span>
-                    </p>
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-pine to-emerald-300"
-                        style={{
-                          width: `${Math.min(100, Math.max(6, (currentCalendarMonthNet / proMonthlyGoal) * 100))}%`,
-                        }}
-                      />
-                    </div>
-                    {currentCalendarMonthNet < proMonthlyGoal ? (
-                      <p className="mt-3 text-sm text-storm">
-                        Te faltan{" "}
-                        {formatCurrency(Math.max(0, proMonthlyGoal - currentCalendarMonthNet), displayCurrencyCode)} para
-                        cerrar la meta este mes.
-                      </p>
-                    ) : (
-                      <p className="mt-3 text-sm text-pine">Meta alcanzada o superada en el mes en curso.</p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-storm">
-                    Define un monto de ahorro neto mensual para ver aquí cuánto llevas según los movimientos aplicados
-                    del mes calendario.
-                  </p>
-                )}
-
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Racha de registro</p>
-                  <p className="mt-3 font-display text-2xl font-semibold text-ink">{distinctPostingDaysThisMonth}</p>
-                  <p className="mt-1 text-sm text-storm">
-                    Días distintos con al menos un movimiento aplicado en el mes actual.
-                  </p>
-                </div>
-              </div>
-            </SurfaceCard>
-          ) : null}
-        </section>
-      ) : null}
-
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          03
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Flujo de dinero</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Cómo entró y salió el dinero en el período. Gráficos diarios y proyección hacia el cierre del mes.</p>
+        </div>
+      </div>
       {showSavingsSection ? (
       <section
         className={`grid gap-6 ${
@@ -4536,12 +4716,31 @@ export function DashboardPage() {
               </Button>
             ))}
           </div>
+          {hasCrossMovementFilter ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[14px] border border-gold/20 bg-gold/8 px-3 py-2 text-xs text-storm">
+              <span>Filtrado:</span>
+              {activeCategoryFilter ? (
+                <span className="font-semibold text-ink">categoría &quot;{activeCategoryFilter}&quot;</span>
+              ) : null}
+              {activeCategoryFilter && activeAccountIdFilter !== null ? <span>+</span> : null}
+              {activeAccountIdFilter !== null ? (
+                <span className="font-semibold text-ink">cuenta &quot;{activeAccountFilterName}&quot;</span>
+              ) : null}
+              <button
+                className="ml-auto text-storm/60 hover:text-storm"
+                onClick={() => { setActiveCategoryFilter(null); setActiveAccountIdFilter(null); }}
+                type="button"
+              >
+                Limpiar ×
+              </button>
+            </div>
+          ) : null}
           {chronologicalTrendTab === "savings" ? (
             <SavingsLineChart
               currencyCode={displayCurrencyCode}
               dayMovements={movementsForSelectedChronologicalDay}
               onSelect={setSelectedTrendIndex}
-              points={savingsSeries}
+              points={trendFilteredSavingsSeries}
               selectedIndex={selectedTrendSafeIndex}
             />
           ) : null}
@@ -4553,7 +4752,7 @@ export function DashboardPage() {
               dailyLabel="Gasto del día"
               movementsForDay={expenseMovementsSelectedDay}
               onSelect={setSelectedTrendIndex}
-              points={expenseFlowSeries}
+              points={trendFilteredExpenseFlowSeries}
               selectedIndex={selectedTrendSafeIndex}
               variant="expense"
             />
@@ -4566,7 +4765,7 @@ export function DashboardPage() {
               dailyLabel="Ingreso del día"
               movementsForDay={incomeMovementsSelectedDay}
               onSelect={setSelectedTrendIndex}
-              points={incomeFlowSeries}
+              points={trendFilteredIncomeFlowSeries}
               selectedIndex={selectedTrendSafeIndex}
               variant="income"
             />
@@ -4669,6 +4868,15 @@ export function DashboardPage() {
       </section>
       ) : null}
 
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          04
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Cuentas y cartera</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Dónde está el dinero ahora y a quiénes estás expuesto por cobrar o pagar.</p>
+        </div>
+      </div>
       {showPortfolioSection ? (
       <section className="grid gap-6 xl:grid-cols-3">
         {isWidgetVisible("accounts_breakdown") ? (
@@ -4678,7 +4886,13 @@ export function DashboardPage() {
           title="Dinero por cuenta"
           titleAccessory={<DashboardHelpTrigger metricId="widget_accounts_breakdown" />}
         >
-          {visibleAccountsBreakdown.length === 0 ? (
+          {activeAccountTypeFilter ? (
+            <div className="mb-4 flex items-center gap-2 rounded-[14px] border border-pine/20 bg-pine/8 px-3 py-2 text-xs text-storm">
+              Mostrando solo cuentas de tipo <span className="font-semibold text-ink">{accountTypeFilterOptions.find((o) => o.value === activeAccountTypeFilter)?.label ?? activeAccountTypeFilter}</span>
+              <button className="ml-auto text-storm/60 hover:text-storm" onClick={() => setActiveAccountTypeFilter(null)} type="button">Limpiar ×</button>
+            </div>
+          ) : null}
+          {typeFilteredAccountsBreakdown.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear cuenta" to="/app/accounts" />}
               description="Tu primera cuenta abrirá automáticamente esta lectura por balance, participación y actividad."
@@ -4687,18 +4901,24 @@ export function DashboardPage() {
           ) : (
             <div className="grid gap-5">
               <div className="grid gap-3">
-                {visibleAccountsBreakdown.map((item) => {
+                {typeFilteredAccountsBreakdown.map((item) => {
                   const isActive = selectedAccount?.account.id === item.account.id;
+                  const isCrossFiltered = activeAccountIdFilter === item.account.id;
 
                   return (
                     <button
                       className={`rounded-[24px] border p-4 text-left transition ${
-                        isActive
-                          ? "border-pine/30 bg-pine/10"
-                          : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                        isCrossFiltered
+                          ? "border-gold/40 bg-gold/10"
+                          : isActive
+                            ? "border-pine/30 bg-pine/10"
+                            : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
                       }`}
                       key={item.account.id}
-                      onClick={() => setSelectedAccountId(item.account.id)}
+                      onClick={() => {
+                        setSelectedAccountId(item.account.id);
+                        setActiveAccountIdFilter(activeAccountIdFilter === item.account.id ? null : item.account.id);
+                      }}
                       type="button"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -4779,7 +4999,22 @@ export function DashboardPage() {
           title="Quiénes más te deben"
           titleAccessory={<DashboardHelpTrigger metricId="widget_receivable_leaders" />}
         >
-          {visibleReceivableLeaders.length === 0 ? (
+          {activeObligationStatusFilter ? (
+            <div className="mb-4 flex items-center gap-2 rounded-[14px] border border-gold/20 bg-gold/8 px-3 py-2 text-xs text-storm">
+              Filtrando por estado:{" "}
+              <span className="font-semibold text-ink">
+                {obligationAgingBuckets.find((b) => b.key === activeObligationStatusFilter)?.label ?? activeObligationStatusFilter}
+              </span>
+              <button
+                className="ml-auto text-storm/60 hover:text-storm"
+                onClick={() => setActiveObligationStatusFilter(null)}
+                type="button"
+              >
+                Limpiar ×
+              </button>
+            </div>
+          ) : null}
+          {carteraReceivableLeaders.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear crédito" to="/app/obligations" />}
               description="Cuando registres ventas a cuotas o préstamos hechos por ti, aparecerán aquí ordenados por impacto."
@@ -4788,7 +5023,7 @@ export function DashboardPage() {
           ) : (
             <div className="grid gap-5">
               <div className="grid gap-3">
-                {visibleReceivableLeaders.map((item) => {
+                {carteraReceivableLeaders.map((item) => {
                   const isActive = selectedReceivable?.key === item.key;
 
                   return (
@@ -4858,7 +5093,7 @@ export function DashboardPage() {
           title="A quiénes más debes"
           titleAccessory={<DashboardHelpTrigger metricId="widget_payable_leaders" />}
         >
-          {visiblePayableLeaders.length === 0 ? (
+          {carteraPayableLeaders.length === 0 ? (
             <DataState
               action={<GhostLink label="Crear deuda" to="/app/obligations" />}
               description="Cuando registres compras a cuotas o préstamos recibidos, aquí verás quién pesa más sobre tu flujo."
@@ -4867,7 +5102,7 @@ export function DashboardPage() {
           ) : (
             <div className="grid gap-5">
               <div className="grid gap-3">
-                {visiblePayableLeaders.map((item) => {
+                {carteraPayableLeaders.map((item) => {
                   const isActive = selectedPayable?.key === item.key;
 
                   return (
@@ -4930,238 +5165,15 @@ export function DashboardPage() {
       </section>
       ) : null}
 
-      {showSpendingSection ? (
-      <section
-        className={`grid gap-6 ${
-          isWidgetVisible("category_comparison") && isWidgetVisible("monthly_pulse")
-            ? "xl:grid-cols-[1.1fr_0.9fr]"
-            : "xl:grid-cols-1"
-        }`}
-      >
-        {isWidgetVisible("category_comparison") ? (
-        <SurfaceCard
-          action={<GhostLink label="Ver categorías" to="/app/categories" />}
-          description="Comparativo por categoría del período actual contra su referencia anterior. Toca una fila para abrir el detalle."
-          title="Comparativo por categorías"
-          titleAccessory={<DashboardHelpTrigger metricId="widget_category_comparison" />}
-        >
-          {visibleCategories.length === 0 ? (
-            <DataState
-              action={<GhostLink label="Registrar gasto" to="/app/movements" />}
-              description="Cuando tengas gastos aplicados, aquí verás dónde más se fue el dinero y cómo cambia frente al comparativo."
-              title="Aún no hay categorías con gasto"
-            />
-          ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="grid gap-3">
-                {visibleCategories.map((item) => {
-                  const isActive = selectedCategory?.key === item.key;
-
-                  return (
-                    <button
-                      className={`rounded-[24px] border p-4 text-left transition ${
-                        isActive
-                          ? "border-ember/30 bg-ember/10"
-                          : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
-                      }`}
-                      key={item.key}
-                      onClick={() => setSelectedCategoryKey(item.key)}
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-ink">{item.name}</p>
-                          <p className="mt-1 text-sm text-storm">
-                            {item.currentCount} movimiento{item.currentCount === 1 ? "" : "s"} este
-                            período
-                          </p>
-                        </div>
-                        <DeltaBadge currencyCode={displayCurrencyCode} inverse value={item.delta} />
-                      </div>
-                      <div className="mt-4 grid gap-2">
-                        <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
-                          <span>{comparison.current.label}</span>
-                          <span>{formatCurrency(item.current, displayCurrencyCode)}</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-white/[0.08]">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-ember to-gold"
-                            style={{ width: `${(item.current / maxCategoryAmount) * 100}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
-                          <span>{comparison.previous.label}</span>
-                          <span>{formatCurrency(item.previous, displayCurrencyCode)}</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-white/[0.08]">
-                          <div
-                            className="h-full rounded-full bg-white/35"
-                            style={{ width: `${(item.previous / maxCategoryAmount) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {selectedCategory ? (
-                <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoría activa</p>
-                  <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {selectedCategory.name}
-                  </h4>
-                  <div className="mt-5 grid gap-3">
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                        Gasto del período
-</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedCategory.current, displayCurrencyCode)}
-                      </p>
-                      <p className="mt-2 text-sm text-storm">
-                        {totalCurrentExpenses > 0
-                          ? `${formatPercentage(selectedCategory.share)} de todo tu gasto actual.`
-                          : "Todavía no representa gasto real en este período."}
-                      </p>
-                    </div>
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparación</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedCategory.previous, displayCurrencyCode)}
-                      </p>
-                      <p className="mt-2 text-sm text-storm">
-                        Diferencia de {formatDeltaCurrency(selectedCategory.delta, displayCurrencyCode)} frente a{" "}
-                        {comparison.previous.label.toLowerCase()}.
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-sm leading-7 text-storm">
-                    {selectedCategory.delta > 0
-                      ? "Aquí tienes la mejor oportunidad para ahorrar más si no era un gasto intencional."
-                      : selectedCategory.delta < 0
-                        ? "Ya lograste bajar esta categoría frente al comparativo anterior."
-                        : "Esta categoría viene prácticamente igual que en el período de referencia."}
-                  </p>
-                </article>
-              ) : null}
-            </div>
-          )}
-        </SurfaceCard>
-        ) : null}
-
-        {isWidgetVisible("monthly_pulse") ? (
-        <SurfaceCard
-          action={<CalendarDays className="h-5 w-5 text-gold" />}
-          description="Pulso mensual de los ultimos seis meses para ver si tu caja viene expandiendose o comprimiendose."
-          title="Pulso mensual"
-          titleAccessory={<DashboardHelpTrigger metricId="widget_monthly_pulse" />}
-        >
-          {monthlyPulse.length === 0 ? (
-            <DataState
-              description="Aún no hay movimientos aplicados para construir tu evolución mensual."
-              title="Sin historia mensual"
-            />
-          ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="grid gap-3">
-                {monthlyPulse.map((item) => {
-                  const isActive = selectedMonth?.key === item.key;
-
-                  return (
-                    <button
-                      className={`rounded-[24px] border p-4 text-left transition ${
-                        isActive
-                          ? "border-gold/30 bg-gold/10"
-                          : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
-                      }`}
-                      key={item.key}
-                      onClick={() => setSelectedMonthKey(item.key)}
-                      type="button"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-ink">{item.label}</p>
-                          <p className="mt-1 text-sm text-storm">
-                            {item.movementCount} movimiento{item.movementCount === 1 ? "" : "s"}
-                          </p>
-                        </div>
-                        <StatusBadge
-                          status={formatCurrency(item.net, displayCurrencyCode)}
-                          tone={item.net >= 0 ? "success" : "danger"}
-                        />
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
-                            <span>Entradas</span>
-                            <span>{formatCurrency(item.income, displayCurrencyCode)}</span>
-                          </div>
-                          <div className="flex h-20 items-end rounded-[18px] bg-pine/8 p-2">
-                            <div
-                              className="w-full rounded-[14px] bg-pine"
-                              style={{ height: `${(item.income / maxMonthlyAmount) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
-                            <span>Salidas</span>
-                            <span>{formatCurrency(item.expense, displayCurrencyCode)}</span>
-                          </div>
-                          <div className="flex h-20 items-end rounded-[18px] bg-ember/8 p-2">
-                            <div
-                              className="w-full rounded-[14px] bg-ember"
-                              style={{ height: `${(item.expense / maxMonthlyAmount) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {selectedMonth ? (
-                <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Mes seleccionado</p>
-                  <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {selectedMonth.label}
-                  </h4>
-                  <div className="mt-5 grid gap-3">
-                    <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-pine">Entradas</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedMonth.income, displayCurrencyCode)}
-                      </p>
-                    </div>
-                    <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-ember">Salidas</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedMonth.expense, displayCurrencyCode)}
-                      </p>
-                    </div>
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Resultado</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedMonth.net, displayCurrencyCode)}
-                      </p>
-                      <p className="mt-2 text-sm text-storm">
-                        {selectedMonth.movementCount} movimiento
-                        {selectedMonth.movementCount === 1 ? "" : "s"} aplicado
-                        {selectedMonth.movementCount === 1 ? "" : "s"} en ese mes.
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              ) : null}
-            </div>
-          )}
-        </SurfaceCard>
-        ) : null}
-      </section>
-      ) : null}
-
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          05
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Presupuestos activos</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Tus límites de gasto vigentes. Mirá cuánto espacio te queda antes de ver el detalle por categoría.</p>
+        </div>
+      </div>
       {showBudgetSection ? (
       <section className="grid gap-6 xl:grid-cols-1">
         <SurfaceCard
@@ -5311,6 +5323,276 @@ export function DashboardPage() {
       </section>
       ) : null}
 
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          06
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Categorías de gasto</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Comparativo de en qué gastaste este período vs el anterior. Identificá dónde está la oportunidad de mejora.</p>
+        </div>
+      </div>
+      {showSpendingSection ? (
+      <section
+        className={`grid gap-6 ${
+          isWidgetVisible("category_comparison") && isWidgetVisible("monthly_pulse")
+            ? "xl:grid-cols-[1.1fr_0.9fr]"
+            : "xl:grid-cols-1"
+        }`}
+      >
+        {isWidgetVisible("category_comparison") ? (
+        <SurfaceCard
+          action={<GhostLink label="Ver categorías" to="/app/categories" />}
+          description="Comparativo por categoría del período actual contra su referencia anterior. Toca una fila para ver detalle y filtrar la tendencia de flujo."
+          title="Comparativo por categorías"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_category_comparison" />}
+        >
+          {visibleCategories.length === 0 ? (
+            <DataState
+              action={<GhostLink label="Registrar gasto" to="/app/movements" />}
+              description="Cuando tengas gastos aplicados, aquí verás dónde más se fue el dinero y cómo cambia frente al comparativo."
+              title="Aún no hay categorías con gasto"
+            />
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="grid gap-3">
+                {visibleCategories.map((item) => {
+                  const isActive = selectedCategory?.key === item.key;
+                  const isCrossFiltered = activeCategoryFilter === item.name;
+
+                  return (
+                    <button
+                      className={`rounded-[24px] border p-4 text-left transition ${
+                        isCrossFiltered
+                          ? "border-gold/35 bg-gold/12"
+                          : isActive
+                            ? "border-ember/30 bg-ember/10"
+                            : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                      }`}
+                      key={item.key}
+                      onClick={() => {
+                        setSelectedCategoryKey(item.key);
+                        setActiveCategoryFilter(activeCategoryFilter === item.name ? null : item.name);
+                      }}
+                      title={isCrossFiltered ? "Click para quitar filtro de tendencia" : "Click para filtrar la tendencia por esta categoría"}
+                      type="button"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink">{item.name}</p>
+                          <p className="mt-1 text-sm text-storm">
+                            {item.currentCount} movimiento{item.currentCount === 1 ? "" : "s"} este
+                            período
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-storm/90">
+                            Gasto {formatVsPreviousPeriodLabel(item.current, item.previous, comparison.previous.label)}
+                          </p>
+                        </div>
+                        <DeltaBadge currencyCode={displayCurrencyCode} inverse value={item.delta} />
+                      </div>
+                      <div className="mt-4 grid gap-2">
+                        <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
+                          <span>{comparison.current.label}</span>
+                          <span>{formatCurrency(item.current, displayCurrencyCode)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/[0.08]">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-ember to-gold"
+                            style={{ width: `${(item.current / maxCategoryAmount) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
+                          <span>{comparison.previous.label}</span>
+                          <span>{formatCurrency(item.previous, displayCurrencyCode)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/[0.08]">
+                          <div
+                            className="h-full rounded-full bg-white/35"
+                            style={{ width: `${(item.previous / maxCategoryAmount) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedCategory ? (
+                <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoría activa</p>
+                  <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {selectedCategory.name}
+                  </h4>
+                  <div className="mt-5 grid gap-3">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">
+                        Gasto del período
+</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(selectedCategory.current, displayCurrencyCode)}
+                      </p>
+                      <p className="mt-2 text-sm text-storm">
+                        {totalCurrentExpenses > 0
+                          ? `${formatPercentage(selectedCategory.share)} de todo tu gasto actual.`
+                          : "Todavía no representa gasto real en este período."}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparación</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(selectedCategory.previous, displayCurrencyCode)}
+                      </p>
+                      <p className="mt-2 text-sm text-storm">
+                        Diferencia de {formatDeltaCurrency(selectedCategory.delta, displayCurrencyCode)} frente a{" "}
+                        {comparison.previous.label.toLowerCase()}.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm leading-7 text-storm">
+                    {selectedCategory.delta > 0
+                      ? "Aquí tienes la mejor oportunidad para ahorrar más si no era un gasto intencional."
+                      : selectedCategory.delta < 0
+                        ? "Ya lograste bajar esta categoría frente al comparativo anterior."
+                        : "Esta categoría viene prácticamente igual que en el período de referencia."}
+                  </p>
+                </article>
+              ) : null}
+            </div>
+          )}
+        </SurfaceCard>
+        ) : null}
+
+        {isWidgetVisible("monthly_pulse") ? (
+        <SurfaceCard
+          action={<CalendarDays className="h-5 w-5 text-gold" />}
+          description="Pulso mensual de los ultimos seis meses para ver si tu caja viene expandiendose o comprimiendose."
+          title="Pulso mensual"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_monthly_pulse" />}
+        >
+          {monthlyPulse.length === 0 ? (
+            <DataState
+              description="Aún no hay movimientos aplicados para construir tu evolución mensual."
+              title="Sin historia mensual"
+            />
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="grid gap-3">
+                {monthlyPulse.map((item, monthIndex) => {
+                  const isActive = selectedMonth?.key === item.key;
+                  const prevMonth = monthIndex > 0 ? monthlyPulse[monthIndex - 1] : null;
+                  const netDeltaVsPrev = prevMonth ? item.net - prevMonth.net : null;
+
+                  return (
+                    <button
+                      className={`rounded-[24px] border p-4 text-left transition ${
+                        isActive
+                          ? "border-gold/30 bg-gold/10"
+                          : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                      }`}
+                      key={item.key}
+                      onClick={() => setSelectedMonthKey(item.key)}
+                      type="button"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink">{item.label}</p>
+                          <p className="mt-1 text-sm text-storm">
+                            {item.movementCount} movimiento{item.movementCount === 1 ? "" : "s"}
+                          </p>
+                          {netDeltaVsPrev !== null ? (
+                            <p className="mt-1 text-xs text-storm/90">
+                              Neto vs mes anterior:{" "}
+                              <span className={netDeltaVsPrev >= 0 ? "text-pine" : "text-ember"}>
+                                {formatDeltaCurrency(netDeltaVsPrev, displayCurrencyCode)}
+                              </span>
+                            </p>
+                          ) : null}
+                        </div>
+                        <StatusBadge
+                          status={formatCurrency(item.net, displayCurrencyCode)}
+                          tone={item.net >= 0 ? "success" : "danger"}
+                        />
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
+                            <span>Entradas</span>
+                            <span>{formatCurrency(item.income, displayCurrencyCode)}</span>
+                          </div>
+                          <div className="flex h-20 items-end rounded-[18px] bg-pine/8 p-2">
+                            <div
+                              className="w-full rounded-[14px] bg-pine"
+                              style={{ height: `${(item.income / maxMonthlyAmount) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
+                            <span>Salidas</span>
+                            <span>{formatCurrency(item.expense, displayCurrencyCode)}</span>
+                          </div>
+                          <div className="flex h-20 items-end rounded-[18px] bg-ember/8 p-2">
+                            <div
+                              className="w-full rounded-[14px] bg-ember"
+                              style={{ height: `${(item.expense / maxMonthlyAmount) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedMonth ? (
+                <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Mes seleccionado</p>
+                  <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
+                    {selectedMonth.label}
+                  </h4>
+                  <div className="mt-5 grid gap-3">
+                    <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-pine">Entradas</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(selectedMonth.income, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-ember">Salidas</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(selectedMonth.expense, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Resultado</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(selectedMonth.net, displayCurrencyCode)}
+                      </p>
+                      <p className="mt-2 text-sm text-storm">
+                        {selectedMonth.movementCount} movimiento
+                        {selectedMonth.movementCount === 1 ? "" : "s"} aplicado
+                        {selectedMonth.movementCount === 1 ? "" : "s"} en ese mes.
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              ) : null}
+            </div>
+          )}
+        </SurfaceCard>
+        ) : null}
+      </section>
+      ) : null}
+
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          07
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Hábitos y próximos compromisos</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Qué días concentrás más gasto, qué vence pronto y los últimos movimientos registrados.</p>
+        </div>
+      </div>
       {showTimingSection ? (
       <section
         className={`grid gap-6 ${
@@ -5326,7 +5608,26 @@ export function DashboardPage() {
           title="Ritmo semanal"
           titleAccessory={<DashboardHelpTrigger metricId="widget_weekly_pattern" />}
         >
-          {weekdayPattern.every((item) => item.movementCount === 0) ? (
+          {hasCrossMovementFilter ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[14px] border border-gold/20 bg-gold/8 px-3 py-2 text-xs text-storm">
+              <span>Filtrado:</span>
+              {activeCategoryFilter ? (
+                <span className="font-semibold text-ink">categoría &quot;{activeCategoryFilter}&quot;</span>
+              ) : null}
+              {activeCategoryFilter && activeAccountIdFilter !== null ? <span>+</span> : null}
+              {activeAccountIdFilter !== null ? (
+                <span className="font-semibold text-ink">cuenta &quot;{activeAccountFilterName}&quot;</span>
+              ) : null}
+              <button
+                className="ml-auto text-storm/60 hover:text-storm"
+                onClick={() => { setActiveCategoryFilter(null); setActiveAccountIdFilter(null); }}
+                type="button"
+              >
+                Limpiar ×
+              </button>
+            </div>
+          ) : null}
+          {crossFilteredWeekdayPattern.every((item) => item.movementCount === 0) ? (
             <DataState
               description="Con algunos movimientos aplicados ya se puede detectar qué días concentran ingresos o gasto."
               title="Sin patrón semanal todavía"
@@ -5334,8 +5635,8 @@ export function DashboardPage() {
           ) : (
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <div className="grid gap-3">
-                {weekdayPattern.map((item) => {
-                  const isActive = selectedWeekday?.key === item.key;
+                {crossFilteredWeekdayPattern.map((item) => {
+                  const isActive = crossFilteredSelectedWeekday?.key === item.key;
 
                   return (
                     <button
@@ -5364,13 +5665,13 @@ export function DashboardPage() {
                         <div className="h-2 rounded-full bg-white/[0.08]">
                           <div
                             className="h-full rounded-full bg-pine"
-                            style={{ width: `${(item.income / maxWeekdayAmount) * 100}%` }}
+                            style={{ width: `${(item.income / maxCrossFilteredWeekdayAmount) * 100}%` }}
                           />
                         </div>
                         <div className="h-2 rounded-full bg-white/[0.08]">
                           <div
                             className="h-full rounded-full bg-ember"
-                            style={{ width: `${(item.expense / maxWeekdayAmount) * 100}%` }}
+                            style={{ width: `${(item.expense / maxCrossFilteredWeekdayAmount) * 100}%` }}
                           />
                         </div>
                       </div>
@@ -5379,28 +5680,28 @@ export function DashboardPage() {
                 })}
               </div>
 
-              {selectedWeekday ? (
+              {crossFilteredSelectedWeekday ? (
                 <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
                   <p className="text-xs uppercase tracking-[0.18em] text-storm">Dia activo</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {selectedWeekday.label}
+                    {crossFilteredSelectedWeekday.label}
                   </h4>
                   <div className="mt-5 grid gap-3">
                     <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Entradas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedWeekday.income, displayCurrencyCode)}
+                        {formatCurrency(crossFilteredSelectedWeekday.income, displayCurrencyCode)}
                       </p>
                     </div>
                     <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-ember">Salidas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(selectedWeekday.expense, displayCurrencyCode)}
+                        {formatCurrency(crossFilteredSelectedWeekday.expense, displayCurrencyCode)}
                       </p>
                     </div>
                   </div>
                   <p className="mt-4 text-sm leading-7 text-storm">
-                    {selectedWeekday.net >= 0
+                    {crossFilteredSelectedWeekday.net >= 0
                       ? "Suele ser un dia que te deja aire positivo."
                       : "Suele ser un dia que aprieta tu caja. Si quieres ahorrar mas, revisa que pasa aqui."}
                   </p>
@@ -5520,8 +5821,344 @@ export function DashboardPage() {
       </section>
       ) : null}
 
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          08
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Centro de mando</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Acciones sugeridas, meta de ahorro del mes, presión de la semana y señales del período (Pro).</p>
+        </div>
+      </div>
+      {showProFocusSection ? (
+        <section
+          className={`grid gap-6 ${
+            isWidgetVisible("pro_command_center") &&
+            isWidgetVisible("pro_intelligence_digest") &&
+            isWidgetVisible("pro_goals_strip")
+              ? "xl:grid-cols-[1.1fr_1fr_0.9fr]"
+              : "xl:grid-cols-1"
+          }`}
+        >
+          {isWidgetVisible("pro_command_center") ? (
+            <SurfaceCard
+              description="Prioridades con enlace directo, presión de la semana, proyección simple a fin de mes y una recomendación. La bandeja Por revisar concentra la cola de mantenimiento del workspace."
+              title="Acciones y foco"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_command_center" />}
+            >
+              <div className="grid gap-6">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Acciones sugeridas</p>
+                  {suggestedProActions.length === 0 ? (
+                    <p className="mt-3 text-sm text-storm">No hay acciones urgentes detectadas. Buen momento para revisar metas o categorías.</p>
+                  ) : (
+                    <ul className="mt-3 grid gap-2">
+                      {suggestedProActions.map((action) => (
+                        <li key={action.key}>
+                          <Link
+                            className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-gold/25 hover:bg-white/[0.05]"
+                            to={action.href}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-ink">{action.title}</p>
+                              <p className="mt-1 text-sm leading-6 text-storm">{action.detail}</p>
+                            </div>
+                            <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-storm" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Próxima presión financiera (7 días)</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-pine">Entra</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(proWeekPressure.expectedInflow, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[18px] border border-ember/18 bg-ember/10 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-ember">Sale</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(proWeekPressure.expectedOutflow, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-storm">Balance neto</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(
+                          proWeekPressure.expectedInflow - proWeekPressure.expectedOutflow,
+                          displayCurrencyCode,
+                        )}
+                      </p>
+                      <p className="mt-1 text-xs text-storm">
+                        Caja estimada después: {formatCurrency(proWeekPressure.estimatedBalance, displayCurrencyCode)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-[22px] border border-gold/20 bg-gold/10 p-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Caja estimada a fin de mes</p>
+                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-storm">
+                      Extrapolación desde tu neto del mes (día {monthEndEstimate.daysElapsedInMonth}): ingresos{" "}
+                      {formatCurrency(monthEndEstimate.incomeMonthToDate, displayCurrencyCode)} · gastos{" "}
+                      {formatCurrency(monthEndEstimate.expenseMonthToDate, displayCurrencyCode)}. No incluye todo lo
+                      impredecible.
+                    </p>
+                  </div>
+                  <div
+                    className={`rounded-[22px] border p-4 ${
+                      primaryProRecommendation.tone === "danger"
+                        ? "border-ember/25 bg-ember/10"
+                        : primaryProRecommendation.tone === "warning"
+                          ? "border-gold/25 bg-gold/10"
+                          : primaryProRecommendation.tone === "success"
+                            ? "border-pine/25 bg-pine/10"
+                            : "border-white/10 bg-white/[0.03]"
+                    }`}
+                  >
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Recomendación prioritaria</p>
+                    <p className="mt-3 text-sm leading-7 text-ink">{primaryProRecommendation.text}</p>
+                  </div>
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
+
+          {isWidgetVisible("pro_intelligence_digest") ? (
+            <SurfaceCard
+              description="Resume patrones del período, desvíos y la cola de limpieza sin repetir todo el panel de alertas."
+              title="Insights del período"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_intelligence_digest" />}
+            >
+              <div className="grid gap-5">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Señales automáticas</p>
+                  <div className="mt-3 grid gap-2">
+                    {learningSnapshot.insights.slice(0, 3).map((insight, insightIndex) => (
+                      <article
+                        className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3"
+                        key={`${insight.title}-${insightIndex}`}
+                      >
+                        <p className="font-semibold text-ink">{insight.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">{insight.description}</p>
+                      </article>
+                    ))}
+                    {topBalanceAccount && topBalanceAccount.share >= 0.52 ? (
+                      <article className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
+                        <p className="font-semibold text-ink">Concentración en una cuenta</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">
+                          {topBalanceAccount.account.name} concentra {formatPercentage(topBalanceAccount.share)} del
+                          dinero visible: casi todo el gasto operativo pasa por ahí.
+                        </p>
+                      </article>
+                    ) : null}
+                    {healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14 ? (
+                      <article className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
+                        <p className="font-semibold text-ink">Colchón reciente</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">
+                          Con el ritmo de gasto que miramos, tu liquidez cubre alrededor de{" "}
+                          {(healthSnapshot.coverageMonths * 30).toFixed(0)} días (orden de magnitud).
+                        </p>
+                      </article>
+                    ) : null}
+                    {learningSnapshot.insights.length === 0 &&
+                    !(topBalanceAccount && topBalanceAccount.share >= 0.52) &&
+                    !(healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14) ? (
+                      <p className="text-sm text-storm">Aún no hay suficiente historia para insights automáticos.</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Gasto fuera de patrón</p>
+                  {unusualSpendingLines.length === 0 ? (
+                    <p className="mt-3 text-sm text-storm">No detectamos categorías ni movimientos claramente fuera de tono.</p>
+                  ) : (
+                    <ul className="mt-3 grid gap-2">
+                      {unusualSpendingLines.map((line) => (
+                        <li
+                          className="rounded-[18px] border border-ember/18 bg-ember/8 px-3 py-2 text-sm text-storm"
+                          key={line.key}
+                        >
+                          <span className="font-semibold text-ink">{line.label}</span> — {line.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                  <div>
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Movimientos por revisar</p>
+                    <p className="mt-2 text-sm text-storm">
+                      {uncategorizedMovements.length} sin categoría ·{" "}
+                      {displayMovements.filter((m) => m.status === "pending").length} pendientes de aplicar.
+                    </p>
+                  </div>
+                  <GhostLink label="Ir a movimientos" to="/app/movements" />
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
+
+          {isWidgetVisible("pro_goals_strip") ? (
+            <SurfaceCard
+              description="Meta de ahorro neto del mes guardada en tu cuenta (por usuario y workspace), a partir de los movimientos aplicados del mes calendario."
+              title="Meta y disciplina"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_goals_strip" />}
+            >
+              <div className="grid gap-5">
+                <div>
+                  <label className="text-[0.65rem] uppercase tracking-[0.2em] text-storm" htmlFor="pro-monthly-goal">
+                    Meta de ahorro neto del mes ({displayCurrencyCode})
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input
+                      className="min-w-[8rem] flex-1 rounded-[16px] border border-white/12 bg-white/[0.05] px-4 py-2.5 text-ink outline-none focus:border-gold/40"
+                      id="pro-monthly-goal"
+                      inputMode="decimal"
+                      onChange={(event) => {
+                        setProGoalSaveError(null);
+                        setProGoalDraft(event.target.value);
+                      }}
+                      placeholder="Ej. 800"
+                      value={proGoalDraft}
+                    />
+                    <Button
+                      disabled={!user?.id || upsertFinancialGoalMutation.isPending}
+                      onClick={async () => {
+                        if (!user?.id) {
+                          return;
+                        }
+
+                        const normalized = proGoalDraft.replace(",", ".").trim();
+                        const value = Number.parseFloat(normalized);
+                        const workspaceId = snapshot.workspace.id;
+
+                        try {
+                          if (Number.isFinite(value) && value > 0) {
+                            await upsertFinancialGoalMutation.mutateAsync({
+                              workspaceId,
+                              userId: user.id,
+                              monthlySavingsTarget: value,
+                            });
+                            writeMonthlySavingsTarget(workspaceId, null);
+                            setProMonthlyGoal(value);
+                          } else {
+                            await upsertFinancialGoalMutation.mutateAsync({
+                              workspaceId,
+                              userId: user.id,
+                              monthlySavingsTarget: null,
+                            });
+                            writeMonthlySavingsTarget(workspaceId, null);
+                            setProMonthlyGoal(null);
+                            setProGoalDraft("");
+                          }
+
+                          setProGoalSaveError(null);
+                        } catch (error) {
+                          const message = error instanceof Error ? error.message : "";
+                          if (message.includes("workspace_financial_goals")) {
+                            if (Number.isFinite(value) && value > 0) {
+                              writeMonthlySavingsTarget(workspaceId, value);
+                              setProMonthlyGoal(value);
+                            } else {
+                              writeMonthlySavingsTarget(workspaceId, null);
+                              setProMonthlyGoal(null);
+                              setProGoalDraft("");
+                            }
+                            setProGoalSaveError(null);
+                            return;
+                          }
+
+                          setProGoalSaveError(getQueryErrorMessage(error, "No se pudo guardar la meta."));
+                        }
+                      }}
+                      type="button"
+                      variant="primary"
+                    >
+                      {upsertFinancialGoalMutation.isPending ? "Guardando…" : "Guardar"}
+                    </Button>
+                  </div>
+                  {proGoalSaveError ? (
+                    <p className="mt-2 text-sm text-ember" role="alert">
+                      {proGoalSaveError}
+                    </p>
+                  ) : null}
+                </div>
+
+                {proMonthlyGoal !== null && proMonthlyGoal > 0 ? (
+                  <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-pine">Progreso del mes</p>
+                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                      {formatCurrency(Math.max(0, currentCalendarMonthNet), displayCurrencyCode)}
+                      <span className="text-base font-normal text-storm">
+                        {" "}
+                        / {formatCurrency(proMonthlyGoal, displayCurrencyCode)}
+                      </span>
+                    </p>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-pine to-emerald-300"
+                        style={{
+                          width: `${Math.min(100, Math.max(6, (currentCalendarMonthNet / proMonthlyGoal) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    {currentCalendarMonthNet < proMonthlyGoal ? (
+                      <p className="mt-3 text-sm text-storm">
+                        Te faltan{" "}
+                        {formatCurrency(Math.max(0, proMonthlyGoal - currentCalendarMonthNet), displayCurrencyCode)} para
+                        cerrar la meta este mes.
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm text-pine">Meta alcanzada o superada en el mes en curso.</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-storm">
+                    Define un monto de ahorro neto mensual para ver aquí cuánto llevas según los movimientos aplicados
+                    del mes calendario.
+                  </p>
+                )}
+
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Racha de registro</p>
+                  <p className="mt-3 font-display text-2xl font-semibold text-ink">{distinctPostingDaysThisMonth}</p>
+                  <p className="mt-1 text-sm text-storm">
+                    Días distintos con al menos un movimiento aplicado en el mes actual.
+                  </p>
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
+        </section>
+      ) : null}
+
+      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+          09
+        </div>
+        <div>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Análisis avanzado</p>
+          <p className="mt-1 text-xs leading-5 text-storm/50">Riesgo de cartera, flujo futuro, recurrentes, aprendizaje automático y contexto del equipo.</p>
+        </div>
+      </div>
       {showAdvancedOpsSection ? (
         <>
+          <div className="mb-1 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Cartera y vencimientos</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {(isWidgetVisible("obligation_watch") || isWidgetVisible("future_flow")) ? (
             <section
               className={`grid gap-6 ${
@@ -5576,10 +6213,22 @@ export function DashboardPage() {
                       </div>
 
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                        {obligationAgingBuckets.map((bucket) => (
-                          <article
-                            className="relative rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+                        {obligationAgingBuckets.map((bucket) => {
+                          const isBucketActive = activeObligationStatusFilter === bucket.key;
+                          return (
+                          <button
+                            className={`relative rounded-[22px] border p-4 text-left transition ${
+                              isBucketActive
+                                ? "border-gold/40 bg-gold/10"
+                                : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                            }`}
                             key={bucket.key}
+                            onClick={() =>
+                              setActiveObligationStatusFilter(
+                                activeObligationStatusFilter === bucket.key ? null : bucket.key,
+                              )
+                            }
+                            type="button"
                           >
                             <div className="absolute right-3 top-3 z-[1]">
                               <DashboardHelpTrigger metricId={`obligation_bucket_${bucket.key}`} />
@@ -5591,8 +6240,9 @@ export function DashboardPage() {
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
                               {formatCurrency(bucket.amount, displayCurrencyCode)}
                             </p>
-                          </article>
-                        ))}
+                          </button>
+                        );
+                        })}
                       </div>
                     </div>
                   )}
@@ -5606,6 +6256,16 @@ export function DashboardPage() {
                   title="Proyección de flujo futuro"
                   titleAccessory={<DashboardHelpTrigger metricId="widget_future_flow" />}
                 >
+                  <div className="mb-4 rounded-[22px] border border-gold/20 bg-gold/8 p-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Lectura rápida (mes calendario)</p>
+                    <p className="mt-2 font-display text-lg font-semibold text-ink sm:text-xl">
+                      Si mantenés el ritmo de este mes, al cierre tu caja líquida rondaría{" "}
+                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}.
+                    </p>
+                    <p className="mt-2 text-xs text-storm">
+                      Misma estimación que en Resumen principal; aquí abajo el detalle por ventana de días.
+                    </p>
+                  </div>
                   <div className="grid gap-4">
                     {futureFlowWindows.map((window) => (
                       <article
@@ -5658,6 +6318,10 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          <div className="mb-1 mt-4 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Alertas y calidad del dato</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {(isWidgetVisible("alert_center") || isWidgetVisible("data_quality")) ? (
             <section
               className={`grid gap-6 ${
@@ -5712,7 +6376,7 @@ export function DashboardPage() {
               {isWidgetVisible("data_quality") ? (
                 <SurfaceCard
                   action={<StatusBadge status={`${qualityIssuesTotal} pendientes`} tone={qualityIssuesTotal > 0 ? "warning" : "success"} />}
-                  description="Revisá qué tan completos están tus datos para que comparativos, proyecciones y reportes sean confiables."
+                  description="Contadores de completitud para comparativos y reportes. Para una cola accionable (categorías, duplicados, cartera, etc.) usá el widget Por revisar si lo tenés visible."
                   title="Calidad de datos"
                   titleAccessory={<DashboardHelpTrigger metricId="widget_data_quality" />}
                 >
@@ -5737,6 +6401,10 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          <div className="mb-1 mt-4 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Recurrentes y exposición cambiaria</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {(isWidgetVisible("subscriptions_snapshot") ||
             isWidgetVisible("transfer_snapshot") ||
             isWidgetVisible("currency_exposure")) ? (
@@ -5914,6 +6582,10 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          <div className="mb-1 mt-4 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Aprendizaje y señales</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {isWidgetVisible("learning_panel") ? (
             <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
               <SurfaceCard
@@ -6084,6 +6756,10 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          <div className="mb-1 mt-4 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Equipo y colaboración</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {isWidgetVisible("workspace_collaboration") ? (
             <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
               <SurfaceCard
@@ -6158,6 +6834,10 @@ export function DashboardPage() {
             </section>
           ) : null}
 
+          <div className="mb-1 mt-4 flex items-center gap-2">
+            <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Salud financiera y actividad</p>
+            <div className="h-px flex-1 bg-white/6" />
+          </div>
           {(isWidgetVisible("health_center") || isWidgetVisible("activity_timeline")) ? (
             <section
               className={`grid gap-6 ${

@@ -1,4 +1,4 @@
-import type { MovementRecord, SubscriptionSummary } from "../../../types/domain";
+import type { MovementRecord, ObligationSummary, SubscriptionSummary } from "../../../types/domain";
 
 export type SuggestedProAction = {
   key: string;
@@ -190,6 +190,80 @@ export function buildSuggestedProActions(input: {
   }
 
   return actions.sort((a, b) => a.priority - b.priority).slice(0, 8);
+}
+
+/** Heurística: metadata explícita de revisión o confianza numérica baja (p. ej. importaciones asistidas). */
+export function movementNeedsReviewMetadata(movement: MovementRecord): boolean {
+  const meta = movement.metadata;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return false;
+  }
+
+  const o = meta as Record<string, unknown>;
+  if (o.needs_review === true || o.review_suggested === true) {
+    return true;
+  }
+
+  if (o.confidence === "low") {
+    return true;
+  }
+
+  const n = typeof o.confidence === "number" ? o.confidence : null;
+  return n !== null && n < 0.65;
+}
+
+const STALE_OBLIGATION_MS = 50 * 86400000;
+
+/** Obligaciones activas con saldo y sin pago ni evento reciente (50 días). */
+export function countObligationsWithoutRecentActivity(
+  obligations: ObligationSummary[],
+  nowMs: number = Date.now(),
+): number {
+  let count = 0;
+
+  for (const o of obligations) {
+    if (o.status !== "active" || o.pendingAmount <= 0) {
+      continue;
+    }
+
+    const lastPay = o.lastPaymentDate ? new Date(o.lastPaymentDate).getTime() : 0;
+    let lastEvt = 0;
+
+    for (const e of o.events ?? []) {
+      const t = new Date(e.eventDate).getTime();
+      if (t > lastEvt) {
+        lastEvt = t;
+      }
+    }
+
+    const last = Math.max(lastPay, lastEvt);
+    if (last === 0 || nowMs - last > STALE_OBLIGATION_MS) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+/** Suscripciones activas sin cuenta ligada o con próximo vencimiento ya pasado (día calendario). */
+export function countSubscriptionsNeedingAttention(subs: SubscriptionSummary[], now = new Date()): number {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  return subs.filter((s) => {
+    if (s.status !== "active") {
+      return false;
+    }
+
+    if (!s.accountId) {
+      return true;
+    }
+
+    if (s.nextDueDate && new Date(s.nextDueDate).getTime() < start) {
+      return true;
+    }
+
+    return false;
+  }).length;
 }
 
 export function countDuplicateMovementGroups(
