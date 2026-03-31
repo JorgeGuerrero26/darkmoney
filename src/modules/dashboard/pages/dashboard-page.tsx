@@ -2703,6 +2703,20 @@ export function DashboardPage() {
     }
   }, [canAccessProFeatures, dashboardMode, isCheckingAdvancedDashboardAccess]);
 
+  useEffect(() => {
+    const snap = snapshotQuery.data;
+    if (!snap?.workspace?.id) {
+      return;
+    }
+
+    const workspaceId = snap.workspace.id;
+    const fromServer = snap.financialGoal?.monthlySavingsTarget ?? null;
+    const stored = readMonthlySavingsTarget(workspaceId);
+    const resolved = fromServer ?? stored;
+    setProMonthlyGoal(resolved);
+    setProGoalDraft(resolved !== null ? String(resolved) : "");
+  }, [snapshotQuery.data?.workspace?.id, snapshotQuery.data?.financialGoal?.monthlySavingsTarget]);
+
   const availableWidgets = dashboardWidgetDefinitions.filter((widget) =>
     widget.modes.includes(effectiveDashboardMode),
   );
@@ -3578,128 +3592,69 @@ export function DashboardPage() {
   ];
   const qualityIssuesTotal = qualityItems.reduce((total, item) => total + item.value, 0);
 
-  useEffect(() => {
-    const id = snapshot.workspace.id;
-    const fromServer = snapshot.financialGoal?.monthlySavingsTarget ?? null;
-    const stored = readMonthlySavingsTarget(id);
-    const resolved = fromServer ?? stored;
-    setProMonthlyGoal(resolved);
-    setProGoalDraft(resolved !== null ? String(resolved) : "");
-  }, [snapshot.workspace.id, snapshot.financialGoal?.monthlySavingsTarget]);
+  const duplicateExpenseMovementGroups = countDuplicateMovementGroups(postedMovements, classifyMovement);
 
-  const duplicateExpenseMovementGroups = useMemo(
-    () => countDuplicateMovementGroups(postedMovements, classifyMovement),
-    [postedMovements],
+  const idleSubscriptionForHint = findIdleSubscriptionName(
+    new Date(),
+    postedMovements,
+    activeSubscriptions,
   );
 
-  const idleSubscriptionForHint = useMemo(
-    () => findIdleSubscriptionName(new Date(), postedMovements, activeSubscriptions),
-    [postedMovements, activeSubscriptions],
+  const monthEndEstimate = buildMonthEndEstimate(
+    new Date(),
+    liquidMoneyTotal,
+    postedMovements,
+    classifyMovement,
+    getIncomeAmount,
+    getExpenseAmount,
   );
 
-  const monthEndEstimate = useMemo(
-    () =>
-      buildMonthEndEstimate(
-        new Date(),
-        liquidMoneyTotal,
-        postedMovements,
-        classifyMovement,
-        getIncomeAmount,
-        getExpenseAmount,
-      ),
-    [liquidMoneyTotal, postedMovements],
-  );
+  const suggestedProActions = buildSuggestedProActions({
+    overdueAmount,
+    receivableTotal: receivableDisplay.amount,
+    payableTotal: payableDisplay.amount,
+    uncategorizedCount: uncategorizedMovements.length,
+    pendingMovementsCount: displayMovements.filter((movement) => movement.status === "pending").length,
+    criticalBudgetCount: criticalCurrentBudgets.length,
+    duplicateMovementGroups: duplicateExpenseMovementGroups,
+    idleSubscriptionName: idleSubscriptionForHint,
+  });
 
-  const suggestedProActions = useMemo(
-    () =>
-      buildSuggestedProActions({
-        overdueAmount,
-        receivableTotal: receivableDisplay.amount,
-        payableTotal: payableDisplay.amount,
-        uncategorizedCount: uncategorizedMovements.length,
-        pendingMovementsCount: displayMovements.filter((movement) => movement.status === "pending").length,
-        criticalBudgetCount: criticalCurrentBudgets.length,
-        duplicateMovementGroups: duplicateExpenseMovementGroups,
-        idleSubscriptionName: idleSubscriptionForHint,
-      }),
-    [
-      overdueAmount,
-      receivableDisplay.amount,
-      payableDisplay.amount,
-      uncategorizedMovements.length,
-      displayMovements,
-      criticalCurrentBudgets.length,
-      duplicateExpenseMovementGroups,
-      idleSubscriptionForHint,
-    ],
-  );
-
-  const unusualSpendingLines = useMemo(
-    () =>
-      buildUnusualSpendingLines(
-        currentPeriodMovements,
-        previousPeriodMovements,
-        classifyMovement,
-        getExpenseAmount,
-        opportunityCategory?.name ?? null,
-        opportunityCategory?.delta ?? 0,
-        displayCurrencyCode,
-        formatCurrency,
-      ),
-    [
-      currentPeriodMovements,
-      previousPeriodMovements,
-      opportunityCategory,
-      displayCurrencyCode,
-    ],
+  const unusualSpendingLines = buildUnusualSpendingLines(
+    currentPeriodMovements,
+    previousPeriodMovements,
+    classifyMovement,
+    getExpenseAmount,
+    opportunityCategory?.name ?? null,
+    opportunityCategory?.delta ?? 0,
+    displayCurrencyCode,
+    formatCurrency,
   );
 
   const proWeekPressure = futureFlowWindows[0];
 
-  const savingsBalanceTotal = useMemo(
-    () =>
-      visibleAccounts
-        .filter((account) => account.type === "savings")
-        .reduce((total, account) => total + account.currentBalance, 0),
-    [visibleAccounts],
-  );
+  const savingsBalanceTotal = visibleAccounts
+    .filter((account) => account.type === "savings")
+    .reduce((total, account) => total + account.currentBalance, 0);
 
-  const distinctPostingDaysThisMonth = useMemo(
-    () => countDistinctPostingDaysThisMonth(new Date(), postedMovements),
-    [postedMovements],
-  );
+  const distinctPostingDaysThisMonth = countDistinctPostingDaysThisMonth(new Date(), postedMovements);
 
   const currentCalendarMonthNet =
     monthEndEstimate.incomeMonthToDate - monthEndEstimate.expenseMonthToDate;
 
-  const primaryProRecommendation = useMemo(
-    () =>
-      buildPrimaryRecommendation({
-        monthlySavingsTarget: proMonthlyGoal,
-        currentMonthNet: currentCalendarMonthNet,
-        opportunityCategoryName: opportunityCategory?.name ?? null,
-        uncategorizedCount: uncategorizedMovements.length,
-        overdueAmount,
-        lowBalanceAccountName: lowBalanceAccounts[0]?.name ?? null,
-        savingsAccountBalance: savingsBalanceTotal,
-        averageWeeklySpend,
-        learningInsightLine: learningSnapshot.insights[0]?.title ?? null,
-        formatCurrency,
-        currencyCode: displayCurrencyCode,
-      }),
-    [
-      proMonthlyGoal,
-      currentCalendarMonthNet,
-      opportunityCategory,
-      uncategorizedMovements.length,
-      overdueAmount,
-      lowBalanceAccounts,
-      savingsBalanceTotal,
-      averageWeeklySpend,
-      learningSnapshot.insights,
-      displayCurrencyCode,
-    ],
-  );
+  const primaryProRecommendation = buildPrimaryRecommendation({
+    monthlySavingsTarget: proMonthlyGoal,
+    currentMonthNet: currentCalendarMonthNet,
+    opportunityCategoryName: opportunityCategory?.name ?? null,
+    uncategorizedCount: uncategorizedMovements.length,
+    overdueAmount,
+    lowBalanceAccountName: lowBalanceAccounts[0]?.name ?? null,
+    savingsAccountBalance: savingsBalanceTotal,
+    averageWeeklySpend,
+    learningInsightLine: learningSnapshot.insights[0]?.title ?? null,
+    formatCurrency,
+    currencyCode: displayCurrencyCode,
+  });
 
   const collaborationActivity = snapshot.activity.filter((item) =>
     isInRange(item.createdAt, comparison.current),
