@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";

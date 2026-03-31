@@ -29,6 +29,7 @@ import {
 import {
   getQueryErrorMessage,
   useSharedObligationsQuery,
+  useUpsertWorkspaceFinancialGoalMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import type {
@@ -39,8 +40,23 @@ import type {
   SubscriptionSummary,
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
+import {
+  DashboardHelpProvider,
+  DashboardHelpTrigger,
+  DashboardKpiHelpWrap,
+} from "../components/dashboard-metric-help";
 import { useProFeatureAccess } from "../../shared/use-pro-feature-access";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import {
+  buildMonthEndEstimate,
+  buildPrimaryRecommendation,
+  buildSuggestedProActions,
+  buildUnusualSpendingLines,
+  countDistinctPostingDaysThisMonth,
+  countDuplicateMovementGroups,
+  findIdleSubscriptionName,
+} from "../lib/pro-dashboard-features";
+import { readMonthlySavingsTarget, writeMonthlySavingsTarget } from "../lib/pro-goal-storage";
 
 type ComparisonPreset = "today" | "week" | "month" | "last30";
 
@@ -166,7 +182,10 @@ type DashboardWidgetId =
   | "health_center"
   | "currency_exposure"
   | "learning_panel"
-  | "activity_timeline";
+  | "activity_timeline"
+  | "pro_command_center"
+  | "pro_intelligence_digest"
+  | "pro_goals_strip";
 
 type DashboardWidgetDefinition = {
   id: DashboardWidgetId;
@@ -310,6 +329,24 @@ const dashboardWidgetDefinitions: DashboardWidgetDefinition[] = [
   { id: "currency_exposure", label: "Monedas", helper: "exposición cambiaria", modes: ["advanced"] },
   { id: "learning_panel", label: "Aprendiendo de ti", helper: "patrones y proyecciones", modes: ["advanced"] },
   { id: "activity_timeline", label: "Actividad reciente", helper: "historial del workspace", modes: ["advanced"] },
+  {
+    id: "pro_command_center",
+    label: "Acciones y foco Pro",
+    helper: "qué hacer hoy, presión 7 días, cierre de mes y una recomendación",
+    modes: ["advanced"],
+  },
+  {
+    id: "pro_intelligence_digest",
+    label: "Insights del período (Pro)",
+    helper: "señales, gasto fuera de patrón y cola de revisión",
+    modes: ["advanced"],
+  },
+  {
+    id: "pro_goals_strip",
+    label: "Meta mensual y disciplina (Pro)",
+    helper: "meta de ahorro local y racha de registro",
+    modes: ["advanced"],
+  },
 ];
 
 const learningPhaseDefinitions: LearningPhaseDefinition[] = [
@@ -1039,6 +1076,7 @@ function SegmentedControl<T extends string | number>({
 
 function OverviewCard({
   accent = "ink",
+  helpMetricId,
   hint,
   icon,
   label,
@@ -1047,6 +1085,7 @@ function OverviewCard({
   value,
 }: {
   accent?: "pine" | "ember" | "gold" | "ink";
+  helpMetricId?: string;
   hint: string;
   icon: ReactNode;
   label: string;
@@ -1062,8 +1101,15 @@ function OverviewCard({
   }[accent];
 
   return (
-    <article className="glass-panel rounded-[28px] p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-2 sm:gap-4">
+    <article className="glass-panel relative rounded-[28px] p-4 sm:p-5">
+      {helpMetricId ? (
+        <div className="absolute right-3 top-3 z-[1] sm:right-4 sm:top-4">
+          <DashboardHelpTrigger metricId={helpMetricId} />
+        </div>
+      ) : null}
+      <div
+        className={`flex items-start justify-between gap-2 sm:gap-4${helpMetricId ? " pr-9 sm:pr-11" : ""}`}
+      >
         <div className="min-w-0">
           <p className="text-[0.65rem] uppercase tracking-[0.18em] text-storm/90 sm:text-xs sm:tracking-[0.24em]">{label}</p>
           <p className="mt-2 font-display text-2xl font-semibold text-ink sm:mt-3 sm:text-4xl">{value}</p>
@@ -2514,6 +2560,7 @@ export function DashboardPage() {
     workspaces,
   } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  const upsertFinancialGoalMutation = useUpsertWorkspaceFinancialGoalMutation();
   const sharedObligationsQuery = useSharedObligationsQuery(user?.id);
   const snapshot = snapshotQuery.data;
   const sharedObligations = sharedObligationsQuery.data ?? [];
@@ -2531,6 +2578,9 @@ export function DashboardPage() {
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>(readStoredDashboardMode);
   const [hiddenWidgets, setHiddenWidgets] = useState<DashboardWidgetId[]>(readStoredHiddenWidgets);
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
+  const [proMonthlyGoal, setProMonthlyGoal] = useState<number | null>(null);
+  const [proGoalDraft, setProGoalDraft] = useState("");
+  const [proGoalSaveError, setProGoalSaveError] = useState<string | null>(null);
   const [displayCurrencyCode, setDisplayCurrencyCode] = useState<string>(() => {
     if (typeof window === "undefined") {
       return "PEN";
@@ -3527,6 +3577,130 @@ export function DashboardPage() {
     },
   ];
   const qualityIssuesTotal = qualityItems.reduce((total, item) => total + item.value, 0);
+
+  useEffect(() => {
+    const id = snapshot.workspace.id;
+    const fromServer = snapshot.financialGoal?.monthlySavingsTarget ?? null;
+    const stored = readMonthlySavingsTarget(id);
+    const resolved = fromServer ?? stored;
+    setProMonthlyGoal(resolved);
+    setProGoalDraft(resolved !== null ? String(resolved) : "");
+  }, [snapshot.workspace.id, snapshot.financialGoal?.monthlySavingsTarget]);
+
+  const duplicateExpenseMovementGroups = useMemo(
+    () => countDuplicateMovementGroups(postedMovements, classifyMovement),
+    [postedMovements],
+  );
+
+  const idleSubscriptionForHint = useMemo(
+    () => findIdleSubscriptionName(new Date(), postedMovements, activeSubscriptions),
+    [postedMovements, activeSubscriptions],
+  );
+
+  const monthEndEstimate = useMemo(
+    () =>
+      buildMonthEndEstimate(
+        new Date(),
+        liquidMoneyTotal,
+        postedMovements,
+        classifyMovement,
+        getIncomeAmount,
+        getExpenseAmount,
+      ),
+    [liquidMoneyTotal, postedMovements],
+  );
+
+  const suggestedProActions = useMemo(
+    () =>
+      buildSuggestedProActions({
+        overdueAmount,
+        receivableTotal: receivableDisplay.amount,
+        payableTotal: payableDisplay.amount,
+        uncategorizedCount: uncategorizedMovements.length,
+        pendingMovementsCount: displayMovements.filter((movement) => movement.status === "pending").length,
+        criticalBudgetCount: criticalCurrentBudgets.length,
+        duplicateMovementGroups: duplicateExpenseMovementGroups,
+        idleSubscriptionName: idleSubscriptionForHint,
+      }),
+    [
+      overdueAmount,
+      receivableDisplay.amount,
+      payableDisplay.amount,
+      uncategorizedMovements.length,
+      displayMovements,
+      criticalCurrentBudgets.length,
+      duplicateExpenseMovementGroups,
+      idleSubscriptionForHint,
+    ],
+  );
+
+  const unusualSpendingLines = useMemo(
+    () =>
+      buildUnusualSpendingLines(
+        currentPeriodMovements,
+        previousPeriodMovements,
+        classifyMovement,
+        getExpenseAmount,
+        opportunityCategory?.name ?? null,
+        opportunityCategory?.delta ?? 0,
+        displayCurrencyCode,
+        formatCurrency,
+      ),
+    [
+      currentPeriodMovements,
+      previousPeriodMovements,
+      opportunityCategory,
+      displayCurrencyCode,
+    ],
+  );
+
+  const proWeekPressure = futureFlowWindows[0];
+
+  const savingsBalanceTotal = useMemo(
+    () =>
+      visibleAccounts
+        .filter((account) => account.type === "savings")
+        .reduce((total, account) => total + account.currentBalance, 0),
+    [visibleAccounts],
+  );
+
+  const distinctPostingDaysThisMonth = useMemo(
+    () => countDistinctPostingDaysThisMonth(new Date(), postedMovements),
+    [postedMovements],
+  );
+
+  const currentCalendarMonthNet =
+    monthEndEstimate.incomeMonthToDate - monthEndEstimate.expenseMonthToDate;
+
+  const primaryProRecommendation = useMemo(
+    () =>
+      buildPrimaryRecommendation({
+        monthlySavingsTarget: proMonthlyGoal,
+        currentMonthNet: currentCalendarMonthNet,
+        opportunityCategoryName: opportunityCategory?.name ?? null,
+        uncategorizedCount: uncategorizedMovements.length,
+        overdueAmount,
+        lowBalanceAccountName: lowBalanceAccounts[0]?.name ?? null,
+        savingsAccountBalance: savingsBalanceTotal,
+        averageWeeklySpend,
+        learningInsightLine: learningSnapshot.insights[0]?.title ?? null,
+        formatCurrency,
+        currencyCode: displayCurrencyCode,
+      }),
+    [
+      proMonthlyGoal,
+      currentCalendarMonthNet,
+      opportunityCategory,
+      uncategorizedMovements.length,
+      overdueAmount,
+      lowBalanceAccounts,
+      savingsBalanceTotal,
+      averageWeeklySpend,
+      learningSnapshot.insights,
+      displayCurrencyCode,
+    ],
+  );
+
   const collaborationActivity = snapshot.activity.filter((item) =>
     isInRange(item.createdAt, comparison.current),
   );
@@ -3568,8 +3742,15 @@ export function DashboardPage() {
     isWidgetVisible("currency_exposure") ||
     isWidgetVisible("learning_panel") ||
     isWidgetVisible("activity_timeline");
+  const showProFocusSection =
+    canUseAdvancedDashboard &&
+    effectiveDashboardMode === "advanced" &&
+    (isWidgetVisible("pro_command_center") ||
+      isWidgetVisible("pro_intelligence_digest") ||
+      isWidgetVisible("pro_goals_strip"));
 
   return (
+    <DashboardHelpProvider>
     <div className="flex flex-col gap-6 pb-8">
       <PageHeader
         actions={
@@ -3630,6 +3811,7 @@ export function DashboardPage() {
         }
         description="Elige una vista simple o avanzada, y decide que widgets quieres tener a la mano cada vez que entres."
         title="Panel de control del dashboard"
+        titleAccessory={<DashboardHelpTrigger metricId="panel_control" />}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
@@ -3727,6 +3909,7 @@ export function DashboardPage() {
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
         <OverviewCard
           accent="pine"
+          helpMetricId="kpi_total_money"
           hint="Saldo combinado de tus cuentas activas, convertido a una sola lectura cuando hace falta."
           icon={<WalletCards className="h-5 w-5" />}
           label="Dinero total"
@@ -3736,6 +3919,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="ink"
+          helpMetricId="kpi_receivable"
           hint="Plata pendiente de cobro en creditos, ventas a cuotas y otras cuentas por cobrar."
           icon={<ArrowDownCircle className="h-5 w-5" />}
           label="Te deben"
@@ -3745,6 +3929,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="ember"
+          helpMetricId="kpi_payable"
           hint="Lo que todavía tienes por pagar considerando deudas, compras a cuotas y compromisos vivos."
           icon={<ArrowUpCircle className="h-5 w-5" />}
           label="Debes"
@@ -3754,6 +3939,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="gold"
+          helpMetricId="kpi_period_savings"
           hint={`Resultado neto de ${comparison.current.label.toLowerCase()} restando gastos a ingresos.`}
           icon={<PiggyBank className="h-5 w-5" />}
           label="Ahorro del período"
@@ -3763,6 +3949,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="pine"
+          helpMetricId="kpi_income"
           hint="Entradas aplicadas dentro del período seleccionado. No cuenta transferencias internas."
           icon={<ArrowUpRight className="h-5 w-5" />}
           label="Ingresos"
@@ -3772,6 +3959,7 @@ export function DashboardPage() {
         />
         <OverviewCard
           accent="ember"
+          helpMetricId="kpi_expense"
           hint="Salidas aplicadas dentro del período seleccionado, incluyendo pagos recurrentes y obligaciones."
           icon={<ArrowDownRight className="h-5 w-5" />}
           label="Gastos"
@@ -3784,54 +3972,54 @@ export function DashboardPage() {
 
       {isWidgetVisible("overview_kpis") ? (
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_real_free_money">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Dinero libre real</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(healthSnapshot.realFreeMoney, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Liquidez menos pagos cercanos en 30 dias.</p>
-          </div>
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_avg_daily_spend">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Promedio diario</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(averageDailySpend, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Salida media dentro del corte actual.</p>
-          </div>
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_active_subscriptions">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Suscripciones activas</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">{activeSubscriptions.length}</p>
             <p className="mt-2 text-sm text-storm">
               Costo mensual aprox. {formatCurrency(monthlyRecurringCost, displayCurrencyCode)}.
             </p>
-          </div>
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_upcoming_payments">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos próximos</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(upcomingOutflows, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">{upcomingCommitments.filter((item) => item.kind !== "Por cobrar").length} compromisos cercanos.</p>
-          </div>
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_overdue">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Vencido</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(overdueAmount, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">{overdueObligations.length} registros necesitan revision.</p>
-          </div>
-          <div className="glass-panel-soft rounded-[24px] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="kpi_transferred">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Transferido</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(totalTransferredThisPeriod, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">{currentPeriodTransfers.length} transferencias en el corte.</p>
-          </div>
+          </DashboardKpiHelpWrap>
         </section>
       ) : null}
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="adv_net_worth">
             <p className="text-xs uppercase tracking-[0.18em] text-pine">Patrimonio neto ampliado</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(expandedNetWorth, displayCurrencyCode)}
@@ -3839,36 +4027,36 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               Caja actual más lo que te deben, menos lo que aún debes.
             </p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_liquidity">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Liquidez disponible</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(liquidMoneyTotal, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Efectivo, bancos y ahorros listos para moverse.</p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_cash">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Efectivo</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(totalCash, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Fondos de caja y billeteras visibles.</p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_bank">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Bancos</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(totalBank, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Saldo disponible en cuentas bancarias activas.</p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_savings">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Ahorros</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(totalSavings, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Reservas en cuentas marcadas para ahorrar.</p>
-          </div>
-          <div className="rounded-[24px] border border-gold/18 bg-gold/10 p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-gold/18 bg-gold/10 p-4" metricId="adv_projected_cash_30">
             <p className="text-xs uppercase tracking-[0.18em] text-gold">Caja proyectada 30 dias</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(projectedLiquidMoney, displayCurrencyCode)}
@@ -3877,7 +4065,7 @@ export function DashboardPage() {
               Considera {formatCurrency(upcomingInflows, displayCurrencyCode)} por entrar y{" "}
               {formatCurrency(upcomingOutflows, displayCurrencyCode)} por salir.
             </p>
-          </div>
+          </DashboardKpiHelpWrap>
         </section>
       ) : null}
 
@@ -3901,6 +4089,7 @@ export function DashboardPage() {
           }
           description="Lectura separada de los creditos y deudas compartidos contigo en modo solo lectura. No se mezclan con los KPIs del workspace."
           title="Cartera compartida contigo"
+          titleAccessory={<DashboardHelpTrigger metricId="shared_portfolio" />}
         >
           {sharedObligationsQuery.isLoading ? (
             <DataState
@@ -3918,7 +4107,7 @@ export function DashboardPage() {
             />
           ) : (
             <div className="grid gap-4 xl:grid-cols-4">
-              <div className="glass-panel-soft rounded-[24px] p-4">
+              <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="shared_principal">
                 <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal compartido</p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedPrincipalDisplay.amount, sharedPrincipalDisplay.currencyCode)}
@@ -3926,8 +4115,8 @@ export function DashboardPage() {
                 <p className="mt-2 text-sm text-storm">
                   Base actual de {displaySharedObligations.length} registros en seguimiento.
                 </p>
-              </div>
-              <div className="glass-panel-soft rounded-[24px] p-4">
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="glass-panel-soft rounded-[24px] p-4" metricId="shared_pending">
                 <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendiente compartido</p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedPendingDisplay.amount, sharedPendingDisplay.currencyCode)}
@@ -3935,8 +4124,8 @@ export function DashboardPage() {
                 <p className="mt-2 text-sm text-storm">
                   Exposición viva que ves aparte de tu cartera propia.
                 </p>
-              </div>
-              <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="shared_receivable">
                 <p className="text-xs uppercase tracking-[0.18em] text-pine">Créditos compartidos</p>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink">
                   {formatCurrency(sharedReceivableDisplay.amount, sharedReceivableDisplay.currencyCode)}
@@ -3948,8 +4137,8 @@ export function DashboardPage() {
                 <p className="mt-2 text-sm text-storm/85">
                   Al propietario de estos registros aún le deben pagar.
                 </p>
-              </div>
-              <div className="rounded-[24px] border border-rosewood/18 bg-rosewood/10 p-4">
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[24px] border border-rosewood/18 bg-rosewood/10 p-4" metricId="shared_payable">
                 <p className="text-xs uppercase tracking-[0.18em] text-rosewood">
                   Deudas compartidas
                 </p>
@@ -3963,7 +4152,7 @@ export function DashboardPage() {
                 <p className="mt-2 text-sm text-storm/85">
                   El propietario de estos registros aún debe pagar.
                 </p>
-              </div>
+              </DashboardKpiHelpWrap>
             </div>
           )}
         </SurfaceCard>
@@ -3971,14 +4160,14 @@ export function DashboardPage() {
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_avg_weekly_spend">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Gasto semanal medio</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(averageWeeklySpend, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">Referencia rápida para medir tu ritmo de consumo.</p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_avg_monthly_savings">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Ahorro mensual medio</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {formatCurrency(averageMonthlySavings, displayCurrencyCode)}
@@ -3986,8 +4175,8 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               Promedio de tu pulso mensual reciente. Capacidad actual {formatPercentage(Math.max(0, savingsCapacity))}.
             </p>
-          </div>
-          <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="adv_top_account">
             <p className="text-xs uppercase tracking-[0.18em] text-pine">Cuenta con mayor saldo</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {topBalanceAccount ? formatCurrency(topBalanceAccount.amount, displayCurrencyCode) : "Sin cuentas"}
@@ -3997,8 +4186,8 @@ export function DashboardPage() {
                 ? `${topBalanceAccount.account.name} concentra ${formatPercentage(topBalanceAccount.share)} del dinero visible.`
                 : "Crea o activa una cuenta para empezar a ver concentración de saldo."}
             </p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_bottom_account">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Cuenta con menor saldo</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
               {bottomBalanceAccount ? formatCurrency(bottomBalanceAccount.amount, displayCurrencyCode) : "Sin cuentas"}
@@ -4008,8 +4197,8 @@ export function DashboardPage() {
                 ? `${bottomBalanceAccount.account.name} hoy tiene el menor peso dentro del dinero activo.`
                 : "Aún no hay suficientes cuentas para comparar extremos."}
             </p>
-          </div>
-          <div className="rounded-[24px] border border-pine/18 bg-pine/10 p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="adv_latest_income">
             <div className="flex flex-wrap items-start gap-2">
               <p className="min-w-0 flex-1 text-xs uppercase tracking-[0.18em] text-pine">Ultimo ingreso</p>
               {latestIncomeAmount !== null ? (
@@ -4022,8 +4211,8 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               {latestIncome ? formatDateTime(latestIncome.occurredAt) : "Cuando registres cobros o ingresos, apareceran aqui."}
             </p>
-          </div>
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+          </DashboardKpiHelpWrap>
+          <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_latest_movement">
             <div className="flex flex-wrap items-start gap-2">
               <p className="min-w-0 flex-1 text-xs uppercase tracking-[0.18em] text-storm">Ultimo movimiento</p>
               {latestMovementLabel && latestMovementAmount !== null ? (
@@ -4039,7 +4228,321 @@ export function DashboardPage() {
             <p className="mt-2 text-sm text-storm">
               {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Todavía no hay movimientos aplicados para resumir."}
             </p>
-          </div>
+          </DashboardKpiHelpWrap>
+        </section>
+      ) : null}
+
+      {showProFocusSection ? (
+        <section
+          className={`grid gap-6 ${
+            isWidgetVisible("pro_command_center") &&
+            isWidgetVisible("pro_intelligence_digest") &&
+            isWidgetVisible("pro_goals_strip")
+              ? "xl:grid-cols-[1.1fr_1fr_0.9fr]"
+              : "xl:grid-cols-1"
+          }`}
+        >
+          {isWidgetVisible("pro_command_center") ? (
+            <SurfaceCard
+              description="Prioridades con enlace directo, presión de la semana, proyección simple a fin de mes y una sola recomendación prioritaria."
+              title="Acciones y foco (Pro)"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_command_center" />}
+            >
+              <div className="grid gap-6">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Acciones sugeridas</p>
+                  {suggestedProActions.length === 0 ? (
+                    <p className="mt-3 text-sm text-storm">No hay acciones urgentes detectadas. Buen momento para revisar metas o categorías.</p>
+                  ) : (
+                    <ul className="mt-3 grid gap-2">
+                      {suggestedProActions.map((action) => (
+                        <li key={action.key}>
+                          <Link
+                            className="flex items-start justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-gold/25 hover:bg-white/[0.05]"
+                            to={action.href}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-ink">{action.title}</p>
+                              <p className="mt-1 text-sm leading-6 text-storm">{action.detail}</p>
+                            </div>
+                            <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-storm" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Próxima presión financiera (7 días)</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-pine">Entra</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(proWeekPressure.expectedInflow, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[18px] border border-ember/18 bg-ember/10 p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-ember">Sale</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(proWeekPressure.expectedOutflow, displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-storm">Balance neto</p>
+                      <p className="mt-2 font-display text-lg font-semibold text-ink">
+                        {formatCurrency(
+                          proWeekPressure.expectedInflow - proWeekPressure.expectedOutflow,
+                          displayCurrencyCode,
+                        )}
+                      </p>
+                      <p className="mt-1 text-xs text-storm">
+                        Caja estimada después: {formatCurrency(proWeekPressure.estimatedBalance, displayCurrencyCode)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-[22px] border border-gold/20 bg-gold/10 p-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Caja estimada a fin de mes</p>
+                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-storm">
+                      Extrapolación desde tu neto del mes (día {monthEndEstimate.daysElapsedInMonth}): ingresos{" "}
+                      {formatCurrency(monthEndEstimate.incomeMonthToDate, displayCurrencyCode)} · gastos{" "}
+                      {formatCurrency(monthEndEstimate.expenseMonthToDate, displayCurrencyCode)}. No incluye todo lo
+                      impredecible.
+                    </p>
+                  </div>
+                  <div
+                    className={`rounded-[22px] border p-4 ${
+                      primaryProRecommendation.tone === "danger"
+                        ? "border-ember/25 bg-ember/10"
+                        : primaryProRecommendation.tone === "warning"
+                          ? "border-gold/25 bg-gold/10"
+                          : primaryProRecommendation.tone === "success"
+                            ? "border-pine/25 bg-pine/10"
+                            : "border-white/10 bg-white/[0.03]"
+                    }`}
+                  >
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Recomendación prioritaria</p>
+                    <p className="mt-3 text-sm leading-7 text-ink">{primaryProRecommendation.text}</p>
+                  </div>
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
+
+          {isWidgetVisible("pro_intelligence_digest") ? (
+            <SurfaceCard
+              description="Resume patrones del período, desvíos y la cola de limpieza sin repetir todo el panel de alertas."
+              title="Insights del período (Pro)"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_intelligence_digest" />}
+            >
+              <div className="grid gap-5">
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Señales automáticas</p>
+                  <div className="mt-3 grid gap-2">
+                    {learningSnapshot.insights.slice(0, 3).map((insight, insightIndex) => (
+                      <article
+                        className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3"
+                        key={`${insight.title}-${insightIndex}`}
+                      >
+                        <p className="font-semibold text-ink">{insight.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">{insight.description}</p>
+                      </article>
+                    ))}
+                    {topBalanceAccount && topBalanceAccount.share >= 0.52 ? (
+                      <article className="rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
+                        <p className="font-semibold text-ink">Concentración en una cuenta</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">
+                          {topBalanceAccount.account.name} concentra {formatPercentage(topBalanceAccount.share)} del
+                          dinero visible: casi todo el gasto operativo pasa por ahí.
+                        </p>
+                      </article>
+                    ) : null}
+                    {healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14 ? (
+                      <article className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
+                        <p className="font-semibold text-ink">Colchón reciente</p>
+                        <p className="mt-1 text-sm leading-6 text-storm">
+                          Con el ritmo de gasto que miramos, tu liquidez cubre alrededor de{" "}
+                          {(healthSnapshot.coverageMonths * 30).toFixed(0)} días (orden de magnitud).
+                        </p>
+                      </article>
+                    ) : null}
+                    {learningSnapshot.insights.length === 0 &&
+                    !(topBalanceAccount && topBalanceAccount.share >= 0.52) &&
+                    !(healthSnapshot.coverageMonths !== null && healthSnapshot.coverageMonths * 30 >= 14) ? (
+                      <p className="text-sm text-storm">Aún no hay suficiente historia para insights automáticos.</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Gasto fuera de patrón</p>
+                  {unusualSpendingLines.length === 0 ? (
+                    <p className="mt-3 text-sm text-storm">No detectamos categorías ni movimientos claramente fuera de tono.</p>
+                  ) : (
+                    <ul className="mt-3 grid gap-2">
+                      {unusualSpendingLines.map((line) => (
+                        <li
+                          className="rounded-[18px] border border-ember/18 bg-ember/8 px-3 py-2 text-sm text-storm"
+                          key={line.key}
+                        >
+                          <span className="font-semibold text-ink">{line.label}</span> — {line.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                  <div>
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Movimientos por revisar</p>
+                    <p className="mt-2 text-sm text-storm">
+                      {uncategorizedMovements.length} sin categoría ·{" "}
+                      {displayMovements.filter((m) => m.status === "pending").length} pendientes de aplicar.
+                    </p>
+                  </div>
+                  <GhostLink label="Ir a movimientos" to="/app/movements" />
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
+
+          {isWidgetVisible("pro_goals_strip") ? (
+            <SurfaceCard
+              description="Meta de ahorro neto del mes guardada en tu cuenta (por usuario y workspace), a partir de los movimientos aplicados del mes calendario."
+              title="Meta y disciplina (Pro)"
+              titleAccessory={<DashboardHelpTrigger metricId="widget_pro_goals_strip" />}
+            >
+              <div className="grid gap-5">
+                <div>
+                  <label className="text-[0.65rem] uppercase tracking-[0.2em] text-storm" htmlFor="pro-monthly-goal">
+                    Meta de ahorro neto del mes ({displayCurrencyCode})
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input
+                      className="min-w-[8rem] flex-1 rounded-[16px] border border-white/12 bg-white/[0.05] px-4 py-2.5 text-ink outline-none focus:border-gold/40"
+                      id="pro-monthly-goal"
+                      inputMode="decimal"
+                      onChange={(event) => {
+                        setProGoalSaveError(null);
+                        setProGoalDraft(event.target.value);
+                      }}
+                      placeholder="Ej. 800"
+                      value={proGoalDraft}
+                    />
+                    <Button
+                      disabled={!user?.id || upsertFinancialGoalMutation.isPending}
+                      onClick={async () => {
+                        if (!user?.id) {
+                          return;
+                        }
+
+                        const normalized = proGoalDraft.replace(",", ".").trim();
+                        const value = Number.parseFloat(normalized);
+                        const workspaceId = snapshot.workspace.id;
+
+                        try {
+                          if (Number.isFinite(value) && value > 0) {
+                            await upsertFinancialGoalMutation.mutateAsync({
+                              workspaceId,
+                              userId: user.id,
+                              monthlySavingsTarget: value,
+                            });
+                            writeMonthlySavingsTarget(workspaceId, null);
+                            setProMonthlyGoal(value);
+                          } else {
+                            await upsertFinancialGoalMutation.mutateAsync({
+                              workspaceId,
+                              userId: user.id,
+                              monthlySavingsTarget: null,
+                            });
+                            writeMonthlySavingsTarget(workspaceId, null);
+                            setProMonthlyGoal(null);
+                            setProGoalDraft("");
+                          }
+
+                          setProGoalSaveError(null);
+                        } catch (error) {
+                          const message = error instanceof Error ? error.message : "";
+                          if (message.includes("workspace_financial_goals")) {
+                            if (Number.isFinite(value) && value > 0) {
+                              writeMonthlySavingsTarget(workspaceId, value);
+                              setProMonthlyGoal(value);
+                            } else {
+                              writeMonthlySavingsTarget(workspaceId, null);
+                              setProMonthlyGoal(null);
+                              setProGoalDraft("");
+                            }
+                            setProGoalSaveError(null);
+                            return;
+                          }
+
+                          setProGoalSaveError(getQueryErrorMessage(error, "No se pudo guardar la meta."));
+                        }
+                      }}
+                      type="button"
+                      variant="primary"
+                    >
+                      {upsertFinancialGoalMutation.isPending ? "Guardando…" : "Guardar"}
+                    </Button>
+                  </div>
+                  {proGoalSaveError ? (
+                    <p className="mt-2 text-sm text-ember" role="alert">
+                      {proGoalSaveError}
+                    </p>
+                  ) : null}
+                </div>
+
+                {proMonthlyGoal !== null && proMonthlyGoal > 0 ? (
+                  <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                    <p className="text-[0.65rem] uppercase tracking-[0.2em] text-pine">Progreso del mes</p>
+                    <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                      {formatCurrency(Math.max(0, currentCalendarMonthNet), displayCurrencyCode)}
+                      <span className="text-base font-normal text-storm">
+                        {" "}
+                        / {formatCurrency(proMonthlyGoal, displayCurrencyCode)}
+                      </span>
+                    </p>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-pine to-emerald-300"
+                        style={{
+                          width: `${Math.min(100, Math.max(6, (currentCalendarMonthNet / proMonthlyGoal) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    {currentCalendarMonthNet < proMonthlyGoal ? (
+                      <p className="mt-3 text-sm text-storm">
+                        Te faltan{" "}
+                        {formatCurrency(Math.max(0, proMonthlyGoal - currentCalendarMonthNet), displayCurrencyCode)} para
+                        cerrar la meta este mes.
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm text-pine">Meta alcanzada o superada en el mes en curso.</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-storm">
+                    Define un monto de ahorro neto mensual para ver aquí cuánto llevas según los movimientos aplicados
+                    del mes calendario.
+                  </p>
+                )}
+
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Racha de registro</p>
+                  <p className="mt-3 font-display text-2xl font-semibold text-ink">{distinctPostingDaysThisMonth}</p>
+                  <p className="mt-1 text-sm text-storm">
+                    Días distintos con al menos un movimiento aplicado en el mes actual.
+                  </p>
+                </div>
+              </div>
+            </SurfaceCard>
+          ) : null}
         </section>
       ) : null}
 
@@ -4056,6 +4559,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
           description="Ahorro neto, gastos, ingresos y transferencias día a día. Toca un día para ver los movimientos que lo componen."
           title="Cronológicos del período"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_savings_trend" />}
         >
           <div className="mb-6 flex flex-wrap gap-2">
             {(
@@ -4133,10 +4637,14 @@ export function DashboardPage() {
           action={<Sparkles className="h-5 w-5 text-gold" />}
           description="Lecturas rápidas para saber dónde poner atención antes de abrir cada módulo."
           title="Radar del período"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_period_radar" />}
         >
           <div className="grid gap-3">
-            <article className="rounded-[24px] border border-pine/18 bg-pine/10 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-pine">Categoría más pesada ahora</p>
+            <article className="relative rounded-[24px] border border-pine/18 bg-pine/10 p-5">
+              <div className="absolute right-4 top-4 z-[1]">
+                <DashboardHelpTrigger metricId="radar_top_category" />
+              </div>
+              <p className="pr-10 text-xs uppercase tracking-[0.18em] text-pine">Categoría más pesada ahora</p>
               <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                 {topCategoryThisPeriod?.name ?? "Aún sin categoría dominante"}
               </h4>
@@ -4149,8 +4657,11 @@ export function DashboardPage() {
               </p>
             </article>
 
-            <article className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">La que más pesaba antes</p>
+            <article className="relative rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+              <div className="absolute right-4 top-4 z-[1]">
+                <DashboardHelpTrigger metricId="radar_prev_category" />
+              </div>
+              <p className="pr-10 text-xs uppercase tracking-[0.18em] text-storm">La que más pesaba antes</p>
               <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
                 {topCategoryPreviousPeriod?.name ?? "Sin historial comparable"}
               </h4>
@@ -4161,8 +4672,11 @@ export function DashboardPage() {
               </p>
             </article>
 
-            <article className="rounded-[24px] border border-ember/18 bg-ember/10 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-ember">Oportunidad más clara</p>
+            <article className="relative rounded-[24px] border border-ember/18 bg-ember/10 p-5">
+              <div className="absolute right-4 top-4 z-[1]">
+                <DashboardHelpTrigger metricId="radar_opportunity" />
+              </div>
+              <p className="pr-10 text-xs uppercase tracking-[0.18em] text-ember">Oportunidad más clara</p>
               <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
                 {opportunityCategory?.name ?? "Sin fuga clara todavía"}
               </h4>
@@ -4173,8 +4687,11 @@ export function DashboardPage() {
               </p>
             </article>
 
-            <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-              <div className="flex items-start justify-between gap-4">
+            <article className="relative rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+              <div className="absolute right-4 top-4 z-[1]">
+                <DashboardHelpTrigger metricId="radar_best_day" />
+              </div>
+              <div className="flex items-start justify-between gap-4 pr-8">
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-storm">Mejor día de ahorro</p>
                   <h4 className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4204,6 +4721,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver cuentas" to="/app/accounts" />}
           description="Cuánto dinero sostiene hoy cada cuenta y cuánta actividad tuvo dentro del período."
           title="Dinero por cuenta"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_accounts_breakdown" />}
         >
           {visibleAccountsBreakdown.length === 0 ? (
             <DataState
@@ -4304,6 +4822,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver créditos y deudas" to="/app/obligations" />}
           description="Quiénes concentran hoy la mayor parte de lo que te deben."
           title="Quiénes más te deben"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_receivable_leaders" />}
         >
           {visibleReceivableLeaders.length === 0 ? (
             <DataState
@@ -4382,6 +4901,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver créditos y deudas" to="/app/obligations" />}
           description="Quiénes concentran la mayor parte de lo que hoy tienes pendiente por pagar."
           title="A quiénes más debes"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_payable_leaders" />}
         >
           {visiblePayableLeaders.length === 0 ? (
             <DataState
@@ -4468,6 +4988,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver categorías" to="/app/categories" />}
           description="Comparativo por categoría del período actual contra su referencia anterior. Toca una fila para abrir el detalle."
           title="Comparativo por categorías"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_category_comparison" />}
         >
           {visibleCategories.length === 0 ? (
             <DataState
@@ -4579,6 +5100,7 @@ export function DashboardPage() {
           action={<CalendarDays className="h-5 w-5 text-gold" />}
           description="Pulso mensual de los ultimos seis meses para ver si tu caja viene expandiendose o comprimiendose."
           title="Pulso mensual"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_monthly_pulse" />}
         >
           {monthlyPulse.length === 0 ? (
             <DataState
@@ -4691,6 +5213,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver presupuestos" to="/app/budgets" />}
           description="Topes activos del período actual para ver rápido cuánto espacio te queda y dónde ya se está tensando el gasto."
           title="Presupuestos del período"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_budgets" />}
         >
           {activeCurrentBudgets.length === 0 ? (
             <DataState
@@ -4702,25 +5225,25 @@ export function DashboardPage() {
             <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
               <div className="grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                  <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="budget_ceiling">
                     <p className="text-xs uppercase tracking-[0.18em] text-storm">Techo activo</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
                       {formatCurrency(currentBudgetLimitTotal, displayCurrencyCode)}
                     </p>
-                  </div>
-                  <div className="rounded-[22px] border border-ember/18 bg-ember/10 p-4">
+                  </DashboardKpiHelpWrap>
+                  <DashboardKpiHelpWrap className="rounded-[22px] border border-ember/18 bg-ember/10 p-4" metricId="budget_consumed">
                     <p className="text-xs uppercase tracking-[0.18em] text-ember">Consumido</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
                       {formatCurrency(currentBudgetSpentTotal, displayCurrencyCode)}
                     </p>
-                  </div>
-                  <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                  </DashboardKpiHelpWrap>
+                  <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="budget_remaining">
                     <p className="text-xs uppercase tracking-[0.18em] text-pine">Restante</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
                       {formatCurrency(currentBudgetRemainingTotal, displayCurrencyCode)}
                     </p>
-                  </div>
-                  <div className="rounded-[22px] border border-gold/18 bg-gold/10 p-4">
+                  </DashboardKpiHelpWrap>
+                  <DashboardKpiHelpWrap className="rounded-[22px] border border-gold/18 bg-gold/10 p-4" metricId="budget_at_risk">
                     <p className="text-xs uppercase tracking-[0.18em] text-gold">En riesgo</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
                       {criticalCurrentBudgets.length}
@@ -4728,7 +5251,7 @@ export function DashboardPage() {
                     <p className="mt-2 text-sm text-storm">
                       {overLimitCurrentBudgets.length} excedidos ahora.
                     </p>
-                  </div>
+                  </DashboardKpiHelpWrap>
                 </div>
 
                 <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
@@ -4846,6 +5369,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
           description="Qué días de la semana suelen darte aire y cuáles suelen presionarte más."
           title="Ritmo semanal"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_weekly_pattern" />}
         >
           {weekdayPattern.every((item) => item.movementCount === 0) ? (
             <DataState
@@ -4937,6 +5461,7 @@ export function DashboardPage() {
           action={<GhostLink label="Ver suscripciones" to="/app/subscriptions" />}
           description="Compromisos cercanos y movimientos recientes que explican por dónde viene el flujo."
           title="Lo que viene y lo que movió tu período"
+          titleAccessory={<DashboardHelpTrigger metricId="widget_upcoming_recent" />}
         >
           <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
             <div>
@@ -5055,6 +5580,7 @@ export function DashboardPage() {
                   action={<GhostLink label="Ver creditos y deudas" to="/app/obligations" />}
                   description="Vista operativa de tu cartera para distinguir lo que esta al dia, por vencer o ya vencido."
                   title="Estado de creditos y deudas"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_obligation_watch" />}
                 >
                   {displayObligations.length === 0 ? (
                     <DataState
@@ -5065,7 +5591,7 @@ export function DashboardPage() {
                   ) : (
                     <div className="grid gap-5">
                       <div className="grid gap-3 sm:grid-cols-4">
-                        <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="obligation_due_soon">
                           <p className="text-xs uppercase tracking-[0.18em] text-pine">Por vencer</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(
@@ -5073,34 +5599,37 @@ export function DashboardPage() {
                               displayCurrencyCode,
                             )}
                           </p>
-                        </div>
-                        <div className="rounded-[22px] border border-ember/18 bg-ember/10 p-4">
+                        </DashboardKpiHelpWrap>
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-ember/18 bg-ember/10 p-4" metricId="obligation_overdue_block">
                           <p className="text-xs uppercase tracking-[0.18em] text-ember">Vencido</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(overdueAmount, displayCurrencyCode)}
                           </p>
-                        </div>
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                        </DashboardKpiHelpWrap>
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_collected_period">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Cobrado este corte</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(collectedThisPeriod, displayCurrencyCode)}
                           </p>
-                        </div>
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                        </DashboardKpiHelpWrap>
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_paid_period">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagado este corte</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(paidThisPeriod, displayCurrencyCode)}
                           </p>
-                        </div>
+                        </DashboardKpiHelpWrap>
                       </div>
 
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                         {obligationAgingBuckets.map((bucket) => (
                           <article
-                            className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+                            className="relative rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
                             key={bucket.key}
                           >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="absolute right-3 top-3 z-[1]">
+                              <DashboardHelpTrigger metricId={`obligation_bucket_${bucket.key}`} />
+                            </div>
+                            <div className="flex items-start justify-between gap-3 pr-10">
                               <p className="text-sm font-semibold text-ink">{bucket.label}</p>
                               <StatusBadge status={`${bucket.count}`} tone={bucket.tone} />
                             </div>
@@ -5120,14 +5649,18 @@ export function DashboardPage() {
                   action={<StatusBadge status="7, 15 y 30 días" tone="info" />}
                   description="Una mirada más explícita al dinero que probablemente entrará o saldrá según compromisos y registros programados."
                   title="Proyección de flujo futuro"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_future_flow" />}
                 >
                   <div className="grid gap-4">
                     {futureFlowWindows.map((window) => (
                       <article
-                        className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5"
+                        className="relative rounded-[24px] border border-white/10 bg-white/[0.03] p-5"
                         key={window.days}
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="absolute right-4 top-4 z-[1]">
+                          <DashboardHelpTrigger metricId="future_flow_window" />
+                        </div>
+                        <div className="flex flex-wrap items-start justify-between gap-3 pr-10">
                           <div>
                             <p className="text-xs uppercase tracking-[0.18em] text-storm">
                               Próximos {window.days} días
@@ -5183,6 +5716,7 @@ export function DashboardPage() {
                   action={<StatusBadge status={`${anomalyAlerts.length} alertas`} tone={anomalyAlerts.length > 0 ? "warning" : "success"} />}
                   description="Alertas concretas para que el dashboard te diga donde mirar primero sin tener que interpretar todo el panel."
                   title="Alertas y anomalías"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_alert_center" />}
                 >
                   {anomalyAlerts.length === 0 ? (
                     <DataState
@@ -5225,6 +5759,7 @@ export function DashboardPage() {
                   action={<StatusBadge status={`${qualityIssuesTotal} pendientes`} tone={qualityIssuesTotal > 0 ? "warning" : "success"} />}
                   description="Revisá qué tan completos están tus datos para que comparativos, proyecciones y reportes sean confiables."
                   title="Calidad de datos"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_data_quality" />}
                 >
                   <div className="grid gap-3">
                     {qualityItems.map((item) => (
@@ -5256,6 +5791,7 @@ export function DashboardPage() {
                   action={<GhostLink label="Ver suscripciones" to="/app/subscriptions" />}
                   description="Lectura recurrente para saber cuánto pesan tus cargos fijos y cuál es el siguiente en caer."
                   title="Pulso de suscripciones"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_subscriptions_snapshot" />}
                 >
                   {visibleSubscriptionHighlights.length === 0 ? (
                     <DataState
@@ -5266,18 +5802,18 @@ export function DashboardPage() {
                   ) : (
                     <div className="grid gap-5">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="sub_monthly_cost">
                           <p className="text-xs uppercase tracking-[0.18em] text-pine">Costo mensual</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(monthlyRecurringCost, displayCurrencyCode)}
                           </p>
-                        </div>
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                        </DashboardKpiHelpWrap>
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="sub_active_paused">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Activas / pausadas</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {activeSubscriptions.length} / {pausedSubscriptions.length}
                           </p>
-                        </div>
+                        </DashboardKpiHelpWrap>
                       </div>
 
                       {nextSubscriptionDue ? (
@@ -5318,6 +5854,7 @@ export function DashboardPage() {
                   action={<GhostLink label="Ver movimientos" to="/app/movements" />}
                   description="Muestra como se esta moviendo el dinero entre tus cuentas dentro del corte actual."
                   title="Transferencias internas"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_transfer_snapshot" />}
                 >
                   {visibleTransferRoutes.length === 0 ? (
                     <DataState
@@ -5327,18 +5864,18 @@ export function DashboardPage() {
                   ) : (
                     <div className="grid gap-5">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="transfer_total_snapshot">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Transferido</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {formatCurrency(totalTransferredThisPeriod, displayCurrencyCode)}
                           </p>
-                        </div>
-                        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                        </DashboardKpiHelpWrap>
+                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="transfer_count_snapshot">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Cantidad</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
                             {currentPeriodTransfers.length}
                           </p>
-                        </div>
+                        </DashboardKpiHelpWrap>
                       </div>
 
                       {topTransferRoute ? (
@@ -5378,6 +5915,7 @@ export function DashboardPage() {
                   action={<StatusBadge status={`Vista ${displayCurrencyCode}`} tone="neutral" />}
                   description="Cuánto de tu dinero en cuentas queda expuesto a cada moneda antes de consolidarlo en la vista global."
                   title="Exposición por moneda"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_currency_exposure" />}
                 >
                   {currencyExposure.length === 0 ? (
                     <DataState
@@ -5388,10 +5926,13 @@ export function DashboardPage() {
                     <div className="grid gap-4">
                       {currencyExposure.map((item) => (
                         <article
-                          className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+                          className="relative rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
                           key={item.currencyCode}
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="absolute right-3 top-3 z-[1]">
+                            <DashboardHelpTrigger metricId="widget_currency_exposure" />
+                          </div>
+                          <div className="flex items-start justify-between gap-3 pr-10">
                             <div>
                               <p className="font-semibold text-ink">{item.currencyCode}</p>
                               <p className="mt-1 text-sm text-storm">
@@ -5439,33 +5980,34 @@ export function DashboardPage() {
                 }
                 description="DarkMoney analiza tu historial para ir de lecturas básicas a patrones, proyecciones y alertas inteligentes."
                 title="Aprendiendo de ti"
+                titleAccessory={<DashboardHelpTrigger metricId="widget_learning_panel" />}
               >
                 <div className="grid gap-4">
                   <div className="grid gap-3 sm:grid-cols-4">
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="learn_movements_useful">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Movimientos utiles</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {learningSnapshot.totalPostedMovements}
                       </p>
-                    </div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="learn_history_days">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Historial</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {learningSnapshot.historyDays} dias
                       </p>
-                    </div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="learn_category_quality">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Calidad de categorias</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatPercentage(learningSnapshot.categorizedRate)}
                       </p>
-                    </div>
-                    <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="learn_confidence">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Confianza actual</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {learningSnapshot.readinessScore}%
                       </p>
-                    </div>
+                    </DashboardKpiHelpWrap>
                   </div>
 
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -5534,6 +6076,7 @@ export function DashboardPage() {
                 }
                 description="Lo que DarkMoney ya puede inferir sobre tus hábitos y lo que falta para detectar patrones más precisos."
                 title="Señales activas"
+                titleAccessory={<DashboardHelpTrigger metricId="widget_active_signals" />}
               >
                 <div className="grid gap-4">
                   {learningSnapshot.insights.length === 0 ? (
@@ -5592,27 +6135,28 @@ export function DashboardPage() {
                 action={<StatusBadge status={`Workspace ${formatWorkspaceKindLabel(activeWorkspace.kind)}`} tone="info" />}
                 description="Lectura del workspace activo y de la colaboración reciente para saber cuánto movimiento humano hubo en este entorno."
                 title="Colaboración del workspace"
+                titleAccessory={<DashboardHelpTrigger metricId="widget_workspace_collaboration" />}
               >
                 <div className="grid gap-4">
                   <div className="grid gap-3 sm:grid-cols-4">
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="collab_role">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Tu rol</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatWorkspaceRoleLabel(activeWorkspace.role)}
                       </p>
-                    </div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="collab_personal_count">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Personales</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">{personalWorkspaceCount}</p>
-                    </div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="collab_shared_count">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Compartidos</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">{sharedWorkspaceCount}</p>
-                    </div>
-                    <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                    </DashboardKpiHelpWrap>
+                    <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="collab_activity_cut">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Actividad del corte</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">{collaborationActivity.length}</p>
-                    </div>
+                    </DashboardKpiHelpWrap>
                   </div>
 
                   <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
@@ -5630,6 +6174,7 @@ export function DashboardPage() {
                 action={<StatusBadge status={`${actorActivity.length} actores visibles`} tone="neutral" />}
                 description="Quiénes movieron más actividad en el período actual dentro del workspace activo."
                 title="Actividad por actor"
+                titleAccessory={<DashboardHelpTrigger metricId="widget_activity_actor" />}
               >
                 {actorActivity.length === 0 ? (
                   <DataState
@@ -5671,6 +6216,7 @@ export function DashboardPage() {
                   action={<StatusBadge status={healthSnapshot.title} tone={healthSnapshot.tone} />}
                   description="Lectura rápida de liquidez, ahorro y presión financiera usando lo que ya pasó y lo que viene."
                   title="Centro de salud financiera"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_health_center" />}
                 >
                   <div className="grid gap-4">
                     <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
@@ -5678,35 +6224,38 @@ export function DashboardPage() {
                     </article>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_real_liquidity">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Liquidez real</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
                           {formatCurrency(healthSnapshot.realFreeMoney, displayCurrencyCode)}
                         </p>
-                      </div>
-                      <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      </DashboardKpiHelpWrap>
+                      <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_savings_capacity">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Capacidad de ahorro</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
                           {formatPercentage(Math.max(0, savingsCapacity))}
                         </p>
-                      </div>
-                      <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      </DashboardKpiHelpWrap>
+                      <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_coverage_months">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Cobertura mensual</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
                           {healthSnapshot.coverageMonths !== null ? `${healthSnapshot.coverageMonths.toFixed(1)} meses` : "Sin dato"}
                         </p>
-                      </div>
-                      <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                      </DashboardKpiHelpWrap>
+                      <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_debt_to_income">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Deuda / ingreso</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
                           {healthSnapshot.debtToIncomeRatio !== null ? `${(healthSnapshot.debtToIncomeRatio * 100).toFixed(0)}%` : "Sin dato"}
                         </p>
-                      </div>
+                      </DashboardKpiHelpWrap>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <article className="rounded-[22px] border border-gold/18 bg-gold/10 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-gold">Lo próximo a pagar</p>
+                      <article className="relative rounded-[22px] border border-gold/18 bg-gold/10 p-4">
+                        <div className="absolute right-3 top-3 z-[1]">
+                          <DashboardHelpTrigger metricId="health_next_payable" />
+                        </div>
+                        <p className="pr-10 text-xs uppercase tracking-[0.18em] text-gold">Lo próximo a pagar</p>
                         <p className="mt-3 font-semibold text-ink">
                           {nextPayableDue ? nextPayableDue.title : "Sin deuda próxima"}
                         </p>
@@ -5716,8 +6265,11 @@ export function DashboardPage() {
                             : "No hay compromisos por pagar cercanos."}
                         </p>
                       </article>
-                      <article className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-pine">Lo próximo a cobrar</p>
+                      <article className="relative rounded-[22px] border border-pine/18 bg-pine/10 p-4">
+                        <div className="absolute right-3 top-3 z-[1]">
+                          <DashboardHelpTrigger metricId="health_next_receivable" />
+                        </div>
+                        <p className="pr-10 text-xs uppercase tracking-[0.18em] text-pine">Lo próximo a cobrar</p>
                         <p className="mt-3 font-semibold text-ink">
                           {nextReceivableDue ? nextReceivableDue.title : "Sin cobro próximo"}
                         </p>
@@ -5737,6 +6289,7 @@ export function DashboardPage() {
                   action={<GhostLink label="Ver notificaciones" to="/app/notifications" />}
                   description="Historial del workspace para ver que se movio recientemente en cuentas, movimientos y compromisos."
                   title="Actividad reciente"
+                  titleAccessory={<DashboardHelpTrigger metricId="widget_activity_timeline" />}
                 >
                   {snapshot.activity.length === 0 ? (
                     <DataState
@@ -5770,5 +6323,6 @@ export function DashboardPage() {
         </>
       ) : null}
     </div>
+    </DashboardHelpProvider>
   );
 }

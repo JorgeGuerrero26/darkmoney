@@ -15,6 +15,7 @@ Este esquema esta orientado a finanzas personales y compartidas. Soporta:
 - Creditos y deudas
 - Suscripciones recurrentes
 - Notificaciones y actividad compartida
+- Metas de ahorro mensual del dashboard (Pro), por usuario y workspace
 
 ### Resumen funcional
 
@@ -461,6 +462,27 @@ Presupuestos por periodo. Pueden ser generales, por categoria, por cuenta o por 
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
+### `workspace_financial_goals`
+
+Meta de ahorro neto mensual que el usuario define en el dashboard avanzado (Pro). Hay como maximo **una fila por par** `(workspace_id, user_id)`: en un workspace compartido cada miembro puede tener su propia meta. La app compara ese monto con el neto del **mes calendario** segun movimientos **aplicados** (`posted`).
+
+- Script de creacion: `sql/create_workspace_financial_goals.sql`
+- **RLS:** solo filas con `user_id = auth.uid()` y el usuario debe ser miembro del workspace (`workspace_members`). Politicas `select`, `insert`, `update` y `delete` propias.
+- **Quitar la meta:** borrar la fila (no se guarda un valor cero).
+
+| Campo | Tipo | Nulo | Descripcion |
+|---|---|---|---|
+| `id` | `bigint` | No | Identificador (identity) |
+| `workspace_id` | `bigint` | No | Workspace; FK a `workspaces` (cascade al borrar workspace) |
+| `user_id` | `uuid` | No | Usuario dueno de la meta; FK a `auth.users` |
+| `monthly_savings_target` | `numeric(14,2)` | No | Objetivo de ahorro neto mensual; debe ser **> 0** |
+| `created_at` | `timestamptz` | No | Fecha de creacion |
+| `updated_at` | `timestamptz` | No | Fecha de actualizacion (trigger `trg_workspace_financial_goals_touch_updated_at`) |
+
+**Restricciones:** `unique (workspace_id, user_id)`; check `monthly_savings_target > 0`.
+
+**Indice:** `workspace_financial_goals_workspace_user_idx` sobre `(workspace_id, user_id)`.
+
 ### `attachments`
 
 Metadata de comprobantes y adjuntos guardados en Storage.
@@ -806,6 +828,7 @@ Historial compartido de acciones dentro de un workspace.
 - Compartir un credito o deuda con otro usuario debe resolverse con `obligation_shares`, confirmacion explicita por correo y acceso solo lectura para el usuario invitado.
 - Las notificaciones por gasto compartido deben generarse por usuario destinatario en `notifications`, usando `activity_log` y/o `movements`.
 - La seguridad de acceso debe cerrarse con politicas RLS basadas en `workspace_members` y no solo en `created_by_user_id`.
+- Las metas de `workspace_financial_goals` son personales por usuario dentro del workspace; no sustituyen presupuestos ni obligaciones.
 
 ## 8. Siguiente paso sugerido
 

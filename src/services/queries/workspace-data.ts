@@ -803,6 +803,10 @@ export type WorkspaceSnapshot = {
     categories: CategorySummary[];
     counterparties: CounterpartySummary[];
   };
+  /** Meta de ahorro neto mensual del usuario en este workspace (null si no hay fila o la tabla no existe). */
+  financialGoal: {
+    monthlySavingsTarget: number;
+  } | null;
 };
 
 const defaultAccountColors: Record<string, string> = {
@@ -1354,6 +1358,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     obligationsResult,
     subscriptionsResult,
     activityResult,
+    financialGoalResult,
   ] = await Promise.all([
     client
       .from("accounts")
@@ -1412,6 +1417,12 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       .eq("workspace_id", workspace.id)
       .order("created_at", { ascending: false })
       .limit(12),
+    client
+      .from("workspace_financial_goals")
+      .select("monthly_savings_target")
+      .eq("workspace_id", workspace.id)
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   const resultError =
@@ -1426,6 +1437,19 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
 
   if (resultError) {
     throw resultError;
+  }
+
+  let financialGoal: WorkspaceSnapshot["financialGoal"] = null;
+  if (financialGoalResult.error) {
+    if (!isMissingRelationError(financialGoalResult.error, "workspace_financial_goals")) {
+      throw financialGoalResult.error;
+    }
+  } else if (financialGoalResult.data) {
+    const row = financialGoalResult.data as { monthly_savings_target: NumericLike | null };
+    const target = toNumber(row.monthly_savings_target);
+    if (target > 0) {
+      financialGoal = { monthlySavingsTarget: target };
+    }
   }
 
   const accountRows = (accountsResult.data ?? []) as AccountRow[];
@@ -1884,7 +1908,49 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       categories,
       counterparties,
     },
+    financialGoal,
   };
+}
+
+async function upsertWorkspaceFinancialGoal(input: {
+  workspaceId: number;
+  userId: string;
+  monthlySavingsTarget: number | null;
+}) {
+  const client = getClient();
+
+  if (input.monthlySavingsTarget === null || input.monthlySavingsTarget <= 0) {
+    const { error } = await client
+      .from("workspace_financial_goals")
+      .delete()
+      .eq("workspace_id", input.workspaceId)
+      .eq("user_id", input.userId);
+
+    if (error && !isMissingRelationError(error, "workspace_financial_goals")) {
+      throw error;
+    }
+
+    return;
+  }
+
+  const { error } = await client.from("workspace_financial_goals").upsert(
+    {
+      workspace_id: input.workspaceId,
+      user_id: input.userId,
+      monthly_savings_target: input.monthlySavingsTarget,
+    },
+    { onConflict: "workspace_id,user_id" },
+  );
+
+  if (error) {
+    if (isMissingRelationError(error, "workspace_financial_goals")) {
+      throw new Error(
+        "La tabla workspace_financial_goals no existe en Supabase. Ejecuta el script sql/create_workspace_financial_goals.sql en el SQL Editor.",
+      );
+    }
+
+    throw error;
+  }
 }
 
 async function fetchNotifications(userId: string) {
@@ -2492,6 +2558,27 @@ export function useWorkspaceSnapshotQuery(
     queryFn: () => fetchWorkspaceSnapshot(workspace as Workspace, userId as string, profile),
     enabled: Boolean(workspace && userId),
     placeholderData: (previousData) => previousData,
+  });
+}
+
+export function useUpsertWorkspaceFinancialGoalMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      workspaceId: number;
+      userId: string;
+      monthlySavingsTarget: number | null;
+    }) => {
+      if (!input.userId) {
+        throw new Error("No hay sesion activa.");
+      }
+
+      await upsertWorkspaceFinancialGoal(input);
+    },
+    onSettled: async (_data, _error, variables) => {
+      await invalidateWorkspaceSnapshot(queryClient, variables.workspaceId, variables.userId);
+    },
   });
 }
 
