@@ -1,17 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ReactNode } from "react";
 import {
-  ArrowDownCircle,
-  ArrowDownRight,
-  ArrowUpCircle,
-  ArrowUpRight,
   CalendarDays,
   ChevronRight,
-  PiggyBank,
   RefreshCw,
   Sparkles,
-  WalletCards,
 } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
@@ -1089,55 +1082,6 @@ function SegmentedControl<T extends string | number>({
   );
 }
 
-function OverviewCard({
-  accent = "ink",
-  helpMetricId,
-  hint,
-  icon,
-  label,
-  trendLabel,
-  trendTone = "neutral",
-  value,
-}: {
-  accent?: "pine" | "ember" | "gold" | "ink";
-  helpMetricId?: string;
-  hint: string;
-  icon: ReactNode;
-  label: string;
-  trendLabel?: string;
-  trendTone?: "neutral" | "success" | "warning" | "danger" | "info";
-  value: string;
-}) {
-  const accentStyles = {
-    pine: "from-pine/18 to-pine/5 text-pine",
-    ember: "from-ember/18 to-ember/5 text-ember",
-    gold: "from-gold/20 to-gold/6 text-gold",
-    ink: "from-white/16 to-white/6 text-ink",
-  }[accent];
-
-  return (
-    <article className="glass-panel relative rounded-[28px] p-4 sm:p-5">
-      {helpMetricId ? (
-        <div className="absolute right-3 top-3 z-[1] sm:right-4 sm:top-4">
-          <DashboardHelpTrigger metricId={helpMetricId} />
-        </div>
-      ) : null}
-      <div
-        className={`flex items-start justify-between gap-2 sm:gap-4${helpMetricId ? " pr-9 sm:pr-11" : ""}`}
-      >
-        <div className="min-w-0">
-          <p className="text-[0.65rem] uppercase tracking-[0.18em] text-storm/90 sm:text-xs sm:tracking-[0.24em]">{label}</p>
-          <p className="mt-2 font-display text-2xl font-semibold text-ink sm:mt-3 sm:text-4xl">{value}</p>
-        </div>
-        <div className={`hidden rounded-[22px] bg-gradient-to-br p-3 ring-1 ring-white/8 sm:block ${accentStyles}`}>
-          {icon}
-        </div>
-      </div>
-      <p className="mt-4 text-sm leading-7 text-storm">{hint}</p>
-      {trendLabel ? <StatusBadge className="mt-4" status={trendLabel} tone={trendTone} /> : null}
-    </article>
-  );
-}
 
 function DeltaBadge({
   value,
@@ -1964,17 +1908,6 @@ function formatVsPreviousPeriodLabel(current: number, previous: number, previous
   return `${arrow} ${prefix}${abs}% vs ${previousPeriodLabel}`;
 }
 
-function getChangeTone(value: number) {
-  if (value > 0) {
-    return "success";
-  }
-
-  if (value < 0) {
-    return "danger";
-  }
-
-  return "neutral";
-}
 
 const FLOW_CHART_THEME = {
   expense: {
@@ -3074,23 +3007,6 @@ export function DashboardPage() {
       })),
     displayCurrencyCode,
   );
-  const sharedPrincipalDisplay = resolveAggregateAmountDisplay(
-    displaySharedObligations.map((obligation) => ({
-      currencyCode: obligation.currencyCode,
-      amount: obligation.currentPrincipalAmount ?? obligation.principalAmount,
-      amountInBaseCurrency:
-        obligation.currentPrincipalAmountInBaseCurrency ?? obligation.principalAmountInBaseCurrency,
-    })),
-    displayCurrencyCode,
-  );
-  const sharedPendingDisplay = resolveAggregateAmountDisplay(
-    displaySharedObligations.map((obligation) => ({
-      currencyCode: obligation.currencyCode,
-      amount: obligation.pendingAmount,
-      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
-    })),
-    displayCurrencyCode,
-  );
   const sharedReceivableObligations = displaySharedObligations.filter(
     (obligation) => obligation.direction === "receivable",
   );
@@ -3153,10 +3069,7 @@ export function DashboardPage() {
     visiblePayableLeaders.find((item) => item.key === selectedPayableKey) ?? visiblePayableLeaders[0] ?? null;
   const selectedMonth =
     monthlyPulse.find((item) => item.key === selectedMonthKey) ?? monthlyPulse[monthlyPulse.length - 1] ?? null;
-  const selectedWeekday =
-    weekdayPattern.find((item) => item.key === selectedWeekdayKey) ?? weekdayPattern[0] ?? null;
   const totalCurrentExpenses = allCategoryComparison.reduce((total, item) => total + item.current, 0);
-  const totalCurrentSavingsDelta = currentTotals.net - previousTotals.net;
   const comparisonDaySpan = getDateDiffInclusive(comparison.current.start, comparison.current.end);
   const currentPeriodTransfers = currentPeriodMovements.filter((movement) => movement.movementType === "transfer");
   const transferRoutes = buildTransferRoutes(currentPeriodTransfers);
@@ -3368,9 +3281,6 @@ export function DashboardPage() {
   const totalBank = visibleAccounts
     .filter((account) => account.type === "bank")
     .reduce((total, account) => total + account.currentBalance, 0);
-  const totalSavings = visibleAccounts
-    .filter((account) => account.type === "savings")
-    .reduce((total, account) => total + account.currentBalance, 0);
   const futureFlowWindows = [7, 15, 30].map((days) => {
     const limitDate = endOfDay(addDays(new Date(), days));
     const scheduledWindow = scheduledMovements.filter(
@@ -3412,7 +3322,6 @@ export function DashboardPage() {
       : 0;
   const savingsCapacity = currentTotals.income > 0 ? currentTotals.net / currentTotals.income : 0;
   const expandedNetWorth = totalMoneyDisplay.amount + receivableDisplay.amount - payableDisplay.amount;
-  const projectedLiquidMoney = liquidMoneyTotal + upcomingInflows - upcomingOutflows;
   const topBalanceAccount = [...visibleAccountsBreakdown].sort((left, right) => right.amount - left.amount)[0] ?? null;
   const bottomBalanceAccount = [...visibleAccountsBreakdown].sort((left, right) => left.amount - right.amount)[0] ?? null;
   const topTransferRoute = visibleTransferRoutes[0] ?? null;
@@ -3711,7 +3620,6 @@ export function DashboardPage() {
   const maxAccountShare = Math.max(0.0001, ...visibleAccountsBreakdown.map((item) => item.share));
   const maxReceivable = Math.max(1, ...visibleReceivableLeaders.map((item) => item.amount));
   const maxPayable = Math.max(1, ...visiblePayableLeaders.map((item) => item.amount));
-  const maxWeekdayAmount = Math.max(1, ...weekdayPattern.map((item) => Math.max(item.income, item.expense)));
   const maxCurrencyExposure = Math.max(1, ...currencyExposure.map((item) => item.amount));
   const showReviewInboxSection = isWidgetVisible("review_inbox");
   const showSavingsSection = isWidgetVisible("savings_trend") || isWidgetVisible("period_radar");
@@ -3788,9 +3696,7 @@ export function DashboardPage() {
       })
     : currentPeriodMovements;
 
-  // Savings trend uses combined cross-filter
-  const trendFilteredPostedMovements = crossFilteredPostedMovements;
-
+  // Savings trend uses combined cross-filter (crossFilteredPostedMovements)
   const trendFilteredSavingsSeries = hasCrossMovementFilter
     ? buildSavingsSeries(crossFilteredPostedMovements, comparison)
     : savingsSeries;
