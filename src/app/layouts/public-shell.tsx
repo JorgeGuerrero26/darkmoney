@@ -18,8 +18,9 @@ export function PublicShell() {
   const { user } = useAuth();
 
   return (
-    <main className="min-h-screen bg-glow px-4 py-5 text-ink sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-7xl flex-col gap-6">
+    <div className="min-h-screen bg-glow text-ink">
+      {/* Contenido principal: ancho completo con el mismo padding horizontal que el footer */}
+      <div className="flex w-full flex-col gap-6 px-4 pt-5 sm:px-6 lg:px-8">
         <header className="glass-panel-strong overflow-hidden rounded-[32px] p-4 sm:p-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
@@ -81,63 +82,119 @@ export function PublicShell() {
           imageClassName="object-cover object-center"
         />
 
-        <Outlet />
+        <div className="pb-16">
+          <Outlet />
+        </div>
+      </div>
 
-        <footer className="glass-panel-soft rounded-[28px] px-5 py-5">
-          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      {/* Footer full-width */}
+      <footer className="border-t border-white/[0.06] bg-[rgba(5,7,10,0.72)] backdrop-blur-xl">
+        <div className="w-full px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
+            {/* Brand */}
             <div>
-              <p className="text-sm font-semibold text-ink">DarkMoney</p>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-storm">
-                Plataforma web para organizar dinero propio y compartido desde un solo
-                lugar.
-              </p>
-
-              <div className="mt-4 grid gap-3 text-sm text-storm">
-                <a
-                  className="flex items-center gap-3 transition hover:text-ink"
-                  href={PUBLIC_CONTACT_LINKS.email}
-                >
-                  <Mail className="h-4 w-4 text-pine" />
-                  {PUBLIC_CONTACT.supportEmail}
-                </a>
-                <a
-                  className="flex items-center gap-3 transition hover:text-ink"
-                  href={PUBLIC_CONTACT_LINKS.phone}
-                >
-                  <Phone className="h-4 w-4 text-pine" />
-                  {PUBLIC_CONTACT.supportPhoneDisplay}
-                </a>
-                <div className="flex items-center gap-3">
-                  <Landmark className="h-4 w-4 text-pine" />
-                  {PUBLIC_CONTACT.cityCountry}
-                </div>
-                <div className="flex items-center gap-3">
-                  <FileBadge2 className="h-4 w-4 text-pine" />
-                  {PUBLIC_CONTACT.taxIdLabel} {PUBLIC_CONTACT.taxIdValue}
-                </div>
+              <div className="flex items-center gap-3">
+                <BrandLogo
+                  className="h-10 w-10 rounded-[12px]"
+                  imageClassName="scale-[1.02] object-[center_48%]"
+                />
+                <p className="font-display text-base font-semibold text-ink">DarkMoney</p>
               </div>
+              <p className="mt-4 max-w-xs text-sm leading-7 text-storm">
+                Plataforma web para organizar dinero propio y compartido desde un solo lugar.
+              </p>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[0.7fr_0.3fr]">
-              <div className="flex flex-wrap gap-3 text-sm text-storm">
+            {/* Navegacion */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
+                Navegacion
+              </p>
+              <ul className="mt-4 flex flex-col gap-3">
                 {publicNavigation.map((item) => (
-                  <Link className="transition hover:text-ink" key={item.to} to={item.to}>
-                    {item.label}
-                  </Link>
+                  <li key={item.to}>
+                    <Link
+                      className="text-sm text-storm transition hover:text-ink"
+                      to={item.to}
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            </div>
 
+            {/* Contacto */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
+                Contacto
+              </p>
+              <ul className="mt-4 flex flex-col gap-3 text-sm text-storm">
+                <li>
+                  <a
+                    className="flex items-center gap-2.5 transition hover:text-ink"
+                    href={PUBLIC_CONTACT_LINKS.email}
+                  >
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-pine" />
+                    {PUBLIC_CONTACT.supportEmail}
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="flex items-center gap-2.5 transition hover:text-ink"
+                    href={PUBLIC_CONTACT_LINKS.phone}
+                  >
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-pine" />
+                    {PUBLIC_CONTACT.supportPhoneDisplay}
+                  </a>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Landmark className="h-3.5 w-3.5 shrink-0 text-pine" />
+                  {PUBLIC_CONTACT.cityCountry}
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <FileBadge2 className="h-3.5 w-3.5 shrink-0 text-pine" />
+                  {PUBLIC_CONTACT.taxIdLabel} {PUBLIC_CONTACT.taxIdValue}
+                </li>
+              </ul>
+            </div>
+
+            {/* Libro de Reclamaciones */}
+            <div className="flex flex-col justify-start">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
+                Legal
+              </p>
               <Link
-                className="flex items-center justify-center gap-2 rounded-[22px] border border-gold/20 bg-gold/10 px-4 py-3 text-sm font-semibold text-gold transition hover:border-gold/30 hover:bg-gold/14"
+                className="mt-4 flex items-center gap-2.5 rounded-[20px] border border-gold/20 bg-gold/[0.08] px-4 py-3.5 text-sm font-semibold text-gold transition hover:border-gold/30 hover:bg-gold/[0.13]"
                 to={PUBLIC_CONTACT.claimsBookPath}
               >
-                <BookText className="h-4 w-4" />
-                Libro de Reclamaciones
+                <BookText className="h-4 w-4 shrink-0" />
+                Libro de
+                <br />
+                Reclamaciones
               </Link>
             </div>
           </div>
-        </footer>
-      </div>
-    </main>
+
+          {/* Bottom bar */}
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-6">
+            <p className="text-xs text-storm/50">
+              © {new Date().getFullYear()} DarkMoney. Todos los derechos reservados.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              {publicNavigation.slice(1, 4).map((item) => (
+                <Link
+                  className="text-xs text-storm/50 transition hover:text-storm"
+                  key={item.to}
+                  to={item.to}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }

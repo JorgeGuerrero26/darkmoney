@@ -22,9 +22,10 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
 import { BrandLogo } from "../../components/ui/brand-logo";
 import { Button } from "../../components/ui/button";
 import { DataState } from "../../components/ui/data-state";
@@ -191,37 +192,6 @@ function getWorkspaceAccentColor(kind: Workspace["kind"]) {
   return kind === "shared" ? "#4566d6" : "#1b6a58";
 }
 
-function useWorkspacePickerPanel(isOpen: boolean, onClose: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, onClose]);
-
-  return containerRef;
-}
-
 function WorkspacePicker({
   activeWorkspaceId,
   disabled = false,
@@ -237,7 +207,7 @@ function WorkspacePicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useWorkspacePickerPanel(isOpen, () => setIsOpen(false));
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false), true);
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],

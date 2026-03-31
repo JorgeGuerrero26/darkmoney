@@ -40,27 +40,29 @@ const privacySections = [
 
 export function PrivacyPage() {
   return (
-    <div className="flex flex-col items-center gap-12 pb-10">
+    <div className="flex w-full flex-col gap-10 pb-10">
       {/* Hero */}
-      <section className="flex max-w-2xl flex-col items-center gap-4 pt-4 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-[20px] border border-ember/20 bg-ember/10">
+      <section className="flex w-full flex-col gap-5 border-b border-white/[0.06] pb-10 pt-4 sm:flex-row sm:items-start sm:gap-6">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-ember/20 bg-ember/10">
           <Lock className="h-6 w-6 text-ember" />
         </div>
-        <StatusBadge status="Privacidad" tone="info" />
-        <h1 className="text-balance font-display text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
-          Politica de Privacidad
-        </h1>
-        <p className="text-balance max-w-lg text-sm leading-8 text-storm">
-          Te explicamos que datos usamos, por que los usamos y como protegemos la
-          informacion relacionada con tu cuenta y actividad en DarkMoney.
-        </p>
-        <p className="text-xs tracking-wide text-storm/50">
-          Ultima actualizacion: 26 de marzo de 2026
-        </p>
+        <div className="min-w-0 flex-1">
+          <StatusBadge status="Privacidad" tone="info" />
+          <h1 className="mt-4 font-display text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
+            Politica de Privacidad
+          </h1>
+          <p className="mt-3 text-sm leading-8 text-storm sm:max-w-3xl">
+            Te explicamos que datos usamos, por que los usamos y como protegemos la
+            informacion relacionada con tu cuenta y actividad en DarkMoney.
+          </p>
+          <p className="mt-4 text-xs tracking-wide text-storm/50">
+            Ultima actualizacion: 26 de marzo de 2026
+          </p>
+        </div>
       </section>
 
       {/* Content */}
-      <div className="glass-panel w-full max-w-3xl rounded-[32px] p-8 sm:p-10">
+      <div className="glass-panel w-full rounded-[32px] p-8 sm:p-10">
         <div className="flex flex-col">
           {privacySections.map((section, index) => (
             <div

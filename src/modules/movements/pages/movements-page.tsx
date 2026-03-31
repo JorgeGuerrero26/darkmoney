@@ -27,6 +27,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -213,27 +214,6 @@ const movementFieldHintClassName = "mt-1 sm:mt-2 break-words text-[0.65rem] sm:t
 const movementPickerTriggerClassName = `${movementFieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left`;
 const movementPickerSearchInputClassName =
   "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-
-function useMovementPickerPanel(isOpen: boolean, onClose: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isOpen, onClose]);
-
-  return containerRef;
-}
 
 function getMovementPickerTriggerStyle(isOpen: boolean) {
   return {
@@ -543,7 +523,7 @@ function SearchablePicker({
 }: SearchablePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useMovementPickerPanel(isOpen, () => setIsOpen(false));
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],

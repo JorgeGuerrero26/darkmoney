@@ -159,7 +159,7 @@ export function DatePickerField({
       return;
     }
 
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: PointerEvent) {
       const target = event.target as HTMLElement | null;
 
       if (!target?.closest(`[data-picker-id="${panelId}"]`)) {
@@ -167,8 +167,8 @@ export function DatePickerField({
       }
     }
 
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [isOpen, panelId]);
 
   function handlePickDay(nextDate: Date) {

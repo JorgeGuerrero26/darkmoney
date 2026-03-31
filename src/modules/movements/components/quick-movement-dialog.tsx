@@ -10,8 +10,9 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
@@ -182,27 +183,6 @@ function parseOptionalNumber(value: string) {
   return Number.isFinite(parsedValue) ? parsedValue : Number.NaN;
 }
 
-function useQuickPickerPanel(isOpen: boolean, onClose: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isOpen, onClose]);
-
-  return containerRef;
-}
-
 function getQuickMovementMode(kind: QuickMovementKind) {
   return quickMovementModes.find((mode) => mode.kind === kind) ?? quickMovementModes[0];
 }
@@ -361,7 +341,7 @@ function QuickPicker({
 }: QuickPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useQuickPickerPanel(isOpen, () => setIsOpen(false));
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],

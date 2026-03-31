@@ -202,24 +202,26 @@ export function ClaimBookPage() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-12 pb-10">
+    <div className="flex w-full flex-col gap-10 pb-10">
       {/* Hero */}
-      <section className="flex max-w-2xl flex-col items-center gap-4 pt-4 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-[20px] border border-gold/20 bg-gold/10">
+      <section className="flex w-full flex-col gap-5 border-b border-white/[0.06] pb-10 pt-4 sm:flex-row sm:items-start sm:gap-6">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-gold/20 bg-gold/10">
           <BookText className="h-6 w-6 text-gold" />
         </div>
-        <StatusBadge status="INDECOPI visible" tone="warning" />
-        <h1 className="text-balance font-display text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
-          Libro de Reclamaciones
-        </h1>
-        <p className="text-balance max-w-lg text-sm leading-8 text-storm">
-          Registra un reclamo o queja sobre el servicio. Recibirás un codigo de
-          seguimiento y te responderemos por los canales indicados.
-        </p>
+        <div className="min-w-0 flex-1">
+          <StatusBadge status="INDECOPI visible" tone="warning" />
+          <h1 className="mt-4 font-display text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
+            Libro de Reclamaciones
+          </h1>
+          <p className="mt-3 text-sm leading-8 text-storm sm:max-w-3xl">
+            Registra un reclamo o queja sobre el servicio. Recibirás un codigo de
+            seguimiento y te responderemos por los canales indicados.
+          </p>
+        </div>
       </section>
 
       {/* Info cards */}
-      <div className="grid w-full max-w-3xl gap-4 sm:grid-cols-2">
+      <div className="grid w-full gap-4 sm:grid-cols-2">
         <div className="glass-panel-soft rounded-[28px] p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-storm/70">
             Contacto del proveedor
@@ -271,7 +273,7 @@ export function ClaimBookPage() {
 
       {/* Feedback banners */}
       {errorMessage ? (
-        <div className="w-full max-w-3xl">
+        <div className="w-full">
           <FormFeedbackBanner
             description={errorMessage}
             title="No pudimos registrar tu reclamo"
@@ -281,7 +283,7 @@ export function ClaimBookPage() {
       ) : null}
 
       {successState ? (
-        <div className="w-full max-w-3xl">
+        <div className="w-full">
           <FormFeedbackBanner
             description={`Tu registro fue guardado con el codigo ${successState.claimCode}. Te responderemos por los canales indicados. Fecha referencial de revision: ${responseDeadlineText}.`}
             title="Libro de reclamaciones registrado"
@@ -291,7 +293,7 @@ export function ClaimBookPage() {
       ) : null}
 
       {/* Form */}
-      <div className="glass-panel w-full max-w-3xl rounded-[32px] p-8 sm:p-10">
+      <div className="glass-panel w-full rounded-[32px] p-8 sm:p-10">
         <div className="mb-8">
           <h2 className="font-display text-2xl font-semibold text-ink">
             Formulario de registro

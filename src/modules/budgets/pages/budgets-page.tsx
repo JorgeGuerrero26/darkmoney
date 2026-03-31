@@ -17,6 +17,7 @@ import {
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -159,37 +160,6 @@ function Input({
   );
 }
 
-function useBudgetPickerPanel(isOpen: boolean, onClose: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, onClose]);
-
-  return containerRef;
-}
-
 function BudgetPicker({
   disabled = false,
   emptyMessage,
@@ -211,7 +181,7 @@ function BudgetPicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useBudgetPickerPanel(isOpen, () => setIsOpen(false));
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false), true);
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],

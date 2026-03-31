@@ -22,6 +22,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -255,27 +256,6 @@ function buildFormStateFromSubscription(subscription: SubscriptionSummary): Subs
   };
 }
 
-function usePickerPanel(isOpen: boolean, onClose: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        onClose();
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [isOpen, onClose]);
-
-  return containerRef;
-}
-
 function Picker({
   disabled = false,
   emptyMessage,
@@ -288,7 +268,7 @@ function Picker({
 }: PickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = usePickerPanel(isOpen, () => setIsOpen(false));
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],
