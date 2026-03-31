@@ -3130,9 +3130,6 @@ export function DashboardPage() {
   const upcomingOutflows = upcomingCommitments
     .filter((item) => item.kind !== "Por cobrar")
     .reduce((total, item) => total + item.amount, 0);
-  const upcomingInflows = upcomingCommitments
-    .filter((item) => item.kind === "Por cobrar")
-    .reduce((total, item) => total + item.amount, 0);
   const overdueObligations = displayObligations.filter((obligation) => {
     if (!obligation.dueDate || obligation.pendingAmount <= 0) {
       return false;
