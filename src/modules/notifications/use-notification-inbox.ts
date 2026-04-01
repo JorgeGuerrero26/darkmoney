@@ -183,6 +183,42 @@ function buildSmartNotifications(
     });
   }
 
+  for (const income of (snapshot.recurringIncome ?? []).filter(
+    (item) => item.status === "active",
+  )) {
+    const diffDays = getDaysDifference(income.nextExpectedDate);
+    const remindWindow = Math.max(1, income.remindDaysBefore);
+
+    if (diffDays > remindWindow || diffDays < -7) {
+      continue;
+    }
+
+    const title =
+      diffDays < -1
+        ? "Ingreso fijo no recibido"
+        : diffDays <= 0
+          ? "Ingreso fijo esperado hoy"
+          : `Ingreso fijo llega en ${diffDays} dia${diffDays === 1 ? "" : "s"}`;
+    const body =
+      diffDays < -1
+        ? `${income.name} debia llegar el ${income.nextExpectedDate} y aun no lo has registrado en ${workspaceLabel}.`
+        : `${income.name} por ${formatCurrency(income.amount, income.currencyCode)} se espera el ${income.nextExpectedDate}.`;
+
+    notifications.push({
+      id: `smart:recurring-income:${income.id}:${income.nextExpectedDate}:${Math.max(diffDays, -7)}`,
+      source: "smart",
+      title,
+      body,
+      status: "pending",
+      scheduledFor: toTimestamp(income.nextExpectedDate, 8),
+      kind: "recurring_income",
+      channel: "in_app",
+      readAt: null,
+      tone: diffDays < -1 ? "warning" : diffDays <= 0 ? "success" : "info",
+      href: "/app/recurring-income",
+    });
+  }
+
   for (const obligation of snapshot.obligations.filter(
     (item: ObligationSummary) => item.pendingAmount > 0 && item.status !== "paid",
   )) {

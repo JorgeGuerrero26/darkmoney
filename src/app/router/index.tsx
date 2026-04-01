@@ -181,6 +181,13 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "recurring-income",
+        lazy: lazyRoute(
+          () => import("../../modules/recurring-income/pages/recurring-income-page"),
+          "RecurringIncomePage",
+        ),
+      },
+      {
         path: "notifications",
         lazy: lazyRoute(
           () => import("../../modules/notifications/pages/notifications-page"),

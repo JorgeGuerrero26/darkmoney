@@ -373,6 +373,37 @@ export type SubscriptionSummary = {
   notes?: string | null;
 };
 
+// Ingresos fijos recurrentes — contraparte semantica de SubscriptionSummary
+export type RecurringIncomeFrequency = SubscriptionFrequency;
+export type RecurringIncomeStatus = SubscriptionStatus;
+
+export type RecurringIncomeSummary = {
+  id: number;
+  workspaceId: number;
+  name: string;
+  payerPartyId?: number | null;
+  payer: string;
+  accountId?: number | null;
+  accountName?: string | null;
+  categoryId?: number | null;
+  categoryName?: string | null;
+  status: RecurringIncomeStatus;
+  amount: number;
+  amountInBaseCurrency?: number | null;
+  currencyCode: string;
+  frequency: RecurringIncomeFrequency;
+  frequencyLabel: string;
+  intervalCount: number;
+  dayOfMonth?: number | null;
+  dayOfWeek?: number | null;
+  startDate: string;
+  nextExpectedDate: string;
+  endDate?: string | null;
+  remindDaysBefore: number;
+  description?: string | null;
+  notes?: string | null;
+};
+
 export type NotificationItem = {
   id: number;
   title: string;

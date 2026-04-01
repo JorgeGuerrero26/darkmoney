@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarDays,
@@ -30,6 +30,7 @@ import type {
   ExchangeRateSummary,
   MovementRecord,
   ObligationSummary,
+  RecurringIncomeSummary,
   SubscriptionSummary,
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
@@ -288,10 +289,23 @@ const comparisonOptions: Array<{
 ];
 
 const topOptions = [5, 8, 12];
-const weekdayLabels = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
+/** Lunes–domingo; índice = (date.getDay() + 6) % 7 (lunes = 0). */
+const weekdayLabelsFull = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+];
+/** Abreviaturas para ejes de gráficos con pocos puntos. */
+const weekdayLabelsShort = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const DASHBOARD_CURRENCY_STORAGE_KEY = "darkmoney.dashboard.displayCurrency";
 const DASHBOARD_MODE_STORAGE_KEY = "darkmoney.dashboard.mode";
 const DASHBOARD_HIDDEN_WIDGETS_STORAGE_KEY = "darkmoney.dashboard.hiddenWidgets";
+/** Ancla para scroll desde el resumen (meta vacía / editar meta) al widget Meta y disciplina. */
+const DASHBOARD_META_DISCIPLINA_ANCHOR_ID = "dashboard-widget-meta-disciplina";
 
 const dashboardModeOptions: Array<{ value: DashboardMode; label: string; helper: string }> = [
   { value: "simple", label: "Vista simple", helper: "solo lo esencial" },
@@ -871,7 +885,7 @@ function buildSavingsSeries(
       key: toLocalDateKey(currentDate),
       label:
         length <= 10
-          ? weekdayLabels[(currentDate.getDay() + 6) % 7]
+          ? weekdayLabelsShort[(currentDate.getDay() + 6) % 7]
           : shortDateFormatter.format(currentDate),
       fullLabel: fullDateFormatter.format(currentDate),
       currentDate,
@@ -952,7 +966,7 @@ function buildDailyFlowSeries(
       key: toLocalDateKey(currentDate),
       label:
         length <= 10
-          ? weekdayLabels[(currentDate.getDay() + 6) % 7]
+          ? weekdayLabelsShort[(currentDate.getDay() + 6) % 7]
           : shortDateFormatter.format(currentDate),
       fullLabel: fullDateFormatter.format(currentDate),
       currentDate,
@@ -1294,7 +1308,7 @@ function buildMonthlyPulse(movements: MovementRecord[]) {
 }
 
 function buildWeekdayPattern(movements: MovementRecord[]) {
-  const weekdays = weekdayLabels.map(
+  const weekdays = weekdayLabelsFull.map(
     (label, index) =>
       ({
         key: `${index}`,
@@ -1333,6 +1347,7 @@ function buildWeekdayPattern(movements: MovementRecord[]) {
 function buildUpcomingCommitments(
   obligations: ObligationSummary[],
   subscriptions: SubscriptionSummary[],
+  recurringIncome: RecurringIncomeSummary[],
 ) {
   const today = startOfDay(new Date());
   const limit = addDays(today, 30);
@@ -1369,9 +1384,23 @@ function buildUpcomingCommitments(
       date: subscription.nextDueDate,
     }));
 
-  return [...obligationItems, ...subscriptionItems]
-    .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
-    .slice(0, 6);
+  const recurringIncomeItems = recurringIncome
+    .filter((income) => {
+      const expectedDate = new Date(income.nextExpectedDate);
+      return expectedDate >= today && expectedDate <= limit && income.status === "active";
+    })
+    .map((income) => ({
+      key: `recurring-income-${income.id}`,
+      kind: "Ingreso fijo",
+      title: income.name,
+      counterpart: income.payer,
+      amount: income.amountInBaseCurrency ?? income.amount,
+      date: income.nextExpectedDate,
+    }));
+
+  return [...obligationItems, ...subscriptionItems, ...recurringIncomeItems].sort(
+    (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime(),
+  );
 }
 
 function readStoredDashboardMode(): DashboardMode {
@@ -1788,7 +1817,7 @@ function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string
   const insights: LearningInsight[] = [];
 
   if (currentPhase >= 1 && topWeekdayEntry) {
-    const weekdayLabel = weekdayLabels[(topWeekdayEntry[0] + 6) % 7];
+    const weekdayLabel = weekdayLabelsFull[(topWeekdayEntry[0] + 6) % 7];
     insights.push({
       title: `Tu día más cargado hoy parece ser ${weekdayLabel}`,
       description: `Ese día concentra ${Math.round((topWeekdayEntry[1] / Math.max(totalExpense, 1)) * 100)}% del gasto histórico aplicable.`,
@@ -2688,6 +2717,24 @@ export function DashboardPage() {
     );
   }
 
+  const scrollToMetaDisciplinaWidget = useCallback(() => {
+    if (!canUseAdvancedDashboard) {
+      return;
+    }
+    const run = () => {
+      document.getElementById(DASHBOARD_META_DISCIPLINA_ANCHOR_ID)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    };
+    if (effectiveDashboardMode !== "advanced") {
+      setDashboardMode("advanced");
+      window.setTimeout(run, 180);
+    } else {
+      run();
+    }
+  }, [canUseAdvancedDashboard, effectiveDashboardMode]);
+
   function handleDashboardModeChange(nextMode: DashboardMode) {
     if (nextMode === "advanced" && !canUseAdvancedDashboard) {
       setDashboardMode("simple");
@@ -2922,6 +2969,23 @@ export function DashboardPage() {
       amountInBaseCurrency: convertedAmount ?? null,
     };
   });
+  const displayRecurringIncome = (snapshot.recurringIncome ?? []).map((income) => {
+    const convertedAmount = convertDashboardAmount({
+      amount: income.amount,
+      currencyCode: income.currencyCode,
+      amountInBaseCurrency: income.amountInBaseCurrency,
+      baseCurrencyCode,
+      targetCurrencyCode: displayCurrencyCode,
+      exchangeRateMap,
+    });
+
+    return {
+      ...income,
+      currencyCode: displayCurrencyCode,
+      amount: convertedAmount ?? income.amount,
+      amountInBaseCurrency: convertedAmount ?? null,
+    };
+  });
   const displayBudgets = snapshot.budgets.map((budget) => {
     const convertedLimitAmount = convertDashboardAmount({
       amount: budget.limitAmount,
@@ -2977,7 +3041,7 @@ export function DashboardPage() {
   const visiblePayableLeaders = payableLeaders.slice(0, topCount);
   const monthlyPulse = buildMonthlyPulse(postedMovements);
   const weekdayPattern = buildWeekdayPattern(currentPeriodMovements);
-  const upcomingCommitments = buildUpcomingCommitments(displayObligations, displaySubscriptions);
+  const upcomingCommitments = buildUpcomingCommitments(displayObligations, displaySubscriptions, displayRecurringIncome);
 
   const totalMoneyDisplay = resolveAggregateAmountDisplay(
     visibleAccounts.map((account) => ({
@@ -3023,6 +3087,23 @@ export function DashboardPage() {
   );
   const sharedPayableDisplay = resolveAggregateAmountDisplay(
     sharedPayableObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.pendingAmount,
+      amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
+    })),
+    displayCurrencyCode,
+  );
+  const sharedPrincipalDisplay = resolveAggregateAmountDisplay(
+    displaySharedObligations.map((obligation) => ({
+      currencyCode: obligation.currencyCode,
+      amount: obligation.currentPrincipalAmount ?? obligation.principalAmount,
+      amountInBaseCurrency:
+        obligation.currentPrincipalAmountInBaseCurrency ?? obligation.principalAmountInBaseCurrency,
+    })),
+    displayCurrencyCode,
+  );
+  const sharedPendingDisplay = resolveAggregateAmountDisplay(
+    displaySharedObligations.map((obligation) => ({
       currencyCode: obligation.currencyCode,
       amount: obligation.pendingAmount,
       amountInBaseCurrency: obligation.pendingAmountInBaseCurrency,
@@ -3090,6 +3171,9 @@ export function DashboardPage() {
     (total, subscription) => total + subscription.monthlyAmount,
     0,
   );
+  const monthlyRecurringIncome = displayRecurringIncome
+    .filter((income) => income.status === "active")
+    .reduce((total, income) => total + getMonthlySubscriptionAmount({ ...income, nextDueDate: income.nextExpectedDate }), 0);
   const todayKey = toDateKey(new Date());
   const currentBudgets = displayBudgets.filter(
     (budget) => budget.periodStart <= todayKey && budget.periodEnd >= todayKey,
@@ -3278,6 +3362,9 @@ export function DashboardPage() {
   const totalBank = visibleAccounts
     .filter((account) => account.type === "bank")
     .reduce((total, account) => total + account.currentBalance, 0);
+  const totalSavings = visibleAccounts
+    .filter((account) => account.type === "savings")
+    .reduce((total, account) => total + account.currentBalance, 0);
   const futureFlowWindows = [7, 15, 30].map((days) => {
     const limitDate = endOfDay(addDays(new Date(), days));
     const scheduledWindow = scheduledMovements.filter(
@@ -3295,10 +3382,10 @@ export function DashboardPage() {
       (item) => new Date(item.date).getTime() <= limitDate.getTime(),
     );
     const expectedInflow = commitmentsWindow
-      .filter((item) => item.kind === "Por cobrar")
+      .filter((item) => item.kind === "Por cobrar" || item.kind === "Ingreso fijo")
       .reduce((total, item) => total + item.amount, 0) + scheduledIncome;
     const expectedOutflow = commitmentsWindow
-      .filter((item) => item.kind !== "Por cobrar")
+      .filter((item) => item.kind !== "Por cobrar" && item.kind !== "Ingreso fijo")
       .reduce((total, item) => total + item.amount, 0) + scheduledExpense;
 
     return {
@@ -3311,6 +3398,8 @@ export function DashboardPage() {
       estimatedBalance: liquidMoneyTotal + expectedInflow - expectedOutflow,
     };
   });
+  const projectedLiquidBalance30Days =
+    futureFlowWindows.find((window) => window.days === 30)?.estimatedBalance ?? liquidMoneyTotal;
   const averageDailySpend = currentTotals.expense / Math.max(1, comparisonDaySpan);
   const averageWeeklySpend = currentTotals.expense / Math.max(1, comparisonDaySpan / 7);
   const averageMonthlySavings =
@@ -3677,10 +3766,22 @@ export function DashboardPage() {
   // Combined cross-filter: category + account ID
   const hasCrossMovementFilter = activeCategoryFilter !== null || activeAccountIdFilter !== null;
 
+  function movementMatchesAccountFilter(movement: MovementRecord, accountId: number): boolean {
+    return (
+      movement.sourceAccountId === accountId ||
+      movement.destinationAccountId === accountId
+    );
+  }
+
   const crossFilteredPostedMovements = hasCrossMovementFilter
     ? postedMovements.filter((m) => {
         if (activeCategoryFilter !== null && m.category !== activeCategoryFilter) return false;
-        if (activeAccountIdFilter !== null && m.sourceAccountId !== activeAccountIdFilter) return false;
+        if (
+          activeAccountIdFilter !== null &&
+          !movementMatchesAccountFilter(m, activeAccountIdFilter)
+        ) {
+          return false;
+        }
         return true;
       })
     : postedMovements;
@@ -3688,7 +3789,12 @@ export function DashboardPage() {
   const crossFilteredCurrentPeriodMovements = hasCrossMovementFilter
     ? currentPeriodMovements.filter((m) => {
         if (activeCategoryFilter !== null && m.category !== activeCategoryFilter) return false;
-        if (activeAccountIdFilter !== null && m.sourceAccountId !== activeAccountIdFilter) return false;
+        if (
+          activeAccountIdFilter !== null &&
+          !movementMatchesAccountFilter(m, activeAccountIdFilter)
+        ) {
+          return false;
+        }
         return true;
       })
     : currentPeriodMovements;
@@ -3804,9 +3910,28 @@ export function DashboardPage() {
               }))}
               value={topCount}
             />
+            <div className="max-w-md rounded-[16px] border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <p className="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-storm/55">
+                Qué hacen los filtros
+              </p>
+              <p className="mt-1.5 text-[0.65rem] leading-relaxed text-storm/75">
+                <span className="font-medium text-ink/85">Categoría</span> y{" "}
+                <span className="font-medium text-ink/85">cuenta</span> dejan solo los movimientos que coinciden y
+                recalculan las gráficas de <span className="text-storm/90">tendencia de ahorro</span>,{" "}
+                <span className="text-storm/90">flujo por día</span> y <span className="text-storm/90">ritmo semanal</span>{" "}
+                (siempre dentro del período que elegiste arriba). La cuenta se activa tocando una fila en{" "}
+                <span className="font-medium text-ink/85">Dinero por cuenta</span>, no desde aquí.
+              </p>
+              <p className="mt-2 text-[0.65rem] leading-relaxed text-storm/75">
+                <span className="font-medium text-ink/85">Tipo de cuenta</span> solo acorta la lista del desglose de
+                cuentas; <span className="font-medium text-storm/90">no cambia</span> esas gráficas de tendencia.
+              </p>
+            </div>
             {distinctCategoryNames.length > 0 ? (
               <div className="flex flex-col gap-1.5">
-                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">Filtrar por categoría</p>
+                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">
+                  Categoría → tendencia y ritmo semanal
+                </p>
                 <div className="flex flex-wrap gap-1.5">
                   {distinctCategoryNames.slice(0, 12).map((name) => (
                     <button
@@ -3817,6 +3942,11 @@ export function DashboardPage() {
                       }`}
                       key={name}
                       onClick={() => setActiveCategoryFilter(activeCategoryFilter === name ? null : name)}
+                      title={
+                        activeCategoryFilter === name
+                          ? "Quitar filtro de tendencia"
+                          : `Filtrar tendencia y ritmo semanal por «${name}»`
+                      }
                       type="button"
                     >
                       {name}
@@ -3827,7 +3957,9 @@ export function DashboardPage() {
             ) : null}
             {accountTypeFilterOptions.length > 1 ? (
               <div className="flex flex-col gap-1.5">
-                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">Filtrar por tipo de cuenta</p>
+                <p className="text-[0.6rem] uppercase tracking-[0.2em] text-storm/60">
+                  Tipo de cuenta → solo lista en Dinero por cuenta
+                </p>
                 <div className="flex flex-wrap gap-1.5">
                   {accountTypeFilterOptions.map((opt) => (
                     <button
@@ -3847,46 +3979,65 @@ export function DashboardPage() {
               </div>
             ) : null}
             {hasActiveFilters ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-[16px] border border-gold/20 bg-gold/8 px-3 py-2">
-                <span className="text-xs text-storm/70">Filtrando:</span>
-                {activeCategoryFilter ? (
-                  <button
-                    className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
-                    onClick={() => setActiveCategoryFilter(null)}
-                    type="button"
-                  >
-                    Categoría: {activeCategoryFilter} ×
-                  </button>
-                ) : null}
-                {activeAccountTypeFilter ? (
-                  <button
-                    className="inline-flex items-center gap-1 rounded-full bg-pine/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-pine/35"
-                    onClick={() => setActiveAccountTypeFilter(null)}
-                    type="button"
-                  >
-                    Tipo: {accountTypeFilterOptions.find((o) => o.value === activeAccountTypeFilter)?.label ?? activeAccountTypeFilter} ×
-                  </button>
-                ) : null}
-                {activeAccountIdFilter !== null ? (
-                  <button
-                    className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
-                    onClick={() => setActiveAccountIdFilter(null)}
-                    type="button"
-                  >
-                    Cuenta: {activeAccountFilterName} ×
-                  </button>
-                ) : null}
-                {activeObligationStatusFilter !== null ? (
-                  <button
-                    className="inline-flex items-center gap-1 rounded-full bg-ember/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-ember/35"
-                    onClick={() => setActiveObligationStatusFilter(null)}
-                    type="button"
-                  >
-                    Aging: {obligationAgingBuckets.find((b) => b.key === activeObligationStatusFilter)?.label ?? activeObligationStatusFilter} ×
-                  </button>
-                ) : null}
+              <div className="flex flex-col gap-2 rounded-[16px] border border-gold/20 bg-gold/8 px-3 py-2">
+                {(activeCategoryFilter !== null || activeAccountIdFilter !== null) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-storm/65">
+                      Tendencia / ritmo
+                    </span>
+                    {activeCategoryFilter ? (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
+                        onClick={() => setActiveCategoryFilter(null)}
+                        type="button"
+                      >
+                        Categoría: {activeCategoryFilter} ×
+                      </button>
+                    ) : null}
+                    {activeAccountIdFilter !== null ? (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-full bg-gold/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-gold/35"
+                        onClick={() => setActiveAccountIdFilter(null)}
+                        type="button"
+                      >
+                        Cuenta: {activeAccountFilterName} ×
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+                {(activeAccountTypeFilter !== null || activeObligationStatusFilter !== null) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.65rem] font-medium uppercase tracking-[0.12em] text-storm/65">
+                      Otras vistas
+                    </span>
+                    {activeAccountTypeFilter ? (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-full bg-pine/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-pine/35"
+                        onClick={() => setActiveAccountTypeFilter(null)}
+                        type="button"
+                      >
+                        Tipo cuenta:{" "}
+                        {accountTypeFilterOptions.find((o) => o.value === activeAccountTypeFilter)?.label ??
+                          activeAccountTypeFilter}{" "}
+                        ×
+                      </button>
+                    ) : null}
+                    {activeObligationStatusFilter !== null ? (
+                      <button
+                        className="inline-flex items-center gap-1 rounded-full bg-ember/25 px-2.5 py-0.5 text-xs font-medium text-ink hover:bg-ember/35"
+                        onClick={() => setActiveObligationStatusFilter(null)}
+                        type="button"
+                      >
+                        Cartera:{" "}
+                        {obligationAgingBuckets.find((b) => b.key === activeObligationStatusFilter)?.label ??
+                          activeObligationStatusFilter}{" "}
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                )}
                 <button
-                  className="text-xs text-storm/60 underline hover:text-storm"
+                  className="self-start text-xs text-storm/60 underline hover:text-storm"
                   onClick={() => {
                     setActiveCategoryFilter(null);
                     setActiveAccountTypeFilter(null);
@@ -4188,7 +4339,10 @@ export function DashboardPage() {
             <p className="mt-1 text-sm text-storm">{healthSnapshot.description}</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <div className="text-right">
+            <div className="relative text-right pr-7">
+              <div className="absolute right-0 top-0 z-[1]">
+                <DashboardHelpTrigger className="h-6 w-6" metricId="kpi_savings_rate" />
+              </div>
               <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm/60">Ahorro %</p>
               <p className="mt-0.5 text-sm font-semibold text-ink">
                 {healthSnapshot.savingsRate !== null
@@ -4222,9 +4376,14 @@ export function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 
           {/* LIQUIDEZ */}
-          <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-pine">Liquidez</p>
-            <p className="mt-1 text-[0.65rem] text-storm/50">Dinero disponible ahora y por tipo de cuenta.</p>
+          <div className="relative rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+            <div className="absolute right-4 top-4 z-[1]">
+              <DashboardHelpTrigger metricId="adv_liquidity" />
+            </div>
+            <p className="pr-10 text-[0.6rem] font-bold uppercase tracking-[0.24em] text-pine">Liquidez</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">
+              Totales al día, desglose por tipo de cuenta y una estimación de cómo podría quedar la caja en ~30 días.
+            </p>
             <div className="mt-4 grid gap-3">
               <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_total_money">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Dinero total</p>
@@ -4238,9 +4397,9 @@ export function DashboardPage() {
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(healthSnapshot.realFreeMoney, displayCurrencyCode)}
                 </p>
-                <p className="mt-1 text-xs text-storm">Liquidez menos pagos cercanos 30 d.</p>
+                <p className="mt-1 text-xs text-storm">Liquidez hoy menos salidas previstas en los próximos ~30 días.</p>
               </DashboardKpiHelpWrap>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
                 <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_cash">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Efectivo</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
@@ -4253,14 +4412,31 @@ export function DashboardPage() {
                     {formatCurrency(totalBank, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_savings">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Ahorros</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(totalSavings, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
               </div>
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="adv_projected_cash_30">
+                <p className="text-[0.58rem] uppercase tracking-[0.16em] text-pine">Caja estimada a 30 días</p>
+                <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                  {formatCurrency(projectedLiquidBalance30Days, displayCurrencyCode)}
+                </p>
+                <p className="mt-1 text-[0.65rem] leading-relaxed text-storm/85">
+                  Toma tu liquidez actual y suma o resta cobros, pagos y movimientos programados que la app ya conoce para ese plazo. Cifra orientativa.
+                </p>
+              </DashboardKpiHelpWrap>
             </div>
           </div>
 
           {/* FLUJO DEL PERÍODO */}
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
             <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-gold">Flujo del período</p>
-            <p className="mt-1 text-[0.65rem] text-storm/50">Resultado neto y sus componentes para el corte activo.</p>
+            <p className="mt-1 text-[0.65rem] text-storm/50">
+              Ingresos, gastos y ahorro neto del corte; abajo, transferencias internas, cartera y recurrentes en resumen.
+            </p>
             <div className="mt-4 grid gap-3">
               <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_income">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Ingresos</p>
@@ -4291,6 +4467,51 @@ export function DashboardPage() {
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Promedio/día</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
                     {formatCurrency(averageDailySpend, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_transferred">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Transferido</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(totalTransferredThisPeriod, displayCurrencyCode)}
+                  </p>
+                  <p className="mt-1 text-[0.65rem] text-storm/80">
+                    {currentPeriodTransfers.length}{" "}
+                    {currentPeriodTransfers.length === 1 ? "transferencia" : "transferencias"} en el período
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/8 p-3" metricId="kpi_overdue">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-ember">Vencido</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(overdueAmount, displayCurrencyCode)}
+                  </p>
+                  <p className="mt-1 text-[0.65rem] text-storm/80">
+                    {overdueObligations.length}{" "}
+                    {overdueObligations.length === 1 ? "obligación vencida" : "obligaciones vencidas"} con saldo pendiente
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/8 p-3" metricId="kpi_upcoming_payments">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Pagos próximos</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                    {formatCurrency(upcomingOutflows, displayCurrencyCode)}
+                  </p>
+                  <p className="mt-1 text-[0.65rem] text-storm/80">
+                    Pagos y cuotas esperados en ~30 días (no suma ítems marcados como por cobrar).
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_active_subscriptions">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Suscripciones</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">{activeSubscriptions.length} activas</p>
+                  <p className="mt-1 text-[0.65rem] text-storm/80">
+                    Costo mensual recurrente aproximado: {formatCurrency(monthlyRecurringCost, displayCurrencyCode)}
+                  </p>
+                </DashboardKpiHelpWrap>
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/8 p-3" metricId="kpi_recurring_income">
+                  <p className="text-[0.58rem] uppercase tracking-[0.16em] text-pine">Ingresos fijos</p>
+                  <p className="mt-1.5 font-display text-base font-semibold text-ink">{displayRecurringIncome.filter((r) => r.status === "active").length} activos</p>
+                  <p className="mt-1 text-[0.65rem] text-storm/80">
+                    Entrada mensual recurrente estimada: {formatCurrency(monthlyRecurringIncome, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
               </div>
@@ -4331,7 +4552,7 @@ export function DashboardPage() {
             <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-storm">Salud</p>
             <p className="mt-1 text-[0.65rem] text-storm/50">Métricas de sostenibilidad y riesgo financiero personal.</p>
             <div className="mt-4 grid gap-3">
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_savings_rate">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_savings_capacity">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-storm">Cap. ahorro %</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {healthSnapshot.savingsRate !== null
@@ -4402,7 +4623,15 @@ export function DashboardPage() {
               </p>
               {canUseAdvancedDashboard ? (
                 <p className="mt-2 text-xs text-storm/80">
-                  Editá el monto en el widget Meta y disciplina.
+                  Editá el monto en el widget{" "}
+                  <button
+                    className="font-medium text-gold underline decoration-gold/35 underline-offset-2 hover:text-gold/90"
+                    onClick={scrollToMetaDisciplinaWidget}
+                    type="button"
+                  >
+                    Meta y disciplina
+                  </button>
+                  .
                 </p>
               ) : null}
             </div>
@@ -4410,8 +4639,25 @@ export function DashboardPage() {
             <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
               <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Meta de ahorro del mes</p>
               <p className="mt-3 text-sm leading-6 text-storm">
-                Todavía no hay meta guardada. Podés definirla en el widget{" "}
-                <span className="font-medium text-ink">Meta y disciplina</span> (vista avanzada).
+                Todavía no hay meta guardada.{" "}
+                {canUseAdvancedDashboard ? (
+                  <>
+                    Podés definirla en el widget{" "}
+                    <button
+                      className="font-medium text-gold underline decoration-gold/35 underline-offset-2 hover:text-gold/90"
+                      onClick={scrollToMetaDisciplinaWidget}
+                      type="button"
+                    >
+                      Meta y disciplina
+                    </button>{" "}
+                    (vista avanzada; te llevamos ahí con un toque).
+                  </>
+                ) : (
+                  <>
+                    Podés definirla en el widget{" "}
+                    <span className="font-medium text-ink">Meta y disciplina</span> (vista avanzada).
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -4494,6 +4740,24 @@ export function DashboardPage() {
                 </p>
                 <p className="mt-2 text-sm text-storm/85">
                   El propietario de estos registros aún debe pagar.
+                </p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 sm:col-span-2" metricId="shared_principal">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal compartido</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedPrincipalDisplay.amount, sharedPrincipalDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  Suma del capital registrado en la cartera que otro usuario te mostró en solo lectura. No es un saldo tuyo: sirve como contexto del tamaño del crédito o préstamo original.
+                </p>
+              </DashboardKpiHelpWrap>
+              <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 sm:col-span-2" metricId="shared_pending">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendiente compartido</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(sharedPendingDisplay.amount, sharedPendingDisplay.currencyCode)}
+                </p>
+                <p className="mt-2 text-sm text-storm">
+                  Todo lo que en esos mismos registros sigue sin pagarse ni cobrarse por completo. Solo lectura; no se mezcla con tus KPI del workspace.
                 </p>
               </DashboardKpiHelpWrap>
             </div>
@@ -4595,7 +4859,7 @@ export function DashboardPage() {
         {isWidgetVisible("savings_trend") ? (
         <SurfaceCard
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
-          description="Ahorro neto, gastos, ingresos y transferencias día a día. Toca un día para ver los movimientos que lo componen."
+          description="Ahorro neto, gastos, ingresos y transferencias día a día. Si activaste filtro de categoría o cuenta, estas curvas solo usan movimientos que coinciden. Tocá un día para ver el detalle."
           title="Cronológicos del período"
           titleAccessory={<DashboardHelpTrigger metricId="widget_savings_trend" />}
         >
@@ -4621,7 +4885,7 @@ export function DashboardPage() {
           </div>
           {hasCrossMovementFilter ? (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[14px] border border-gold/20 bg-gold/8 px-3 py-2 text-xs text-storm">
-              <span>Filtrado:</span>
+              <span className="font-medium text-storm/80">Filtro tendencia:</span>
               {activeCategoryFilter ? (
                 <span className="font-semibold text-ink">categoría &quot;{activeCategoryFilter}&quot;</span>
               ) : null}
@@ -4785,7 +5049,7 @@ export function DashboardPage() {
         {isWidgetVisible("accounts_breakdown") ? (
         <SurfaceCard
           action={<GhostLink label="Ver cuentas" to="/app/accounts" />}
-          description="Cuánto dinero sostiene hoy cada cuenta y cuánta actividad tuvo dentro del período."
+          description="Cuánto dinero sostiene hoy cada cuenta y cuánta actividad tuvo en el período. Tocá una cuenta para filtrar por ella las gráficas de tendencia y el ritmo semanal (movimientos que salen o entran por esa cuenta)."
           title="Dinero por cuenta"
           titleAccessory={<DashboardHelpTrigger metricId="widget_accounts_breakdown" />}
         >
@@ -4822,6 +5086,11 @@ export function DashboardPage() {
                         setSelectedAccountId(item.account.id);
                         setActiveAccountIdFilter(activeAccountIdFilter === item.account.id ? null : item.account.id);
                       }}
+                      title={
+                        isCrossFiltered
+                          ? "Quitar filtro de tendencia por esta cuenta"
+                          : "Filtrar tendencia y ritmo semanal por movimientos que pasan por esta cuenta"
+                      }
                       type="button"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -5246,7 +5515,7 @@ export function DashboardPage() {
         {isWidgetVisible("category_comparison") ? (
         <SurfaceCard
           action={<GhostLink label="Ver categorías" to="/app/categories" />}
-          description="Comparativo por categoría del período actual contra su referencia anterior. Toca una fila para ver detalle y filtrar la tendencia de flujo."
+          description="Comparativo del período actual vs la referencia anterior. Tocá una fila (o las pastillas de categoría arriba) para aplicar el mismo filtro de tendencia: recalcula ahorro día a día, flujos y ritmo semanal con solo esos movimientos."
           title="Comparativo por categorías"
           titleAccessory={<DashboardHelpTrigger metricId="widget_category_comparison" />}
         >
@@ -5277,7 +5546,11 @@ export function DashboardPage() {
                         setSelectedCategoryKey(item.key);
                         setActiveCategoryFilter(activeCategoryFilter === item.name ? null : item.name);
                       }}
-                      title={isCrossFiltered ? "Click para quitar filtro de tendencia" : "Click para filtrar la tendencia por esta categoría"}
+                      title={
+                        isCrossFiltered
+                          ? "Quitar filtro de tendencia"
+                          : "Filtrar tendencia y ritmo semanal por esta categoría"
+                      }
                       type="button"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -5507,13 +5780,13 @@ export function DashboardPage() {
         {isWidgetVisible("weekly_pattern") ? (
         <SurfaceCard
           action={<GhostLink label="Ver movimientos" to="/app/movements" />}
-          description="Qué días de la semana suelen darte aire y cuáles suelen presionarte más."
+          description="Qué días de la semana suelen darte aire y cuáles presionan más. Respeta el mismo filtro de categoría o cuenta que las gráficas de tendencia."
           title="Ritmo semanal"
           titleAccessory={<DashboardHelpTrigger metricId="widget_weekly_pattern" />}
         >
           {hasCrossMovementFilter ? (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[14px] border border-gold/20 bg-gold/8 px-3 py-2 text-xs text-storm">
-              <span>Filtrado:</span>
+              <span className="font-medium text-storm/80">Filtro tendencia:</span>
               {activeCategoryFilter ? (
                 <span className="font-semibold text-ink">categoría &quot;{activeCategoryFilter}&quot;</span>
               ) : null}
@@ -5585,7 +5858,7 @@ export function DashboardPage() {
 
               {crossFilteredSelectedWeekday ? (
                 <article className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Dia activo</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-storm">Día activo</p>
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {crossFilteredSelectedWeekday.label}
                   </h4>
@@ -5605,8 +5878,8 @@ export function DashboardPage() {
                   </div>
                   <p className="mt-4 text-sm leading-7 text-storm">
                     {crossFilteredSelectedWeekday.net >= 0
-                      ? "Suele ser un dia que te deja aire positivo."
-                      : "Suele ser un dia que aprieta tu caja. Si quieres ahorrar mas, revisa que pasa aqui."}
+                      ? "Suele ser un día que te deja aire positivo."
+                      : "Suele ser un día que aprieta tu caja. Si quieres ahorrar más, revisa qué pasa aquí."}
                   </p>
                 </article>
               ) : null}
@@ -5633,7 +5906,7 @@ export function DashboardPage() {
                 />
               ) : (
                 <div className="mt-4 grid gap-3">
-                  {upcomingCommitments.map((item) => (
+                  {upcomingCommitments.slice(0, 6).map((item) => (
                     <article
                       className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
                       key={item.key}
@@ -5647,7 +5920,7 @@ export function DashboardPage() {
                         </div>
                         <StatusBadge
                           status={formatDate(item.date)}
-                          tone={item.kind === "Por cobrar" ? "success" : "warning"}
+                          tone={item.kind === "Por cobrar" || item.kind === "Ingreso fijo" ? "success" : "warning"}
                         />
                       </div>
                       <p className="mt-4 font-display text-2xl font-semibold text-ink">
@@ -5914,6 +6187,7 @@ export function DashboardPage() {
           ) : null}
 
           {isWidgetVisible("pro_goals_strip") ? (
+            <div className="scroll-mt-24 md:scroll-mt-28" id={DASHBOARD_META_DISCIPLINA_ANCHOR_ID}>
             <SurfaceCard
               description="Meta de ahorro neto del mes guardada en tu cuenta (por usuario y workspace), a partir de los movimientos aplicados del mes calendario."
               title="Meta y disciplina"
@@ -6043,6 +6317,7 @@ export function DashboardPage() {
                 </div>
               </div>
             </SurfaceCard>
+            </div>
           ) : null}
         </section>
       ) : null}

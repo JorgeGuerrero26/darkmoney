@@ -5,7 +5,12 @@
       "Bash(node scripts/restructure-dashboard.js)",
       "Bash(mv c:/Users/Adrian/Documents/DarkMoney/scripts/restructure-dashboard.js c:/Users/Adrian/Documents/DarkMoney/scripts/restructure-dashboard.cjs)",
       "Bash(node scripts/restructure-dashboard.cjs)",
-      "Bash(node remove-old-kpi-blocks.cjs)"
+      "Bash(node remove-old-kpi-blocks.cjs)",
+      "Bash(grep -l \"subscriptions\\\\|recurring\" /c/Users/Adrian/Documents/DarkMoney/sql/*.sql)",
+      "Bash(grep -l \"notification\" /c/Users/Adrian/Documents/DarkMoney/sql/*.sql)",
+      "Bash(grep -r \"recurring\\\\|salary\\\\|payroll\" /c/Users/Adrian/Documents/DarkMoney/src --include=*.ts --include=*.tsx)",
+      "Bash(grep -l \"create table.*subscription\\\\|CREATE TABLE.*subscription\" /c/Users/Adrian/Documents/DarkMoney/sql/*.sql)",
+      "Bash(grep -A 50 \"create_subscriptions\\\\|CREATE TABLE subscriptions\" /c/Users/Adrian/Documents/DarkMoney/sql/*.sql)"
     ]
   }
 }

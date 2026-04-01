@@ -149,7 +149,7 @@ function DashboardHelpModal({ id, onClose }: { id: string; onClose: () => void }
     <div
       aria-labelledby="dashboard-metric-help-title"
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-[80] isolate flex items-end justify-center bg-black/68 p-4 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-[''] sm:items-center"
+      className="animate-fade-in fixed inset-0 z-[80] isolate flex items-end justify-center bg-black/72 p-4 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/60 before:backdrop-blur-2xl before:content-[''] sm:items-center"
       onClick={onClose}
       role="dialog"
     >
@@ -158,7 +158,7 @@ function DashboardHelpModal({ id, onClose }: { id: string; onClose: () => void }
         onClick={(event) => event.stopPropagation()}
       >
         <div
-          className="animate-rise-in relative max-h-[min(88vh,720px)] w-full overflow-y-auto rounded-[28px] border border-white/12 bg-[#0a0f18]/96 p-6 shadow-[0_40px_100px_rgba(0,0,0,0.55)] [transform:translateZ(0)] backdrop-blur-md"
+          className="animate-rise-in relative max-h-[min(88vh,720px)] w-full overflow-y-auto rounded-[28px] border border-white/10 bg-[#050a12]/95 p-6 shadow-[0_40px_130px_rgba(0,0,0,0.62)] [transform:translateZ(0)] backdrop-blur-md"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">

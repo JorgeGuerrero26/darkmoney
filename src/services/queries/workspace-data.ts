@@ -23,6 +23,8 @@ import type {
   SharedObligationSummary,
   ObligationStatus,
   ObligationSummary,
+  RecurringIncomeFrequency,
+  RecurringIncomeSummary,
   SubscriptionFrequency,
   SubscriptionSummary,
   UserEntitlementSummary,
@@ -258,6 +260,28 @@ type SubscriptionRow = {
   status: SubscriptionSummary["status"];
   remind_days_before: number;
   auto_create_movement: boolean;
+  description: string | null;
+  notes: string | null;
+};
+
+type RecurringIncomeRow = {
+  id: number;
+  workspace_id: number;
+  name: string;
+  payer_party_id: number | null;
+  account_id: number | null;
+  category_id: number | null;
+  currency_code: string;
+  amount: NumericLike;
+  frequency: RecurringIncomeFrequency;
+  interval_count: number;
+  day_of_month: number | null;
+  day_of_week: number | null;
+  start_date: string;
+  next_expected_date: string;
+  end_date: string | null;
+  status: RecurringIncomeSummary["status"];
+  remind_days_before: number;
   description: string | null;
   notes: string | null;
 };
@@ -573,6 +597,26 @@ export type SubscriptionFormInput = {
   notes?: string | null;
 };
 
+export type RecurringIncomeFormInput = {
+  name: string;
+  payerPartyId?: number | null;
+  accountId?: number | null;
+  categoryId?: number | null;
+  currencyCode: string;
+  amount: number;
+  frequency: RecurringIncomeFrequency;
+  intervalCount: number;
+  dayOfMonth?: number | null;
+  dayOfWeek?: number | null;
+  startDate: string;
+  nextExpectedDate: string;
+  endDate?: string | null;
+  status: RecurringIncomeSummary["status"];
+  remindDaysBefore: number;
+  description?: string | null;
+  notes?: string | null;
+};
+
 export type CounterpartyFormInput = {
   name: string;
   type: CounterpartySummary["type"];
@@ -689,6 +733,22 @@ type SubscriptionDeleteInput = {
   workspaceId: number;
 };
 
+type RecurringIncomeMutationInput = RecurringIncomeFormInput & {
+  workspaceId: number;
+  userId: string;
+};
+
+type RecurringIncomeUpdateInput = RecurringIncomeFormInput & {
+  recurringIncomeId: number;
+  workspaceId: number;
+  userId: string;
+};
+
+type RecurringIncomeDeleteInput = {
+  recurringIncomeId: number;
+  workspaceId: number;
+};
+
 type CounterpartyMutationInput = CounterpartyFormInput & {
   workspaceId: number;
   userId: string;
@@ -789,6 +849,7 @@ export type WorkspaceSnapshot = {
   budgets: BudgetOverview[];
   obligations: ObligationSummary[];
   subscriptions: SubscriptionSummary[];
+  recurringIncome: RecurringIncomeSummary[];
   activity: ActivityItem[];
   cashflow: CashflowPoint[];
   metrics: {
@@ -1359,6 +1420,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     subscriptionsResult,
     activityResult,
     financialGoalResult,
+    recurringIncomeResult,
   ] = await Promise.all([
     client
       .from("accounts")
@@ -1423,6 +1485,13 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       .eq("workspace_id", workspace.id)
       .eq("user_id", userId)
       .maybeSingle(),
+    client
+      .from("recurring_income")
+      .select(
+        "id, workspace_id, name, payer_party_id, account_id, category_id, currency_code, amount, frequency, interval_count, day_of_month, day_of_week, start_date, next_expected_date, end_date, status, remind_days_before, description, notes",
+      )
+      .eq("workspace_id", workspace.id)
+      .order("next_expected_date", { ascending: true }),
   ]);
 
   const resultError =
@@ -1450,6 +1519,15 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     if (target > 0) {
       financialGoal = { monthlySavingsTarget: target };
     }
+  }
+
+  let recurringIncomeRows: RecurringIncomeRow[] = [];
+  if (recurringIncomeResult.error) {
+    if (!isMissingRelationError(recurringIncomeResult.error, "recurring_income")) {
+      throw recurringIncomeResult.error;
+    }
+  } else {
+    recurringIncomeRows = (recurringIncomeResult.data ?? []) as RecurringIncomeRow[];
   }
 
   const accountRows = (accountsResult.data ?? []) as AccountRow[];
@@ -1486,6 +1564,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
         .map((row) => normalizeCurrencyCode(row.currency_code))
         .concat(obligationRows.map((row) => normalizeCurrencyCode(row.currency_code)))
         .concat(subscriptionRows.map((row) => normalizeCurrencyCode(row.currency_code)))
+        .concat(recurringIncomeRows.map((row) => normalizeCurrencyCode(row.currency_code)))
         .concat(baseCurrencyCode),
     ),
   );
@@ -1832,6 +1911,33 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     notes: row.notes,
   }));
 
+  const recurringIncome = recurringIncomeRows.map<RecurringIncomeSummary>((row) => ({
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    payerPartyId: row.payer_party_id,
+    payer: row.payer_party_id ? counterpartyNameMap.get(row.payer_party_id) ?? "Sin pagador" : "Sin pagador",
+    accountId: row.account_id,
+    accountName: row.account_id ? accountRowMap.get(row.account_id)?.name ?? null : null,
+    categoryId: row.category_id,
+    categoryName: row.category_id ? categoryNameMap.get(row.category_id) ?? null : null,
+    status: row.status,
+    amount: toNumber(row.amount),
+    amountInBaseCurrency: convertAmountToCurrency(toNumber(row.amount), row.currency_code, baseCurrencyCode, exchangeRateMap),
+    currencyCode: row.currency_code,
+    frequency: row.frequency,
+    frequencyLabel: row.interval_count > 1 ? `${row.interval_count} x ${row.frequency}` : row.frequency,
+    intervalCount: row.interval_count,
+    dayOfMonth: row.day_of_month,
+    dayOfWeek: row.day_of_week,
+    startDate: row.start_date,
+    nextExpectedDate: row.next_expected_date,
+    endDate: row.end_date,
+    remindDaysBefore: row.remind_days_before,
+    description: row.description,
+    notes: row.notes,
+  }));
+
   const budgets = budgetRows.map<BudgetOverview>((row) => ({
     id: row.id,
     workspaceId: row.workspace_id,
@@ -1894,6 +2000,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     budgets,
     obligations,
     subscriptions,
+    recurringIncome,
     activity,
     cashflow: buildCashflow(movementRows),
     metrics: {
@@ -3784,6 +3891,29 @@ function buildSubscriptionMutationPayload(input: SubscriptionFormInput, userId: 
   };
 }
 
+function buildRecurringIncomeMutationPayload(input: RecurringIncomeFormInput, userId: string) {
+  return {
+    updated_by_user_id: userId,
+    name: input.name.trim(),
+    payer_party_id: input.payerPartyId ?? null,
+    account_id: input.accountId ?? null,
+    category_id: input.categoryId ?? null,
+    currency_code: input.currencyCode.trim().toUpperCase(),
+    amount: input.amount,
+    frequency: input.frequency,
+    interval_count: input.intervalCount,
+    day_of_month: input.dayOfMonth ?? null,
+    day_of_week: input.dayOfWeek ?? null,
+    start_date: input.startDate,
+    next_expected_date: input.nextExpectedDate,
+    end_date: normalizeOptionalText(input.endDate) ?? null,
+    status: input.status,
+    remind_days_before: input.remindDaysBefore,
+    description: normalizeOptionalText(input.description),
+    notes: normalizeOptionalText(input.notes),
+  };
+}
+
 function buildBudgetMutationPayload(input: BudgetFormInput, userId: string) {
   return {
     updated_by_user_id: userId,
@@ -4412,6 +4542,77 @@ export function useDeleteSubscriptionMutation(workspaceId?: number, userId?: str
     ...optimisticDelete<SubscriptionDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
       ...snap,
       subscriptions: snap.subscriptions.filter((s) => s.id !== input.subscriptionId),
+    })),
+  });
+}
+
+export function useCreateRecurringIncomeMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: RecurringIncomeMutationInput) => {
+      const client = getClient();
+      const { error } = await client.from("recurring_income").insert({
+        workspace_id: input.workspaceId,
+        created_by_user_id: input.userId,
+        ...buildRecurringIncomeMutationPayload(input, input.userId),
+      });
+
+      if (error) {
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+      }
+    },
+  });
+}
+
+export function useUpdateRecurringIncomeMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: RecurringIncomeUpdateInput) => {
+      const client = getClient();
+      const { error } = await client
+        .from("recurring_income")
+        .update(buildRecurringIncomeMutationPayload(input, input.userId))
+        .eq("id", input.recurringIncomeId)
+        .eq("workspace_id", input.workspaceId);
+
+      if (error) {
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+      }
+    },
+  });
+}
+
+export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: RecurringIncomeDeleteInput) => {
+      const client = getClient();
+      const { error } = await client
+        .from("recurring_income")
+        .delete()
+        .eq("id", input.recurringIncomeId)
+        .eq("workspace_id", input.workspaceId);
+
+      if (error) {
+        throw error;
+      }
+    },
+    ...optimisticDelete<RecurringIncomeDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
+      ...snap,
+      recurringIncome: snap.recurringIncome.filter((r) => r.id !== input.recurringIncomeId),
     })),
   });
 }

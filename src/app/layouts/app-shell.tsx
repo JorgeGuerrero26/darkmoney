@@ -18,6 +18,7 @@ import {
   Settings,
   Shapes,
   Sparkles,
+  TrendingUp,
   Users,
   Wallet,
   X,
@@ -63,6 +64,7 @@ const navigation = [
   { to: "/app/contacts", label: "Contactos", icon: Users },
   { to: "/app/obligations", label: "Créditos y deudas", icon: HandCoins },
   { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
+  { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
   { to: "/app/notifications", label: "Notificaciones", icon: Bell },
   { to: "/app/settings", label: "Configuración", icon: Settings },
 ];

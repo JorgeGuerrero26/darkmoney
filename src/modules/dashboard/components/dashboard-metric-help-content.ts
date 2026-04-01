@@ -39,6 +39,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     paragraphs: [
       "Aquí eliges la densidad de información: vista simple (solo lo esencial) o avanzada (widgets extra como riesgo, monedas, suscripciones y aprendizaje).",
       "También puedes mostrar u ocultar cada widget. La preferencia se guarda en tu navegador para que al volver veas el mismo tablero.",
+      "Junto al selector de período verás pastillas de categoría, tipo de cuenta y un resumen de filtros activos: categoría y cuenta (elegida en Dinero por cuenta) recortan los movimientos que alimentan las gráficas de tendencia y el ritmo semanal; el tipo de cuenta solo acorta la lista del desglose de cuentas.",
+      "Los KPI principales del resumen (dinero total, ingresos/gastos/ahorro del período, patrimonio ampliado en vista avanzada, etc.) siempre usan el período completo: no se alteran al activar ese filtro cruzado.",
     ],
     bullets: [
       "Simple: menos bloques, lectura más rápida.",
@@ -121,32 +123,72 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   kpi_active_subscriptions: a({
     title: "Suscripciones activas",
     paragraphs: [
-      "Cantidad de suscripciones marcadas como activas y el costo mensual aproximado que calculamos a partir de ellas.",
-      "Útil para ver el peso de lo recurrente frente a gastos one-shot.",
+      "Cuenta cuántas suscripciones están en estado activo y muestra un costo mensual recurrente aproximado: la app normaliza cada monto a equivalente mensual según la frecuencia (diaria, semanal, mensual, etc.) y los suma.",
+      "Sirve para ver el peso de lo recurrente frente a gastos puntuales del período.",
     ],
   }),
 
-  kpi_upcoming_payments: a({
-    title: "Pagos próximos",
+  kpi_recurring_income: a({
+    title: “Ingresos fijos activos”,
     paragraphs: [
-      "Monto agregado de compromisos (cuotas, suscripciones u obligaciones) que vencen en la ventana cercana que usa el dashboard.",
-      "Te ayuda a dimensionar la salida de efectivo antes de que ocurra.",
+      “Cuenta los ingresos recurrentes en estado activo (sueldos, alquileres cobrados, honorarios fijos, etc.) y muestra la entrada mensual recurrente estimada: la app normaliza cada monto a equivalente mensual según la frecuencia configurada y los suma.”,
+      “Sirve para ver cuánto de tu ingreso mensual ya está comprometido y garantizado antes de cualquier movimiento variable.”,
+    ],
+    healthyRange: “Idealmente el ingreso recurrente cubre tus gastos fijos más un margen de ahorro.”,
+  }),
+
+  kpi_upcoming_payments: a({
+    title: “Pagos próximos”,
+    paragraphs: [
+      “Suma los importes de obligaciones por pagar y de suscripciones activas cuyo vencimiento cae entre hoy y los próximos 30 días, usando el saldo pendiente registrado.”,
+      “No incluye partidas marcadas como “Por cobrar” ni ingresos fijos esperados (eso sería entrada esperada, no salida).”,
+      “En “Lo que viene” solo se listan hasta seis ítems por fecha; el número de esta tarjeta agrega todos los que entran en la ventana.”,
     ],
   }),
 
   kpi_overdue: a({
     title: "Vencido",
     paragraphs: [
-      "Suma de montos en obligaciones que ya pasaron su fecha o están en situación vencida según tus registros.",
-      "Prioridad operativa: conviene revisar esas partidas y registrar pagos o acuerdos.",
+      "Suma el saldo pendiente de obligaciones del workspace cuya fecha de vencimiento ya pasó (respecto a hoy) y que aún tienen monto pendiente.",
+      "No refleja por sí solo la cartera compartida en solo lectura: prioriza lo que tú gestionas en tu espacio.",
     ],
   }),
 
   kpi_transferred: a({
     title: "Transferido",
     paragraphs: [
-      "Total movido entre tus propias cuentas en el período (transferencias internas).",
-      "No es gasto ni ingreso “nuevo”: reorganiza dónde está el dinero. Aun así importa para ver actividad y flujo entre cuentas.",
+      "Total movido entre tus propias cuentas en el período activo del dashboard (movimientos contabilizados como transferencia).",
+      "No es gasto ni ingreso nuevo para el resultado del período: solo cambia dónde está el dinero; igual ayuda a ver qué tan activo estás moviendo saldos entre cuentas.",
+    ],
+  }),
+
+  kpi_savings_rate: a({
+    title: "Capacidad de ahorro (%)",
+    paragraphs: [
+      "Misma idea que “Capacidad de ahorro” en el bloque avanzado: qué parte de tus ingresos del período seleccionado quedó como ahorro neto después de restar gastos aplicados.",
+      "Fórmula: (Ingresos del período − Gastos del período) ÷ Ingresos del período, en porcentaje. Si no hay ingresos o el resultado no es válido, verás “Sin dato”.",
+      "La tarjeta de Salud usa umbrales orientativos (por ejemplo sano por encima del ~10%); son guías, no reglas absolutas.",
+    ],
+    example: "Ingresos del mes S/ 4 000, gastos S/ 3 360 → ahorro neto S/ 640 → capacidad 16%.",
+    chart: "savings-capacity",
+  }),
+
+  kpi_coverage_months: a({
+    title: "Cobertura (meses)",
+    paragraphs: [
+      "Estima cuántos meses podrías cubrir con tu liquidez “conservadora” si el gasto reciente del workspace se mantuviera parecido.",
+      "Combina saldos líquidos (efectivo, banco, ahorros tratados como caja) con una referencia de gasto mensual reciente. Si falta gasto o datos, muestra “Sin dato”.",
+      "Valores en torno a 3 meses o más suelen interpretarse como colchón razonable en la tarjeta de Salud; depende de tu situación.",
+    ],
+    example: "Liquidez conservadora S/ 9 000 y gasto mensual de referencia S/ 3 000 → unos 3 meses de cobertura.",
+  }),
+
+  kpi_debt_income: a({
+    title: "Ratio deuda / ingreso",
+    paragraphs: [
+      "Relación entre pasivo relevante (lo que debes en obligaciones y deudas que el modelo considera) y los ingresos del período seleccionado.",
+      "Un porcentaje alto indica que gran parte de lo que entra ya está comprometida con deuda; uno bajo deja más margen operativo.",
+      "La tarjeta suele marcar como “sano” un valor por debajo del ~40%; es orientativo.",
     ],
   }),
 
@@ -162,7 +204,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   adv_liquidity: a({
     title: "Liquidez disponible",
     paragraphs: [
-      "Dinero en perfiles que consideramos listos para usar: efectivo, bancos operativos y ahorros líquidos, según cómo clasificaste tus cuentas.",
+      "En el resumen, el bloque de liquidez junta: total en cuentas que cuentas como líquidas, desglose por tipo (efectivo, banco, ahorro), “dinero libre real” (liquidez menos salidas previstas en ~30 días) y una caja estimada a 30 días.",
+      "Cada subtarjeta usa la misma clasificación de cuentas que definiste: efectivo, banco y ahorros tratados como caja disponible.",
     ],
   }),
 
@@ -188,10 +231,10 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 
   adv_projected_cash_30: a({
-    title: "Caja proyectada (30 días)",
+    title: "Caja estimada a 30 días",
     paragraphs: [
-      "Estimación de saldo líquido dentro de unos 30 días tomando entradas y salidas esperadas según compromisos y movimientos programados que el sistema conoce.",
-      "Es una guía, no un pronóstico perfecto: si faltan datos, la proyección se aparta de la realidad.",
+      "Parte de tu liquidez actual y suma o resta cobros y pagos esperados en ~30 días según obligaciones y suscripciones en ventana, más ingresos y gastos de movimientos programados que la app ya tiene cargados.",
+      "Es orientativa: si falta registrar algo, el número se desvía de lo que pasará en la vida real.",
     ],
   }),
 
@@ -205,14 +248,16 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   shared_principal: a({
     title: "Principal compartido",
     paragraphs: [
-      "Saldo base agregado de esos registros compartidos. Representa la magnitud de lo que estás observando del lado del otro usuario.",
+      "Suma el capital (monto base) registrado en obligaciones que otro usuario te compartió en solo lectura.",
+      "No es un saldo tuyo: sirve como contexto del tamaño original del crédito o préstamo en la cartera ajena.",
     ],
   }),
 
   shared_pending: a({
     title: "Pendiente compartido",
     paragraphs: [
-      "Exposición viva aún no saldada dentro de la cartera compartida: lo que sigue “abierto” en esos créditos/deudas.",
+      "Agrega lo que en esos mismos registros compartidos sigue sin pagarse ni cobrarse por completo (saldo pendiente).",
+      "Solo lectura y aparte de tus KPI del workspace, para no mezclar “tuyo” con “visto por compartido”.",
     ],
   }),
 
@@ -241,7 +286,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   adv_avg_monthly_savings: a({
     title: "Ahorro mensual medio",
     paragraphs: [
-      "Promedio del resultado neto (ingresos − gastos) de cada mes que aparece en tu “Pulso mensual” (hasta los últimos seis meses con datos).",
+      "Promedio del resultado neto (ingresos − gastos) de cada mes que aparece en tu “Pulso mensual” (hasta los últimos seis meses con datos). Ese pulso se calcula con todos los movimientos aplicados; no aplica el filtro cruzado de categoría/cuenta del encabezado.",
       "La frase “Capacidad actual X%” NO es el promedio de esos meses: es otra métrica del período que estás comparando arriba (Hoy/Semana/Mes…).",
     ],
     bullets: [
@@ -294,12 +339,14 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   widget_savings_trend: a({
     title: "Cronológicos del período",
     paragraphs: [
-      "Curvas día a día dentro del período elegido. Puedes alternar entre ahorro neto, gastos acumulados, ingresos acumulados y transferencias acumuladas.",
+      "Curvas día a día dentro del período elegido en el selector superior (Hoy / Semana / Mes / Últimos 30 días). Puedes alternar entre ahorro neto, gastos acumulados, ingresos acumulados y transferencias acumuladas.",
       "La línea comparativa usa el día homólogo del período anterior para ver si el ritmo mejora o empeora.",
+      "Si activaste filtro de categoría o de cuenta (desde las pastillas del encabezado o desde Comparativo por categorías / Dinero por cuenta), estas curvas solo usan movimientos que cumplen ese cruce; el aviso dorado encima del gráfico lo recuerda.",
     ],
     bullets: [
       "Toca un día para ver movimientos concretos que lo explican.",
       "Transferencias mueven dinero entre cuentas; no siempre implican gasto del mundo real.",
+      "Filtro por cuenta: se consideran movimientos donde esa cuenta es origen o destino.",
     ],
   }),
 
@@ -307,6 +354,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     title: "Radar del período",
     paragraphs: [
       "Resumen ejecutivo: categoría que más pesa ahora, cómo era antes, dónde hay “fuga” respecto al período previo y qué día defendiste mejor tu caja.",
+      "Los cuatro recuadros se calculan con el comparativo completo del período (misma ventana que el selector arriba). No aplican el filtro cruzado de categoría/cuenta del encabezado: ese filtro solo afecta a Cronológicos del período y Ritmo semanal.",
     ],
   }),
 
@@ -345,6 +393,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     paragraphs: [
       "Distribución de saldos y cuánta actividad tuvo cada cuenta en el período. La barra muestra participación sobre el total visible.",
       "Puedes ver si una cuenta está incluida o fuera del patrimonio neto según tu configuración.",
+      "Al tocar una fila activas o quitas el filtro de tendencia para esa cuenta: las gráficas de Cronológicos del período y Ritmo semanal pasan a usar solo movimientos que pasan por esa cuenta (origen o destino). El tipo de cuenta del encabezado solo acorta esta lista, no cambia esas gráficas.",
     ],
   }),
 
@@ -367,6 +416,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     paragraphs: [
       "Para cada categoría con gasto: monto del período actual, monto del período de referencia y la diferencia (delta).",
       "Las barras comparan visualmente magnitudes; el delta numérico dice si gastaste más o menos que antes.",
+      "Los importes de esta tabla siempre miran el período completo (no se recortan por el filtro cruzado). Al tocar una fila —o la misma categoría en las pastillas del encabezado— activas el filtro de tendencia: recalculan Cronológicos del período y Ritmo semanal con solo los movimientos de esa categoría (y cuenta, si además elegiste una en Dinero por cuenta).",
     ],
     chart: "category-compare",
   }),
@@ -374,7 +424,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   widget_monthly_pulse: a({
     title: "Pulso mensual",
     paragraphs: [
-      "Hasta seis meses recientes con ingresos, gastos y resultado neto por mes. Selecciona un mes para ver el detalle en el panel derecho.",
+      "Hasta seis meses recientes con ingresos, gastos y resultado neto por mes calendario. Selecciona un mes para ver el detalle en el panel derecho.",
+      "La serie se arma con todos los movimientos aplicados del workspace (no aplica el filtro cruzado de categoría/cuenta del encabezado). Ese filtro solo afecta a Cronológicos del período y Ritmo semanal.",
     ],
     bullets: [
       "Barras verdes: entradas del mes.",
@@ -423,7 +474,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   widget_weekly_pattern: a({
     title: "Ritmo semanal",
     paragraphs: [
-      "Agrega ingresos y gastos por día de la semana dentro del período. Sirve para ver si los fines de semana o ciertos días concentran el gasto.",
+      "Agrega ingresos y gastos por día de la semana dentro del período seleccionado arriba. Sirve para ver si los fines de semana o ciertos días concentran el gasto.",
+      "Respeta el mismo filtro cruzado de categoría y cuenta que Cronológicos del período: si hay filtro activo, solo entran movimientos que coinciden.",
     ],
     example: "Los sábados siempre en rojo → quizá ahí conviene planificar tope o anticipar compras.",
   }),
@@ -431,7 +483,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   widget_upcoming_recent: a({
     title: "Lo que viene y lo que movió tu período",
     paragraphs: [
-      "Columna izquierda: compromisos próximos (cuotas, suscripciones, cobros esperados). Columna derecha: últimos movimientos aplicados que explican el período.",
+      "Columna izquierda: compromisos próximos (cuotas, suscripciones, cobros esperados) en una ventana fija de unos 30 días desde hoy, independiente del preset de comparación del encabezado.",
+      "Columna derecha: movimientos aplicados recientes que ayudan a contextualizar el período que estás comparando arriba.",
     ],
   }),
 
@@ -677,7 +730,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     title: "Centro de salud financiera",
     paragraphs: [
       "Síntesis de liquidez ajustada, capacidad de ahorro, cobertura de meses con gasto actual, ratio deuda/ingreso y próximos pagos/cobros.",
-      "Va de la mano de los KPI inferiores pero los interpreta en un solo relato.",
+      "Va de la mano de los KPI del resumen (en vista simple verás parte de ellos en la tarjeta Salud) pero aquí los agrupa con texto orientativo.",
+      "No usa el filtro cruzado de categoría/cuenta del encabezado: los ratios se calculan con la lógica global del workspace y el período del selector.",
     ],
   }),
 
@@ -740,7 +794,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     ],
     bullets: [
       "Las acciones se ordenan por urgencia aproximada; no sustituyen el módulo completo de alertas.",
-      "La cierre de mes extrapola el neto diario del mes en curso: es orientativa.",
+      "El cierre de mes extrapola el neto diario del mes en curso: es orientativa.",
     ],
   }),
 
@@ -789,34 +843,62 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 };
 
-const SIMPLE_FALLBACK: DashboardMetricSimpleWords = {
-  paragraphs: [
-    "Este bloque muestra un número o mensaje sobre tu dinero en el dashboard.",
-    "Todavía estamos completando la explicación más sencilla para este indicador. Leé el texto de arriba: si una palabra suena rara, fijate en el título del bloque en la pantalla principal.",
-  ],
-};
-
-export function getDashboardMetricHelp(metricId: string): DashboardMetricHelpResolved {
-  const found = DASHBOARD_METRIC_HELP[metricId];
-  const simple = DASHBOARD_HELP_SIMPLE_WORDS[metricId] ?? SIMPLE_FALLBACK;
-
-  if (found) {
-    return {
-      ...found,
-      simpleWords: found.simpleWords ?? simple,
-    };
-  }
-
+function simpleWordsFromArticle(article: DashboardMetricArticle): DashboardMetricSimpleWords {
   return {
-    title: "Indicador",
-    paragraphs: [
-      "Todavía no tenemos una guía detallada para este bloque. Mientras tanto, revisa el subtítulo del widget en el dashboard o la sección correspondiente en la app.",
-    ],
-    simpleWords: simple,
+    paragraphs:
+      article.paragraphs.length > 0
+        ? [...article.paragraphs]
+        : [`“${article.title}” es un dato de tu tablero; arriba está la explicación detallada.`],
+    bullets: article.bullets ? [...article.bullets] : undefined,
+    example: article.example,
   };
 }
 
-/** Catálogo para documentación: id interno y etiqueta visible. */
+const UNKNOWN_METRIC_SIMPLE: DashboardMetricSimpleWords = {
+  paragraphs: [
+    "Este número lo arma la app con tus movimientos, saldos y el período que elegiste arriba (hoy, semana, mes, etc.).",
+    "Si no coincide con lo que esperás, revisá que los movimientos estén aplicados y que las fechas del filtro sean las correctas.",
+  ],
+};
+
+function unknownMetricArticle(metricId: string): DashboardMetricArticle {
+  const raw =
+    metricId.length > 0
+      ? metricId
+          .split("_")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ")
+      : "Indicador";
+  return {
+    title: raw,
+    paragraphs: [
+      "Este indicador resume un valor calculado con los datos del workspace activo y el mismo período que usás en el selector de fechas del dashboard.",
+      "Si el resultado sorprende, conviene revisar movimientos pendientes de aplicar, categorías vacías o el rango de fechas antes de concluir que hay un error del sistema.",
+    ],
+  };
+}
+
+export function getDashboardMetricHelp(metricId: string): DashboardMetricHelpResolved {
+  const found = DASHBOARD_METRIC_HELP[metricId];
+  if (found) {
+    const simple =
+      found.simpleWords ??
+      DASHBOARD_HELP_SIMPLE_WORDS[metricId] ??
+      simpleWordsFromArticle(found);
+    return { ...found, simpleWords: simple };
+  }
+
+  const article = unknownMetricArticle(metricId);
+  return {
+    ...article,
+    simpleWords: DASHBOARD_HELP_SIMPLE_WORDS[metricId] ?? UNKNOWN_METRIC_SIMPLE,
+  };
+}
+
+/**
+ * Catálogo para documentación: id interno y etiqueta visible.
+ * `scope` sigue los modos del dashboard: both = simple y avanzada; pro = solo avanzada; simple = solo simple.
+ */
 export const DASHBOARD_INDICATOR_CATALOG: Array<{
   id: string;
   label: string;
@@ -834,15 +916,19 @@ export const DASHBOARD_INDICATOR_CATALOG: Array<{
   { id: "kpi_real_free_money", label: "Dinero libre real", scope: "both" },
   { id: "kpi_avg_daily_spend", label: "Promedio diario", scope: "both" },
   { id: "kpi_active_subscriptions", label: "Suscripciones activas", scope: "both" },
+  { id: "kpi_recurring_income", label: "Ingresos fijos activos", scope: "both" },
   { id: "kpi_upcoming_payments", label: "Pagos próximos", scope: "both" },
   { id: "kpi_overdue", label: "Vencido", scope: "both" },
   { id: "kpi_transferred", label: "Transferido", scope: "both" },
-  { id: "adv_net_worth", label: "Patrimonio neto ampliado", scope: "pro" },
-  { id: "adv_liquidity", label: "Liquidez disponible", scope: "pro" },
-  { id: "adv_cash", label: "Efectivo", scope: "pro" },
-  { id: "adv_bank", label: "Bancos", scope: "pro" },
-  { id: "adv_savings", label: "Ahorros", scope: "pro" },
-  { id: "adv_projected_cash_30", label: "Caja proyectada 30 días", scope: "pro" },
+  { id: "kpi_savings_rate", label: "Capacidad de ahorro (%)", scope: "both" },
+  { id: "kpi_coverage_months", label: "Cobertura (meses)", scope: "both" },
+  { id: "kpi_debt_income", label: "Ratio deuda / ingreso", scope: "both" },
+  { id: "adv_net_worth", label: "Patrimonio neto ampliado", scope: "both" },
+  { id: "adv_liquidity", label: "Liquidez disponible", scope: "both" },
+  { id: "adv_cash", label: "Efectivo", scope: "both" },
+  { id: "adv_bank", label: "Bancos", scope: "both" },
+  { id: "adv_savings", label: "Ahorros", scope: "both" },
+  { id: "adv_projected_cash_30", label: "Caja estimada (30 días)", scope: "both" },
   { id: "shared_portfolio", label: "Cartera compartida (tarjeta)", scope: "pro" },
   { id: "shared_principal", label: "Principal compartido", scope: "pro" },
   { id: "shared_pending", label: "Pendiente compartido", scope: "pro" },
@@ -850,7 +936,7 @@ export const DASHBOARD_INDICATOR_CATALOG: Array<{
   { id: "shared_payable", label: "Deudas compartidas", scope: "pro" },
   { id: "adv_avg_weekly_spend", label: "Gasto semanal medio", scope: "pro" },
   { id: "adv_avg_monthly_savings", label: "Ahorro mensual medio", scope: "pro" },
-  { id: "adv_savings_capacity", label: "Capacidad de ahorro (%)", scope: "pro" },
+  { id: "adv_savings_capacity", label: "Capacidad de ahorro (%)", scope: "both" },
   { id: "adv_top_account", label: "Cuenta con mayor saldo", scope: "pro" },
   { id: "adv_bottom_account", label: "Cuenta con menor saldo", scope: "pro" },
   { id: "adv_latest_income", label: "Último ingreso", scope: "pro" },
