@@ -22,9 +22,10 @@ import {
   Users,
   Wallet,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
 import { BrandLogo } from "../../components/ui/brand-logo";
@@ -55,7 +56,7 @@ import { useWorkspaceStore } from "../../stores/workspace-store";
 import type { Workspace } from "../../types/domain";
 import { PRO_ADMIN_EMAIL } from "../../modules/shared/use-pro-feature-access";
 
-const navigation = [
+const compactNavigation = [
   { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
   { to: "/app/accounts", label: "Cuentas", icon: Wallet },
   { to: "/app/movements", label: "Movimientos", icon: Gauge },
@@ -67,6 +68,73 @@ const navigation = [
   { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
   { to: "/app/notifications", label: "Notificaciones", icon: Bell },
   { to: "/app/settings", label: "Configuración", icon: Settings },
+];
+
+type NavigationItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+};
+
+type NavigationGroupId = "operations" | "planning" | "catalogs" | "relations" | "system";
+
+type NavigationGroup = {
+  id: NavigationGroupId;
+  title: string;
+  summary: string;
+  items: NavigationItem[];
+};
+
+const dashboardNavigationItem: NavigationItem = {
+  to: "/app",
+  label: "Dashboard",
+  icon: LayoutGrid,
+  end: true,
+};
+
+const navigationGroups: NavigationGroup[] = [
+  {
+    id: "operations",
+    title: "Operacion",
+    summary: "Cuentas, flujo y cobros",
+    items: [
+      { to: "/app/accounts", label: "Cuentas", icon: Wallet },
+      { to: "/app/movements", label: "Movimientos", icon: Gauge },
+      { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
+      { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
+    ],
+  },
+  {
+    id: "planning",
+    title: "Planeacion",
+    summary: "Presupuestos y seguimiento",
+    items: [{ to: "/app/budgets", label: "Presupuestos", icon: PiggyBank }],
+  },
+  {
+    id: "catalogs",
+    title: "Catalogos",
+    summary: "Base y clasificacion",
+    items: [
+      { to: "/app/categories", label: "Categorias", icon: Shapes },
+      { to: "/app/contacts", label: "Contactos", icon: Users },
+    ],
+  },
+  {
+    id: "relations",
+    title: "Relaciones",
+    summary: "Creditos y terceros",
+    items: [{ to: "/app/obligations", label: "Creditos y deudas", icon: HandCoins }],
+  },
+  {
+    id: "system",
+    title: "Sistema",
+    summary: "Alertas y ajustes",
+    items: [
+      { to: "/app/notifications", label: "Notificaciones", icon: Bell },
+      { to: "/app/settings", label: "Configuracion", icon: Settings },
+    ],
+  },
 ];
 
 const PRO_BANNER_DISMISS_PREFIX = "darkmoney.pro-banner.dismissed-until";
@@ -361,7 +429,9 @@ function AppShellContent() {
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
+  const [openNavigationGroup, setOpenNavigationGroup] = useState<NavigationGroupId | null>("operations");
   const { showToast } = useToast();
+  const location = useLocation();
   const navigate = useNavigate();
   const { profile, signOut, user } = useAuth();
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
@@ -393,6 +463,13 @@ function AppShellContent() {
   const normalizedBillingStatus = entitlementQuery.data?.billingStatus?.trim().toLowerCase() ?? null;
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
   const workspaceInitials = buildInitials(activeWorkspace?.name, "WS");
+  const activeNavigationGroup = useMemo(
+    () =>
+      navigationGroups.find((group) =>
+        group.items.some((item) => location.pathname === item.to),
+      )?.id ?? null,
+    [location.pathname],
+  );
   const workspaceErrorMessage = error
     ? getQueryErrorMessage(error, "No se pudieron cargar tus workspaces.")
     : "";
@@ -524,6 +601,12 @@ function AppShellContent() {
     setIsProBannerDismissed(Boolean(dismissedUntil && dismissedUntilTimestamp > Date.now()));
   }, [hasProAccess, user?.id]);
 
+  useEffect(() => {
+    if (activeNavigationGroup) {
+      setOpenNavigationGroup(activeNavigationGroup);
+    }
+  }, [activeNavigationGroup]);
+
   function handleDismissProBanner() {
     if (!user?.id) {
       setIsProBannerDismissed(true);
@@ -537,7 +620,7 @@ function AppShellContent() {
   }
 
   return (
-    <div className="min-h-screen bg-glow text-ink">
+    <div className="min-h-screen bg-glow text-ink lg:h-screen lg:overflow-hidden">
       <a className="skip-to-content" href="#main-content">
         Saltar al contenido principal
       </a>
@@ -550,23 +633,23 @@ function AppShellContent() {
         />
       ) : null}
 
-      <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:gap-5 lg:px-4 lg:py-4">
+      <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:h-full lg:min-h-0 lg:gap-5 lg:px-4 lg:py-4">
         <aside
           aria-label="Menú principal"
-          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-6 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:static lg:overflow-visible lg:translate-x-0 ${
+          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-5 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
             isSidebarCollapsed ? "lg:w-[118px] lg:px-4" : "lg:w-[296px] lg:px-5"
           }`}
         >
-          <div className="flex min-h-full flex-col">
+          <div className="flex h-full min-h-0 flex-col">
             <div
               className={`flex ${
-                isSidebarCollapsed ? "items-center gap-3 lg:flex-col lg:justify-start" : "items-start justify-between gap-4"
+                isSidebarCollapsed ? "items-center gap-3 lg:flex-col lg:justify-start" : "items-start justify-between gap-3"
               }`}
             >
               <div
-                className={`min-w-0 ${isSidebarCollapsed ? "hidden lg:flex lg:flex-col lg:items-center lg:gap-3" : "flex flex-1 flex-col items-start gap-4"}`}
+                className={`min-w-0 ${isSidebarCollapsed ? "hidden lg:flex lg:flex-col lg:items-center lg:gap-3" : "flex flex-1 items-center gap-3"}`}
               >
                 {isSidebarCollapsed ? (
                   <BrandLogo
@@ -574,14 +657,22 @@ function AppShellContent() {
                     imageClassName="scale-[1.02] object-[center_48%]"
                   />
                 ) : (
-                  <div className="flex w-full items-start justify-between gap-4">
+                  <div className="flex w-full items-center gap-3">
                     <BrandLogo
-                      className="h-28 w-28 rounded-[28px]"
+                      className="h-[74px] w-[74px] rounded-[22px]"
                       imageClassName="scale-[1.02] object-[center_48%]"
                     />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.68rem] uppercase tracking-[0.28em] text-storm/72">
+                        Dark Money
+                      </p>
+                      <p className="mt-1.5 max-w-[10.75rem] text-[0.92rem] leading-6 text-storm">
+                        Finanzas personales y compartidas en un solo sistema.
+                      </p>
+                    </div>
                     <button
                       aria-label="Colapsar menú lateral"
-                      className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
+                      className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
                       onClick={() => toggleSidebarCollapsed()}
                       title="Colapsar menú"
                       type="button"
@@ -590,14 +681,6 @@ function AppShellContent() {
                     </button>
                   </div>
                 )}
-                <div className={isSidebarCollapsed ? "hidden" : "min-w-0 max-w-[13rem]"}>
-                  <p className="text-[0.68rem] uppercase tracking-[0.28em] text-storm/72">
-                    Dark Money
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-storm">
-                    Finanzas personales y compartidas en un solo sistema.
-                  </p>
-                </div>
               </div>
 
               {isSidebarCollapsed ? (
@@ -622,8 +705,9 @@ function AppShellContent() {
               </button>
             </div>
 
-            <div className={`mt-6 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
-              <p className="mb-2 text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
+            <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+            <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+              <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
                 Workspace
               </p>
               <WorkspacePicker
@@ -639,7 +723,7 @@ function AppShellContent() {
             </div>
 
             <div
-              className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} glass-panel-soft mt-8 flex-col items-center gap-3 rounded-[30px] px-3 py-4 text-center`}
+              className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} glass-panel-soft mt-6 flex-col items-center gap-3 rounded-[30px] px-3 py-4 text-center`}
               title={
                 activeWorkspace
                   ? `${activeWorkspace.name} · ${activeWorkspace.kind} · ${activeWorkspace.role}`
@@ -664,8 +748,8 @@ function AppShellContent() {
               </div>
             </div>
 
-            <nav aria-label="Navegación principal" className="mt-8 space-y-2">
-              {navigation.map((item) => {
+            <nav aria-label="Navegación principal" className={isSidebarCollapsed ? "mt-8 space-y-2" : "hidden"}>
+              {compactNavigation.map((item) => {
                 const Icon = item.icon;
                 const isNotificationsItem = item.to === "/app/notifications";
                 return (
@@ -702,7 +786,98 @@ function AppShellContent() {
               })}
             </nav>
 
-            <div className={`mt-auto rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] p-4 backdrop-blur-2xl ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+            {!isSidebarCollapsed ? (
+              <nav aria-label="Navegacion principal agrupada" className="mt-8 space-y-3">
+                <NavLink
+                  className={({ isActive }) =>
+                    `group flex items-center gap-3 rounded-[22px] px-4 py-3 text-sm font-semibold transition ${
+                      isActive
+                        ? "bg-white/[0.08] text-ink ring-1 ring-white/12"
+                        : "text-storm hover:bg-white/[0.04] hover:text-ink"
+                    }`
+                  }
+                  end={dashboardNavigationItem.end}
+                  onClick={() => setSidebarOpen(false)}
+                  to={dashboardNavigationItem.to}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  <span>{dashboardNavigationItem.label}</span>
+                </NavLink>
+
+                {navigationGroups.map((group) => {
+                  const isGroupActive = group.items.some((item) => location.pathname === item.to);
+                  const isOpen = openNavigationGroup === group.id;
+
+                  return (
+                    <div
+                      className={`overflow-hidden rounded-[24px] border transition ${
+                        isGroupActive || isOpen
+                          ? "border-white/10 bg-white/[0.035]"
+                          : "border-white/[0.04] bg-transparent"
+                      }`}
+                      key={group.id}
+                    >
+                      <button
+                        className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
+                          isGroupActive || isOpen ? "text-ink" : "text-storm hover:bg-white/[0.03] hover:text-ink"
+                        }`}
+                        onClick={() =>
+                          setOpenNavigationGroup((current) => (current === group.id ? null : group.id))
+                        }
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">{group.title}</span>
+                          <span className="mt-1 block text-[0.68rem] uppercase tracking-[0.18em] text-storm/75">
+                            {group.summary}
+                          </span>
+                        </span>
+                        <ChevronDown
+                          className={`h-4 w-4 shrink-0 transition ${isOpen ? "rotate-180 text-ink" : "text-storm/70"}`}
+                        />
+                      </button>
+
+                      {isOpen ? (
+                        <div className="border-t border-white/8 px-2 pb-2 pt-2">
+                          {group.items.map((item) => {
+                            const Icon = item.icon;
+                            const isNotificationsItem = item.to === "/app/notifications";
+
+                            return (
+                              <NavLink
+                                className={({ isActive }) =>
+                                  `group mt-1 flex items-center gap-3 rounded-[18px] px-3 py-2.5 text-sm transition ${
+                                    isActive
+                                      ? "bg-white/[0.08] text-ink ring-1 ring-white/10"
+                                      : "text-storm hover:bg-white/[0.04] hover:text-ink"
+                                  }`
+                                }
+                                key={item.to}
+                                onClick={() => setSidebarOpen(false)}
+                                to={item.to}
+                              >
+                                <span className="relative inline-flex">
+                                  <Icon className="h-4 w-4" />
+                                  {isNotificationsItem && unreadNotificationsCount > 0 ? (
+                                    <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ff6b7a] px-1 text-[9px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.35)]">
+                                      {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span>{item.label}</span>
+                              </NavLink>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </nav>
+            ) : null}
+            </div>
+
+            <div className={`mt-6 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] p-4 backdrop-blur-2xl ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
               <div className="flex items-center gap-3">
                 <IdentityAvatar
                   imageUrl={profile?.avatarUrl}
@@ -742,7 +917,7 @@ function AppShellContent() {
               </div>
             </div>
 
-            <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-auto flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] px-3 py-4 backdrop-blur-2xl`}>
+            <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-6 flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] px-3 py-4 backdrop-blur-2xl`}>
               <IdentityAvatar
                 imageUrl={profile?.avatarUrl}
                 initials={currentUserInitials}
@@ -765,7 +940,7 @@ function AppShellContent() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0" id="main-content" tabIndex={-1}>
+        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1" id="main-content" tabIndex={-1}>
           <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] p-4">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">

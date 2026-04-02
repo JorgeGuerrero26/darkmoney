@@ -7,14 +7,13 @@ import {
   PencilLine,
   PiggyBank,
   Plus,
-  ReceiptText,
   RefreshCw,
   Search,
   Trash2,
   Wallet,
   X,
 } from "lucide-react";
-import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
+import type { FormEvent, InputHTMLAttributes } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
@@ -52,6 +51,16 @@ type EditorMode = "create" | "edit";
 type ScopeFilter = "all" | BudgetOverview["scopeKind"];
 type StatusFilter = "all" | "active" | "critical" | "inactive";
 type BudgetScopeKind = BudgetOverview["scopeKind"];
+type BudgetTableFilters = {
+  name: string;
+  scope: ScopeFilter;
+  status: StatusFilter;
+  currentOnly: boolean;
+  period: string;
+  limit: string;
+  spent: string;
+  remaining: string;
+};
 
 type BudgetFormState = {
   name: string;
@@ -972,25 +981,6 @@ function BudgetEditorDialog({
   );
 }
 
-
-function StatCard({
-  description,
-  title,
-  value,
-}: {
-  description: string;
-  title: string;
-  value: ReactNode;
-}) {
-  return (
-    <div className="glass-panel-soft rounded-[26px] p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
-      <p className="mt-3 font-display text-3xl font-semibold text-ink">{value}</p>
-      <p className="mt-2 text-sm leading-7 text-storm">{description}</p>
-    </div>
-  );
-}
-
 function BudgetsLoadingSkeleton() {
   return (
     <>
@@ -1001,6 +991,40 @@ function BudgetsLoadingSkeleton() {
         ))}
       </div>
     </>
+  );
+}
+
+const defaultBudgetTableFilters = (): BudgetTableFilters => ({
+  name: "",
+  scope: "all",
+  status: "all",
+  currentOnly: true,
+  period: "",
+  limit: "",
+  spent: "",
+  remaining: "",
+});
+
+function BudgetSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "info" | "warning";
+  value: string;
+}) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+  } as const;
+
+  return (
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
   );
 }
 
@@ -1057,10 +1081,6 @@ export function BudgetsPage() {
 
   const [pageFeedback, setPageFeedback] = useState<FeedbackState | null>(null);
   const [editorFeedback, setEditorFeedback] = useState<FeedbackState | null>(null);
-  const [search, setSearch] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [showCurrentOnly, setShowCurrentOnly] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -1084,13 +1104,17 @@ export function BudgetsPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   const budgetColumns: ColumnDef[] = [
+    { key: "alcance", label: "Alcance" },
     { key: "periodo", label: "Período" },
     { key: "limite", label: "Límite" },
     { key: "consumido", label: "Consumido" },
     { key: "restante", label: "Restante" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-budgets", budgetColumns);
-  const [viewMode, setViewMode] = useViewMode("budgets");
+  const [viewMode, setViewMode] = useViewMode("budgets", "table");
+  const [budgetFilters, setBudgetFilters] = useState<BudgetTableFilters>(() =>
+    defaultBudgetTableFilters(),
+  );
   const [formState, setFormState] = useState<BudgetFormState>(() =>
     createDefaultFormState(activeWorkspace),
   );
@@ -1151,9 +1175,22 @@ export function BudgetsPage() {
   );
   const selectedBudget = displayBudgets.find((budget) => budget.id === selectedBudgetId) ?? null;
   const deleteTarget = displayBudgets.find((budget) => budget.id === deleteTargetId) ?? null;
+  const hasActiveFilters =
+    budgetFilters.name.trim() !== "" ||
+    budgetFilters.scope !== "all" ||
+    budgetFilters.status !== "all" ||
+    budgetFilters.currentOnly !== true ||
+    budgetFilters.period.trim() !== "" ||
+    budgetFilters.limit.trim() !== "" ||
+    budgetFilters.spent.trim() !== "" ||
+    budgetFilters.remaining.trim() !== "";
 
   const filteredBudgets = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = budgetFilters.name.trim().toLowerCase();
+    const normalizedPeriod = budgetFilters.period.trim().toLowerCase();
+    const normalizedLimit = budgetFilters.limit.trim();
+    const normalizedSpent = budgetFilters.spent.trim();
+    const normalizedRemaining = budgetFilters.remaining.trim();
 
     return [...displayBudgets]
       .filter((budget) => {
@@ -1161,37 +1198,62 @@ export function BudgetsPage() {
           return false;
         }
 
-        if (scopeFilter !== "all" && budget.scopeKind !== scopeFilter) {
+        if (budgetFilters.scope !== "all" && budget.scopeKind !== budgetFilters.scope) {
           return false;
         }
 
-        if (statusFilter === "active" && !budget.isActive) {
+        if (budgetFilters.status === "active" && !budget.isActive) {
           return false;
         }
 
-        if (statusFilter === "critical" && !(budget.isNearLimit || budget.isOverLimit)) {
+        if (budgetFilters.status === "critical" && !(budget.isNearLimit || budget.isOverLimit)) {
           return false;
         }
 
-        if (statusFilter === "inactive" && budget.isActive) {
+        if (budgetFilters.status === "inactive" && budget.isActive) {
           return false;
         }
 
-        if (showCurrentOnly && !isBudgetCurrent(budget)) {
+        if (budgetFilters.currentOnly && !isBudgetCurrent(budget)) {
           return false;
         }
 
-        if (!normalizedSearch) {
-          return true;
+        if (
+          normalizedSearch &&
+          !(
+            budget.name.toLowerCase().includes(normalizedSearch) ||
+            budget.scopeLabel.toLowerCase().includes(normalizedSearch) ||
+            (budget.categoryName ?? "").toLowerCase().includes(normalizedSearch) ||
+            (budget.accountName ?? "").toLowerCase().includes(normalizedSearch) ||
+            (budget.notes ?? "").toLowerCase().includes(normalizedSearch)
+          )
+        ) {
+          return false;
         }
 
-        return (
-          budget.name.toLowerCase().includes(normalizedSearch) ||
-          budget.scopeLabel.toLowerCase().includes(normalizedSearch) ||
-          (budget.categoryName ?? "").toLowerCase().includes(normalizedSearch) ||
-          (budget.accountName ?? "").toLowerCase().includes(normalizedSearch) ||
-          (budget.notes ?? "").toLowerCase().includes(normalizedSearch)
-        );
+        if (normalizedPeriod) {
+          const formattedPeriod =
+            `${formatDate(budget.periodStart)} ${formatDate(budget.periodEnd)}`.toLowerCase();
+          const rawPeriod = `${budget.periodStart} ${budget.periodEnd}`.toLowerCase();
+
+          if (!formattedPeriod.includes(normalizedPeriod) && !rawPeriod.includes(normalizedPeriod)) {
+            return false;
+          }
+        }
+
+        if (normalizedLimit && !String(budget.displayLimitAmount).includes(normalizedLimit)) {
+          return false;
+        }
+
+        if (normalizedSpent && !String(budget.displaySpentAmount).includes(normalizedSpent)) {
+          return false;
+        }
+
+        if (normalizedRemaining && !String(budget.displayRemainingAmount).includes(normalizedRemaining)) {
+          return false;
+        }
+
+        return true;
       })
       .sort((left, right) => {
         const leftScore =
@@ -1209,7 +1271,43 @@ export function BudgetsPage() {
           new Date(left.periodEnd).getTime() - new Date(right.periodEnd).getTime()
         );
       });
-  }, [displayBudgets, hiddenIds, scopeFilter, statusFilter, showCurrentOnly, search]);
+  }, [budgetFilters, displayBudgets, hiddenIds]);
+
+  useEffect(() => {
+    if (viewMode === "table") {
+      return;
+    }
+
+    setBudgetFilters((currentValue) => {
+      if (
+        !currentValue.period &&
+        !currentValue.limit &&
+        !currentValue.spent &&
+        !currentValue.remaining
+      ) {
+        return currentValue;
+      }
+
+      return {
+        ...currentValue,
+        period: "",
+        limit: "",
+        spent: "",
+        remaining: "",
+      };
+    });
+  }, [viewMode]);
+
+  function updateBudgetFilter<Field extends keyof BudgetTableFilters>(
+    field: Field,
+    value: BudgetTableFilters[Field],
+  ) {
+    setBudgetFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearBudgetFilters() {
+    setBudgetFilters(defaultBudgetTableFilters());
+  }
 
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredBudgets);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -1254,7 +1352,6 @@ export function BudgetsPage() {
   const criticalBudgets = currentActiveBudgets.filter(
     (budget) => budget.isNearLimit || budget.isOverLimit,
   );
-  const overLimitBudgets = currentActiveBudgets.filter((budget) => budget.isOverLimit);
   const topRiskBudgets = [...currentActiveBudgets]
     .sort((left, right) => right.usedPercent - left.usedPercent)
     .slice(0, 3);
@@ -1262,6 +1359,8 @@ export function BudgetsPage() {
     (total, budget) => total + budget.movementCount,
     0,
   );
+  const priorityBudget = topRiskBudgets[0] ?? null;
+  const showBudgetExplore = viewMode !== "table" && budgets.length > 0;
 
   function updateFormState<Field extends keyof BudgetFormState>(
     field: Field,
@@ -1560,31 +1659,186 @@ export function BudgetsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <PageHeader
-        actions={
-          <>
-            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-            {viewMode === "table" ? (
-              <ColumnPicker columns={budgetColumns} visible={colVis} onToggle={toggleCol} />
-            ) : null}
-            <Button
-              onClick={() =>
-                downloadBudgetsCSV(
-                  filteredBudgets,
-                  `presupuestos-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
+      <section className="glass-panel-strong rounded-[32px] p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">presupuestos</p>
+              <h2 className="font-display text-4xl font-semibold text-ink">Presupuestos por periodo</h2>
+              <p className="max-w-3xl text-sm leading-7 text-storm">
+                Entra directo a tu tabla de presupuestos. Cuando uses la vista tabla, los filtros viven
+                dentro de cada columna; en lista o tarjetas reaparece el explorador compacto para revisar
+                el periodo con mÃ¡s contexto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <BudgetSummaryChip label="vigentes" value={String(currentActiveBudgets.length)} />
+              <BudgetSummaryChip label="techo" tone="info" value={formatCurrency(totalLimitBase, displayCurrencyCode)} />
+              <BudgetSummaryChip label="consumido" tone="info" value={formatCurrency(totalSpentBase, displayCurrencyCode)} />
+              <BudgetSummaryChip
+                label="restante"
+                tone={totalRemainingBase < 0 ? "warning" : "info"}
+                value={formatCurrency(totalRemainingBase, displayCurrencyCode)}
+              />
+              <BudgetSummaryChip label="en alerta" tone="warning" value={String(criticalBudgets.length)} />
+              <BudgetSummaryChip label="movimientos" tone="info" value={String(totalTrackedMovements)} />
+              {snapshotQuery.isFetching ? <BudgetSummaryChip label="estado" value="Actualizando" /> : null}
+            </div>
+          </div>
+
+          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                <p className="text-sm leading-7 text-storm">
+                  Crea presupuestos, cambia de vista y exporta. En tabla filtras por columna; en otras
+                  vistas vuelve el explorador con filtros rÃ¡pidos.
+                </p>
+              </div>
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo presupuesto
+              </Button>
+              <Button
+                onClick={() =>
+                  downloadBudgetsCSV(
+                    filteredBudgets,
+                    `presupuestos-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+              {hasActiveFilters ? (
+                <Button onClick={clearBudgetFilters} variant="ghost">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar filtros
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={budgetColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <StatusBadge status={`${filteredBudgets.length} visibles`} tone="neutral" />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <button
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  budgetFilters.currentOnly
+                    ? "border-pine/30 bg-pine/10 text-pine"
+                    : "border-white/10 bg-white/[0.04] text-ink hover:border-white/16"
+                }`}
+                onClick={() => updateBudgetFilter("currentOnly", !budgetFilters.currentOnly)}
+                type="button"
+              >
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Periodo</p>
+                <p className="mt-2 text-sm font-semibold">
+                  {budgetFilters.currentOnly ? "Solo vigentes" : "Incluye historicos"}
+                </p>
+              </button>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Mayor presion</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {priorityBudget ? priorityBudget.name : "Todo despejado"}
+                </p>
+                <p className="mt-1 text-xs text-storm">
+                  {priorityBudget ? `${Math.round(priorityBudget.usedPercent)}% usado` : "Sin alertas por ahora"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{displayCurrencyCode}</p>
+                <p className="mt-1 text-xs text-storm">Resumen consolidado del workspace</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      {pageFeedback ? (
+        pageFeedback.tone === "error" ? (
+          <FormFeedbackBanner
+            description={pageFeedback.description}
+            tone={pageFeedback.tone}
+            title={pageFeedback.title}
+          />
+        ) : !isEditorOpen ? (
+          <DataState description={pageFeedback.description} title={pageFeedback.title} tone={pageFeedback.tone} />
+        ) : null
+      ) : null}
+
+      {showBudgetExplore ? (
+        <SurfaceCard
+          description="Busca por nombre y filtra por alcance o estado cuando prefieras recorrer la vista lista o tarjetas."
+          title="Explorar presupuestos"
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(220px,0.75fr)_minmax(220px,0.75fr)_auto_auto]">
+            <div className="relative min-w-[200px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+              <input
+                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                onChange={(event) => updateBudgetFilter("name", event.target.value)}
+                placeholder="Buscar por nombre, categoria, cuenta o notas..."
+                type="text"
+                value={budgetFilters.name}
+              />
+            </div>
+            <select
+              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(event) => updateBudgetFilter("scope", event.target.value as ScopeFilter)}
+              value={budgetFilters.scope}
             >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
+              {scopeFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(event) => updateBudgetFilter("status", event.target.value as StatusFilter)}
+              value={budgetFilters.status}
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              className="h-16 px-6"
+              onClick={() => updateBudgetFilter("currentOnly", !budgetFilters.currentOnly)}
+              variant={budgetFilters.currentOnly ? "secondary" : "ghost"}
+            >
+              {budgetFilters.currentOnly ? "Solo vigentes" : "Ver historicos"}
             </Button>
-            <Button onClick={openCreateEditor}>
-              <Plus className="h-4 w-4" />
-              Nuevo presupuesto
+            <Button className="h-16 px-6" onClick={clearBudgetFilters} variant={hasActiveFilters ? "secondary" : "ghost"}>
+              Limpiar filtros
             </Button>
-          </>
-        }
+          </div>
+        </SurfaceCard>
+      ) : null}
+
+      {/*
         description="Pon topes mensuales o por rango a tu gasto total, a una categoría, a una cuenta o al cruce de ambas."
         eyebrow="planificación"
         title="Presupuestos"
@@ -1765,10 +2019,13 @@ export function BudgetsPage() {
       </section>
       ) : null}
 
+      */}
+
+      {/*
       <SurfaceCard
         action={<StatusBadge status={`${filteredBudgets.length} visibles`} tone="info" />}
         description="Cada tarjeta te muestra el límite, lo consumido, el saldo restante y la presión del período."
-        title="Mantenedor de presupuestos"
+        title="Presupuestos registrados"
       >
         {filteredBudgets.length === 0 ? (
           <DataState
@@ -1776,15 +2033,7 @@ export function BudgetsPage() {
               budgets.length === 0 ? (
                 <Button onClick={openCreateEditor}>Crear primer presupuesto</Button>
               ) : (
-                <Button
-                  onClick={() => {
-                    setSearch("");
-                    setScopeFilter("all");
-                    setStatusFilter("all");
-                    setShowCurrentOnly(false);
-                  }}
-                  variant="ghost"
-                >
+                <Button onClick={clearBudgetFilters} variant="ghost">
                   Limpiar filtros
                 </Button>
               )
@@ -2002,6 +2251,441 @@ export function BudgetsPage() {
                     <Button onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">
                       <BarChart3 className="h-4 w-4" />
                       Ver análisis
+                    </Button>
+                    <Button onClick={() => openEditEditor(budget)} variant="ghost">
+                      <PencilLine className="h-4 w-4" />
+                      Editar
+                    </Button>
+                    <Button
+                      disabled={isToggling}
+                      onClick={() => void handleToggleBudget(budget)}
+                      variant="ghost"
+                    >
+                      {budget.isActive ? "Desactivar" : "Reactivar"}
+                    </Button>
+                    <Button
+                      className="border-white/10 text-[#ffb4bc] hover:border-[#ffb4bc]/30 hover:bg-[#ff9ca6]/10 hover:text-[#ffd3d8]"
+                      onClick={() => setDeleteTargetId(budget.id)}
+                      variant="ghost"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </SurfaceCard>
+      */}
+
+      <SurfaceCard
+        action={<StatusBadge status={`${filteredBudgets.length} visibles`} tone="info" />}
+        description="La tabla es la vista predeterminada del modulo. Cambia a lista o tarjetas si quieres recorrer cada presupuesto con mas contexto."
+        title="Presupuestos registrados"
+      >
+        {filteredBudgets.length === 0 ? (
+          <DataState
+            action={
+              budgets.length === 0 ? (
+                <Button onClick={openCreateEditor}>Crear primer presupuesto</Button>
+              ) : (
+                <Button onClick={clearBudgetFilters} variant="ghost">
+                  Limpiar filtros
+                </Button>
+              )
+            }
+            description={
+              budgets.length === 0
+                ? "Crea topes generales, por categoria, por cuenta o cruzando categoria y cuenta."
+                : "Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna."
+            }
+            title={budgets.length === 0 ? "Aun no has creado presupuestos" : "No encontramos coincidencias"}
+          />
+        ) : viewMode === "list" ? (
+          <div className="space-y-3">
+            {filteredBudgets.map((budget) => (
+              <article
+                className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16"
+                key={budget.id}
+              >
+                <SelectionCheckbox
+                  ariaLabel={`Seleccionar ${budget.name}`}
+                  checked={selectedIds.has(budget.id)}
+                  onChange={() => toggleSelect(budget.id)}
+                />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-pine">
+                  {budget.scopeKind === "account" || budget.scopeKind === "category_account" ? (
+                    <Wallet className="h-4 w-4" />
+                  ) : (
+                    <PiggyBank className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink">{budget.name}</p>
+                  <p className="text-xs text-storm">
+                    {budget.scopeLabel} · {formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}
+                  </p>
+                </div>
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="h-2 w-24 rounded-full bg-white/[0.08]">
+                    <div
+                      className={`h-full rounded-full ${budget.isOverLimit ? "bg-ember" : budget.isNearLimit ? "bg-gold" : "bg-pine"}`}
+                      style={{ width: `${Math.min(budget.usedPercent, 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-8 text-right text-xs text-storm">{Math.round(budget.usedPercent)}%</span>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p
+                    className={`font-display text-xl font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"}`}
+                  >
+                    {formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}
+                  </p>
+                  <p className="text-xs text-storm">
+                    de {formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}
+                  </p>
+                </div>
+                <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
+                <div className="flex shrink-0 gap-2">
+                  <Button className="py-1.5 text-xs" onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">
+                    Analisis
+                  </Button>
+                  <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">
+                    Editar
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="overflow-x-auto rounded-[24px] border border-white/10">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.02]">
+                  <th className="w-10 px-4 py-3.5">
+                    <SelectionCheckbox
+                      ariaLabel="Seleccionar todos"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={allSelected ? clearAll : selectAll}
+                    />
+                  </th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">
+                    Presupuesto
+                  </th>
+                  <th
+                    className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("alcance", "hidden sm:table-cell")}`}
+                  >
+                    Alcance
+                  </th>
+                  <th
+                    className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("periodo", "hidden lg:table-cell")}`}
+                  >
+                    Periodo
+                  </th>
+                  <th
+                    className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("limite")}`}
+                  >
+                    Limite
+                  </th>
+                  <th
+                    className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("consumido")}`}
+                  >
+                    Consumido
+                  </th>
+                  <th
+                    className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("restante")}`}
+                  >
+                    Restante
+                  </th>
+                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">
+                    Estado
+                  </th>
+                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">
+                    Acciones
+                  </th>
+                </tr>
+                <tr className="border-b border-white/10 bg-[#0c1522]">
+                  <th className="px-4 py-3" />
+                  <th className="px-5 py-3">
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("name", event.target.value)}
+                      placeholder="Filtrar presupuesto"
+                      type="text"
+                      value={budgetFilters.name}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("alcance", "hidden sm:table-cell")}`}>
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("scope", event.target.value as ScopeFilter)}
+                      value={budgetFilters.scope}
+                    >
+                      {scopeFilterOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className={`px-5 py-3 ${cv("periodo", "hidden lg:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("period", event.target.value)}
+                      placeholder="Filtrar periodo"
+                      type="text"
+                      value={budgetFilters.period}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("limite")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("limit", event.target.value)}
+                      placeholder="Limite"
+                      type="text"
+                      value={budgetFilters.limit}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("consumido")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("spent", event.target.value)}
+                      placeholder="Consumido"
+                      type="text"
+                      value={budgetFilters.spent}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("restante")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("remaining", event.target.value)}
+                      placeholder="Restante"
+                      type="text"
+                      value={budgetFilters.remaining}
+                    />
+                  </th>
+                  <th className="px-5 py-3">
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateBudgetFilter("status", event.target.value as StatusFilter)}
+                      value={budgetFilters.status}
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="px-5 py-3 text-right">
+                    {hasActiveFilters ? (
+                      <button
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                        onClick={clearBudgetFilters}
+                        type="button"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBudgets.map((budget, index) => (
+                  <tr
+                    className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredBudgets.length - 1 ? "border-b-0" : ""}`}
+                    key={budget.id}
+                  >
+                    <td className="w-10 px-4 py-3.5">
+                      <SelectionCheckbox
+                        ariaLabel={`Seleccionar ${budget.name}`}
+                        checked={selectedIds.has(budget.id)}
+                        onChange={() => toggleSelect(budget.id)}
+                      />
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="font-medium text-ink">{budget.name}</p>
+                      <p className="text-xs text-storm">
+                        {budget.categoryName ?? budget.accountName ?? "Sin detalle fijo"}
+                      </p>
+                    </td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("alcance", "hidden sm:table-cell")}`}>
+                      {budget.scopeLabel}
+                    </td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("periodo", "hidden lg:table-cell")}`}>
+                      {formatDate(budget.periodStart)} – {formatDate(budget.periodEnd)}
+                    </td>
+                    <td className={`px-5 py-3.5 text-right font-semibold text-ink ${cv("limite")}`}>
+                      {formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}
+                    </td>
+                    <td className={`px-5 py-3.5 text-right text-ink ${cv("consumido")}`}>
+                      {formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)}
+                    </td>
+                    <td
+                      className={`px-5 py-3.5 text-right font-semibold ${budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine"} ${cv("restante")}`}
+                    >
+                      {formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          className="py-1.5 text-xs"
+                          onClick={() => setAnalyticsBudgetId(budget.id)}
+                          variant="ghost"
+                        >
+                          Analisis
+                        </Button>
+                        <Button className="py-1.5 text-xs" onClick={() => openEditEditor(budget)} variant="ghost">
+                          Editar
+                        </Button>
+                        <Button
+                          className="py-1.5 text-xs"
+                          disabled={isToggling}
+                          onClick={() => void handleToggleBudget(budget)}
+                          variant="ghost"
+                        >
+                          {budget.isActive ? "Desactivar" : "Activar"}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-2">
+            {filteredBudgets.map((budget) => {
+              const progressWidth = Math.min(Math.max(budget.usedPercent, 2), 100);
+              const remainingTone = budget.displayRemainingAmount < 0 ? "text-ember" : "text-pine";
+              const isSelected = selectedIds.has(budget.id);
+              const longPressHandlers = createLongPressHandlers(() => toggleSelect(budget.id));
+
+              return (
+                <article
+                  className={`relative rounded-[30px] border border-white/10 bg-white/[0.03] p-5 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
+                  key={budget.id}
+                  onClick={(e) => {
+                    if (wasRecentLongPress()) return;
+                    if (selectedCount === 0) return;
+                    if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
+                    toggleSelect(budget.id);
+                  }}
+                  {...longPressHandlers}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap gap-2">
+                        <StatusBadge status={budget.scopeLabel} tone="info" />
+                        <StatusBadge status={`Vista ${budget.displayCurrencyCode}`} tone="success" />
+                        {budget.isConvertedDisplay ? (
+                          <StatusBadge status={`Regla ${budget.currencyCode}`} tone="neutral" />
+                        ) : null}
+                        <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
+                        {!budget.isActive ? <StatusBadge status="Inactivo" tone="neutral" /> : null}
+                      </div>
+                      <h3 className="mt-4 font-display text-3xl font-semibold text-ink">{budget.name}</h3>
+                      <p className="mt-2 text-sm leading-7 text-storm">
+                        {formatDate(budget.periodStart)} al {formatDate(budget.periodEnd)}
+                      </p>
+                    </div>
+
+                    <div className="flex h-14 w-14 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.03] text-pine">
+                      {budget.scopeKind === "account" || budget.scopeKind === "category_account" ? (
+                        <Wallet className="h-6 w-6" />
+                      ) : (
+                        <PiggyBank className="h-6 w-6" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Limite</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(budget.displayLimitAmount, budget.displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Consumido</p>
+                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                        {formatCurrency(budget.displaySpentAmount, budget.displayCurrencyCode)}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Restante</p>
+                      <p className={`mt-3 font-display text-2xl font-semibold ${remainingTone}`}>
+                        {formatCurrency(budget.displayRemainingAmount, budget.displayCurrencyCode)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    {budget.isConvertedDisplay ? (
+                      <p className="mb-3 text-xs uppercase tracking-[0.18em] text-storm/75">
+                        Regla configurada en {budget.currencyCode}. Esta lectura se muestra en {budget.displayCurrencyCode}.
+                      </p>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-storm">
+                      <span>Uso del presupuesto</span>
+                      <span>{Math.round(budget.usedPercent)}%</span>
+                    </div>
+                    <div className="mt-3 h-3 rounded-full bg-white/[0.08]">
+                      <div
+                        className={`h-full rounded-full ${
+                          budget.isOverLimit
+                            ? "bg-gradient-to-r from-ember to-[#ff9e6a]"
+                            : budget.isNearLimit
+                              ? "bg-gradient-to-r from-gold to-[#ffd18b]"
+                              : "bg-gradient-to-r from-pine to-emerald-300"
+                        }`}
+                        style={{ width: `${progressWidth}%` }}
+                      />
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-storm">
+                      {budget.isOverLimit
+                        ? `Ya sobrepasaste este techo por ${formatCurrency(
+                            Math.abs(budget.displayRemainingAmount),
+                            budget.displayCurrencyCode,
+                          )}.`
+                        : budget.isNearLimit
+                          ? `Estas entrando en zona de alerta desde el ${Math.round(
+                              budget.alertPercent,
+                            )}% configurado.`
+                          : "Todavia tienes aire para seguir dentro del plan."}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Categoria</p>
+                      <p className="mt-3 text-sm font-semibold text-ink">
+                        {budget.categoryName ?? "Sin categoria fija"}
+                      </p>
+                    </div>
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Cuenta</p>
+                      <p className="mt-3 text-sm font-semibold text-ink">
+                        {budget.accountName ?? "Sin cuenta fija"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-storm">
+                    <span>{budget.movementCount} movimientos dentro del periodo.</span>
+                    <span>Actualizado {formatDate(budget.updatedAt)}</span>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-5">
+                    <Button onClick={() => setAnalyticsBudgetId(budget.id)} variant="ghost">
+                      <BarChart3 className="h-4 w-4" />
+                      Ver analisis
                     </Button>
                     <Button onClick={() => openEditEditor(budget)} variant="ghost">
                       <PencilLine className="h-4 w-4" />

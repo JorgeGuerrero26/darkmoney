@@ -95,16 +95,16 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   kpi_recurring_income: S({
     paragraphs: [
-      “Ingreso fijo = algo que te llega seguido (sueldo, alquiler cobrado, honorario mensual). “Activos” son los que no pausaste ni cancelaste.”,
-      “El monto mostrado es un “por mes aproximado”: la app convierte cada uno a mensual y los suma. Es tu base de ingresos garantizada.”,
+      "Ingreso fijo = algo que te llega seguido (sueldo, alquiler cobrado, honorario mensual). “Activos” son los que no pausaste ni cancelaste.",
+      "El monto mostrado es un “por mes aproximado”: la app convierte cada uno a mensual y los suma. Es tu base de ingresos garantizada.",
     ],
   }),
 
   kpi_upcoming_payments: S({
     paragraphs: [
-      “Suma lo que tendrías que pagar en los próximos ~30 días según fechas que ya cargaste: cuotas por pagar y próximos cobros de suscripciones activas.”,
-      “No mete lo que está marcado como “por cobrar” ni los ingresos fijos esperados (eso sería plata que te entraría, no que saldría).”,
-      “En la lista de la pantalla solo ves unos pocos ítems; el total de la tarjeta suma todos los que entran en esos 30 días.”,
+      "Suma lo que tendrías que pagar en los próximos ~30 días según fechas que ya cargaste: cuotas por pagar y próximos cobros de suscripciones activas.",
+      "No mete lo que está marcado como “por cobrar” ni los ingresos fijos esperados (eso sería plata que te entraría, no que saldría).",
+      "En la lista de la pantalla solo ves unos pocos ítems; el total de la tarjeta suma todos los que entran en esos 30 días.",
     ],
   }),
 

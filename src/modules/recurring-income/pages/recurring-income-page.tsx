@@ -1,8 +1,10 @@
 import {
-  CalendarClock,
   Check,
   ChevronDown,
+  CheckCircle2,
+  Clock,
   Download,
+  History,
   LoaderCircle,
   PencilLine,
   Plus,
@@ -14,15 +16,15 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import type {
+  CSSProperties,
   FormEvent,
   InputHTMLAttributes,
   ReactNode,
   TextareaHTMLAttributes,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
-
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -30,9 +32,15 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import {
+  TableColumnFilterMenu,
+  TableFilterOptionButton,
+  tableColumnFilterInputClassName,
+} from "../../../components/ui/table-column-filter-menu";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
@@ -44,7 +52,9 @@ import type {
   AccountSummary,
   CategorySummary,
   CounterpartySummary,
+  MovementRecord,
   RecurringIncomeFrequency,
+  RecurringIncomeOccurrence,
   RecurringIncomeStatus,
   RecurringIncomeSummary,
 } from "../../../types/domain";
@@ -52,9 +62,12 @@ import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
+  type ConfirmArrivalInput,
   type RecurringIncomeFormInput,
+  useConfirmRecurringIncomeArrivalMutation,
   useCreateRecurringIncomeMutation,
   useDeleteRecurringIncomeMutation,
+  useRecurringIncomeOccurrencesQuery,
   useUpdateRecurringIncomeMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
@@ -86,6 +99,20 @@ type FeedbackState = {
   title: string;
   description: string;
 };
+
+type RecurringIncomeTableFilters = {
+  name: string;
+  payer: string;
+  frequency: "all" | RecurringIncomeFrequency;
+  status: "all" | RecurringIncomeStatus;
+  category: string;
+  account: string;
+  amount: string;
+  nextExpectedDateFrom: string;
+  nextExpectedDateTo: string;
+};
+
+type RecurringIncomeTableFilterField = keyof RecurringIncomeTableFilters;
 
 type PickerOption = {
   value: string;
@@ -248,6 +275,37 @@ function buildFormStateFromRecurringIncome(income: RecurringIncomeSummary): Recu
   };
 }
 
+function advanceNextExpectedDate(income: RecurringIncomeSummary): string {
+  const parts = income.nextExpectedDate.split("-");
+  const d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12));
+  const { frequency, intervalCount } = income;
+  switch (frequency) {
+    case "daily":
+      d.setUTCDate(d.getUTCDate() + intervalCount);
+      break;
+    case "weekly":
+      d.setUTCDate(d.getUTCDate() + 7 * intervalCount);
+      break;
+    case "monthly": {
+      d.setUTCMonth(d.getUTCMonth() + intervalCount);
+      if (income.dayOfMonth) {
+        const maxDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        d.setUTCDate(Math.min(income.dayOfMonth, maxDay));
+      }
+      break;
+    }
+    case "quarterly":
+      d.setUTCMonth(d.getUTCMonth() + 3 * intervalCount);
+      break;
+    case "yearly":
+      d.setUTCFullYear(d.getUTCFullYear() + intervalCount);
+      break;
+    default:
+      d.setUTCDate(d.getUTCDate() + intervalCount);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 function Picker({
   disabled = false,
   emptyMessage,
@@ -260,7 +318,11 @@ function Picker({
 }: PickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],
@@ -283,15 +345,59 @@ function Picker({
     }
   }, [isOpen]);
 
+  function calcPosition() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const style: CSSProperties = { position: "fixed", left: rect.left, width: rect.width, zIndex: 9999 };
+    if (spaceBelow >= 300 || spaceBelow >= rect.top) {
+      style.top = rect.bottom + 10;
+    } else {
+      style.bottom = window.innerHeight - rect.top + 10;
+    }
+    setDropdownStyle(style);
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (target && (containerRef.current?.contains(target) || dropdownRef.current?.contains(target))) {
+        return;
+      }
+      setIsOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    // Recalculate position on any scroll (capture=true catches all containers)
+    window.addEventListener("scroll", calcPosition, true);
+    window.addEventListener("resize", calcPosition);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", calcPosition, true);
+      window.removeEventListener("resize", calcPosition);
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleToggle() {
+    if (disabled) return;
+    if (!isOpen) {
+      calcPosition();
+    }
+    setIsOpen((v) => !v);
+  }
+
   return (
-    <div
-      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
+    <div className="relative min-w-0" ref={containerRef}>
       <button
+        ref={triggerRef}
         className={`${fieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={handleToggle}
         type="button"
       >
         <span className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -318,8 +424,12 @@ function Picker({
         <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
+      {isOpen ? createPortal(
+        <div
+          ref={dropdownRef}
+          className="animate-rise-in rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          style={dropdownStyle}
+        >
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
             <input
@@ -376,7 +486,8 @@ function Picker({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );
@@ -778,16 +889,322 @@ function EditorDialog({
   );
 }
 
+function ConfirmArrivalDialog({
+  income,
+  movements,
+  onClose,
+  onConfirm,
+  isSaving,
+}: {
+  income: RecurringIncomeSummary;
+  movements: MovementRecord[];
+  onClose: () => void;
+  onConfirm: (input: Omit<ConfirmArrivalInput, "workspaceId" | "userId">) => Promise<void>;
+  isSaving: boolean;
+}) {
+  const today = toDateInputValue(new Date().toISOString());
+  const [actualDate, setActualDate] = useState(today);
+  const [notes, setNotes] = useState("");
+  const [movementId, setMovementId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const incomeMovements = useMemo(
+    () =>
+      movements
+        .filter((m) => m.movementType === "income" && m.status !== "voided")
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+        .slice(0, 40),
+    [movements],
+  );
+  const movementOptions = incomeMovements.map<PickerOption>((m) => ({
+    value: String(m.id),
+    label: m.description || `Movimiento #${m.id}`,
+    description: `${formatDate(m.occurredAt)} · ${m.destinationCurrencyCode ?? m.sourceCurrencyCode ?? ""}`,
+    leadingLabel: (m.destinationCurrencyCode ?? m.sourceCurrencyCode ?? "??").slice(0, 3),
+    leadingColor: "#1b6a58",
+    searchText: `${m.description} ${m.occurredAt}`,
+  }));
+  const nextExpectedDate = advanceNextExpectedDate(income);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!actualDate) {
+      setError("Indica la fecha real de llegada.");
+      return;
+    }
+    setError(null);
+    await onConfirm({
+      recurringIncomeId: income.id,
+      expectedDate: income.nextExpectedDate,
+      actualDate,
+      amount: income.amount,
+      currencyCode: income.currencyCode,
+      movementId: movementId ? Number(movementId) : null,
+      notes,
+      nextExpectedDate,
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-[#02060d]/82 p-4 backdrop-blur-xl"
+      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0 && !isSaving) onClose(); }}
+    >
+      <div className="flex min-h-full items-center justify-center">
+        <div
+          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          <form className="flex flex-col gap-5 p-6" noValidate onSubmit={handleSubmit}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="rounded-full border border-pine/20 bg-pine/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-pine/80">
+                  Confirmar llegada
+                </span>
+                <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
+                <p className="mt-1 text-sm text-storm">
+                  Esperado el {formatDate(income.nextExpectedDate)} · {formatCurrency(income.amount, income.currencyCode)}
+                </p>
+              </div>
+              <button
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
+                disabled={isSaving}
+                onClick={onClose}
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {error ? (
+              <p className="rounded-[18px] border border-[#ffb4bc]/20 bg-[#ffb4bc]/10 px-4 py-3 text-sm text-[#ffb4bc]">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="rounded-[26px] border border-pine/15 bg-pine/8 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-storm">Proxima llegada despues de confirmar</p>
+              <p className="mt-1.5 font-medium text-ink">{formatDate(nextExpectedDate)}</p>
+            </div>
+
+            <Field label="Fecha real de llegada">
+              <DatePickerField
+                value={actualDate}
+                onChange={(v) => setActualDate(v ?? "")}
+              />
+            </Field>
+
+            <Field hint="Opcional. Vincula este ingreso a un movimiento ya registrado." label="Movimiento vinculado">
+              <Picker
+                emptyMessage="No hay movimientos de ingreso recientes."
+                onChange={setMovementId}
+                options={movementOptions}
+                placeholderDescription="Sin vinculo a un movimiento especifico."
+                placeholderLabel="Sin vinculo"
+                queryPlaceholder="Buscar movimiento..."
+                value={movementId}
+              />
+            </Field>
+
+            <Field hint="Opcional. Puedes agregar contexto sobre esta llegada." label="Notas">
+              <Textarea
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="ej. Llego con demora por feriado..."
+                value={notes}
+              />
+            </Field>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              <Button disabled={isSaving} onClick={onClose} type="button" variant="ghost">
+                Cancelar
+              </Button>
+              <Button disabled={isSaving} type="submit">
+                {isSaving ? (
+                  <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Confirmando...</>
+                ) : (
+                  <><CheckCircle2 className="mr-2 h-4 w-4" />Confirmar llegada</>
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getOccurrenceStatusLabel(status: RecurringIncomeOccurrence["status"]) {
+  switch (status) {
+    case "on_time": return "A tiempo";
+    case "late": return "Con demora";
+    case "missed": return "No llegó";
+  }
+}
+
+function getOccurrenceStatusColor(status: RecurringIncomeOccurrence["status"]) {
+  switch (status) {
+    case "on_time": return "text-pine";
+    case "late": return "text-[#b48b34]";
+    case "missed": return "text-[#ffb4bc]";
+  }
+}
+
+function HistoryDialog({
+  income,
+  workspaceId,
+  onClose,
+}: {
+  income: RecurringIncomeSummary;
+  workspaceId: number;
+  onClose: () => void;
+}) {
+  const occurrencesQuery = useRecurringIncomeOccurrencesQuery(workspaceId, income.id);
+  const occurrences = occurrencesQuery.data ?? [];
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-[#02060d]/82 p-4 backdrop-blur-xl"
+      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) onClose(); }}
+    >
+      <div className="flex min-h-full items-center justify-center">
+        <div
+          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+        >
+          <div className="flex flex-col gap-5 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                  Historial de llegadas
+                </span>
+                <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
+                <p className="mt-1 text-sm text-storm">{income.frequencyLabel} · {formatCurrency(income.amount, income.currencyCode)}</p>
+              </div>
+              <button
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
+                onClick={onClose}
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {occurrencesQuery.isLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div className="shimmer-surface h-16 rounded-[20px]" key={i} />
+                ))}
+              </div>
+            ) : occurrences.length === 0 ? (
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.02] px-5 py-8 text-center">
+                <Clock className="mx-auto h-8 w-8 text-storm/50" />
+                <p className="mt-3 font-medium text-ink">Sin historial todavia</p>
+                <p className="mt-1 text-sm text-storm">Cuando confirmes la primera llegada, aparecera aqui.</p>
+              </div>
+            ) : (
+              <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
+                {occurrences.map((occ) => (
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-[#0d1623] px-4 py-3"
+                    key={occ.id}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink">
+                        Esperado: {formatDate(occ.expectedDate)}
+                      </p>
+                      {occ.actualDate ? (
+                        <p className="mt-0.5 text-xs text-storm">
+                          Recibido: {formatDate(occ.actualDate)}
+                        </p>
+                      ) : null}
+                      {occ.notes ? (
+                        <p className="mt-0.5 text-xs text-storm/70">{occ.notes}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium text-ink">{formatCurrency(occ.amount, occ.currencyCode)}</p>
+                      <p className={`mt-0.5 text-xs font-semibold ${getOccurrenceStatusColor(occ.status)}`}>
+                        {getOccurrenceStatusLabel(occ.status)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecurringIncomeLoadingSkeleton() {
   return (
     <>
-      <div className="shimmer-surface h-[200px] rounded-[32px]" />
-      <div className="grid gap-4 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div className="shimmer-surface h-[260px] rounded-[30px]" key={i} />
-        ))}
-      </div>
+      <div className="shimmer-surface h-[248px] rounded-[32px]" />
+      <div className="shimmer-surface h-[520px] rounded-[32px]" />
     </>
+  );
+}
+
+const defaultRecurringIncomeTableFilters = (): RecurringIncomeTableFilters => ({
+  name: "",
+  payer: "",
+  frequency: "all",
+  status: "all",
+  category: "",
+  account: "",
+  amount: "",
+  nextExpectedDateFrom: "",
+  nextExpectedDateTo: "",
+});
+
+function isRecurringIncomeTableFilterActive(
+  filters: RecurringIncomeTableFilters,
+  field: RecurringIncomeTableFilterField,
+) {
+  switch (field) {
+    case "name":
+    case "payer":
+    case "category":
+    case "account":
+    case "amount":
+      return Boolean(filters[field].trim());
+    case "nextExpectedDateFrom":
+    case "nextExpectedDateTo":
+      return Boolean(filters[field]);
+    case "frequency":
+    case "status":
+      return filters[field] !== "all";
+    default:
+      return false;
+  }
+}
+
+function RecurringIncomeSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "info" | "warning";
+  value: string;
+}) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+  } as const;
+
+  return (
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
   );
 }
 
@@ -837,6 +1254,7 @@ export function RecurringIncomePage() {
   const createMutation = useCreateRecurringIncomeMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateRecurringIncomeMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteRecurringIncomeMutation(activeWorkspace?.id, user?.id);
+  const confirmMutation = useConfirmRecurringIncomeArrivalMutation(activeWorkspace?.id, user?.id);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
@@ -844,10 +1262,12 @@ export function RecurringIncomePage() {
   const incomeColumns: ColumnDef[] = [
     { key: "pagador", label: "Pagador" },
     { key: "frecuencia", label: "Frecuencia" },
+    { key: "categoria", label: "Categoria" },
+    { key: "cuenta", label: "Cuenta" },
     { key: "proxima_llegada", label: "Próxima llegada" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-recurring-income", incomeColumns);
-  const [viewMode, setViewMode] = useViewMode("recurring-income");
+  const [viewMode, setViewMode] = useViewMode("recurring-income", "table");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -864,11 +1284,15 @@ export function RecurringIncomePage() {
   const [editorMode, setEditorMode] = useState<EditorMode>("create");
   const [selectedIncomeId, setSelectedIncomeId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [confirmIncomeId, setConfirmIncomeId] = useState<number | null>(null);
+  const [historyIncomeId, setHistoryIncomeId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [frequencyFilter, setFrequencyFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [incomeFilters, setIncomeFilters] = useState<RecurringIncomeTableFilters>(() =>
+    defaultRecurringIncomeTableFilters(),
+  );
+  const [openTableFilter, setOpenTableFilter] =
+    useState<RecurringIncomeTableFilterField | null>(null);
   const [formState, setFormState] = useState<RecurringIncomeFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -886,28 +1310,97 @@ export function RecurringIncomePage() {
     deleteTargetId === null
       ? null
       : recurringIncome.find((r) => r.id === deleteTargetId) ?? null;
+  const confirmIncome =
+    confirmIncomeId === null
+      ? null
+      : recurringIncome.find((r) => r.id === confirmIncomeId) ?? null;
+  const historyIncome =
+    historyIncomeId === null
+      ? null
+      : recurringIncome.find((r) => r.id === historyIncomeId) ?? null;
+  const movements = snapshot?.movements ?? [];
 
-  const hasActiveFilters = searchQuery.trim() !== "" || frequencyFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters =
+    incomeFilters.name.trim() !== "" ||
+    incomeFilters.payer.trim() !== "" ||
+    incomeFilters.category.trim() !== "" ||
+    incomeFilters.account.trim() !== "" ||
+    incomeFilters.amount.trim() !== "" ||
+    incomeFilters.nextExpectedDateFrom !== "" ||
+    incomeFilters.nextExpectedDateTo !== "" ||
+    incomeFilters.frequency !== "all" ||
+    incomeFilters.status !== "all";
   const filteredIncome = useMemo(() => {
     let result = recurringIncome.filter((r) => !hiddenIds.has(r.id));
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
+    const normalizedName = incomeFilters.name.trim().toLowerCase();
+    const normalizedPayer = incomeFilters.payer.trim().toLowerCase();
+    const normalizedCategory = incomeFilters.category.trim().toLowerCase();
+    const normalizedAccount = incomeFilters.account.trim().toLowerCase();
+    const normalizedAmount = incomeFilters.amount.trim();
+    if (normalizedName) {
       result = result.filter(
         (r) =>
-          r.name.toLowerCase().includes(q) ||
-          (r.payer ?? "").toLowerCase().includes(q) ||
-          (r.categoryName ?? "").toLowerCase().includes(q),
+          r.name.toLowerCase().includes(normalizedName) ||
+          (r.categoryName ?? "").toLowerCase().includes(normalizedName) ||
+          (r.accountName ?? "").toLowerCase().includes(normalizedName),
       );
     }
-    if (frequencyFilter !== "all") {
-      result = result.filter((r) => r.frequency === frequencyFilter);
+    if (normalizedPayer) {
+      result = result.filter((r) => (r.payer ?? "").toLowerCase().includes(normalizedPayer));
     }
-    if (statusFilter !== "all") {
-      result = result.filter((r) => r.status === statusFilter);
+    if (normalizedCategory) {
+      result = result.filter((r) => (r.categoryName ?? "").toLowerCase().includes(normalizedCategory));
+    }
+    if (normalizedAccount) {
+      result = result.filter((r) => (r.accountName ?? "").toLowerCase().includes(normalizedAccount));
+    }
+    if (incomeFilters.frequency !== "all") {
+      result = result.filter((r) => r.frequency === incomeFilters.frequency);
+    }
+    if (incomeFilters.status !== "all") {
+      result = result.filter((r) => r.status === incomeFilters.status);
+    }
+    if (normalizedAmount) {
+      result = result.filter((r) => String(r.amount).includes(normalizedAmount));
+    }
+    if (incomeFilters.nextExpectedDateFrom) {
+      result = result.filter((r) => r.nextExpectedDate >= incomeFilters.nextExpectedDateFrom);
+    }
+    if (incomeFilters.nextExpectedDateTo) {
+      result = result.filter((r) => r.nextExpectedDate <= incomeFilters.nextExpectedDateTo);
     }
     return result;
-  }, [recurringIncome, hiddenIds, searchQuery, frequencyFilter, statusFilter]);
+  }, [hiddenIds, incomeFilters, recurringIncome]);
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredIncome);
+
+  useEffect(() => {
+    if (viewMode === "table") {
+      return;
+    }
+
+    setIncomeFilters((currentValue) => {
+      if (
+        !currentValue.payer &&
+        !currentValue.category &&
+        !currentValue.account &&
+        !currentValue.amount &&
+        !currentValue.nextExpectedDateFrom &&
+        !currentValue.nextExpectedDateTo
+      ) {
+        return currentValue;
+      }
+
+      return {
+        ...currentValue,
+        payer: "",
+        category: "",
+        account: "",
+        amount: "",
+        nextExpectedDateFrom: "",
+        nextExpectedDateTo: "",
+      };
+    });
+  }, [viewMode]);
 
   useEffect(() => {
     if (!isEditorOpen) {
@@ -992,6 +1485,72 @@ export function RecurringIncomePage() {
             baseCurrencyCode,
           )
         : "Multimoneda";
+  const recurringIncomePayers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          recurringIncome
+            .map((income) => income.payer?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [recurringIncome],
+  );
+  const recurringIncomeCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          recurringIncome
+            .map((income) => income.categoryName?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [recurringIncome],
+  );
+  const recurringIncomeAccounts = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          recurringIncome
+            .map((income) => income.accountName?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [recurringIncome],
+  );
+  const showIncomeExplore = viewMode !== "table" && recurringIncome.length > 0;
+
+  function updateIncomeFilter<Field extends keyof RecurringIncomeTableFilters>(
+    field: Field,
+    value: RecurringIncomeTableFilters[Field],
+  ) {
+    setIncomeFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearIncomeFilters() {
+    setIncomeFilters(defaultRecurringIncomeTableFilters());
+    setOpenTableFilter(null);
+  }
+
+  function toggleTableFilterMenu(field: RecurringIncomeTableFilterField) {
+    setOpenTableFilter((currentValue) => (currentValue === field ? null : field));
+  }
+
+  function closeTableFilterMenu() {
+    setOpenTableFilter(null);
+  }
+
+  function clearSingleTableFilter(field: RecurringIncomeTableFilterField) {
+    updateIncomeFilter(field, defaultRecurringIncomeTableFilters()[field]);
+  }
+
+  function applyIncomeFilterAndClose<Field extends RecurringIncomeTableFilterField>(
+    field: Field,
+    value: RecurringIncomeTableFilters[Field],
+  ) {
+    updateIncomeFilter(field, value);
+    setOpenTableFilter(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1207,6 +1766,29 @@ export function RecurringIncomePage() {
     }
   }
 
+  async function handleConfirmArrival(input: Omit<ConfirmArrivalInput, "workspaceId" | "userId">) {
+    if (!activeWorkspace || !user?.id) return;
+    try {
+      await confirmMutation.mutateAsync({
+        ...input,
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+      });
+      setConfirmIncomeId(null);
+      setFeedback({
+        tone: "success",
+        title: "Llegada confirmada",
+        description: `La proxima llegada se actualizo automaticamente a ${formatDate(input.nextExpectedDate)}.`,
+      });
+    } catch (err) {
+      setFeedback({
+        tone: "error",
+        title: "No se pudo confirmar la llegada",
+        description: getQueryErrorMessage(err, "Intenta nuevamente."),
+      });
+    }
+  }
+
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
@@ -1254,103 +1836,152 @@ export function RecurringIncomePage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <PageHeader
-        actions={
-          <>
-            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-            {viewMode === "table" ? (
-              <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
-            ) : null}
-            <Button
-              onClick={() =>
-                downloadRecurringIncomeCSV(
-                  filteredIncome,
-                  `ingresos-recurrentes-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
-            <Button onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo ingreso
-            </Button>
-          </>
-        }
-        description="Registra tus ingresos fijos como sueldos o alquileres cobrados, con monto, frecuencia, cuenta sugerida y recordatorios."
-        eyebrow="ingresos recurrentes"
-        title="Ingresos recurrentes"
-      />
+      <section className="glass-panel-strong rounded-[32px] p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">ingresos fijos</p>
+              <h2 className="font-display text-4xl font-semibold text-ink">Ingresos recurrentes</h2>
+              <p className="max-w-3xl text-sm leading-7 text-storm">
+                Entra directo a tu tabla de ingresos fijos. Cuando uses la vista tabla, los filtros viven
+                en cada columna; en lista o tarjetas vuelve el explorador compacto para recorrerlos mejor.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <RecurringIncomeSummaryChip label="registrados" value={String(recurringIncome.length)} />
+              <RecurringIncomeSummaryChip label="llegan pronto" tone="warning" value={String(dueSoonCount)} />
+              <RecurringIncomeSummaryChip
+                label="activos"
+                tone="info"
+                value={String(recurringIncome.filter((r) => r.status === "active").length)}
+              />
+              <RecurringIncomeSummaryChip label="monto esperado" tone="info" value={totalAmountDisplay} />
+              {snapshotQuery.isFetching ? <RecurringIncomeSummaryChip label="estado" value="Actualizando" /> : null}
+            </div>
+          </div>
+
+          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                <p className="text-sm leading-7 text-storm">
+                  Registra ingresos, cambia de vista y exporta. En tabla filtras por columna; en otras vistas
+                  reaparece el explorador con filtros rapidos.
+                </p>
+              </div>
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo ingreso
+              </Button>
+              <Button
+                onClick={() =>
+                  downloadRecurringIncomeCSV(
+                    filteredIncome,
+                    `ingresos-recurrentes-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+              {hasActiveFilters ? (
+                <Button onClick={clearIncomeFilters} variant="ghost">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar filtros
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <StatusBadge status={`${filteredIncome.length} visibles`} tone="neutral" />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Siguiente ingreso</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {nextIncome ? formatDate(nextIncome.nextExpectedDate) : "Sin fecha"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Moneda</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{sharedCurrency ?? "Multimoneda"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{baseCurrencyCode}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
-
-      <SurfaceCard action={<CalendarClock className="h-5 w-5 text-pine" />} description="Resumen general de tus ingresos recurrentes configurados." title="Radar de ingresos fijos">
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Registrados</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{recurringIncome.length}</p><p className="mt-2 text-sm text-storm">Ingresos recurrentes configurados en este workspace.</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Llegan pronto</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{dueSoonCount}</p><p className="mt-2 text-sm text-storm">Con fecha dentro de los proximos 7 dias.</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Activos</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{recurringIncome.filter((r) => r.status === "active").length}</p><p className="mt-2 text-sm text-storm">En estado activo actualmente.</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Monto esperado</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{totalAmountDisplay}</p><p className="mt-2 text-sm text-storm">{sharedCurrency !== null ? `Total acumulado en ${sharedCurrency}.` : allAmountsConvertible ? `Convertido a ${baseCurrencyCode}.` : "Tienes importes en varias monedas."}</p></div>
-        </div>
-      </SurfaceCard>
-
-      {recurringIncome.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-            disabled={snapshotQuery.isFetching}
-            onClick={() => snapshotQuery.refetch()}
-            title="Actualizar"
-            type="button"
-          >
-            <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-          </button>
-          <div className="relative min-w-[200px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por nombre, pagador o categoria..."
-              type="text"
-              value={searchQuery}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(["all", "active", "paused", "cancelled"] as const).map((s) => (
-              <button
-                className={`rounded-full border px-3 py-2 text-xs font-medium transition ${statusFilter === s ? "border-pine/30 bg-pine/15 text-pine" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                type="button"
-              >
-                {s === "all" ? "Todos" : s === "active" ? "Activo" : s === "paused" ? "Pausado" : "Cancelado"}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {([{v:"all",l:"Frec."},{v:"daily",l:"Diaria"},{v:"weekly",l:"Semanal"},{v:"monthly",l:"Mensual"},{v:"quarterly",l:"Trimestral"},{v:"yearly",l:"Anual"},{v:"custom",l:"Custom"}] as const).map(({v, l}) => (
-              <button
-                className={`rounded-full border px-3 py-2 text-xs font-medium transition ${frequencyFilter === v ? "border-[#4566d6]/30 bg-[#4566d6]/15 text-[#8a9fff]" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
-                key={v}
-                onClick={() => setFrequencyFilter(v)}
-                type="button"
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          {hasActiveFilters ? (
-            <button
-              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
-              onClick={() => { setSearchQuery(""); setFrequencyFilter("all"); setStatusFilter("all"); }}
-              type="button"
+      {showIncomeExplore ? (
+        <SurfaceCard
+          description="Busca por nombre y filtra por estado o frecuencia cuando prefieras recorrer la vista lista o tarjetas."
+          title="Explorar ingresos"
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
+            <div className="relative min-w-[200px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+              <input
+                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                onChange={(e) => updateIncomeFilter("name", e.target.value)}
+                placeholder="Buscar por nombre, categoria o cuenta..."
+                type="text"
+                value={incomeFilters.name}
+              />
+            </div>
+            <select
+              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(event) => updateIncomeFilter("status", event.target.value as "all" | RecurringIncomeStatus)}
+              value={incomeFilters.status}
             >
-              <X className="inline-block mr-1 h-3 w-3" />
-              Limpiar
-            </button>
-          ) : null}
-        </div>
+              <option value="all">Todos los estados</option>
+              <option value="active">Activo</option>
+              <option value="paused">Pausado</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+            <select
+              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              onChange={(event) => updateIncomeFilter("frequency", event.target.value as "all" | RecurringIncomeFrequency)}
+              value={incomeFilters.frequency}
+            >
+              <option value="all">Todas las frecuencias</option>
+              {frequencyOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              className="h-16 px-6"
+              onClick={clearIncomeFilters}
+              variant={hasActiveFilters ? "secondary" : "ghost"}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+        </SurfaceCard>
       ) : null}
 
       {viewMode === "list" ? (
@@ -1376,6 +2007,14 @@ export function RecurringIncomePage() {
                   <p className="text-xs text-storm">{formatDate(income.nextExpectedDate)}</p>
                 </div>
                 <StatusBadge status={statusOption.label} tone={getStatusTone(income.status)} />
+                {income.status === "active" ? (
+                  <Button className="py-1.5 text-xs shrink-0" onClick={() => setConfirmIncomeId(income.id)} variant="ghost">
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Confirmar
+                  </Button>
+                ) : null}
+                <Button className="py-1.5 text-xs shrink-0" onClick={() => setHistoryIncomeId(income.id)} variant="ghost">
+                  <History className="mr-1 h-3.5 w-3.5" />
+                </Button>
                 <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(income)} variant="ghost">Editar</Button>
               </article>
             );
@@ -1394,20 +2033,320 @@ export function RecurringIncomePage() {
                     onChange={() => (allSelected ? clearAll() : selectAll())}
                   />
                 </th>
-                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Nombre</th>
-                <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("pagador", "hidden sm:table-cell")}`}>Pagador</th>
-                <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("frecuencia", "hidden md:table-cell")}`}>Frecuencia</th>
-                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
-                <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("proxima_llegada", "hidden md:table-cell")}`}>Próxima llegada</th>
-                <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "name")}
+                    isOpen={openTableFilter === "name"}
+                    label="Nombre"
+                    onClear={() => clearSingleTableFilter("name")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("name")}
+                  >
+                    <div className="space-y-3">
+                      <input
+                        className={tableColumnFilterInputClassName}
+                        onChange={(event) => updateIncomeFilter("name", event.target.value)}
+                        placeholder="Buscar por nombre"
+                        type="text"
+                        value={incomeFilters.name}
+                      />
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("pagador", "hidden sm:table-cell")}`}>
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "payer")}
+                    isOpen={openTableFilter === "payer"}
+                    label="Pagador"
+                    onClear={() => clearSingleTableFilter("payer")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("payer")}
+                  >
+                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                      <TableFilterOptionButton
+                        onClick={() => applyIncomeFilterAndClose("payer", "")}
+                        selected={!incomeFilters.payer}
+                      >
+                        Todos
+                      </TableFilterOptionButton>
+                      {recurringIncomePayers.map((payer) => (
+                        <TableFilterOptionButton
+                          key={payer}
+                          onClick={() => applyIncomeFilterAndClose("payer", payer)}
+                          selected={incomeFilters.payer === payer}
+                        >
+                          {payer}
+                        </TableFilterOptionButton>
+                      ))}
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("frecuencia", "hidden md:table-cell")}`}>
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "frequency")}
+                    isOpen={openTableFilter === "frequency"}
+                    label="Frecuencia"
+                    onClear={() => clearSingleTableFilter("frequency")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("frequency")}
+                  >
+                    <div className="space-y-1">
+                      <TableFilterOptionButton
+                        onClick={() => applyIncomeFilterAndClose("frequency", "all")}
+                        selected={incomeFilters.frequency === "all"}
+                      >
+                        Todas
+                      </TableFilterOptionButton>
+                      {frequencyOptions.map((option) => (
+                        <TableFilterOptionButton
+                          key={option.value}
+                          onClick={() => applyIncomeFilterAndClose("frequency", option.value)}
+                          selected={incomeFilters.frequency === option.value}
+                        >
+                          {option.label}
+                        </TableFilterOptionButton>
+                      ))}
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("categoria", "hidden lg:table-cell")}`}>
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "category")}
+                    isOpen={openTableFilter === "category"}
+                    label="Categoria"
+                    onClear={() => clearSingleTableFilter("category")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("category")}
+                  >
+                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                      <TableFilterOptionButton
+                        onClick={() => applyIncomeFilterAndClose("category", "")}
+                        selected={!incomeFilters.category}
+                      >
+                        Todas
+                      </TableFilterOptionButton>
+                      {recurringIncomeCategories.map((category) => (
+                        <TableFilterOptionButton
+                          key={category}
+                          onClick={() => applyIncomeFilterAndClose("category", category)}
+                          selected={incomeFilters.category === category}
+                        >
+                          {category}
+                        </TableFilterOptionButton>
+                      ))}
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("cuenta", "hidden xl:table-cell")}`}>
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "account")}
+                    isOpen={openTableFilter === "account"}
+                    label="Cuenta"
+                    onClear={() => clearSingleTableFilter("account")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("account")}
+                  >
+                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                      <TableFilterOptionButton
+                        onClick={() => applyIncomeFilterAndClose("account", "")}
+                        selected={!incomeFilters.account}
+                      >
+                        Todas
+                      </TableFilterOptionButton>
+                      {recurringIncomeAccounts.map((accountName) => (
+                        <TableFilterOptionButton
+                          key={accountName}
+                          onClick={() => applyIncomeFilterAndClose("account", accountName)}
+                          selected={incomeFilters.account === accountName}
+                        >
+                          {accountName}
+                        </TableFilterOptionButton>
+                      ))}
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className="relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "amount")}
+                    align="right"
+                    isOpen={openTableFilter === "amount"}
+                    label="Monto"
+                    onClear={() => clearSingleTableFilter("amount")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("amount")}
+                    triggerClassName="justify-end text-right"
+                  >
+                    <div className="space-y-3">
+                      <input
+                        className={`${tableColumnFilterInputClassName} text-right`}
+                        onChange={(event) => updateIncomeFilter("amount", event.target.value)}
+                        placeholder="Ej. 250"
+                        type="text"
+                        value={incomeFilters.amount}
+                      />
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className={`relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("proxima_llegada", "hidden md:table-cell")}`}>
+                  <TableColumnFilterMenu
+                    active={
+                      isRecurringIncomeTableFilterActive(incomeFilters, "nextExpectedDateFrom") ||
+                      isRecurringIncomeTableFilterActive(incomeFilters, "nextExpectedDateTo")
+                    }
+                    align="right"
+                    isOpen={
+                      openTableFilter === "nextExpectedDateFrom" ||
+                      openTableFilter === "nextExpectedDateTo"
+                    }
+                    label="Proxima llegada"
+                    minWidthClassName="min-w-[320px]"
+                    onClear={() => {
+                      clearSingleTableFilter("nextExpectedDateFrom");
+                      clearSingleTableFilter("nextExpectedDateTo");
+                    }}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("nextExpectedDateFrom")}
+                    triggerClassName="justify-end text-right"
+                  >
+                    <div className="space-y-3">
+                      <InlineDateRangePicker
+                        endDate={incomeFilters.nextExpectedDateTo}
+                        onEndDateChange={(value) => updateIncomeFilter("nextExpectedDateTo", value)}
+                        onStartDateChange={(value) => updateIncomeFilter("nextExpectedDateFrom", value)}
+                        startDate={incomeFilters.nextExpectedDateFrom}
+                      />
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
+                <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
+                  <TableColumnFilterMenu
+                    active={isRecurringIncomeTableFilterActive(incomeFilters, "status")}
+                    isOpen={openTableFilter === "status"}
+                    label="Estado"
+                    onClear={() => clearSingleTableFilter("status")}
+                    onClose={closeTableFilterMenu}
+                    onToggle={() => toggleTableFilterMenu("status")}
+                  >
+                    <div className="space-y-1">
+                      <TableFilterOptionButton
+                        onClick={() => applyIncomeFilterAndClose("status", "all")}
+                        selected={incomeFilters.status === "all"}
+                      >
+                        Todos
+                      </TableFilterOptionButton>
+                      {statusOptions.map((option) => (
+                        <TableFilterOptionButton
+                          key={option.value}
+                          onClick={() => applyIncomeFilterAndClose("status", option.value)}
+                          selected={incomeFilters.status === option.value}
+                        >
+                          {option.label}
+                        </TableFilterOptionButton>
+                      ))}
+                    </div>
+                  </TableColumnFilterMenu>
+                </th>
                 <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+              </tr>
+              <tr className="hidden border-b border-white/10 bg-[#0c1522]">
+                <th className="px-4 py-3" />
+                <th className="px-5 py-3">
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("name", event.target.value)}
+                    placeholder="Filtrar nombre"
+                    type="text"
+                    value={incomeFilters.name}
+                  />
+                </th>
+                <th className={`px-5 py-3 ${cv("pagador", "hidden sm:table-cell")}`}>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("payer", event.target.value)}
+                    placeholder="Filtrar pagador"
+                    type="text"
+                    value={incomeFilters.payer}
+                  />
+                </th>
+                <th className={`px-5 py-3 ${cv("frecuencia", "hidden md:table-cell")}`}>
+                  <select
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("frequency", event.target.value as "all" | RecurringIncomeFrequency)}
+                    value={incomeFilters.frequency}
+                  >
+                    <option value="all">Todas</option>
+                    {frequencyOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className={`px-5 py-3 ${cv("categoria", "hidden lg:table-cell")}`}>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("category", event.target.value)}
+                    placeholder="Filtrar categoria"
+                    type="text"
+                    value={incomeFilters.category}
+                  />
+                </th>
+                <th className={`px-5 py-3 ${cv("cuenta", "hidden xl:table-cell")}`}>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("account", event.target.value)}
+                    placeholder="Filtrar cuenta"
+                    type="text"
+                    value={incomeFilters.account}
+                  />
+                </th>
+                <th className="px-5 py-3">
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("amount", event.target.value)}
+                    placeholder="Monto"
+                    type="text"
+                    value={incomeFilters.amount}
+                  />
+                </th>
+                <th className={`px-5 py-3 ${cv("proxima_llegada", "hidden md:table-cell")}`}>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("nextExpectedDateFrom", event.target.value)}
+                    type="date"
+                    value={incomeFilters.nextExpectedDateFrom}
+                  />
+                </th>
+                <th className="px-5 py-3">
+                  <select
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                    onChange={(event) => updateIncomeFilter("status", event.target.value as "all" | RecurringIncomeStatus)}
+                    value={incomeFilters.status}
+                  >
+                    <option value="all">Todos</option>
+                    <option value="active">Activo</option>
+                    <option value="paused">Pausado</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </th>
+                <th className="px-5 py-3 text-right">
+                  {hasActiveFilters ? (
+                    <button
+                      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                      onClick={clearIncomeFilters}
+                      type="button"
+                    >
+                      Limpiar
+                    </button>
+                  ) : null}
+                </th>
               </tr>
             </thead>
             <tbody>
               {recurringIncome.length === 0 ? (
-                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={8}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" /></td></tr>
+                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" /></td></tr>
               ) : filteredIncome.length === 0 ? (
-                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={8}><DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" /></td></tr>
+                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" /></td></tr>
               ) : filteredIncome.map((income, index) => {
                 const statusOption = getStatusOption(income.status);
                 return (
@@ -1422,11 +2361,21 @@ export function RecurringIncomePage() {
                     <td className="px-5 py-3.5 font-medium text-ink">{income.name}</td>
                     <td className={`px-5 py-3.5 text-storm ${cv("pagador", "hidden sm:table-cell")}`}>{income.payer}</td>
                     <td className={`px-5 py-3.5 text-storm ${cv("frecuencia", "hidden md:table-cell")}`}>{income.frequencyLabel}</td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{income.categoryName ?? "-"}</td>
+                    <td className={`px-5 py-3.5 text-storm ${cv("cuenta", "hidden xl:table-cell")}`}>{income.accountName ?? "-"}</td>
                     <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(income.amount, income.currencyCode)}</td>
                     <td className={`px-5 py-3.5 text-right text-storm ${cv("proxima_llegada", "hidden md:table-cell")}`}>{formatDate(income.nextExpectedDate)}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(income.status)} /></td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex justify-end gap-2">
+                        {income.status === "active" ? (
+                          <Button className="py-1.5 text-xs" onClick={() => setConfirmIncomeId(income.id)} variant="ghost">
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />Confirmar
+                          </Button>
+                        ) : null}
+                        <Button className="py-1.5 text-xs" onClick={() => setHistoryIncomeId(income.id)} variant="ghost">
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
                         <Button className="py-1.5 text-xs" onClick={() => openEditEditor(income)} variant="ghost">Editar</Button>
                       </div>
                     </td>
@@ -1481,7 +2430,13 @@ export function RecurringIncomePage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className="text-xs uppercase tracking-[0.18em] text-storm">Recordatorio</p><p className="mt-2 text-sm font-medium text-ink">{income.remindDaysBefore} dias antes</p></div>
                     </div>
                     <div className="mt-5 flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                      {income.status === "active" ? (
+                        <Button onClick={() => setConfirmIncomeId(income.id)} variant="secondary">
+                          <CheckCircle2 className="mr-2 h-4 w-4" />Confirmar llegada
+                        </Button>
+                      ) : null}
                       <Button onClick={() => openEditEditor(income)} variant="secondary"><PencilLine className="mr-2 h-4 w-4" />Editar</Button>
+                      <Button onClick={() => setHistoryIncomeId(income.id)} variant="ghost"><History className="mr-2 h-4 w-4" />Historial</Button>
                       <Button className="text-[#ffb4bc] hover:text-white" onClick={() => setDeleteTargetId(income.id)} variant="ghost"><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>
                     </div>
                   </article>
@@ -1590,6 +2545,24 @@ export function RecurringIncomePage() {
         selectedCount={selectedCount}
         totalCount={filteredIncome.length}
       />
+      {confirmIncome && activeWorkspace ? (
+        <ConfirmArrivalDialog
+          income={confirmIncome}
+          isSaving={confirmMutation.isPending}
+          movements={movements}
+          onClose={() => setConfirmIncomeId(null)}
+          onConfirm={handleConfirmArrival}
+        />
+      ) : null}
+
+      {historyIncome && activeWorkspace ? (
+        <HistoryDialog
+          income={historyIncome}
+          onClose={() => setHistoryIncomeId(null)}
+          workspaceId={activeWorkspace.id}
+        />
+      ) : null}
+
       {showBulkDeleteConfirm ? (
         <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ri-bulk-title">
           <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">

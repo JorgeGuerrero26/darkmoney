@@ -101,8 +101,15 @@ Deno.serve(async (request) => {
 
     return jsonResponse({
       provider: "lemon_squeezy",
-      billingStatus: subscription?.attributes?.status ?? "cancelled",
+      planCode: resolvedEntitlement.planCode,
+      billingProvider: resolvedEntitlement.billingProvider,
+      billingStatus: resolvedEntitlement.billingStatus ?? subscription?.attributes?.status ?? "cancelled",
       proAccessEnabled: resolvedEntitlement.proAccessEnabled,
+      currentPeriodStart: resolvedEntitlement.currentPeriodStart,
+      currentPeriodEnd: resolvedEntitlement.currentPeriodEnd,
+      cancelAtPeriodEnd: resolvedEntitlement.cancelAtPeriodEnd,
+      providerSubscriptionId:
+        resolvedEntitlement.providerSubscriptionId ?? entitlement.provider_subscription_id ?? null,
     });
   } catch (error) {
     return jsonResponse(

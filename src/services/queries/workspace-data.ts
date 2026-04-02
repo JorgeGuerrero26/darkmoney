@@ -24,6 +24,7 @@ import type {
   ObligationStatus,
   ObligationSummary,
   RecurringIncomeFrequency,
+  RecurringIncomeOccurrence,
   RecurringIncomeSummary,
   SubscriptionFrequency,
   SubscriptionSummary,
@@ -284,6 +285,20 @@ type RecurringIncomeRow = {
   remind_days_before: number;
   description: string | null;
   notes: string | null;
+};
+
+type RecurringIncomeOccurrenceRow = {
+  id: number;
+  workspace_id: number;
+  recurring_income_id: number;
+  expected_date: string;
+  actual_date: string | null;
+  amount: NumericLike;
+  currency_code: string;
+  movement_id: number | null;
+  status: "on_time" | "late" | "missed";
+  notes: string | null;
+  created_at: string;
 };
 
 type ActivityRow = {
@@ -615,6 +630,19 @@ export type RecurringIncomeFormInput = {
   remindDaysBefore: number;
   description?: string | null;
   notes?: string | null;
+};
+
+export type ConfirmArrivalInput = {
+  workspaceId: number;
+  userId: string;
+  recurringIncomeId: number;
+  expectedDate: string;
+  actualDate: string;
+  amount: number;
+  currencyCode: string;
+  movementId: number | null;
+  notes: string;
+  nextExpectedDate: string;
 };
 
 export type CounterpartyFormInput = {
@@ -2238,6 +2266,53 @@ async function fetchUserEntitlement(userId: string) {
   } satisfies UserEntitlementSummary;
 }
 
+async function fetchCurrentUserBillingHistory() {
+  const data = await invokeAuthenticatedFunction<Record<string, unknown>>("list-billing-history");
+
+  return {
+    provider: typeof data?.provider === "string" ? data.provider : null,
+    warning: typeof data?.warning === "string" ? data.warning : null,
+    payments: Array.isArray(data?.payments)
+      ? data.payments
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .map((item) => ({
+          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+          title: typeof item.title === "string" ? item.title : "Movimiento premium",
+          description: typeof item.description === "string" ? item.description : "",
+          createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+          amountLabel: typeof item.amountLabel === "string" ? item.amountLabel : null,
+          status: typeof item.status === "string" ? item.status : null,
+          statusLabel: typeof item.statusLabel === "string" ? item.statusLabel : "Movimiento premium",
+          tone:
+            item.tone === "success" ||
+              item.tone === "warning" ||
+              item.tone === "danger" ||
+              item.tone === "info"
+              ? item.tone
+              : "neutral",
+          invoiceNumber: typeof item.invoiceNumber === "string" ? item.invoiceNumber : null,
+        }))
+      : [],
+    events: Array.isArray(data?.events)
+      ? data.events
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .map((item) => ({
+          id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+          title: typeof item.title === "string" ? item.title : "Actividad premium",
+          description: typeof item.description === "string" ? item.description : "",
+          createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+          tone:
+            item.tone === "success" ||
+              item.tone === "warning" ||
+              item.tone === "danger" ||
+              item.tone === "info"
+              ? item.tone
+              : "neutral",
+        }))
+      : [],
+  } satisfies BillingHistoryResult;
+}
+
 type StartProCheckoutInput = {
   appUrl?: string;
   workspaceId?: number | null;
@@ -2252,8 +2327,49 @@ type StartProCheckoutResult = {
 
 type CancelProSubscriptionResult = {
   provider: string;
+  planCode?: UserEntitlementSummary["planCode"];
   billingStatus?: string | null;
+  billingProvider?: string | null;
   proAccessEnabled: boolean;
+  currentPeriodEnd?: string | null;
+  currentPeriodStart?: string | null;
+  cancelAtPeriodEnd?: boolean;
+  providerSubscriptionId?: string | null;
+};
+
+type BillingHistoryPaymentItem = {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  amountLabel?: string | null;
+  status?: string | null;
+  statusLabel: string;
+  tone: "success" | "warning" | "danger" | "info" | "neutral";
+  invoiceNumber?: string | null;
+};
+
+type BillingHistoryEventItem = {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  tone: "success" | "warning" | "danger" | "info" | "neutral";
+};
+
+type BillingHistoryResult = {
+  provider?: string | null;
+  warning?: string | null;
+  payments: BillingHistoryPaymentItem[];
+  events: BillingHistoryEventItem[];
+};
+
+type PaddlePortalSessionResult = {
+  provider: string;
+  portalUrl: string;
+  overviewUrl?: string | null;
+  cancelUrl?: string | null;
+  updatePaymentMethodUrl?: string | null;
 };
 
 async function fetchNotificationPreferences(userId: string) {
@@ -2567,7 +2683,7 @@ export function getQueryErrorMessage(
       loweredMessage.includes("lemon_squeezy") ||
       loweredMessage.includes("lemon squeezy")
     ) {
-      return `${error.message} Revisa los secrets del proveedor de cobro en Supabase Functions y la configuracion publica del checkout en el frontend.`;
+      return `${error.message} Revisa la configuracion del cobro premium en Supabase Functions y en el frontend.`;
     }
 
     return error.message;
@@ -2764,6 +2880,38 @@ export function useCurrentUserEntitlementQuery(userId?: string) {
   });
 }
 
+export function useCurrentUserBillingHistoryQuery(userId?: string) {
+  return useQuery({
+    queryKey: ["billing-history", userId ?? null],
+    queryFn: () => fetchCurrentUserBillingHistory(),
+    enabled: Boolean(userId),
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export function useCreatePaddleCustomerPortalMutation() {
+  return useMutation({
+    mutationFn: async () => {
+      const data = await invokeAuthenticatedFunction<Record<string, unknown>>("create-paddle-customer-portal");
+
+      const portalUrl = typeof data?.portalUrl === "string" ? data.portalUrl : null;
+
+      if (!portalUrl) {
+        throw new Error("No pudimos abrir el centro de suscripcion en este momento.");
+      }
+
+      return {
+        provider: typeof data?.provider === "string" ? data.provider : "paddle",
+        portalUrl,
+        overviewUrl: typeof data?.overviewUrl === "string" ? data.overviewUrl : null,
+        cancelUrl: typeof data?.cancelUrl === "string" ? data.cancelUrl : null,
+        updatePaymentMethodUrl:
+          typeof data?.updatePaymentMethodUrl === "string" ? data.updatePaymentMethodUrl : null,
+      } satisfies PaddlePortalSessionResult;
+    },
+  });
+}
+
 export function useStartProCheckoutMutation(userId?: string) {
   const queryClient = useQueryClient();
 
@@ -2786,7 +2934,7 @@ export function useStartProCheckoutMutation(userId?: string) {
             : null;
 
       if (!checkoutUrl) {
-        throw new Error("Lemon Squeezy no devolvio una URL valida para continuar el checkout.");
+        throw new Error("No recibimos una URL valida para continuar el cobro premium.");
       }
 
       return {
@@ -2818,13 +2966,41 @@ export function useCancelProSubscriptionMutation(userId?: string) {
 
       return {
         provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
+        planCode: data?.planCode === "pro" ? "pro" : "free",
         billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
+        billingProvider: typeof data?.billingProvider === "string" ? data.billingProvider : "lemon_squeezy",
         proAccessEnabled: Boolean(data?.proAccessEnabled),
+        currentPeriodStart: typeof data?.currentPeriodStart === "string" ? data.currentPeriodStart : null,
+        currentPeriodEnd: typeof data?.currentPeriodEnd === "string" ? data.currentPeriodEnd : null,
+        cancelAtPeriodEnd: Boolean(data?.cancelAtPeriodEnd),
+        providerSubscriptionId:
+          typeof data?.providerSubscriptionId === "string" ? data.providerSubscriptionId : null,
       } satisfies CancelProSubscriptionResult;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      queryClient.setQueryData<UserEntitlementSummary | null>(
+        ["user-entitlement", userId ?? null],
+        (previousData) =>
+          previousData
+            ? {
+              ...previousData,
+              planCode: result.planCode ?? previousData.planCode,
+              proAccessEnabled: result.proAccessEnabled,
+              billingStatus: result.billingStatus ?? previousData.billingStatus ?? null,
+              billingProvider: result.billingProvider ?? previousData.billingProvider ?? null,
+              currentPeriodStart: result.currentPeriodStart ?? previousData.currentPeriodStart ?? null,
+              currentPeriodEnd: result.currentPeriodEnd ?? previousData.currentPeriodEnd ?? null,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? previousData.cancelAtPeriodEnd,
+              providerSubscriptionId:
+                result.providerSubscriptionId ?? previousData.providerSubscriptionId ?? null,
+            }
+            : previousData ?? null,
+      );
       await queryClient.invalidateQueries({
         queryKey: ["user-entitlement", userId ?? null],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["billing-history", userId ?? null],
       });
     },
   });
@@ -2844,13 +3020,95 @@ export function useCancelPaddleSubscriptionMutation(userId?: string) {
 
       return {
         provider: typeof data?.provider === "string" ? data.provider : "paddle",
+        planCode: data?.planCode === "pro" ? "pro" : "free",
         billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
+        billingProvider: typeof data?.billingProvider === "string" ? data.billingProvider : "paddle",
         proAccessEnabled: Boolean(data?.proAccessEnabled),
+        currentPeriodStart: typeof data?.currentPeriodStart === "string" ? data.currentPeriodStart : null,
+        currentPeriodEnd: typeof data?.currentPeriodEnd === "string" ? data.currentPeriodEnd : null,
+        cancelAtPeriodEnd: Boolean(data?.cancelAtPeriodEnd),
+        providerSubscriptionId:
+          typeof data?.providerSubscriptionId === "string" ? data.providerSubscriptionId : null,
       } satisfies CancelProSubscriptionResult;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      queryClient.setQueryData<UserEntitlementSummary | null>(
+        ["user-entitlement", userId ?? null],
+        (previousData) =>
+          previousData
+            ? {
+              ...previousData,
+              planCode: result.planCode ?? previousData.planCode,
+              proAccessEnabled: result.proAccessEnabled,
+              billingStatus: result.billingStatus ?? previousData.billingStatus ?? null,
+              billingProvider: result.billingProvider ?? previousData.billingProvider ?? null,
+              currentPeriodStart: result.currentPeriodStart ?? previousData.currentPeriodStart ?? null,
+              currentPeriodEnd: result.currentPeriodEnd ?? previousData.currentPeriodEnd ?? null,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? previousData.cancelAtPeriodEnd,
+              providerSubscriptionId:
+                result.providerSubscriptionId ?? previousData.providerSubscriptionId ?? null,
+            }
+            : previousData ?? null,
+      );
       await queryClient.invalidateQueries({
         queryKey: ["user-entitlement", userId ?? null],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["billing-history", userId ?? null],
+      });
+    },
+  });
+}
+
+export function useReactivatePaddleSubscriptionMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
+        "reactivate-paddle-subscription",
+        {
+          provider: "paddle",
+        },
+      );
+
+      return {
+        provider: typeof data?.provider === "string" ? data.provider : "paddle",
+        planCode: data?.planCode === "pro" ? "pro" : "free",
+        billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
+        billingProvider: typeof data?.billingProvider === "string" ? data.billingProvider : "paddle",
+        proAccessEnabled: Boolean(data?.proAccessEnabled),
+        currentPeriodStart: typeof data?.currentPeriodStart === "string" ? data.currentPeriodStart : null,
+        currentPeriodEnd: typeof data?.currentPeriodEnd === "string" ? data.currentPeriodEnd : null,
+        cancelAtPeriodEnd: Boolean(data?.cancelAtPeriodEnd),
+        providerSubscriptionId:
+          typeof data?.providerSubscriptionId === "string" ? data.providerSubscriptionId : null,
+      } satisfies CancelProSubscriptionResult;
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData<UserEntitlementSummary | null>(
+        ["user-entitlement", userId ?? null],
+        (previousData) =>
+          previousData
+            ? {
+              ...previousData,
+              planCode: result.planCode ?? previousData.planCode,
+              proAccessEnabled: result.proAccessEnabled,
+              billingStatus: result.billingStatus ?? previousData.billingStatus ?? null,
+              billingProvider: result.billingProvider ?? previousData.billingProvider ?? null,
+              currentPeriodStart: result.currentPeriodStart ?? previousData.currentPeriodStart ?? null,
+              currentPeriodEnd: result.currentPeriodEnd ?? previousData.currentPeriodEnd ?? null,
+              cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? previousData.cancelAtPeriodEnd,
+              providerSubscriptionId:
+                result.providerSubscriptionId ?? previousData.providerSubscriptionId ?? null,
+            }
+            : previousData ?? null,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["user-entitlement", userId ?? null],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["billing-history", userId ?? null],
       });
     },
   });
@@ -4614,6 +4872,80 @@ export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: 
       ...snap,
       recurringIncome: snap.recurringIncome.filter((r) => r.id !== input.recurringIncomeId),
     })),
+  });
+}
+
+export function useRecurringIncomeOccurrencesQuery(
+  workspaceId?: number,
+  recurringIncomeId?: number,
+) {
+  return useQuery({
+    queryKey: ["recurring_income_occurrences", workspaceId, recurringIncomeId],
+    enabled: !!workspaceId && !!recurringIncomeId,
+    queryFn: async () => {
+      if (!workspaceId || !recurringIncomeId) return [];
+      const client = getClient();
+      const { data, error } = await client
+        .from("recurring_income_occurrences")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("recurring_income_id", recurringIncomeId)
+        .order("expected_date", { ascending: false })
+        .limit(20);
+      if (error) {
+        if (isMissingRelationError(error, "recurring_income_occurrences")) return [];
+        throw error;
+      }
+      return (data ?? []).map<RecurringIncomeOccurrence>((row: RecurringIncomeOccurrenceRow) => ({
+        id: row.id,
+        workspaceId: row.workspace_id,
+        recurringIncomeId: row.recurring_income_id,
+        expectedDate: row.expected_date,
+        actualDate: row.actual_date,
+        amount: toNumber(row.amount),
+        currencyCode: row.currency_code,
+        movementId: row.movement_id,
+        status: row.status,
+        notes: row.notes,
+        createdAt: row.created_at,
+      }));
+    },
+  });
+}
+
+export function useConfirmRecurringIncomeArrivalMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ConfirmArrivalInput) => {
+      const client = getClient();
+      const occurrenceStatus = input.actualDate <= input.expectedDate ? "on_time" : "late";
+      const { error: occErr } = await client.from("recurring_income_occurrences").insert({
+        workspace_id: input.workspaceId,
+        recurring_income_id: input.recurringIncomeId,
+        expected_date: input.expectedDate,
+        actual_date: input.actualDate,
+        amount: input.amount,
+        currency_code: input.currencyCode.toUpperCase(),
+        movement_id: input.movementId || null,
+        status: occurrenceStatus,
+        notes: input.notes || null,
+      });
+      if (occErr) throw occErr;
+      const { error: updateErr } = await client
+        .from("recurring_income")
+        .update({ next_expected_date: input.nextExpectedDate })
+        .eq("id", input.recurringIncomeId)
+        .eq("workspace_id", input.workspaceId);
+      if (updateErr) throw updateErr;
+    },
+    onSuccess: async (_, input) => {
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+        await queryClient.invalidateQueries({
+          queryKey: ["recurring_income_occurrences", workspaceId, input.recurringIncomeId],
+        });
+      }
+    },
   });
 }
 

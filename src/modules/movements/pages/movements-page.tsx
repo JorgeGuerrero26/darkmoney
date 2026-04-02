@@ -7,14 +7,12 @@ import {
   Check,
   ChevronDown,
   Download,
-  Filter,
   LoaderCircle,
   PencilLine,
   Plus,
   ReceiptText,
   RefreshCw,
   Search,
-  Sparkles,
   Trash2,
   Wallet,
   X,
@@ -35,9 +33,11 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
@@ -126,6 +126,20 @@ type SearchablePickerProps = {
   queryPlaceholder: string;
   emptyMessage: string;
 };
+
+type MovementTableFilters = {
+  description: string;
+  type: MovementType | "all";
+  status: MovementStatus | "all";
+  category: string;
+  counterparty: string;
+  sourceAccount: string;
+  amount: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+type MovementTableFilterField = keyof MovementTableFilters;
 
 const movementTypeOptions = [
   {
@@ -1601,13 +1615,76 @@ function MovementEditorDialog({
 function MovementsLoadingSkeleton() {
   return (
     <>
-      <div className="shimmer-surface h-[300px] rounded-[32px]" />
-      <div className="space-y-3">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div className="shimmer-surface h-[72px] rounded-[22px]" key={i} />
-        ))}
-      </div>
+      <div className="shimmer-surface h-[248px] rounded-[32px]" />
+      <div className="shimmer-surface h-[520px] rounded-[32px]" />
     </>
+  );
+}
+
+const movementTableFilterDefaults: MovementTableFilters = {
+  description: "",
+  type: "all",
+  status: "all",
+  category: "",
+  counterparty: "",
+  sourceAccount: "",
+  amount: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
+const movementTableFilterInputClassName =
+  "w-full rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+
+const defaultMovementTableFilters = (): MovementTableFilters => ({
+  ...movementTableFilterDefaults,
+});
+
+function isMovementTableFilterActive(
+  filters: MovementTableFilters,
+  field: MovementTableFilterField,
+) {
+  switch (field) {
+    case "description":
+    case "category":
+    case "counterparty":
+    case "sourceAccount":
+    case "amount":
+      return Boolean(filters[field].trim());
+    case "dateFrom":
+    case "dateTo":
+      return Boolean(filters[field]);
+    case "type":
+      return filters.type !== "all";
+    case "status":
+      return filters.status !== "all";
+    default:
+      return false;
+  }
+}
+
+type MovementSummaryChipProps = {
+  label: string;
+  tone?: "neutral" | "info" | "warning";
+  value: string;
+};
+
+function MovementSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: MovementSummaryChipProps) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+  } as const;
+
+  return (
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
   );
 }
 
@@ -1668,11 +1745,13 @@ export function MovementsPage() {
   const movementColumns: ColumnDef[] = [
     { key: "tipo", label: "Tipo" },
     { key: "estado", label: "Estado" },
+    { key: "categoria", label: "Categoria" },
+    { key: "contraparte", label: "Contraparte" },
     { key: "cuenta_origen", label: "Cuenta origen" },
     { key: "fecha", label: "Fecha" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-movements", movementColumns);
-  const [viewMode, setViewMode] = useViewMode("movements");
+  const [viewMode, setViewMode] = useViewMode("movements", "table");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -1694,9 +1773,37 @@ export function MovementsPage() {
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [searchValue, setSearchValue] = useState("");
-  const [statusFilter, setStatusFilter] = useState<MovementStatus | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<MovementType | "all">("all");
+  const [tableFilters, setTableFilters] = useState<MovementTableFilters>(() => defaultMovementTableFilters());
+  const [openTableFilter, setOpenTableFilter] = useState<MovementTableFilterField | null>(null);
+  useEffect(() => {
+    if (viewMode === "table") {
+      return;
+    }
+
+    setOpenTableFilter(null);
+    setTableFilters((currentValue) => {
+      if (
+        !currentValue.category &&
+        !currentValue.counterparty &&
+        !currentValue.sourceAccount &&
+        !currentValue.amount &&
+        !currentValue.dateFrom &&
+        !currentValue.dateTo
+      ) {
+        return currentValue;
+      }
+
+      return {
+        ...currentValue,
+        category: "",
+        counterparty: "",
+        sourceAccount: "",
+        amount: "",
+        dateFrom: "",
+        dateTo: "",
+      };
+    });
+  }, [viewMode]);
   const createMovementMutation = useCreateMovementMutation(activeWorkspace?.id, user?.id);
   const updateMovementMutation = useUpdateMovementMutation(activeWorkspace?.id, user?.id);
   const deleteMovementMutation = useDeleteMovementMutation(activeWorkspace?.id, user?.id);
@@ -1725,75 +1832,82 @@ export function MovementsPage() {
   const isUploadingReceipt =
     createAttachmentRecordMutation.isPending || deleteAttachmentRecordMutation.isPending;
 
+  const movementCategories = useMemo(
+    () => Array.from(new Set((snapshot?.movements ?? []).map((movement) => movement.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [snapshot],
+  );
+  const movementCounterparties = useMemo(
+    () => Array.from(new Set((snapshot?.movements ?? []).map((movement) => movement.counterparty).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [snapshot],
+  );
+  const movementSourceAccounts = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (snapshot?.movements ?? [])
+            .map((movement) => movement.sourceAccountName)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
+    [snapshot],
+  );
+
   const filteredMovements = useMemo(() => {
     if (!snapshot) {
       return [];
     }
-
-    const normalizedSearch = searchValue.trim().toLowerCase();
+    const normalizedDescription = tableFilters.description.trim().toLowerCase();
+    const normalizedCategory = tableFilters.category.trim().toLowerCase();
+    const normalizedCounterparty = tableFilters.counterparty.trim().toLowerCase();
+    const normalizedSourceAccount = tableFilters.sourceAccount.trim().toLowerCase();
+    const normalizedAmount = tableFilters.amount.trim();
 
     return snapshot.movements.filter((movement) => {
       if (hiddenIds.has(movement.id)) {
         return false;
       }
 
-      const matchesSearch =
-        !normalizedSearch ||
-        movement.description.toLowerCase().includes(normalizedSearch) ||
-        movement.category.toLowerCase().includes(normalizedSearch) ||
-        movement.counterparty.toLowerCase().includes(normalizedSearch) ||
-        movement.sourceAccountName?.toLowerCase().includes(normalizedSearch) ||
-        movement.destinationAccountName?.toLowerCase().includes(normalizedSearch) ||
-        movement.notes?.toLowerCase().includes(normalizedSearch);
-      const matchesStatus = statusFilter === "all" || movement.status === statusFilter;
-      const matchesType = typeFilter === "all" || movement.movementType === typeFilter;
+      const amountCandidates = [
+        movement.sourceAmount,
+        movement.destinationAmount,
+      ]
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+        .map((value) => String(value));
+      const occurredDate = movement.occurredAt.slice(0, 10);
 
-      return matchesSearch && matchesStatus && matchesType;
+      const matchesDescription =
+        !normalizedDescription ||
+        movement.description.toLowerCase().includes(normalizedDescription);
+      const matchesStatus = tableFilters.status === "all" || movement.status === tableFilters.status;
+      const matchesType = tableFilters.type === "all" || movement.movementType === tableFilters.type;
+      const matchesCategory =
+        !normalizedCategory || movement.category.toLowerCase().includes(normalizedCategory);
+      const matchesCounterparty =
+        !normalizedCounterparty || movement.counterparty.toLowerCase().includes(normalizedCounterparty);
+      const matchesSourceAccount =
+        !normalizedSourceAccount ||
+        (movement.sourceAccountName ?? "").toLowerCase().includes(normalizedSourceAccount);
+      const matchesAmount =
+        !normalizedAmount || amountCandidates.some((candidate) => candidate.includes(normalizedAmount));
+      const matchesDateFrom = !tableFilters.dateFrom || occurredDate >= tableFilters.dateFrom;
+      const matchesDateTo = !tableFilters.dateTo || occurredDate <= tableFilters.dateTo;
+
+      return (
+        matchesDescription &&
+        matchesStatus &&
+        matchesType &&
+        matchesCategory &&
+        matchesCounterparty &&
+        matchesSourceAccount &&
+        matchesAmount &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
     });
-  }, [hiddenIds, searchValue, snapshot, statusFilter, typeFilter]);
+  }, [hiddenIds, snapshot, tableFilters]);
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredMovements);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const statusFilterPickerOptions = [
-    {
-      value: "all",
-      label: "Todos los estados",
-      description: "Muestra cualquier estado.",
-      leadingLabel: "TT",
-      leadingColor: "#6b7280",
-      searchText: "todos estados all",
-    },
-    ...movementStatusOptions.map((option) => ({
-      value: option.value,
-      label: option.label,
-      description: option.description,
-      leadingLabel: option.label.slice(0, 2).toUpperCase(),
-      leadingColor: getMovementStatusColor(option.value),
-      searchText: `${option.label} ${option.description} ${option.value}`,
-    })),
-  ];
-  const typeFilterPickerOptions = [
-    {
-      value: "all",
-      label: "Todos los tipos",
-      description: "Incluye gastos, ingresos y movimientos especiales.",
-      leadingLabel: "TT",
-      leadingColor: "#6b7280",
-      searchText: "todos tipos movimientos all",
-    },
-    ...movementTypeOptions.map((option) => {
-      const visual = getMovementVisualPreset(option.value);
-
-      return {
-        value: option.value,
-        label: option.label,
-        description: option.description,
-        leadingLabel: option.label.slice(0, 2).toUpperCase(),
-        leadingColor: visual.color,
-        searchText: `${option.label} ${option.description} ${option.value}`,
-      };
-    }),
-  ];
 
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
@@ -1876,7 +1990,56 @@ export function MovementsPage() {
     (movement) => movement.status === "planned" || movement.status === "pending",
   ).length;
   const latestMovement = snapshot.movements[0] ?? null;
-  const hasActiveFilters = Boolean(searchValue.trim()) || statusFilter !== "all" || typeFilter !== "all";
+  const postedIncomeCount = snapshot.movements.filter((movement) => incomeLikeMovementTypes.has(movement.movementType)).length;
+  const postedExpenseCount = snapshot.movements.filter((movement) => expenseLikeMovementTypes.has(movement.movementType)).length;
+  const hasAnyMovements = snapshot.movements.length > 0;
+  const hasActiveFilters = Boolean(
+    tableFilters.description.trim() ||
+      tableFilters.category.trim() ||
+      tableFilters.counterparty.trim() ||
+      tableFilters.sourceAccount.trim() ||
+      tableFilters.amount.trim() ||
+      tableFilters.dateFrom ||
+      tableFilters.dateTo ||
+      tableFilters.status !== "all" ||
+      tableFilters.type !== "all",
+  );
+  const showMovementExplore = viewMode !== "table" && hasAnyMovements;
+
+  function updateTableFilter<Field extends keyof MovementTableFilters>(
+    field: Field,
+    value: MovementTableFilters[Field],
+  ) {
+    setTableFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function clearTableFilters() {
+    setTableFilters(defaultMovementTableFilters());
+    setOpenTableFilter(null);
+  }
+
+  function toggleTableFilterMenu(field: MovementTableFilterField) {
+    setOpenTableFilter((current) => (current === field ? null : field));
+  }
+
+  function closeTableFilterMenu() {
+    setOpenTableFilter(null);
+  }
+
+  function clearSingleTableFilter(field: MovementTableFilterField) {
+    updateTableFilter(field, movementTableFilterDefaults[field]);
+  }
+
+  function applyTableFilterAndClose<Field extends MovementTableFilterField>(
+    field: Field,
+    value: MovementTableFilters[Field],
+  ) {
+    updateTableFilter(field, value);
+    setOpenTableFilter(null);
+  }
 
   function openCreateEditor() {
     setFeedbackMessage("");
@@ -2227,137 +2390,203 @@ export function MovementsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          actions={
-            <>
-              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-              {viewMode === "table" ? (
-                <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
-              ) : null}
-              <Button
-                onClick={() =>
-                  downloadMovementsCSV(
-                    filteredMovements,
-                    `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
-                  )
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              <Button onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo movimiento
-              </Button>
-            </>
-          }
-          description="Registra y organiza tus movimientos con cuentas, estados, categorias y relaciones en un solo lugar."
-          eyebrow="movimientos"
-          title="Libro de movimientos"
-        >
-          <div className="flex flex-wrap gap-3 text-sm text-storm">
-            <StatusBadge status={`${snapshot.movements.length} movimientos`} tone="neutral" />
-            <StatusBadge status={`${snapshot.metrics.postedCount} aplicados`} tone="success" />
-            <StatusBadge status={`${queuedCount} por revisar`} tone="warning" />
-            <StatusBadge status={formatWorkspaceKindLabel(snapshot.workspace.kind)} tone="info" />
-            {snapshotQuery.isFetching ? (
-              <StatusBadge
-                className="animate-soft-pulse"
-                status="Actualizando"
-                tone="neutral"
-              />
-            ) : null}
-          </div>
-        </PageHeader>
+        <section className="glass-panel-strong rounded-[32px] p-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-[0.28em] text-storm/90">movimientos</p>
+                <h2 className="font-display text-4xl font-semibold text-ink">Libro de movimientos</h2>
+                <p className="max-w-3xl text-sm leading-7 text-storm">
+                  Entra directo a tus registros, revisa el estado de cada movimiento y filtra por columna cuando
+                  necesites encontrar algo puntual. La tabla manda; el resumen solo acompaña.
+                </p>
+              </div>
 
-        {errorMessage && !isEditorOpen ? (
-          <DataState
-            description={errorMessage}
-            title="No pudimos completar la accion"
-            tone="error"
-          />
-        ) : null}
-        <SurfaceCard
-          action={<Filter className="h-5 w-5 text-gold" />}
-          className="relative z-20 overflow-visible"
-          description="Busca por descripcion, cuenta, contraparte o categoria y filtra por estado o tipo."
-          title="Explorar movimientos"
-        >
-          <div className="grid gap-4 lg:grid-cols-[1.35fr_0.75fr_0.9fr_auto]">
-            <div className="flex items-center gap-2">
-              <button
-                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching}
-                onClick={() => snapshotQuery.refetch()}
-                title="Actualizar"
-                type="button"
-              >
-                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              </button>
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-                <EditorInput
-                  className="pl-11 sm:pl-11"
-                  onChange={(event) => setSearchValue(event.target.value)}
-                  placeholder="Buscar por descripcion, categoria, cuenta o contraparte..."
-                  value={searchValue}
-                />
+              <div className="flex flex-wrap gap-3">
+                <MovementSummaryChip label="movimientos" value={String(snapshot.movements.length)} />
+                <MovementSummaryChip label="aplicados" tone="info" value={String(snapshot.metrics.postedCount)} />
+                {queuedCount > 0 ? (
+                  <MovementSummaryChip label="en cola" tone="warning" value={String(queuedCount)} />
+                ) : null}
+                <MovementSummaryChip label="transferencias" tone="info" value={String(transferCount)} />
+                <MovementSummaryChip label="workspace" tone="info" value={formatWorkspaceKindLabel(snapshot.workspace.kind)} />
+                {snapshotQuery.isFetching ? <MovementSummaryChip label="estado" value="Actualizando" /> : null}
               </div>
             </div>
 
-            <SearchablePicker
-              emptyMessage="No encontramos un estado con ese termino."
-              onChange={(nextValue) => setStatusFilter(nextValue as MovementStatus | "all")}
-              options={statusFilterPickerOptions}
-              placeholderDescription="Filtra por estado del movimiento."
-              placeholderLabel="Todos los estados"
-              queryPlaceholder="Buscar estado..."
-              value={statusFilter}
-            />
+            <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                  <p className="text-sm leading-7 text-storm">
+                    Crea movimientos, cambia de vista y exporta. En tabla, los filtros viven dentro de cada columna.
+                  </p>
+                </div>
+                <button
+                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                  disabled={snapshotQuery.isFetching}
+                  onClick={() => snapshotQuery.refetch()}
+                  title="Actualizar"
+                  type="button"
+                >
+                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+                </button>
+              </div>
 
-            <SearchablePicker
-              emptyMessage="No encontramos un tipo con ese termino."
-              onChange={(nextValue) => setTypeFilter(nextValue as MovementType | "all")}
-              options={typeFilterPickerOptions}
-              placeholderDescription="Filtra por tipo operativo."
-              placeholderLabel="Todos los tipos"
-              queryPlaceholder="Buscar tipo..."
-              value={typeFilter}
-            />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={openCreateEditor}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo movimiento
+                </Button>
+                <Button
+                  disabled={!filteredMovements.length}
+                  onClick={() =>
+                    downloadMovementsCSV(
+                      filteredMovements,
+                      `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
+                    )
+                  }
+                  variant="ghost"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar CSV
+                </Button>
+                {hasActiveFilters ? (
+                  <Button onClick={clearTableFilters} variant="ghost">
+                    <X className="mr-2 h-4 w-4" />
+                    Limpiar filtros
+                  </Button>
+                ) : null}
+              </div>
 
-            <Button
-              disabled={!hasActiveFilters}
-              onClick={() => {
-                setSearchValue("");
-                setStatusFilter("all");
-                setTypeFilter("all");
-              }}
-              variant="ghost"
-            >
-              Limpiar filtros
-            </Button>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+                {viewMode === "table" ? (
+                  <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
+                ) : null}
+                <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
+              </div>
+
+              {hasAnyMovements ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Salidas</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">{postedExpenseCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Entradas</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">{postedIncomeCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultimo registro</p>
+                    <p className="mt-2 text-sm font-semibold text-ink">
+                      {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Sin actividad"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-7 text-storm">
+                  Tu primera fila activara el historial, las vistas y los filtros por columna.
+                </p>
+              )}
+            </aside>
           </div>
-        </SurfaceCard>
+        </section>
 
+        {errorMessage && !isEditorOpen ? (
+        <DataState
+          description={errorMessage}
+          title="No pudimos completar la accion"
+          tone="error"
+        />
+      ) : null}
+        {showMovementExplore ? (
+          <SurfaceCard
+            description="Busca por descripcion y filtra por estado o tipo cuando prefieras recorrer la vista lista o tarjetas."
+            title="Explorar movimientos"
+          >
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
+              <div className="flex items-center gap-2">
+                <button
+                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                  disabled={snapshotQuery.isFetching}
+                  onClick={() => snapshotQuery.refetch()}
+                  title="Actualizar"
+                  type="button"
+                >
+                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+                </button>
+                <div className="flex-1">
+                  <input
+                    className="w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 py-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                    onChange={(event) => updateTableFilter("description", event.target.value)}
+                    placeholder="Buscar por descripcion, categoria o contraparte..."
+                    type="text"
+                    value={tableFilters.description}
+                  />
+                </div>
+              </div>
+
+              <select
+                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                onChange={(event) => updateTableFilter("status", event.target.value as MovementStatus | "all")}
+                value={tableFilters.status}
+              >
+                <option value="all">Todos los estados</option>
+                {movementStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                onChange={(event) => updateTableFilter("type", event.target.value as MovementType | "all")}
+                value={tableFilters.type}
+              >
+                <option value="all">Todos los tipos</option>
+                {movementTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <Button
+                className="h-16 px-6"
+                onClick={clearTableFilters}
+                variant={hasActiveFilters ? "secondary" : "ghost"}
+              >
+                Limpiar filtros
+              </Button>
+            </div>
+          </SurfaceCard>
+        ) : null}
         <SurfaceCard
-          action={<StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />}
+          action={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {hasActiveFilters ? (
+                <Button
+                  className="h-10 px-4"
+                  onClick={clearTableFilters}
+                  variant="ghost"
+                >
+                  Limpiar filtros
+                </Button>
+              ) : null}
+              <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
+            </div>
+          }
           className="relative z-10"
-          description="Revisa tus movimientos, abre cualquiera para editarlo o eliminalo si ya no lo necesitas."
-          title="Actividad financiera"
+          description="La tabla queda al final como vista principal. Desde aqui abres cualquier movimiento para editarlo o revisarlo."
+          title="Movimientos registrados"
         >
           {filteredMovements.length === 0 ? (
             <DataState
               action={
                 hasActiveFilters ? (
-                  <Button
-                    onClick={() => {
-                      setSearchValue("");
-                      setStatusFilter("all");
-                      setTypeFilter("all");
-                    }}
-                    variant="secondary"
-                  >
+                  <Button onClick={clearTableFilters} variant="secondary">
                     Quitar filtros
                   </Button>
                 ) : (
@@ -2366,7 +2595,7 @@ export function MovementsPage() {
               }
               description={
                 hasActiveFilters
-                  ? "No hay movimientos que coincidan con los filtros actuales."
+                  ? "No hay movimientos que coincidan con los filtros activos en la tabla."
                   : "Todavia no hay movimientos registrados en este espacio."
               }
               title={hasActiveFilters ? "Sin resultados" : "Sin movimientos"}
@@ -2409,12 +2638,225 @@ export function MovementsPage() {
                         onChange={() => (allSelected ? clearAll() : selectAll())}
                       />
                     </th>
-                    <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Descripcion</th>
-                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
-                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("estado", "hidden sm:table-cell")}`}>Estado</th>
-                    <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("cuenta_origen", "hidden md:table-cell")}`}>Cuenta origen</th>
-                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Monto</th>
-                    <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("fecha", "hidden md:table-cell")}`}>Fecha</th>
+                    <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "description")}
+                        isOpen={openTableFilter === "description"}
+                        label="Descripcion"
+                        onClear={() => clearSingleTableFilter("description")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("description")}
+                      >
+                        <div className="space-y-3">
+                          <input
+                            className={movementTableFilterInputClassName}
+                            onChange={(event) => updateTableFilter("description", event.target.value)}
+                            placeholder="Buscar descripcion"
+                            type="text"
+                            value={tableFilters.description}
+                          />
+                          <p className="text-xs leading-6 text-storm">
+                            Busca por texto parcial en la descripcion del movimiento.
+                          </p>
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("tipo", "hidden sm:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "type")}
+                        isOpen={openTableFilter === "type"}
+                        label="Tipo"
+                        onClear={() => clearSingleTableFilter("type")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("type")}
+                      >
+                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                          <TableFilterOptionButton
+                            onClick={() => applyTableFilterAndClose("type", "all")}
+                            selected={tableFilters.type === "all"}
+                          >
+                            Todos
+                          </TableFilterOptionButton>
+                          {movementTypeOptions.map((option) => (
+                            <TableFilterOptionButton
+                              key={option.value}
+                              onClick={() => applyTableFilterAndClose("type", option.value)}
+                              selected={tableFilters.type === option.value}
+                            >
+                              {option.label}
+                            </TableFilterOptionButton>
+                          ))}
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("estado", "hidden sm:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "status")}
+                        isOpen={openTableFilter === "status"}
+                        label="Estado"
+                        onClear={() => clearSingleTableFilter("status")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("status")}
+                      >
+                        <div className="space-y-1">
+                          <TableFilterOptionButton
+                            onClick={() => applyTableFilterAndClose("status", "all")}
+                            selected={tableFilters.status === "all"}
+                          >
+                            Todos
+                          </TableFilterOptionButton>
+                          {movementStatusOptions.map((option) => (
+                            <TableFilterOptionButton
+                              key={option.value}
+                              onClick={() => applyTableFilterAndClose("status", option.value)}
+                              selected={tableFilters.status === option.value}
+                            >
+                              {option.label}
+                            </TableFilterOptionButton>
+                          ))}
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("categoria", "hidden lg:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "category")}
+                        isOpen={openTableFilter === "category"}
+                        label="Categoria"
+                        onClear={() => clearSingleTableFilter("category")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("category")}
+                      >
+                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                          <TableFilterOptionButton
+                            onClick={() => applyTableFilterAndClose("category", "")}
+                            selected={!tableFilters.category}
+                          >
+                            Todas
+                          </TableFilterOptionButton>
+                          {movementCategories.map((category) => (
+                            <TableFilterOptionButton
+                              key={category}
+                              onClick={() => applyTableFilterAndClose("category", category)}
+                              selected={tableFilters.category === category}
+                            >
+                              {category}
+                            </TableFilterOptionButton>
+                          ))}
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("contraparte", "hidden xl:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "counterparty")}
+                        isOpen={openTableFilter === "counterparty"}
+                        label="Contraparte"
+                        onClear={() => clearSingleTableFilter("counterparty")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("counterparty")}
+                      >
+                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                          <TableFilterOptionButton
+                            onClick={() => applyTableFilterAndClose("counterparty", "")}
+                            selected={!tableFilters.counterparty}
+                          >
+                            Todas
+                          </TableFilterOptionButton>
+                          {movementCounterparties.map((counterparty) => (
+                            <TableFilterOptionButton
+                              key={counterparty}
+                              onClick={() => applyTableFilterAndClose("counterparty", counterparty)}
+                              selected={tableFilters.counterparty === counterparty}
+                            >
+                              {counterparty}
+                            </TableFilterOptionButton>
+                          ))}
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("cuenta_origen", "hidden md:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "sourceAccount")}
+                        isOpen={openTableFilter === "sourceAccount"}
+                        label="Cuenta origen"
+                        onClear={() => clearSingleTableFilter("sourceAccount")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("sourceAccount")}
+                      >
+                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                          <TableFilterOptionButton
+                            onClick={() => applyTableFilterAndClose("sourceAccount", "")}
+                            selected={!tableFilters.sourceAccount}
+                          >
+                            Todas
+                          </TableFilterOptionButton>
+                          {movementSourceAccounts.map((accountName) => (
+                            <TableFilterOptionButton
+                              key={accountName}
+                              onClick={() => applyTableFilterAndClose("sourceAccount", accountName)}
+                              selected={tableFilters.sourceAccount === accountName}
+                            >
+                              {accountName}
+                            </TableFilterOptionButton>
+                          ))}
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className="relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
+                      <TableColumnFilterMenu
+                        active={isMovementTableFilterActive(tableFilters, "amount")}
+                        align="right"
+                        isOpen={openTableFilter === "amount"}
+                        label="Monto"
+                        onClear={() => clearSingleTableFilter("amount")}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("amount")}
+                        triggerClassName="justify-end text-right"
+                      >
+                        <div className="space-y-3">
+                          <input
+                            className={`${movementTableFilterInputClassName} text-right`}
+                            onChange={(event) => updateTableFilter("amount", event.target.value)}
+                            placeholder="Ej. 120 o 120.50"
+                            type="text"
+                            value={tableFilters.amount}
+                          />
+                          <p className="text-xs leading-6 text-storm">
+                            Filtra por coincidencia en el monto visible de la tabla.
+                          </p>
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
+                    <th className={`relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("fecha", "hidden md:table-cell")}`}>
+                      <TableColumnFilterMenu
+                        active={
+                          isMovementTableFilterActive(tableFilters, "dateFrom") ||
+                          isMovementTableFilterActive(tableFilters, "dateTo")
+                        }
+                        align="right"
+                        isOpen={openTableFilter === "dateFrom" || openTableFilter === "dateTo"}
+                        label="Fecha"
+                        minWidthClassName="min-w-[320px]"
+                        onClear={() => {
+                          clearSingleTableFilter("dateFrom");
+                          clearSingleTableFilter("dateTo");
+                        }}
+                        onClose={closeTableFilterMenu}
+                        onToggle={() => toggleTableFilterMenu("dateFrom")}
+                        triggerClassName="justify-end text-right"
+                      >
+                        <div className="space-y-3">
+                          <InlineDateRangePicker
+                            endDate={tableFilters.dateTo}
+                            onEndDateChange={(value) => updateTableFilter("dateTo", value)}
+                            onStartDateChange={(value) => updateTableFilter("dateFrom", value)}
+                            startDate={tableFilters.dateFrom}
+                          />
+                          <p className="text-xs leading-6 text-storm">
+                            Filtra por rango cronologico para trabajar como una hoja de calculo.
+                          </p>
+                        </div>
+                      </TableColumnFilterMenu>
+                    </th>
                     <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
                   </tr>
                 </thead>
@@ -2434,6 +2876,8 @@ export function MovementsPage() {
                         <td className="px-5 py-3.5 font-medium text-ink">{movement.description}</td>
                         <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} /></td>
                         <td className={`px-5 py-3.5 ${cv("estado", "hidden sm:table-cell")}`}><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
+                        <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{movement.category}</td>
+                        <td className={`px-5 py-3.5 text-storm ${cv("contraparte", "hidden xl:table-cell")}`}>{movement.counterparty}</td>
                         <td className={`px-5 py-3.5 text-storm ${cv("cuenta_origen", "hidden md:table-cell")}`}>{movement.sourceAccountName ?? "-"}</td>
                         <td className="px-5 py-3.5 text-right font-medium text-ink">{movement.sourceAmount !== null ? formatCurrency(movement.sourceAmount, sourceCurrencyCode) : "-"}</td>
                         <td className={`px-5 py-3.5 text-right text-storm ${cv("fecha", "hidden md:table-cell")}`}>{formatDateTime(movement.occurredAt)}</td>
@@ -2570,86 +3014,6 @@ export function MovementsPage() {
           )}
         </SurfaceCard>
 
-        <SurfaceCard
-          action={<Sparkles className="h-5 w-5 text-gold" />}
-          description="Una vista rapida de tu actividad, tus estados y tus movimientos recientes."
-          title="Resumen de movimientos"
-        >
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Movimientos aplicados</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                {snapshot.metrics.postedCount}
-              </p>
-              <p className="mt-2 text-sm text-storm">Ya forman parte de tus balances y reportes.</p>
-            </div>
-
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">En cola</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">{queuedCount}</p>
-              <p className="mt-2 text-sm text-storm">Movimientos pendientes o planeados por completar.</p>
-            </div>
-
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Transferencias</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">{transferCount}</p>
-              <p className="mt-2 text-sm text-storm">Movimientos internos entre cuentas.</p>
-            </div>
-
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultimo registro</p>
-              <p className="mt-3 text-lg font-medium text-ink">
-                {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Sin actividad"}
-              </p>
-              <p className="mt-2 text-sm text-storm">
-                {latestMovement ? latestMovement.description : "Aun no hay movimientos registrados."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-              <div className="flex items-start gap-3">
-                <ArrowLeftRight className="mt-1 h-5 w-5 text-ember" />
-                <div>
-                  <p className="font-medium text-ink">Todo en un solo lugar</p>
-                  <p className="mt-2 text-sm leading-7 text-storm">
-                    Desde aqui puedes registrar, editar y organizar tus movimientos con cuentas,
-                    notas, conversiones y relaciones con suscripciones u obligaciones.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-void/70 p-4">
-                  <ArrowDownCircle className="h-5 w-5 text-rosewood" />
-                  <p className="mt-3 text-sm font-medium text-ink">Salidas</p>
-                  <p className="mt-1 text-sm text-storm">
-                    {snapshot.movements.filter((movement) => expenseLikeMovementTypes.has(movement.movementType)).length}{" "}
-                    registradas
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-void/70 p-4">
-                  <ArrowUpCircle className="h-5 w-5 text-pine" />
-                  <p className="mt-3 text-sm font-medium text-ink">Entradas</p>
-                  <p className="mt-1 text-sm text-storm">
-                    {snapshot.movements.filter((movement) => incomeLikeMovementTypes.has(movement.movementType)).length}{" "}
-                    registradas
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-void/70 p-4">
-                  <CalendarClock className="h-5 w-5 text-gold" />
-                  <p className="mt-3 text-sm font-medium text-ink">Organizacion</p>
-                  <p className="mt-1 text-sm text-storm">
-                    {snapshot.catalogs.categoriesCount} categorias y {snapshot.catalogs.counterpartiesCount} contrapartes
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </SurfaceCard>
       </div>
 
       {isEditorOpen ? (

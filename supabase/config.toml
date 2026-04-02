@@ -11,6 +11,15 @@ verify_jwt = false
 [functions.cancel-paddle-subscription]
 verify_jwt = false
 
+[functions.list-billing-history]
+verify_jwt = false
+
+[functions.create-paddle-customer-portal]
+verify_jwt = false
+
+[functions.reactivate-paddle-subscription]
+verify_jwt = false
+
 [functions.create-shared-workspace]
 verify_jwt = false
 

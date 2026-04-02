@@ -129,20 +129,21 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   }),
 
   kpi_recurring_income: a({
-    title: “Ingresos fijos activos”,
+    title: "Ingresos fijos activos",
     paragraphs: [
-      “Cuenta los ingresos recurrentes en estado activo (sueldos, alquileres cobrados, honorarios fijos, etc.) y muestra la entrada mensual recurrente estimada: la app normaliza cada monto a equivalente mensual según la frecuencia configurada y los suma.”,
-      “Sirve para ver cuánto de tu ingreso mensual ya está comprometido y garantizado antes de cualquier movimiento variable.”,
+      "Cuenta los ingresos recurrentes en estado activo (sueldos, alquileres cobrados, honorarios fijos, etc.) y muestra la entrada mensual recurrente estimada: la app normaliza cada monto a equivalente mensual según la frecuencia configurada y los suma.",
+      "Sirve para ver cuánto de tu ingreso mensual ya está comprometido y garantizado antes de cualquier movimiento variable.",
     ],
-    healthyRange: “Idealmente el ingreso recurrente cubre tus gastos fijos más un margen de ahorro.”,
+    example:
+      "Tienes sueldo de S/ 3 000 (mensual) y un alquiler cobrado de S/ 800 (mensual) → entrada fija estimada: S/ 3 800/mes.",
   }),
 
   kpi_upcoming_payments: a({
-    title: “Pagos próximos”,
+    title: "Pagos próximos",
     paragraphs: [
-      “Suma los importes de obligaciones por pagar y de suscripciones activas cuyo vencimiento cae entre hoy y los próximos 30 días, usando el saldo pendiente registrado.”,
-      “No incluye partidas marcadas como “Por cobrar” ni ingresos fijos esperados (eso sería entrada esperada, no salida).”,
-      “En “Lo que viene” solo se listan hasta seis ítems por fecha; el número de esta tarjeta agrega todos los que entran en la ventana.”,
+      "Suma los importes de obligaciones por pagar y de suscripciones activas cuyo vencimiento cae entre hoy y los próximos 30 días, usando el saldo pendiente registrado.",
+      "No incluye partidas marcadas como “Por cobrar” ni ingresos fijos esperados (eso sería entrada esperada, no salida).",
+      "En “Lo que viene” solo se listan hasta seis ítems por fecha; el número de esta tarjeta agrega todos los que entran en la ventana.",
     ],
   }),
 

@@ -32,7 +32,6 @@ import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
-import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
@@ -116,6 +115,16 @@ const accountTypeOptions = [
     color: "#6b7280",
     description: "Contenedores especiales o cuentas mixtas.",
   },
+] as const;
+
+const accountTypeFilters = [
+  { value: "all", label: "Todos" },
+  { value: "cash", label: "Efectivo" },
+  { value: "bank", label: "Banco" },
+  { value: "savings", label: "Ahorros" },
+  { value: "credit_card", label: "Tarjeta" },
+  { value: "investment", label: "Inversion" },
+  { value: "loan_wallet", label: "Prestamos" },
 ] as const;
 
 const iconOptions = [
@@ -760,24 +769,34 @@ function AccountIconSelect({
 function AccountsLoadingSkeleton() {
   return (
     <>
-      <section className="grid gap-4 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            className="shimmer-surface h-[196px]"
-            key={`metric-${index}`}
-          />
-        ))}
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            className="shimmer-surface h-[298px]"
-            key={`card-${index}`}
-          />
-        ))}
-      </section>
+      <section className="shimmer-surface h-[252px]" />
+      <section className="shimmer-surface h-[420px]" />
     </>
+  );
+}
+
+type AccountsSummaryChipProps = {
+  label: string;
+  tone?: "neutral" | "info" | "warning";
+  value: string;
+};
+
+function AccountsSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: AccountsSummaryChipProps) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+  } as const;
+
+  return (
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
   );
 }
 
@@ -1626,7 +1645,7 @@ export function AccountsPage() {
     { key: "estado", label: "Estado" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-accounts", accountColumns);
-  const [viewMode, setViewMode] = useViewMode("accounts");
+  const [viewMode, setViewMode] = useViewMode("accounts", "table");
   const [formState, setFormState] = useState<AccountFormState>(() =>
     createDefaultFormState(profile?.baseCurrencyCode ?? "USD"),
   );
@@ -1678,6 +1697,7 @@ export function AccountsPage() {
     snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? profile?.baseCurrencyCode ?? "USD",
   );
   const excludedAccounts = activeAccounts.filter((account) => !account.includeInNetWorth).length;
+  const hasAnyAccounts = (snapshot?.accounts.length ?? 0) > 0;
   const isSaving =
     createAccountMutation.isPending ||
     updateAccountMutation.isPending ||
@@ -2057,54 +2077,144 @@ export function AccountsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          actions={
-            <>
-              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-              {viewMode === "table" ? (
-                <ColumnPicker columns={accountColumns} visible={colVis} onToggle={toggleCol} />
-              ) : null}
-              <Button
-                onClick={() =>
-                  downloadAccountsCSV(
-                    filteredAccounts,
-                    `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
-                  )
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              <Button
-                onClick={() => setShowArchived((currentValue) => !currentValue)}
-                variant="ghost"
-              >
-                {showArchived ? "Ocultar archivadas" : "Ver archivadas"}
-              </Button>
-              <Button onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nueva cuenta
-              </Button>
-            </>
-          }
-          description="Inventario real de cuentas por workspace, con saldo actual calculado desde opening_balance y movimientos aplicados."
-          eyebrow="accounts"
-          title="Cuentas financieras"
-        >
-          <div className="flex flex-wrap gap-3 text-sm text-storm">
-            <StatusBadge status={`${snapshot.accounts.length} cuentas`} tone="neutral" />
-            <StatusBadge status={`${archivedAccounts.length} archivadas`} tone="warning" />
-            <StatusBadge status={formatWorkspaceKindLabel(snapshot.workspace.kind)} tone="info" />
-            {snapshotQuery.isFetching ? (
-              <StatusBadge
-                className="animate-soft-pulse"
-                status="Actualizando"
-                tone="neutral"
-              />
-            ) : null}
+        <section className="glass-panel-strong rounded-[32px] p-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] xl:items-start">
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-[0.28em] text-storm/90">accounts</p>
+                <h2 className="font-display text-4xl font-semibold text-ink">Cuentas financieras</h2>
+                <p className="max-w-3xl text-sm leading-7 text-storm">
+                  Ve tus cuentas primero en tabla, con saldo actual, moneda y estado. El resumen del modulo se mantiene
+                  corto para que no compita con la informacion que de verdad viniste a revisar.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <AccountsSummaryChip label="cuentas" value={String(activeAccounts.length)} />
+                <AccountsSummaryChip
+                  label="patrimonio"
+                  tone="info"
+                  value={formatCurrency(netWorthDisplay.amount, netWorthDisplay.currencyCode)}
+                />
+                {archivedAccounts.length > 0 ? (
+                  <AccountsSummaryChip label="archivadas" tone="warning" value={String(archivedAccounts.length)} />
+                ) : null}
+                {excludedAccounts > 0 ? (
+                  <AccountsSummaryChip label="fuera de patrimonio" tone="warning" value={String(excludedAccounts)} />
+                ) : null}
+                <AccountsSummaryChip label="workspace" tone="info" value={formatWorkspaceKindLabel(snapshot.workspace.kind)} />
+                {snapshotQuery.isFetching ? <AccountsSummaryChip label="estado" value="Actualizando" /> : null}
+              </div>
+            </div>
+
+            <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                  <p className="text-sm leading-7 text-storm">
+                    Acciones, busqueda, vistas y exportacion en un solo bloque para abrir tus cuentas sin rodeos.
+                  </p>
+                </div>
+                <button
+                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                  disabled={snapshotQuery.isFetching}
+                  onClick={() => snapshotQuery.refetch()}
+                  title="Actualizar"
+                  type="button"
+                >
+                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={openCreateEditor}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nueva cuenta
+                </Button>
+                <Button
+                  onClick={() => setShowArchived((currentValue) => !currentValue)}
+                  variant="ghost"
+                >
+                  {showArchived ? "Ocultar archivadas" : "Ver archivadas"}
+                </Button>
+                <Button
+                  disabled={!filteredAccounts.length}
+                  onClick={() =>
+                    downloadAccountsCSV(
+                      filteredAccounts,
+                      `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
+                    )
+                  }
+                  variant="ghost"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar CSV
+                </Button>
+              </div>
+
+              {hasAnyAccounts ? (
+                <div className="mt-4 space-y-3">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+                    <input
+                      className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Buscar cuenta..."
+                      type="text"
+                      value={searchQuery}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+                    {viewMode === "table" ? (
+                      <ColumnPicker columns={accountColumns} visible={colVis} onToggle={toggleCol} />
+                    ) : null}
+                    <StatusBadge status={`${filteredAccounts.length} visibles`} tone="neutral" />
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-7 text-storm">
+                  Crea tu primera cuenta y desde aqui se activaran la busqueda, las vistas y la exportacion.
+                </p>
+              )}
+            </aside>
           </div>
-        </PageHeader>
+
+          {hasAnyAccounts ? (
+            <div className="mt-6 border-t border-white/8 pt-6">
+              <div className="flex flex-wrap gap-2">
+                {accountTypeFilters.map(({ value, label }) => (
+                  <button
+                    className={`rounded-full border px-3 py-2 text-xs font-medium transition ${
+                      typeFilter === value
+                        ? "border-pine/30 bg-pine/15 text-pine"
+                        : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
+                    }`}
+                    key={value}
+                    onClick={() => setTypeFilter(value)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+                {hasActiveFilters ? (
+                  <button
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setTypeFilter("all");
+                    }}
+                    type="button"
+                  >
+                    <X className="mr-1 inline-block h-3 w-3" />
+                    Limpiar
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </section>
 
         {errorMessage && !isEditorOpen ? (
           <DataState
@@ -2114,59 +2224,13 @@ export function AccountsPage() {
           />
         ) : null}
 
-        {visibleAccounts.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-              disabled={snapshotQuery.isFetching}
-              onClick={() => snapshotQuery.refetch()}
-              title="Actualizar"
-              type="button"
-            >
-              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-            </button>
-            <div className="relative min-w-[200px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-              <input
-                className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar cuenta..."
-                type="text"
-                value={searchQuery}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {([{v:"all",l:"Todos"},{v:"cash",l:"Efectivo"},{v:"bank",l:"Banco"},{v:"savings",l:"Ahorros"},{v:"credit_card",l:"Tarjeta"},{v:"investment",l:"Inversion"},{v:"loan_wallet",l:"Prestamos"}] as const).map(({v, l}) => (
-                <button
-                  className={`rounded-full border px-3 py-2 text-xs font-medium transition ${typeFilter === v ? "border-pine/30 bg-pine/15 text-pine" : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"}`}
-                  key={v}
-                  onClick={() => setTypeFilter(v)}
-                  type="button"
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-            {hasActiveFilters ? (
-              <button
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
-                onClick={() => { setSearchQuery(""); setTypeFilter("all"); }}
-                type="button"
-              >
-                <X className="inline-block mr-1 h-3 w-3" />
-                Limpiar
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
         {visibleAccounts.length === 0 ? (
           <DataState
             action={<Button onClick={openCreateEditor}>Crear primera cuenta</Button>}
             description={
               showArchived
                 ? "No hay cuentas archivadas en este workspace."
-                : "Todavia no se registraron cuentas en este workspace. Cuando exista la primera, aqui veras saldo, patrimonio y actividad real."
+                : "Todavia no se registraron cuentas en este workspace. Cuando exista la primera, aqui la veras en tabla con saldo, moneda y estado actual."
             }
             title={showArchived ? "No hay cuentas archivadas" : "No hay cuentas reales todavia"}
           />
@@ -2398,36 +2462,6 @@ export function AccountsPage() {
           </section>
         )}
 
-        <SurfaceCard
-          action={<PiggyBank className="h-5 w-5 text-gold" />}
-          description="Resumen calculado directamente desde los registros reales del workspace."
-          title="Patrimonio del workspace"
-        >
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Cuentas activas</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">{activeAccounts.length}</p>
-              <p className="mt-2 text-sm text-storm">No archivadas dentro del workspace.</p>
-            </div>
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Net worth</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                {formatCurrency(netWorthDisplay.amount, netWorthDisplay.currencyCode)}
-              </p>
-              <p className="mt-2 text-sm text-storm">Solo cuentas incluidas en patrimonio.</p>
-            </div>
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Fuera de patrimonio</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">{excludedAccounts}</p>
-              <p className="mt-2 text-sm text-storm">Cuentas excluidas del calculo neto.</p>
-            </div>
-            <div className="glass-panel-soft rounded-[26px] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Archivadas</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">{archivedAccounts.length}</p>
-              <p className="mt-2 text-sm text-storm">Disponibles para reactivar o eliminar.</p>
-            </div>
-          </div>
-        </SurfaceCard>
       </div>
 
       {isEditorOpen ? (

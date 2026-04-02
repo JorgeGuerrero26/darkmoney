@@ -1,6 +1,4 @@
 import {
-  ArrowDownCircle,
-  ArrowUpCircle,
   BarChart3,
   Building2,
   Download,
@@ -51,6 +49,15 @@ import {
 
 type EditorMode = "create" | "edit";
 type RoleFilter = "all" | CounterpartyRoleType;
+type ContactStatusFilter = "all" | "active" | "archived";
+type ContactTableFilters = {
+  name: string;
+  type: "all" | CounterpartySummary["type"];
+  role: RoleFilter;
+  status: ContactStatusFilter;
+  receivable: string;
+  payable: string;
+};
 
 type ContactFormState = {
   name: string;
@@ -94,6 +101,17 @@ const roleOptions = [
 
 function createDefaultFormState(): ContactFormState {
   return { name: "", type: "person", phone: "", email: "", documentNumber: "", notes: "", roles: [] };
+}
+
+function defaultContactTableFilters(): ContactTableFilters {
+  return {
+    name: "",
+    type: "all",
+    role: "all",
+    status: "active",
+    receivable: "",
+    payable: "",
+  };
 }
 
 function buildFormStateFromContact(contact: CounterpartyOverview): ContactFormState {
@@ -558,14 +576,15 @@ export function ContactsPage() {
   });
   const contactColumns: ColumnDef[] = [
     { key: "tipo", label: "Tipo" },
+    { key: "roles", label: "Roles" },
     { key: "por_cobrar", label: "Por cobrar" },
     { key: "por_pagar", label: "Por pagar" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-contacts", contactColumns);
-  const [viewMode, setViewMode] = useViewMode("contacts");
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-  const [showArchived, setShowArchived] = useState(false);
+  const [viewMode, setViewMode] = useViewMode("contacts", "table");
+  const [contactFilters, setContactFilters] = useState<ContactTableFilters>(() =>
+    defaultContactTableFilters(),
+  );
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -621,32 +640,100 @@ export function ContactsPage() {
     });
   }, [contacts, obligations]);
 
+  const hasActiveFilters =
+    contactFilters.name.trim() !== "" ||
+    contactFilters.type !== "all" ||
+    contactFilters.role !== "all" ||
+    contactFilters.status !== "active" ||
+    contactFilters.receivable.trim() !== "" ||
+    contactFilters.payable.trim() !== "";
+
   const filteredContacts = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = contactFilters.name.trim().toLowerCase();
+    const normalizedReceivable = contactFilters.receivable.trim();
+    const normalizedPayable = contactFilters.payable.trim();
 
     return contactsWithExposure.filter((contact) => {
-      if (!showArchived && contact.isArchived) {
+      if (contactFilters.status === "active" && contact.isArchived) {
         return false;
       }
 
-      if (roleFilter !== "all" && !contact.roles.includes(roleFilter)) {
+      if (contactFilters.status === "archived" && !contact.isArchived) {
         return false;
       }
 
-      if (!normalizedSearch) {
-        return true;
+      if (contactFilters.role !== "all" && !contact.roles.includes(contactFilters.role)) {
+        return false;
       }
 
-      return (
-        contact.name.toLowerCase().includes(normalizedSearch) ||
-        contact.type.toLowerCase().includes(normalizedSearch) ||
-        contact.roles.some((role) => getRoleDefinition(role).label.toLowerCase().includes(normalizedSearch)) ||
-        contact.email?.toLowerCase().includes(normalizedSearch) ||
-        contact.phone?.toLowerCase().includes(normalizedSearch) ||
-        contact.documentNumber?.toLowerCase().includes(normalizedSearch)
-      );
+      if (contactFilters.type !== "all" && contact.type !== contactFilters.type) {
+        return false;
+      }
+
+      if (
+        normalizedSearch &&
+        !(
+          contact.name.toLowerCase().includes(normalizedSearch) ||
+          contact.type.toLowerCase().includes(normalizedSearch) ||
+          contact.roles.some((role) =>
+            getRoleDefinition(role).label.toLowerCase().includes(normalizedSearch),
+          ) ||
+          contact.email?.toLowerCase().includes(normalizedSearch) ||
+          contact.phone?.toLowerCase().includes(normalizedSearch) ||
+          contact.documentNumber?.toLowerCase().includes(normalizedSearch)
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        normalizedReceivable &&
+        !String(contact.receivablePendingInBase).includes(normalizedReceivable)
+      ) {
+        return false;
+      }
+
+      if (normalizedPayable && !String(contact.payablePendingInBase).includes(normalizedPayable)) {
+        return false;
+      }
+
+      return true;
     });
-  }, [contactsWithExposure, roleFilter, search, showArchived]);
+  }, [contactFilters, contactsWithExposure]);
+
+  useEffect(() => {
+    if (viewMode === "table") {
+      return;
+    }
+
+    setContactFilters((currentValue) => {
+      if (
+        currentValue.type === "all" &&
+        currentValue.receivable === "" &&
+        currentValue.payable === ""
+      ) {
+        return currentValue;
+      }
+
+      return {
+        ...currentValue,
+        type: "all",
+        receivable: "",
+        payable: "",
+      };
+    });
+  }, [viewMode]);
+
+  function updateContactFilter<Field extends keyof ContactTableFilters>(
+    field: Field,
+    value: ContactTableFilters[Field],
+  ) {
+    setContactFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearContactFilters() {
+    setContactFilters(defaultContactTableFilters());
+  }
 
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredContacts);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -677,8 +764,7 @@ export function ContactsPage() {
   const totalClients = contacts.filter((contact) => contact.roles.includes("client")).length;
   const totalReceivable = contactsWithExposure.reduce((total, contact) => total + contact.receivablePendingInBase, 0);
   const totalPayable = contactsWithExposure.reduce((total, contact) => total + contact.payablePendingInBase, 0);
-  const topDebtors = [...contactsWithExposure].filter((contact) => contact.receivablePendingInBase > 0).sort((a, b) => b.receivablePendingInBase - a.receivablePendingInBase).slice(0, 3);
-  const topCreditors = [...contactsWithExposure].filter((contact) => contact.payablePendingInBase > 0).sort((a, b) => b.payablePendingInBase - a.payablePendingInBase).slice(0, 3);
+  const showContactExplore = viewMode !== "table" && contacts.length > 0;
 
   function updateFormState<Field extends keyof ContactFormState>(field: Field, value: ContactFormState[Field]) {
     setIsDirty(true);
@@ -850,6 +936,7 @@ export function ContactsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      {/*
       <PageHeader
         actions={<><ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />{viewMode === "table" ? <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} /> : null}<Button onClick={() => downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)} variant="ghost"><Download className="mr-2 h-4 w-4" />Exportar CSV</Button><Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button></>}
         description="Gestiona clientes, proveedores, bancos y relaciones clave del workspace para entender mejor quien te debe, a quien le debes y con quien se mueve tu dinero."
@@ -908,12 +995,179 @@ export function ContactsPage() {
         </div>
       </SurfaceCard>
       ) : null}
+      */}
+
+      <section className="glass-panel-strong rounded-[32px] p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">contactos</p>
+              <h2 className="font-display text-4xl font-semibold text-ink">Relaciones del workspace</h2>
+              <p className="max-w-3xl text-sm leading-7 text-storm">
+                Entra directo a tu tabla de contactos. Cuando uses la vista tabla, los filtros viven
+                dentro de cada columna; en lista o tarjetas reaparece el explorador compacto para revisar
+                personas, empresas y bancos con mas contexto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <StatusBadge status={`${totalActiveContacts} activos`} tone="neutral" />
+              <StatusBadge status={`${totalClients} clientes`} tone="info" />
+              <StatusBadge status={`Te deben ${formatCurrency(totalReceivable, baseCurrencyCode)}`} tone="success" />
+              <StatusBadge status={`Debes ${formatCurrency(totalPayable, baseCurrencyCode)}`} tone="warning" />
+              <StatusBadge status={`${totalArchivedContacts} archivados`} tone="neutral" />
+              {snapshotQuery.isFetching ? <StatusBadge status="Actualizando" tone="neutral" /> : null}
+            </div>
+          </div>
+
+          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                <p className="text-sm leading-7 text-storm">
+                  Registra contactos, cambia de vista y exporta. En tabla filtras por columna; en otras
+                  vistas vuelve el explorador con filtros rapidos.
+                </p>
+              </div>
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo contacto
+              </Button>
+              <Button
+                onClick={() =>
+                  downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+              {hasActiveFilters ? (
+                <Button onClick={clearContactFilters} variant="ghost">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar filtros
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <StatusBadge status={`${filteredContacts.length} visibles`} tone="neutral" />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Estado</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {contactFilters.status === "active"
+                    ? "Solo activos"
+                    : contactFilters.status === "archived"
+                      ? "Solo archivados"
+                      : "Todos"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Rol</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {contactFilters.role === "all"
+                    ? "Todos los roles"
+                    : getRoleDefinition(contactFilters.role).label}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{baseCurrencyCode}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      {feedback && feedback.tone !== "error" && !isEditorOpen ? (
+        <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} />
+      ) : null}
+
+      {showContactExplore ? (
+        <SurfaceCard
+          description="Busca por nombre y filtra por rol o estado cuando prefieras recorrer la vista lista o tarjetas."
+          title="Explorar contactos"
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
+            <Input
+              onChange={(event) => updateContactFilter("name", event.target.value)}
+              placeholder="Buscar por nombre, email, rol o documento..."
+              type="text"
+              value={contactFilters.name}
+            />
+            <select
+              className={`${inputClassName} appearance-none`}
+              onChange={(event) => updateContactFilter("role", event.target.value as RoleFilter)}
+              value={contactFilters.role}
+            >
+              <option value="all">Todos los roles</option>
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${inputClassName} appearance-none`}
+              onChange={(event) =>
+                updateContactFilter("status", event.target.value as ContactStatusFilter)
+              }
+              value={contactFilters.status}
+            >
+              <option value="all">Todos los estados</option>
+              <option value="active">Solo activos</option>
+              <option value="archived">Solo archivados</option>
+            </select>
+            <Button
+              className="h-14 px-6"
+              onClick={clearContactFilters}
+              variant={hasActiveFilters ? "secondary" : "ghost"}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+        </SurfaceCard>
+      ) : null}
 
       {filteredContacts.length === 0 ? (
         <DataState
-          action={contacts.length === 0 ? <Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer contacto</Button> : undefined}
-          description={contacts.length === 0 ? "Todavia no hay contactos registrados en este workspace." : "Prueba cambiando el texto de busqueda o los filtros."}
-          title={contacts.length === 0 ? "Sin contactos todavia" : "Sin resultados"}
+          action={
+            contacts.length === 0 ? (
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Crear primer contacto
+              </Button>
+            ) : (
+              <Button onClick={clearContactFilters} variant="ghost">
+                Limpiar filtros
+              </Button>
+            )
+          }
+          description={
+            contacts.length === 0
+              ? "Registra clientes, proveedores, bancos o personas clave para conectar mejor tus movimientos y obligaciones."
+              : "Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna."
+          }
+          title={contacts.length === 0 ? "Aun no has creado contactos" : "Sin resultados"}
         />
       ) : (
         viewMode === "list" ? (
@@ -947,15 +1201,108 @@ export function ContactsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02]">
-                  <th className="px-3 py-3 w-10">
-                    <SelectionCheckbox ariaLabel="Seleccionar todos" checked={allSelected} indeterminate={someSelected} onChange={allSelected ? clearAll : selectAll} />
+                  <th className="w-10 px-4 py-3.5">
+                    <SelectionCheckbox
+                      ariaLabel="Seleccionar todos"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={allSelected ? clearAll : selectAll}
+                    />
                   </th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Contacto</th>
                   <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
+                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("roles", "hidden lg:table-cell")}`}>Roles</th>
                   <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_cobrar", "hidden md:table-cell")}`}>Por cobrar</th>
                   <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_pagar", "hidden md:table-cell")}`}>Por pagar</th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                   <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                </tr>
+                <tr className="border-b border-white/10 bg-[#0c1522]">
+                  <th className="px-4 py-3" />
+                  <th className="px-5 py-3">
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateContactFilter("name", event.target.value)}
+                      placeholder="Filtrar contacto"
+                      type="text"
+                      value={contactFilters.name}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("tipo", "hidden sm:table-cell")}`}>
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) =>
+                        updateContactFilter(
+                          "type",
+                          event.target.value as ContactTableFilters["type"],
+                        )
+                      }
+                      value={contactFilters.type}
+                    >
+                      <option value="all">Todos</option>
+                      {typeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className={`px-5 py-3 ${cv("roles", "hidden lg:table-cell")}`}>
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateContactFilter("role", event.target.value as RoleFilter)}
+                      value={contactFilters.role}
+                    >
+                      <option value="all">Todos</option>
+                      {roleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className={`px-5 py-3 ${cv("por_cobrar", "hidden md:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateContactFilter("receivable", event.target.value)}
+                      placeholder="Por cobrar"
+                      type="text"
+                      value={contactFilters.receivable}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("por_pagar", "hidden md:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateContactFilter("payable", event.target.value)}
+                      placeholder="Por pagar"
+                      type="text"
+                      value={contactFilters.payable}
+                    />
+                  </th>
+                  <th className="px-5 py-3">
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) =>
+                        updateContactFilter("status", event.target.value as ContactStatusFilter)
+                      }
+                      value={contactFilters.status}
+                    >
+                      <option value="all">Todos</option>
+                      <option value="active">Activos</option>
+                      <option value="archived">Archivados</option>
+                    </select>
+                  </th>
+                  <th className="px-5 py-3 text-right">
+                    {hasActiveFilters ? (
+                      <button
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                        onClick={clearContactFilters}
+                        type="button"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -964,18 +1311,34 @@ export function ContactsPage() {
                   const TypeIcon = typeDefinition.icon;
                   return (
                     <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredContacts.length - 1 ? "border-b-0" : ""}`} key={contact.id}>
-                      <td className="px-3 py-3.5 w-10">
-                        <SelectionCheckbox ariaLabel={`Seleccionar ${contact.name}`} checked={selectedIds.has(contact.id)} onChange={() => toggleSelect(contact.id)} />
+                      <td className="w-10 px-4 py-3.5">
+                        <SelectionCheckbox
+                          ariaLabel={`Seleccionar ${contact.name}`}
+                          checked={selectedIds.has(contact.id)}
+                          onChange={() => toggleSelect(contact.id)}
+                        />
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
                             <TypeIcon className="h-3.5 w-3.5" />
                           </div>
-                          <p className="font-medium text-ink">{contact.name}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-ink">{contact.name}</p>
+                            <p className="truncate text-xs text-storm">
+                              {contact.email ?? contact.phone ?? contact.documentNumber ?? "Sin contacto rapido"}
+                            </p>
+                          </div>
                         </div>
                       </td>
                       <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={typeDefinition.label} tone="neutral" /></td>
+                      <td className={`px-5 py-3.5 ${cv("roles", "hidden lg:table-cell")}`}>
+                        <p className="text-xs text-storm">
+                          {contact.roles.length > 0
+                            ? contact.roles.map((role) => getRoleDefinition(role).label).join(", ")
+                            : "Sin roles"}
+                        </p>
+                      </td>
                       <td className={`px-5 py-3.5 text-right text-storm ${cv("por_cobrar", "hidden md:table-cell")}`}>{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</td>
                       <td className={`px-5 py-3.5 text-right text-storm ${cv("por_pagar", "hidden md:table-cell")}`}>{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</td>
                       <td className="px-5 py-3.5">{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}</td>

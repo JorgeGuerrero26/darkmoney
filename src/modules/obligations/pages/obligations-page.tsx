@@ -7,7 +7,6 @@ import {
   CircleDollarSign,
   Download,
   Eye,
-  Landmark,
   LoaderCircle,
   Lock,
   MailPlus,
@@ -145,6 +144,14 @@ type FeedbackState = {
 
 type DirectionFilterValue = "all" | ObligationDirection;
 type StatusFilterValue = "all" | ObligationStatus;
+type ObligationTableFilters = {
+  title: string;
+  counterparty: string;
+  direction: DirectionFilterValue;
+  status: StatusFilterValue;
+  principal: string;
+  pending: string;
+};
 
 type PickerOption = {
   value: string;
@@ -2579,6 +2586,40 @@ function ObligationsLoadingSkeleton() {
   );
 }
 
+const defaultObligationTableFilters = (): ObligationTableFilters => ({
+  title: "",
+  counterparty: "",
+  direction: "all",
+  status: "all",
+  principal: "",
+  pending: "",
+});
+
+function ObligationSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "info" | "warning" | "success" | "danger";
+  value: string;
+}) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+    success: "border-pine/25 bg-pine/10 text-pine",
+    danger: "border-rosewood/30 bg-rosewood/10 text-rosewood",
+  } as const;
+
+  return (
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
+  );
+}
+
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -2651,7 +2692,10 @@ export function ObligationsPage() {
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-obligations", obligationColumns);
   const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useViewMode("obligations");
+  const [viewMode, setViewMode] = useViewMode("obligations", "table");
+  const [obligationFilters, setObligationFilters] = useState<ObligationTableFilters>(() =>
+    defaultObligationTableFilters(),
+  );
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -3027,8 +3071,6 @@ export function ObligationsPage() {
   const isSendingShareInvite = shareInviteMutation.isPending;
   const receivableObligations = obligations.filter((obligation) => obligation.direction === "receivable");
   const payableObligations = obligations.filter((obligation) => obligation.direction === "payable");
-  const receivables = obligations.filter((obligation) => obligation.direction === "receivable").length;
-  const payables = obligations.filter((obligation) => obligation.direction === "payable").length;
   const activeCount = obligations.filter((obligation) =>
     obligation.status === "draft" || obligation.status === "active" || obligation.status === "defaulted",
   ).length;
@@ -3048,65 +3090,70 @@ export function ObligationsPage() {
     "pending",
     baseCurrencyCode,
   );
-  const receivablePrincipalDisplay = getObligationAmountDisplay(
-    receivableObligations,
-    "principal",
-    baseCurrencyCode,
-  );
   const payablePendingDisplay = getObligationAmountDisplay(
     payableObligations,
     "pending",
     baseCurrencyCode,
   );
-  const payablePrincipalDisplay = getObligationAmountDisplay(
-    payableObligations,
-    "principal",
-    baseCurrencyCode,
-  );
-  const sharedReceivableObligations = sharedObligations.filter(
-    (obligation) => obligation.direction === "receivable",
-  );
-  const sharedPayableObligations = sharedObligations.filter(
-    (obligation) => obligation.direction === "payable",
-  );
-  const sharedReceivables = sharedReceivableObligations.length;
-  const sharedPayables = sharedPayableObligations.length;
-  const sharedPrincipalDisplay = getObligationAmountDisplay(
-    sharedObligations,
-    "principal",
-    baseCurrencyCode,
-  );
-  const sharedPendingDisplay = getObligationAmountDisplay(
-    sharedObligations,
-    "pending",
-    baseCurrencyCode,
-  );
-  const sharedReceivablePendingDisplay = getObligationAmountDisplay(
-    sharedReceivableObligations,
-    "pending",
-    baseCurrencyCode,
-  );
-  const sharedReceivablePrincipalDisplay = getObligationAmountDisplay(
-    sharedReceivableObligations,
-    "principal",
-    baseCurrencyCode,
-  );
-  const sharedPayablePendingDisplay = getObligationAmountDisplay(
-    sharedPayableObligations,
-    "pending",
-    baseCurrencyCode,
-  );
-  const sharedPayablePrincipalDisplay = getObligationAmountDisplay(
-    sharedPayableObligations,
-    "principal",
-    baseCurrencyCode,
-  );
   const filteredObligations = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase();
+    const normalizedTitle = obligationFilters.title.trim().toLowerCase();
+    const normalizedCounterparty = obligationFilters.counterparty.trim().toLowerCase();
+    const normalizedPrincipal = obligationFilters.principal.trim().toLowerCase();
+    const normalizedPending = obligationFilters.pending.trim().toLowerCase();
 
     return obligations.filter((obligation) => {
       if (hiddenIds.has(obligation.id)) {
         return false;
+      }
+
+      if (viewMode === "table") {
+        if (
+          obligationFilters.direction !== "all" &&
+          obligation.direction !== obligationFilters.direction
+        ) {
+          return false;
+        }
+
+        if (
+          obligationFilters.status !== "all" &&
+          obligation.status !== obligationFilters.status
+        ) {
+          return false;
+        }
+
+        if (normalizedTitle && !obligation.title.toLowerCase().includes(normalizedTitle)) {
+          return false;
+        }
+
+        if (
+          normalizedCounterparty &&
+          !obligation.counterparty.toLowerCase().includes(normalizedCounterparty)
+        ) {
+          return false;
+        }
+
+        const principalText = [
+          obligation.currentPrincipalAmount ?? obligation.principalAmount,
+          formatCurrency(
+            obligation.currentPrincipalAmount ?? obligation.principalAmount,
+            obligation.currencyCode,
+          ),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (normalizedPrincipal && !principalText.includes(normalizedPrincipal)) {
+          return false;
+        }
+
+        const pendingText = [obligation.pendingAmount, formatCurrency(obligation.pendingAmount, obligation.currencyCode)]
+          .join(" ")
+          .toLowerCase();
+        if (normalizedPending && !pendingText.includes(normalizedPending)) {
+          return false;
+        }
+
+        return true;
       }
 
       const matchesDirection =
@@ -3138,13 +3185,25 @@ export function ObligationsPage() {
 
       return searchableText.includes(normalizedSearch);
     });
-  }, [directionFilter, hiddenIds, obligations, searchValue, statusFilter]);
+  }, [
+    directionFilter,
+    hiddenIds,
+    obligationFilters,
+    obligations,
+    searchValue,
+    statusFilter,
+    viewMode,
+  ]);
 
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredObligations);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   const filteredSharedObligations = useMemo(() => {
+    if (viewMode === "table") {
+      return sharedObligations;
+    }
+
     const normalizedSearch = searchValue.trim().toLowerCase();
 
     return sharedObligations.filter((obligation) => {
@@ -3180,15 +3239,50 @@ export function ObligationsPage() {
 
       return searchableText.includes(normalizedSearch);
     });
-  }, [directionFilter, searchValue, sharedObligations, statusFilter]);
+  }, [directionFilter, searchValue, sharedObligations, statusFilter, viewMode]);
   const filteredReceivables = filteredObligations.filter(
     (obligation) => obligation.direction === "receivable",
   ).length;
   const filteredPayables = filteredObligations.filter(
     (obligation) => obligation.direction === "payable",
   ).length;
-  const hasActiveFilters =
+  const hasExploreFilters =
     Boolean(searchValue.trim()) || directionFilter !== "all" || statusFilter !== "all";
+  const hasTableFilters =
+    obligationFilters.title.trim() !== "" ||
+    obligationFilters.counterparty.trim() !== "" ||
+    obligationFilters.direction !== "all" ||
+    obligationFilters.status !== "all" ||
+    obligationFilters.principal.trim() !== "" ||
+    obligationFilters.pending.trim() !== "";
+  const hasActiveFilters = viewMode === "table" ? hasTableFilters : hasExploreFilters;
+  const showObligationExplore = viewMode !== "table" && obligations.length > 0;
+  const filteredPendingDisplay = getObligationAmountDisplay(
+    filteredObligations,
+    "pending",
+    baseCurrencyCode,
+  );
+  const nextVisibleObligation = useMemo(() => {
+    return filteredObligations
+      .filter((obligation) => obligation.dueDate)
+      .slice()
+      .sort((left, right) => {
+        const leftDate = Date.parse(left.dueDate ?? left.startDate);
+        const rightDate = Date.parse(right.dueDate ?? right.startDate);
+        return leftDate - rightDate;
+      })[0] ?? null;
+  }, [filteredObligations]);
+
+  function updateObligationFilter<Field extends keyof ObligationTableFilters>(
+    field: Field,
+    value: ObligationTableFilters[Field],
+  ) {
+    setObligationFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearObligationFilters() {
+    setObligationFilters(defaultObligationTableFilters());
+  }
 
   async function handleSubmitShareInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3816,35 +3910,104 @@ export function ObligationsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <PageHeader
-        actions={
-          <>
-            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-            {viewMode === "table" ? (
-              <ColumnPicker columns={obligationColumns} visible={colVis} onToggle={toggleCol} />
-            ) : null}
-            <Button
-              onClick={() =>
-                downloadObligationsCSV(
-                  filteredObligations,
-                  `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
-            <Button onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo credito o deuda
-            </Button>
-          </>
-        }
-        description="Organiza todo lo que te deben y todo lo que debes, con saldo pendiente, avance y abonos en un solo lugar."
-        eyebrow="cartera"
-        title="Creditos y deudas"
-      />
+      <section className="glass-panel-strong rounded-[32px] p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">cartera</p>
+              <h2 className="font-display text-4xl font-semibold text-ink">Creditos y deudas</h2>
+              <p className="max-w-3xl text-sm leading-7 text-storm">
+                Entra directo a tu cartera activa. La tabla es la vista predeterminada: ahi
+                filtras por columna; si cambias a lista o tarjetas reaparece el explorador compacto
+                para recorrer la cartera con mas contexto.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <ObligationSummaryChip label="registros" value={String(obligations.length)} />
+              <ObligationSummaryChip label="principal total" tone="info" value={totalPrincipalDisplay} />
+              <ObligationSummaryChip label="pendiente total" tone="warning" value={totalPendingDisplay} />
+              <ObligationSummaryChip label="me deben" tone="success" value={receivablePendingDisplay} />
+              <ObligationSummaryChip label="yo debo" tone="danger" value={payablePendingDisplay} />
+              <ObligationSummaryChip label="activas" tone="info" value={String(activeCount)} />
+              <ObligationSummaryChip label="liquidadas" value={String(settledCount)} />
+              {snapshotQuery.isFetching ? <ObligationSummaryChip label="estado" value="Actualizando" /> : null}
+            </div>
+          </div>
+
+          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                <p className="text-sm leading-7 text-storm">
+                  Registra creditos, deudas y abonos. En tabla mandan los filtros por columna; en
+                  otras vistas vuelve el explorador rapido.
+                </p>
+              </div>
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={obligationColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <StatusBadge status={`${filteredObligations.length} visibles`} tone="neutral" />
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Button
+                className="sm:flex-1"
+                onClick={() =>
+                  downloadObligationsCSV(
+                    filteredObligations,
+                    `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+              <Button className="sm:flex-1" onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo registro
+              </Button>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Visible</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{filteredPendingDisplay}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Proximo hito</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {nextVisibleObligation?.dueDate ? formatDate(nextVisibleObligation.dueDate) : "Sin fecha"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Compartidos</p>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {sharedObligationsQuery.isLoading
+                    ? "Cargando..."
+                    : sharedObligationsQuery.error
+                      ? "Con incidencia"
+                      : `${sharedObligations.length} activos`}
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
 
       {pageFeedback?.tone === "error" ? (
         <DataState
@@ -3853,224 +4016,6 @@ export function ObligationsPage() {
           tone={pageFeedback.tone}
         />
       ) : null}
-
-      <SurfaceCard
-        action={<Landmark className="h-5 w-5 text-gold" />}
-        description="Resumen general de la cartera activa del workspace."
-        title="Balance de cartera"
-      >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3">
-          <p className="text-sm leading-7 text-storm">
-            Estos montos corresponden a tu workspace activo. Los registros compartidos contigo se
-            muestran aparte para no mezclarlos con tu cartera propia.
-          </p>
-          <StatusBadge status="Workspace activo" tone="neutral" />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="glass-panel-soft rounded-[26px] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Principal total</p>
-            <p className="mt-3 font-display text-3xl font-semibold text-ink">{totalPrincipalDisplay}</p>
-          </div>
-          <div className="glass-panel-soft rounded-[26px] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Pendiente total</p>
-            <p className="mt-3 font-display text-3xl font-semibold text-ink">{totalPendingDisplay}</p>
-          </div>
-          <div className="glass-panel-soft rounded-[26px] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Activas</p>
-            <p className="mt-3 font-display text-3xl font-semibold text-ink">{activeCount}</p>
-          </div>
-          <div className="glass-panel-soft rounded-[26px] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-storm">Liquidada</p>
-            <p className="mt-3 font-display text-3xl font-semibold text-ink">{settledCount}</p>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="rounded-[26px] border border-pine/14 bg-pine/[0.06] p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpCircle className="h-4 w-4 text-pine" />
-                  <p className="text-xs uppercase tracking-[0.18em] text-pine/90">Me deben</p>
-                </div>
-                <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                  {receivablePendingDisplay}
-                </p>
-                <p className="mt-3 text-sm leading-7 text-storm">
-                  {receivables} {receivables === 1 ? "registro por cobrar" : "registros por cobrar"}.
-                </p>
-                <p className="text-sm text-storm/80">
-                  Principal actual: {receivablePrincipalDisplay}
-                </p>
-              </div>
-              <StatusBadge status="Por cobrar" tone="success" />
-            </div>
-          </div>
-          <div className="rounded-[26px] border border-rosewood/16 bg-rosewood/[0.06] p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ArrowDownCircle className="h-4 w-4 text-rosewood" />
-                  <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">Debo</p>
-                </div>
-                <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                  {payablePendingDisplay}
-                </p>
-                <p className="mt-3 text-sm leading-7 text-storm">
-                  {payables} {payables === 1 ? "registro por pagar" : "registros por pagar"}.
-                </p>
-                <p className="text-sm text-storm/80">
-                  Principal actual: {payablePrincipalDisplay}
-                </p>
-              </div>
-              <StatusBadge status="Por pagar" tone="danger" />
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-[28px] border border-[#7aa2ff]/18 bg-[#7aa2ff]/[0.06] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4 text-[#9fb9ff]" />
-                <p className="text-xs uppercase tracking-[0.18em] text-[#c8d8ff]">
-                  Compartidos contigo
-                </p>
-              </div>
-              <p className="mt-2 text-sm leading-7 text-storm">
-                Esta lectura es solo informativa y en modo solo lectura. No entra en los totales
-                del workspace activo.
-              </p>
-            </div>
-            <StatusBadge
-              status={
-                sharedObligationsQuery.isLoading
-                  ? "Cargando..."
-                  : sharedObligationsQuery.error
-                    ? "Con incidencia"
-                    : `${sharedObligations.length} compartidos`
-              }
-              tone="info"
-            />
-          </div>
-
-          {sharedObligationsQuery.isLoading ? (
-            <div className="mt-4 rounded-[24px] border border-white/10 bg-black/10 p-4">
-              <p className="text-sm font-medium text-ink">Buscando cartera compartida</p>
-              <p className="mt-2 text-sm leading-7 text-storm">
-                Estamos revisando los creditos y deudas que otros usuarios te compartieron.
-              </p>
-            </div>
-          ) : sharedObligationsQuery.error ? (
-            <div className="mt-4 rounded-[24px] border border-rosewood/18 bg-rosewood/[0.08] p-4">
-              <p className="text-sm font-medium text-ink">No pudimos abrir los compartidos</p>
-              <p className="mt-2 text-sm leading-7 text-storm">
-                {getQueryErrorMessage(
-                  sharedObligationsQuery.error,
-                  "Intentalo otra vez en unos segundos.",
-                )}
-              </p>
-            </div>
-          ) : sharedObligations.length === 0 ? (
-            <div className="mt-4 rounded-[24px] border border-white/10 bg-black/10 p-4">
-              <p className="text-sm font-medium text-ink">Aun no tienes registros compartidos</p>
-              <p className="mt-2 text-sm leading-7 text-storm">
-                Cuando otra persona te comparta un credito o deuda aceptado, aqui veras el resumen
-                total sin confundirlo con tu cartera propia.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-4 space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="glass-panel-soft rounded-[26px] p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                    Principal compartido
-                  </p>
-                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {sharedPrincipalDisplay}
-                  </p>
-                  <p className="mt-2 text-sm text-storm">
-                    Base actual de {sharedObligations.length} registros en seguimiento.
-                  </p>
-                </div>
-                <div className="glass-panel-soft rounded-[26px] p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">
-                    Pendiente compartido
-                  </p>
-                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {sharedPendingDisplay}
-                  </p>
-                  <p className="mt-2 text-sm text-storm">
-                    Saldo vivo de los accesos compartidos contigo.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-[26px] border border-pine/14 bg-pine/[0.06] p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <ArrowUpCircle className="h-4 w-4 text-pine" />
-                        <p className="text-xs uppercase tracking-[0.18em] text-pine/90">
-                          Creditos compartidos
-                        </p>
-                      </div>
-                      <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                        {sharedReceivablePendingDisplay}
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-storm">
-                        {sharedReceivables}{" "}
-                        {sharedReceivables === 1
-                          ? "credito compartido"
-                          : "creditos compartidos"}
-                        .
-                      </p>
-                      <p className="text-sm text-storm/80">
-                        Al propietario aun le deben pagar este monto.
-                      </p>
-                      <p className="text-sm text-storm/80">
-                        Principal actual: {sharedReceivablePrincipalDisplay}
-                      </p>
-                    </div>
-                    <StatusBadge status="Solo lectura" tone="success" />
-                  </div>
-                </div>
-                <div className="rounded-[26px] border border-rosewood/16 bg-rosewood/[0.06] p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <ArrowDownCircle className="h-4 w-4 text-rosewood" />
-                        <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">
-                          Deudas compartidas
-                        </p>
-                      </div>
-                      <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                        {sharedPayablePendingDisplay}
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-storm">
-                        {sharedPayables}{" "}
-                        {sharedPayables === 1
-                          ? "deuda compartida"
-                          : "deudas compartidas"}
-                        .
-                      </p>
-                      <p className="text-sm text-storm/80">
-                        El propietario aun debe pagar este monto.
-                      </p>
-                      <p className="text-sm text-storm/80">
-                        Principal actual: {sharedPayablePrincipalDisplay}
-                      </p>
-                    </div>
-                    <StatusBadge status="Solo lectura" tone="danger" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </SurfaceCard>
 
       {obligations.length === 0 ? (
         <DataState
@@ -4085,134 +4030,136 @@ export function ObligationsPage() {
         />
       ) : (
         <>
-          <SurfaceCard
-            action={<StatusBadge status={`${filteredObligations.length} visibles`} tone="neutral" />}
-            className="relative z-10"
-            description="Busca por nombre, contraparte, cuenta sugerida o estado para llegar mas rapido al registro correcto."
-            title="Explorar cartera"
-          >
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)]">
-              <div className="space-y-4">
-                <label className="block">
-                  <span className={labelClassName}>Buscar registro</span>
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                      disabled={snapshotQuery.isFetching}
-                      onClick={() => snapshotQuery.refetch()}
-                      title="Actualizar"
-                      type="button"
-                    >
-                      <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-                    </button>
-                    <div className="relative flex-1">
-                      <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-storm/75" />
-                      <Input
-                        className="pl-12"
-                        onChange={(event) => setSearchValue(event.target.value)}
-                        placeholder="Busca por titulo, contraparte o cuenta..."
-                        value={searchValue}
-                      />
+          {showObligationExplore ? (
+            <SurfaceCard
+              action={<StatusBadge status={`${filteredObligations.length} visibles`} tone="neutral" />}
+              className="relative z-10"
+              description="Busca por nombre, contraparte, cuenta sugerida o estado para llegar mas rapido al registro correcto."
+              title="Explorar cartera"
+            >
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)]">
+                <div className="space-y-4">
+                  <label className="block">
+                    <span className={labelClassName}>Buscar registro</span>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                        disabled={snapshotQuery.isFetching}
+                        onClick={() => snapshotQuery.refetch()}
+                        title="Actualizar"
+                        type="button"
+                      >
+                        <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+                      </button>
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-storm/75" />
+                        <Input
+                          className="pl-12"
+                          onChange={(event) => setSearchValue(event.target.value)}
+                          placeholder="Busca por titulo, contraparte o cuenta..."
+                          value={searchValue}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
-                      Tipo de cartera
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => setDirectionFilter("all")}
-                        variant={directionFilter === "all" ? "primary" : "ghost"}
-                      >
-                        Todo
-                      </Button>
-                      <Button
-                        onClick={() => setDirectionFilter("receivable")}
-                        variant={directionFilter === "receivable" ? "primary" : "ghost"}
-                      >
-                        Me deben
-                      </Button>
-                      <Button
-                        onClick={() => setDirectionFilter("payable")}
-                        variant={directionFilter === "payable" ? "primary" : "ghost"}
-                      >
-                        Yo debo
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
-                      Estado
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => setStatusFilter("all")}
-                        variant={statusFilter === "all" ? "primary" : "ghost"}
-                      >
-                        Todos
-                      </Button>
-                      {statusOptions.map((option) => (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
+                        Tipo de cartera
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <Button
-                          key={option.value}
-                          onClick={() => setStatusFilter(option.value)}
-                          variant={statusFilter === option.value ? "primary" : "ghost"}
+                          onClick={() => setDirectionFilter("all")}
+                          variant={directionFilter === "all" ? "primary" : "ghost"}
                         >
-                          {option.label}
+                          Todo
                         </Button>
-                      ))}
+                        <Button
+                          onClick={() => setDirectionFilter("receivable")}
+                          variant={directionFilter === "receivable" ? "primary" : "ghost"}
+                        >
+                          Me deben
+                        </Button>
+                        <Button
+                          onClick={() => setDirectionFilter("payable")}
+                          variant={directionFilter === "payable" ? "primary" : "ghost"}
+                        >
+                          Yo debo
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
+                        Estado
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => setStatusFilter("all")}
+                          variant={statusFilter === "all" ? "primary" : "ghost"}
+                        >
+                          Todos
+                        </Button>
+                        {statusOptions.map((option) => (
+                          <Button
+                            key={option.value}
+                            onClick={() => setStatusFilter(option.value)}
+                            variant={statusFilter === option.value ? "primary" : "ghost"}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
-                  Vista actual
-                </p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-                  <div className="rounded-[22px] border border-white/10 bg-void/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Visibles</p>
-                    <p className="mt-2 text-2xl font-semibold text-ink">{filteredObligations.length}</p>
-                    <p className="mt-2 text-sm text-storm">Segun los filtros actuales.</p>
-                  </div>
-                  <div className="rounded-[22px] border border-pine/14 bg-pine/[0.08] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-pine/90">Me deben</p>
-                    <p className="mt-2 text-2xl font-semibold text-ink">{filteredReceivables}</p>
-                    <p className="mt-2 text-sm text-storm">Registros por cobrar visibles.</p>
-                  </div>
-                  <div className="rounded-[22px] border border-rosewood/16 bg-rosewood/[0.08] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">Yo debo</p>
-                    <p className="mt-2 text-2xl font-semibold text-ink">{filteredPayables}</p>
-                    <p className="mt-2 text-sm text-storm">Registros por pagar visibles.</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
-                  <p className="text-sm leading-7 text-storm">
-                    {hasActiveFilters
-                      ? "Puedes combinar texto, tipo y estado para llegar mas rapido al registro exacto."
-                      : "Usa estos filtros para separar lo que te deben, lo que debes o estados puntuales."}
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">
+                    Vista actual
                   </p>
-                  {hasActiveFilters ? (
-                    <Button
-                      onClick={() => {
-                        setSearchValue("");
-                        setDirectionFilter("all");
-                        setStatusFilter("all");
-                      }}
-                      variant="ghost"
-                    >
-                      Limpiar filtros
-                    </Button>
-                  ) : null}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    <div className="rounded-[22px] border border-white/10 bg-void/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Visibles</p>
+                      <p className="mt-2 text-2xl font-semibold text-ink">{filteredObligations.length}</p>
+                      <p className="mt-2 text-sm text-storm">Segun los filtros actuales.</p>
+                    </div>
+                    <div className="rounded-[22px] border border-pine/14 bg-pine/[0.08] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-pine/90">Me deben</p>
+                      <p className="mt-2 text-2xl font-semibold text-ink">{filteredReceivables}</p>
+                      <p className="mt-2 text-sm text-storm">Registros por cobrar visibles.</p>
+                    </div>
+                    <div className="rounded-[22px] border border-rosewood/16 bg-rosewood/[0.08] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-rosewood/90">Yo debo</p>
+                      <p className="mt-2 text-2xl font-semibold text-ink">{filteredPayables}</p>
+                      <p className="mt-2 text-sm text-storm">Registros por pagar visibles.</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <p className="text-sm leading-7 text-storm">
+                      {hasExploreFilters
+                        ? "Puedes combinar texto, tipo y estado para llegar mas rapido al registro exacto."
+                        : "Usa estos filtros para separar lo que te deben, lo que debes o estados puntuales."}
+                    </p>
+                    {hasExploreFilters ? (
+                      <Button
+                        onClick={() => {
+                          setSearchValue("");
+                          setDirectionFilter("all");
+                          setStatusFilter("all");
+                        }}
+                        variant="ghost"
+                      >
+                        Limpiar filtros
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            </div>
-          </SurfaceCard>
+            </SurfaceCard>
+          ) : null}
 
           {filteredObligations.length === 0 ? (
             <DataState
@@ -4220,13 +4167,29 @@ export function ObligationsPage() {
                 obligations.length === 0 ? (
                   <Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primero</Button>
                 ) : hasActiveFilters ? (
-                  <Button onClick={() => { setSearchValue(""); setDirectionFilter("all"); setStatusFilter("all"); }} variant="secondary">Quitar filtros</Button>
+                  <Button
+                    onClick={() => {
+                      if (viewMode === "table") {
+                        clearObligationFilters();
+                        return;
+                      }
+
+                      setSearchValue("");
+                      setDirectionFilter("all");
+                      setStatusFilter("all");
+                    }}
+                    variant="secondary"
+                  >
+                    Quitar filtros
+                  </Button>
                 ) : undefined
               }
               description={
                 obligations.length === 0
                   ? "Todavia no hay creditos ni deudas registrados en este workspace."
-                  : "No hay registros que coincidan con la busqueda o los filtros actuales."
+                  : viewMode === "table"
+                    ? "No hay registros que coincidan con los filtros activos de la tabla."
+                    : "No hay registros que coincidan con la busqueda o los filtros actuales."
               }
               title={obligations.length === 0 ? "Sin creditos ni deudas todavia" : "Sin resultados"}
             />
@@ -4273,6 +4236,85 @@ export function ObligationsPage() {
                       <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Pendiente</th>
                       <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
                       <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                    </tr>
+                    <tr className="border-b border-white/10 bg-[#0c1522]">
+                      <th className="px-3 py-3" />
+                      <th className="px-5 py-3">
+                        <input
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) => updateObligationFilter("title", event.target.value)}
+                          placeholder="Filtrar registro"
+                          type="text"
+                          value={obligationFilters.title}
+                        />
+                      </th>
+                      <th className={`px-5 py-3 ${cv("contraparte", "hidden sm:table-cell")}`}>
+                        <input
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) => updateObligationFilter("counterparty", event.target.value)}
+                          placeholder="Filtrar contraparte"
+                          type="text"
+                          value={obligationFilters.counterparty}
+                        />
+                      </th>
+                      <th className={`px-5 py-3 ${cv("direccion", "hidden md:table-cell")}`}>
+                        <select
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) =>
+                            updateObligationFilter("direction", event.target.value as DirectionFilterValue)
+                          }
+                          value={obligationFilters.direction}
+                        >
+                          <option value="all">Todas</option>
+                          <option value="receivable">Me deben</option>
+                          <option value="payable">Yo debo</option>
+                        </select>
+                      </th>
+                      <th className={`px-5 py-3 ${cv("principal", "hidden md:table-cell")}`}>
+                        <input
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) => updateObligationFilter("principal", event.target.value)}
+                          placeholder="Principal"
+                          type="text"
+                          value={obligationFilters.principal}
+                        />
+                      </th>
+                      <th className="px-5 py-3">
+                        <input
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) => updateObligationFilter("pending", event.target.value)}
+                          placeholder="Pendiente"
+                          type="text"
+                          value={obligationFilters.pending}
+                        />
+                      </th>
+                      <th className="px-5 py-3">
+                        <select
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                          onChange={(event) =>
+                            updateObligationFilter("status", event.target.value as StatusFilterValue)
+                          }
+                          value={obligationFilters.status}
+                        >
+                          <option value="all">Todos</option>
+                          {statusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </th>
+                      <th className="px-5 py-3 text-right">
+                        {hasTableFilters ? (
+                          <button
+                            className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                            onClick={clearObligationFilters}
+                            type="button"
+                          >
+                            Limpiar
+                          </button>
+                        ) : null}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

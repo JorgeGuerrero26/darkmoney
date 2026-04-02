@@ -6,7 +6,9 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import type { CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type DatePickerFieldMode = "date" | "datetime-local";
 
@@ -117,6 +119,9 @@ export function DatePickerField({
     placeholder ?? (mode === "datetime-local" ? "Selecciona fecha y hora" : "Selecciona una fecha");
   const selectedDate = useMemo(() => parsePickerValue(value, mode), [mode, value]);
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const referenceDate = selectedDate ?? new Date();
     return new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
@@ -126,7 +131,6 @@ export function DatePickerField({
   const [draftMinute, setDraftMinute] = useState(
     selectedDate ? padNumber(Math.floor(selectedDate.getMinutes() / 5) * 5) : "00",
   );
-  const [panelId] = useState(() => `date-picker-${Math.random().toString(36).slice(2, 10)}`);
 
   const monthLabel = new Intl.DateTimeFormat("es-PE", {
     month: "long",
@@ -154,22 +158,39 @@ export function DatePickerField({
     );
   }, [isOpen, selectedDate]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
+  function calcPosition() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const style: CSSProperties = { position: "fixed", left: rect.left, width: rect.width, zIndex: 9999 };
+    if (spaceBelow >= 380 || spaceBelow >= rect.top) {
+      style.top = rect.bottom + 10;
+    } else {
+      style.bottom = window.innerHeight - rect.top + 10;
     }
+    setDropdownStyle(style);
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     function handlePointerDown(event: PointerEvent) {
-      const target = event.target as HTMLElement | null;
-
-      if (!target?.closest(`[data-picker-id="${panelId}"]`)) {
-        setIsOpen(false);
+      const target = event.target as Node | null;
+      if (target && (triggerRef.current?.contains(target) || panelRef.current?.contains(target))) {
+        return;
       }
+      setIsOpen(false);
     }
 
     document.addEventListener("pointerdown", handlePointerDown, true);
-    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, [isOpen, panelId]);
+    window.addEventListener("scroll", calcPosition, true);
+    window.addEventListener("resize", calcPosition);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("scroll", calcPosition, true);
+      window.removeEventListener("resize", calcPosition);
+    };
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePickDay(nextDate: Date) {
     if (mode === "date") {
@@ -224,15 +245,15 @@ export function DatePickerField({
   }
 
   return (
-    <div className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`} data-picker-id={panelId}>
+    <div className="relative min-w-0">
       <button
-        aria-controls={panelId}
+        ref={triggerRef}
         aria-expanded={isOpen}
         className={`flex h-14 w-full items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-left text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 hover:border-white/14 hover:bg-[#101928] focus-visible:border-pine/25 focus-visible:bg-[#111b2a] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] ${
           disabled ? "cursor-not-allowed opacity-60" : ""
         }`}
         disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={() => { calcPosition(); setIsOpen((v) => !v); }}
         type="button"
       >
         <span className="flex min-w-0 items-center gap-3">
@@ -246,10 +267,11 @@ export function DatePickerField({
         <CalendarDays className="h-4 w-4 shrink-0 text-storm" />
       </button>
 
-      {isOpen ? (
+      {isOpen ? createPortal(
         <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
-          id={panelId}
+          ref={panelRef}
+          className="animate-rise-in rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          style={dropdownStyle}
         >
           <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] px-3 py-2">
             <button
@@ -359,7 +381,8 @@ export function DatePickerField({
               Aplicar
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

@@ -6,7 +6,7 @@ import {
   upsertBillingEvent,
 } from "../_shared/billing.ts";
 import {
-  cancelPaddleSubscription,
+  reactivatePaddleSubscription,
   resolveEntitlementFromPaddleSubscription,
 } from "../_shared/paddle.ts";
 
@@ -25,8 +25,7 @@ Deno.serve(async (request) => {
     if (isAdminOverrideEmail(user.email)) {
       return jsonResponse(
         {
-          error:
-            "Tu cuenta administradora no necesita cancelar Pro porque su acceso viene por override interno.",
+          error: "La cuenta administradora no necesita reactivar renovaciones porque su acceso premium viene por override interno.",
         },
         { status: 400 },
       );
@@ -36,7 +35,7 @@ Deno.serve(async (request) => {
     const { data: entitlement, error: entitlementError } = await adminClient
       .from("user_entitlements")
       .select(
-        "user_id, billing_provider, provider_subscription_id, provider_customer_id, manual_override",
+        "user_id, billing_provider, provider_subscription_id, provider_customer_id, current_period_end, cancel_at_period_end",
       )
       .eq("user_id", user.id)
       .maybeSingle();
@@ -48,13 +47,13 @@ Deno.serve(async (request) => {
     if (!entitlement?.provider_subscription_id || entitlement.billing_provider !== "paddle") {
       return jsonResponse(
         {
-          error: "No encontramos una suscripcion activa de Paddle asociada a esta cuenta.",
+          error: "No encontramos una suscripcion de Paddle asociada a esta cuenta para reactivar la renovacion.",
         },
         { status: 400 },
       );
     }
 
-    const subscription = await cancelPaddleSubscription(entitlement.provider_subscription_id);
+    const subscription = await reactivatePaddleSubscription(entitlement.provider_subscription_id);
     const resolvedEntitlement = resolveEntitlementFromPaddleSubscription(subscription);
     const { error: upsertError } = await adminClient.from("user_entitlements").upsert(
       {
@@ -73,8 +72,8 @@ Deno.serve(async (request) => {
         manual_override: false,
         metadata: {
           ...(resolvedEntitlement.metadata ?? {}),
-          cancelled_by_user: true,
-          cancelled_at: new Date().toISOString(),
+          reactivated_by_user: true,
+          reactivated_at: new Date().toISOString(),
         },
       },
       { onConflict: "user_id" },
@@ -87,12 +86,12 @@ Deno.serve(async (request) => {
     await upsertBillingEvent(adminClient, {
       provider: "paddle",
       providerEventId: entitlement.provider_subscription_id,
-      providerEventType: "subscription_cancel_requested_by_user",
+      providerEventType: "subscription_reactivated_by_user",
       userId: user.id,
       externalReference: `dm-pro:${user.id}`,
       payload: {
         subscription,
-        cancelledAt: new Date().toISOString(),
+        reactivatedAt: new Date().toISOString(),
       },
       processed: true,
       processedAt: new Date().toISOString(),
@@ -102,7 +101,7 @@ Deno.serve(async (request) => {
       provider: "paddle",
       planCode: resolvedEntitlement.planCode,
       billingProvider: resolvedEntitlement.billingProvider,
-      billingStatus: resolvedEntitlement.billingStatus ?? subscription?.status ?? "active",
+      billingStatus: resolvedEntitlement.billingStatus,
       proAccessEnabled: resolvedEntitlement.proAccessEnabled,
       currentPeriodStart: resolvedEntitlement.currentPeriodStart,
       currentPeriodEnd: resolvedEntitlement.currentPeriodEnd,
@@ -116,7 +115,7 @@ Deno.serve(async (request) => {
         error:
           error instanceof Error
             ? error.message
-            : "No pudimos cancelar la suscripcion de DarkMoney Pro en Paddle.",
+            : "No pudimos reactivar la renovacion de DarkMoney Pro en Paddle.",
       },
       { status: 500 },
     );

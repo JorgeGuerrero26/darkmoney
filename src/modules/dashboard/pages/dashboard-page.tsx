@@ -1438,7 +1438,10 @@ function readStoredHiddenWidgets(): DashboardWidgetId[] {
   }
 }
 
-function getMonthlySubscriptionAmount(subscription: SubscriptionSummary) {
+function getMonthlySubscriptionAmount(
+  subscription: Pick<SubscriptionSummary, "amount" | "intervalCount" | "frequency"> |
+    Pick<RecurringIncomeSummary, "amount" | "intervalCount" | "frequency">,
+) {
   const intervalCount = Math.max(1, subscription.intervalCount || 1);
 
   switch (subscription.frequency) {
@@ -3173,7 +3176,7 @@ export function DashboardPage() {
   );
   const monthlyRecurringIncome = displayRecurringIncome
     .filter((income) => income.status === "active")
-    .reduce((total, income) => total + getMonthlySubscriptionAmount({ ...income, nextDueDate: income.nextExpectedDate }), 0);
+    .reduce((total, income) => total + getMonthlySubscriptionAmount(income), 0);
   const todayKey = toDateKey(new Date());
   const currentBudgets = displayBudgets.filter(
     (budget) => budget.periodStart <= todayKey && budget.periodEnd >= todayKey,
@@ -3212,7 +3215,7 @@ export function DashboardPage() {
     .sort((left, right) => right.usedPercent - left.usedPercent)
     .slice(0, topCount);
   const upcomingOutflows = upcomingCommitments
-    .filter((item) => item.kind !== "Por cobrar")
+    .filter((item) => item.kind !== "Por cobrar" && item.kind !== "Ingreso fijo")
     .reduce((total, item) => total + item.amount, 0);
   const overdueObligations = displayObligations.filter((obligation) => {
     if (!obligation.dueDate || obligation.pendingAmount <= 0) {
@@ -3392,8 +3395,8 @@ export function DashboardPage() {
       days,
       expectedInflow,
       expectedOutflow,
-      receivableCount: commitmentsWindow.filter((item) => item.kind === "Por cobrar").length,
-      payableCount: commitmentsWindow.filter((item) => item.kind !== "Por cobrar").length,
+      receivableCount: commitmentsWindow.filter((item) => item.kind === "Por cobrar" || item.kind === "Ingreso fijo").length,
+      payableCount: commitmentsWindow.filter((item) => item.kind !== "Por cobrar" && item.kind !== "Ingreso fijo").length,
       scheduledCount: scheduledWindow.length,
       estimatedBalance: liquidMoneyTotal + expectedInflow - expectedOutflow,
     };
@@ -5900,7 +5903,7 @@ export function DashboardPage() {
               <p className="text-xs uppercase tracking-[0.22em] text-storm">Próximos 30 días</p>
               {upcomingCommitments.length === 0 ? (
                 <DataState
-                  description="No hay cuotas ni suscripciones venciendo en las próximas cuatro semanas."
+                  description="No hay cuotas, suscripciones ni ingresos fijos esperados en las próximas cuatro semanas."
                   title="Sin compromisos inmediatos"
                   tone="success"
                 />
@@ -6464,7 +6467,7 @@ export function DashboardPage() {
                             <p className="mt-2 text-sm text-storm">Saldo estimado despues de compromisos.</p>
                           </div>
                           <StatusBadge
-                            status={`${window.receivableCount} por cobrar / ${window.payableCount} por pagar`}
+                            status={`${window.receivableCount} por recibir / ${window.payableCount} por pagar`}
                             tone={window.expectedOutflow > window.expectedInflow ? "warning" : "success"}
                           />
                         </div>

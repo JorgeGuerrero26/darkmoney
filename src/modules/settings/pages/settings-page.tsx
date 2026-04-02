@@ -1,6 +1,6 @@
 import { BellDot, Briefcase, Camera, Check, ChevronDown, LoaderCircle, MailPlus, Plus, Search, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
@@ -12,8 +12,7 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { getPublicAppUrl } from "../../../lib/app-url";
-import { getBillingProviderLabel } from "../../../lib/billing-provider";
-import { formatDate } from "../../../lib/formatting/dates";
+import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel, formatWorkspaceRoleLabel } from "../../../lib/formatting/labels";
 import { isPaddleCheckoutConfigured, openPaddleProCheckout } from "../../../lib/paddle";
 import { useAuth } from "../../auth/auth-context";
@@ -22,8 +21,11 @@ import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   useCreateSharedWorkspaceMutation,
   useCreateWorkspaceInvitationMutation,
+  useCreatePaddleCustomerPortalMutation,
   useCancelPaddleSubscriptionMutation,
   useCancelProSubscriptionMutation,
+  useCurrentUserBillingHistoryQuery,
+  useReactivatePaddleSubscriptionMutation,
   getQueryErrorMessage,
   useCurrentUserEntitlementQuery,
   useNotificationPreferencesQuery,
@@ -459,6 +461,60 @@ function WorkspaceDialogShell({
   );
 }
 
+type SettingsSectionId = "general" | "billing" | "workspace" | "catalogs";
+
+const settingsSectionDefinitions: Array<{
+  id: SettingsSectionId;
+  title: string;
+  description: string;
+  icon: ReactNode;
+}> = [
+  {
+    id: "general",
+    title: "General",
+    description: "Perfil y notificaciones",
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    id: "billing",
+    title: "Facturacion",
+    description: "Plan, pagos e historial",
+    icon: <Sparkles className="h-4 w-4" />,
+  },
+  {
+    id: "workspace",
+    title: "Workspace",
+    description: "Equipo y permisos",
+    icon: <ShieldCheck className="h-4 w-4" />,
+  },
+  {
+    id: "catalogs",
+    title: "Catalogos",
+    description: "Resumen del espacio",
+    icon: <Tag className="h-4 w-4" />,
+  },
+];
+
+function SettingsSectionLead({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-storm/65">{eyebrow}</p>
+      <div className="space-y-2">
+        <h2 className="font-display text-3xl font-semibold leading-tight text-ink">{title}</h2>
+        <p className="max-w-3xl text-sm leading-7 text-storm">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -473,9 +529,12 @@ export function SettingsPage() {
   } = useActiveWorkspace();
   const preferencesQuery = useNotificationPreferencesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
+  const billingHistoryQuery = useCurrentUserBillingHistoryQuery(user?.id);
   const savePreferencesMutation = useSaveNotificationPreferencesMutation(user?.id);
   const cancelLegacyProSubscriptionMutation = useCancelProSubscriptionMutation(user?.id);
   const cancelPaddleSubscriptionMutation = useCancelPaddleSubscriptionMutation(user?.id);
+  const reactivatePaddleSubscriptionMutation = useReactivatePaddleSubscriptionMutation(user?.id);
+  const createPaddleCustomerPortalMutation = useCreatePaddleCustomerPortalMutation();
   const createSharedWorkspaceMutation = useCreateSharedWorkspaceMutation(user?.id);
   const workspaceCollaborationQuery = useWorkspaceCollaborationQuery(activeWorkspace?.id);
   const createWorkspaceInvitationMutation = useCreateWorkspaceInvitationMutation(activeWorkspace?.id, user?.id);
@@ -507,6 +566,7 @@ export function SettingsPage() {
   const [invitedRole, setInvitedRole] = useState<Exclude<WorkspaceRole, "owner">>("member");
   const [invitationNote, setInvitationNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
   useSuccessToast(feedbackMessage, {
     clear: () => setFeedbackMessage(""),
     title: "Configuración actualizada",
@@ -515,6 +575,9 @@ export function SettingsPage() {
     clear: () => setWorkspaceFeedbackMessage(""),
     title: "Workspace colaborativo actualizado",
   });
+  const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
+    setActiveSettingsSection(sectionId);
+  }, []);
   const currencyOptions = useMemo(() => {
     if (!baseCurrencyCode.trim()) {
       return profileCurrencyOptions;
@@ -611,13 +674,9 @@ export function SettingsPage() {
     const query = new URLSearchParams(location.search);
     const billingStatus = query.get("billing");
 
-    if (billingStatus === "paddle") {
+    if (billingStatus === "paddle" || billingStatus === "lemonsqueezy") {
       setBillingFeedbackMessage(
-        "Volviste del checkout premium. Si Paddle ya confirmo el cobro, DarkMoney actualizara tu acceso automaticamente en cuanto llegue el webhook.",
-      );
-    } else if (billingStatus === "lemonsqueezy") {
-      setBillingFeedbackMessage(
-        "Volviste del checkout premium. Si ya completaste el pago, DarkMoney actualizara tu acceso automaticamente en cuanto Lemon Squeezy lo confirme.",
+        "Volviste del cobro premium. Si el pago ya se confirmo, DarkMoney actualizara tu acceso automaticamente en unos segundos.",
       );
     } else {
       setIsBillingAutoRefreshing(false);
@@ -659,6 +718,7 @@ export function SettingsPage() {
           setBillingFeedbackMessage(
             "DarkMoney Pro ya quedo activo. Actualizamos tu acceso automaticamente en segundo plano.",
           );
+          void billingHistoryQuery.refetch();
         }
 
         if (hasReachedStableState) {
@@ -686,7 +746,7 @@ export function SettingsPage() {
         window.clearTimeout(handle);
       }
     };
-  }, [entitlementQuery.refetch, location.pathname, location.search, navigate]);
+  }, [billingHistoryQuery.refetch, entitlementQuery.refetch, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (isCreateWorkspaceOpen) {
@@ -760,12 +820,12 @@ export function SettingsPage() {
 
     try {
       if (!user?.id || !user.email) {
-        throw new Error("Necesitamos un usuario con email valido para abrir Paddle.");
+        throw new Error("Necesitamos un usuario con email valido para abrir el cobro premium.");
       }
 
       if (!isPaddleCheckoutConfigured()) {
         throw new Error(
-          "Falta configurar VITE_PADDLE_CLIENT_TOKEN y VITE_PADDLE_PRO_PRICE_ID para abrir Paddle.",
+          "Falta terminar la configuracion del cobro premium en esta version.",
         );
       }
 
@@ -780,7 +840,7 @@ export function SettingsPage() {
       setBillingErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos abrir Paddle para activar DarkMoney Pro.",
+          "No pudimos abrir el cobro premium de DarkMoney Pro.",
         ),
       );
     } finally {
@@ -800,7 +860,18 @@ export function SettingsPage() {
           : cancelLegacyProSubscriptionMutation;
       const response = await mutation.mutateAsync();
       const friendlyStatus = getFriendlyBillingStatus(response.billingStatus);
+      await Promise.all([entitlementQuery.refetch(), billingHistoryQuery.refetch()]);
+      const cancelFeedbackMessage =
+        response.cancelAtPeriodEnd || response.billingStatus === "canceled" || response.billingStatus === "cancelled"
+          ? response.currentPeriodEnd
+            ? `Renovacion cancelada. Tu acceso premium seguira activo hasta el ${formatDate(response.currentPeriodEnd)} y despues el plan volvera a Free.`
+            : "Renovacion cancelada. La suscripcion ya no se renovara automaticamente."
+          : response.billingStatus
+            ? `${friendlyStatus.label}. DarkMoney ya ajusto tu acceso premium con la respuesta real del proveedor.`
+            : "La suscripcion de DarkMoney Pro fue cancelada correctamente.";
       setShowCancelConfirmation(false);
+      setBillingFeedbackMessage(cancelFeedbackMessage);
+      return;
       setBillingFeedbackMessage(
         response.billingStatus
           ? `${friendlyStatus.label}. DarkMoney ya ajusto tu acceso premium con la respuesta real del proveedor.`
@@ -811,6 +882,53 @@ export function SettingsPage() {
         getQueryErrorMessage(
           error,
           "No pudimos cancelar la suscripción actual de DarkMoney Pro.",
+        ),
+      );
+    }
+  }
+
+  async function handleOpenPaddleCustomerPortal() {
+    setBillingErrorMessage("");
+    setBillingFeedbackMessage("");
+
+    try {
+      const response = await createPaddleCustomerPortalMutation.mutateAsync();
+      const popup = window.open(response.portalUrl, "_blank", "noopener,noreferrer");
+
+      if (!popup) {
+        window.location.assign(response.portalUrl);
+      }
+
+      setBillingFeedbackMessage(
+        "Abrimos tu centro de suscripcion para que revises pagos, metodo de cobro y estado del plan.",
+      );
+    } catch (error) {
+      setBillingErrorMessage(
+        getQueryErrorMessage(
+          error,
+          "No pudimos abrir el centro de suscripcion.",
+        ),
+      );
+    }
+  }
+
+  async function handleReactivatePaddleSubscription() {
+    setBillingErrorMessage("");
+    setBillingFeedbackMessage("");
+
+    try {
+      const response = await reactivatePaddleSubscriptionMutation.mutateAsync();
+      await Promise.all([entitlementQuery.refetch(), billingHistoryQuery.refetch()]);
+      setBillingFeedbackMessage(
+        response.currentPeriodEnd
+          ? `Listo. La renovacion automatica vuelve a estar activa y el siguiente corte queda para el ${formatDate(response.currentPeriodEnd)}.`
+          : "Listo. Tu plan premium vuelve a renovarse automaticamente.",
+      );
+    } catch (error) {
+      setBillingErrorMessage(
+        getQueryErrorMessage(
+          error,
+          "No pudimos reactivar la renovacion automatica de DarkMoney Pro.",
         ),
       );
     }
@@ -895,14 +1013,18 @@ export function SettingsPage() {
   const isCreatingSharedWorkspace = createSharedWorkspaceMutation.isPending;
   const isInvitingMember = createWorkspaceInvitationMutation.isPending;
   const entitlement = entitlementQuery.data;
-  const configuredCheckoutProviderLabel = isPaddleCheckoutConfigured() ? "Paddle" : "nuevo checkout";
-  const providerLabel = getBillingProviderLabel(
-    entitlement?.billingProvider ?? (isPaddleCheckoutConfigured() ? "paddle" : null),
-  );
   const normalizedBillingProvider = entitlement?.billingProvider?.trim().toLowerCase() ?? null;
   const normalizedBillingStatus = entitlement?.billingStatus?.trim().toLowerCase() ?? null;
   const friendlyBillingStatus = getFriendlyBillingStatus(entitlement?.billingStatus);
   const daysRemaining = getDaysUntilDate(entitlement?.currentPeriodEnd);
+  const hasScheduledCancellation =
+    !isAdminOverride &&
+    Boolean(entitlement?.currentPeriodEnd) &&
+    (
+      entitlement?.cancelAtPeriodEnd ||
+      ((normalizedBillingStatus === "cancelled" || normalizedBillingStatus === "canceled") &&
+        (daysRemaining === null || daysRemaining >= 0))
+    );
   const activeCancelMutation =
     normalizedBillingProvider === "paddle"
       ? cancelPaddleSubscriptionMutation
@@ -938,12 +1060,23 @@ export function SettingsPage() {
     Boolean(entitlement?.providerSubscriptionId) &&
     (
       (normalizedBillingProvider === "paddle" &&
-        !entitlement?.cancelAtPeriodEnd &&
+        !hasScheduledCancellation &&
         ["trialing", "active", "paused"].includes(normalizedBillingStatus ?? "")) ||
       (normalizedBillingProvider === "lemon_squeezy" &&
+        !hasScheduledCancellation &&
         (entitlement?.proAccessEnabled ||
           ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? "")))
     );
+  const canOpenPaddlePortal =
+    !isAdminOverride &&
+    normalizedBillingProvider === "paddle" &&
+    Boolean(entitlement?.providerCustomerId);
+  const canReactivatePaddleRenewal =
+    !isAdminOverride &&
+    normalizedBillingProvider === "paddle" &&
+    hasScheduledCancellation &&
+    Boolean(entitlement?.providerSubscriptionId) &&
+    normalizedBillingStatus !== "expired";
   const currentPeriodBadge = isAdminOverride
     ? { status: "Acceso por override admin", tone: "success" as const }
     : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
@@ -951,7 +1084,7 @@ export function SettingsPage() {
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
         ? { status: `Vencio ${formatDate(entitlement.currentPeriodEnd)}`, tone: "warning" as const }
-        : entitlement?.cancelAtPeriodEnd
+        : hasScheduledCancellation
           ? { status: `Termina ${formatDate(entitlement.currentPeriodEnd)}`, tone: "warning" as const }
           : { status: `Renueva ${formatDate(entitlement.currentPeriodEnd)}`, tone: "info" as const }
       : null;
@@ -973,11 +1106,11 @@ export function SettingsPage() {
   const periodSummary = isAdminOverride
     ? "Esta cuenta entra por override administrativo y siempre mantiene acceso premium para pruebas internas."
     : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
-      ? "Tu activacion premium ya fue iniciada. Cuando el proveedor confirme el checkout, DarkMoney encendera el acceso Pro automaticamente."
+      ? "Tu activacion premium ya fue iniciada. Cuando el pago se confirme, DarkMoney encendera el acceso Pro automaticamente."
     : entitlement?.currentPeriodEnd
       ? normalizedBillingStatus === "expired" || (daysRemaining !== null && daysRemaining < 0)
         ? `Tu ultimo periodo premium termino el ${formatDate(entitlement.currentPeriodEnd)}.`
-        : entitlement?.cancelAtPeriodEnd
+        : hasScheduledCancellation
           ? `La suscripcion ya esta cancelada y seguira activa hasta el ${formatDate(entitlement.currentPeriodEnd)}.`
           : daysRemaining === 0
             ? `Tu suscripcion se renueva hoy, ${formatDate(entitlement.currentPeriodEnd)}.`
@@ -986,23 +1119,23 @@ export function SettingsPage() {
               : `Tu suscripcion esta vigente y el siguiente corte es el ${formatDate(entitlement.currentPeriodEnd)}.`
       : "Todavia no hay un ciclo premium reportado para esta cuenta.";
   const statusSummary = isAdminOverride
-    ? "Tu cuenta entra por acceso administrativo, asi que no depende del proveedor para mantener funciones premium."
+    ? "Tu cuenta entra por acceso administrativo, asi que no depende de ningun cobro externo para mantener funciones premium."
     : friendlyBillingStatus.description;
   const nextStepSummary = isAdminOverride
     ? "No necesitas pagar ni reactivar nada mientras esta cuenta siga en modo administrador."
     : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
-      ? "Si ya pagaste, solo espera la confirmacion del proveedor o vuelve a actualizar en unos segundos. Si cerraste el checkout antes de terminar, puedes retomarlo desde este panel."
+      ? "Si ya pagaste, solo espera la confirmacion del cobro o vuelve a actualizar en unos segundos. Si cerraste esa ventana antes de terminar, puedes retomarla desde este panel."
     : normalizedBillingStatus === "expired"
       ? "Como la suscripcion ya expiro, hoy el camino para volver a Pro es activarla de nuevo desde este panel."
-      : entitlement?.cancelAtPeriodEnd && entitlement?.currentPeriodEnd
-        ? `No se renovara automaticamente despues del ${formatDate(entitlement.currentPeriodEnd)}. Si luego quieres volver, podras activarla otra vez desde aqui.`
+      : hasScheduledCancellation && entitlement?.currentPeriodEnd
+        ? `No se renovara automaticamente despues del ${formatDate(entitlement.currentPeriodEnd)}. Si cambias de idea, puedes volver a encender la renovacion automatica desde aqui.`
         : normalizedBillingStatus === "past_due" || normalizedBillingStatus === "unpaid"
           ? "Si el cobro se recupera, DarkMoney ajustara el acceso automaticamente cuando llegue el webhook de pago recuperado o exitoso."
           : entitlement?.providerSubscriptionId
-            ? "Si el proveedor renueva, reanuda o recupera el pago, DarkMoney actualizara tu acceso automaticamente en segundo plano."
+            ? "Si el plan se renueva, se reactiva o recupera un cobro pendiente, DarkMoney actualizara tu acceso automaticamente en segundo plano."
             : isPaddleCheckoutConfigured()
-              ? `Si activas el plan, DarkMoney habilitara las funciones premium en cuanto ${configuredCheckoutProviderLabel} confirme la suscripcion.`
-              : "Estamos preparando el nuevo checkout premium. En cuanto completes la configuracion de Paddle, el acceso Pro quedara listo desde este panel.";
+              ? "Si activas el plan, DarkMoney habilitara las funciones premium apenas se confirme la suscripcion."
+              : "Todavia estamos terminando la configuracion del cobro premium para esta version.";
   const primaryProActionLabel =
     normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
       ? "Continuar activacion Pro"
@@ -1013,6 +1146,8 @@ export function SettingsPage() {
   const cycleSummary = entitlement?.currentPeriodStart
     ? `Desde ${formatDate(entitlement.currentPeriodStart)}`
     : "Aun sin fecha de inicio";
+  const billingHistory = billingHistoryQuery.data;
+  const hasBillingHistory = Boolean(billingHistory?.payments.length || billingHistory?.events.length);
 
   return (
     <div className="space-y-6 pb-8">
@@ -1032,12 +1167,58 @@ export function SettingsPage() {
       />
 
       <form
-        className="space-y-6"
+        className="grid gap-8 xl:grid-cols-[260px_minmax(0,1fr)]"
         id="settings-form"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <aside className="xl:sticky xl:top-24 xl:self-start">
+          <div className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.025] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="rounded-[24px] border border-white/8 bg-black/15 px-4 py-4">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-storm/65">Ajustes</p>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                Navega por las secciones principales y ajusta solo lo que necesites.
+              </p>
+            </div>
+            <nav className="mt-3 grid gap-2">
+              {settingsSectionDefinitions.map((section) => {
+                const isActive = activeSettingsSection === section.id;
+                return (
+                  <button
+                    className={`flex items-start gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                      isActive
+                        ? "border-white/14 bg-white/[0.08] text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                        : "border-transparent bg-transparent text-storm hover:border-white/8 hover:bg-white/[0.04] hover:text-ink"
+                    }`}
+                    key={section.id}
+                    onClick={() => openSettingsSection(section.id)}
+                    type="button"
+                  >
+                    <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+                      isActive ? "border-gold/25 bg-gold/10 text-gold" : "border-white/10 bg-white/[0.04] text-storm"
+                    }`}>
+                      {section.icon}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{section.title}</span>
+                      <span className="mt-1 block text-xs leading-5 text-storm/80">{section.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </aside>
+
+        <div className="space-y-8">
+        {activeSettingsSection === "general" ? (
+        <section className="space-y-5" id="settings-section-general">
+          <SettingsSectionLead
+            description="Administra tu perfil base y como quieres que DarkMoney te avise de recordatorios, cobros y actividad importante."
+            eyebrow="General"
+            title="Perfil y preferencias"
+          />
+        <section className="grid gap-6">
           <div className="relative z-20">
             <SurfaceCard
             action={<Briefcase className="h-5 w-5 text-gold" />}
@@ -1197,19 +1378,22 @@ export function SettingsPage() {
             )}
           </SurfaceCard>
         </section>
+        </section>
+        ) : null}
 
-        {errorMessage ? (
+        {activeSettingsSection === "general" && errorMessage ? (
           <FormFeedbackBanner
             description={errorMessage}
             title="No pudimos guardar los cambios"
           />
         ) : null}
-        {workspaceErrorMessage ? (
-          <FormFeedbackBanner
-            description={workspaceErrorMessage}
-            title="No pudimos completar el flujo colaborativo"
+        {activeSettingsSection === "billing" ? (
+        <section className="space-y-5" id="settings-section-billing">
+          <SettingsSectionLead
+            description="Consulta el estado de tu plan, su vigencia, pagos recientes y las acciones disponibles para mantenerlo activo."
+            eyebrow="Facturacion"
+            title="Plan y pagos"
           />
-        ) : null}
         <SurfaceCard
           action={<Sparkles className="h-5 w-5 text-gold" />}
           description="Accede a funciones premium como el dashboard avanzado y la gestión de comprobantes con DarkMoney Pro."
@@ -1267,24 +1451,24 @@ export function SettingsPage() {
                     : canAccessProFeatures
                       ? "Tu acceso premium ya esta activo. DarkMoney seguira sincronizando renovaciones, cobros y cambios de estado automaticamente."
                       : normalizedBillingStatus === "checkout_created" || normalizedBillingStatus === "checkout_opened"
-                        ? "Ya abriste el checkout premium. Cuando el proveedor confirme el proceso, DarkMoney activara tu acceso automaticamente."
+                        ? "Ya abriste el cobro premium. Cuando el pago se confirme, DarkMoney activara tu acceso automaticamente."
                         : isPaddleCheckoutConfigured()
-                          ? "Desbloquea dashboard avanzado, Aprendiendo de ti, comprobantes y alertas premium con una suscripcion conectada a Paddle."
-                          : "El codigo de Lemon queda guardado, pero el nuevo flujo visible ahora se preparara desde Paddle."}
+                          ? "Desbloquea dashboard avanzado, Aprendiendo de ti, comprobantes y alertas premium con un plan activo."
+                          : "Todavia estamos terminando la configuracion del cobro premium para esta version."}
                 </p>
 
                 {billingErrorMessage ? (
                   <FormFeedbackBanner
                     className="mt-5"
                     description={billingErrorMessage}
-                    title="No pudimos abrir Paddle"
+                    title="No pudimos abrir el cobro premium"
                   />
                 ) : null}
                 {billingFeedbackMessage ? (
                   <FormFeedbackBanner
                     className="mt-5"
                     description={billingFeedbackMessage}
-                    title="Seguimiento de tu suscripción"
+                    title="Seguimiento de tu plan"
                     tone="info"
                   />
                 ) : null}
@@ -1309,18 +1493,18 @@ export function SettingsPage() {
                         </Button>
                       </div>
                     }
-                    badgeLabel="Confirmación"
+                    badgeLabel="Confirmacion"
                     className="mt-5"
-                    description={`La cancelacion se enviara a ${providerLabel} y DarkMoney actualizara tu acceso Pro con la respuesta real del proveedor.`}
-                    title="Vas a cancelar la suscripción de DarkMoney Pro"
+                    description="La renovacion automatica se apagara, pero tu acceso seguira activo hasta el final del ciclo actual. Si cambias de idea, luego podras volver a encenderla desde aqui."
+                    title="Vas a apagar la renovacion automatica"
                   />
                 ) : null}
                 {!isAdminOverride && !canAccessProFeatures && !isPaddleCheckoutConfigured() ? (
                   <FormFeedbackBanner
-                    badgeLabel="Paddle"
+                    badgeLabel="Cobro premium"
                     className="mt-5"
-                    description="Completa VITE_PADDLE_CLIENT_TOKEN y VITE_PADDLE_PRO_PRICE_ID para habilitar el nuevo checkout premium desde el frontend."
-                    title="Paddle todavia no esta configurado en esta build"
+                    description="Esta version todavia no tiene lista la configuracion del cobro premium."
+                    title="El cobro premium aun no esta disponible aqui"
                     tone="info"
                   />
                 ) : null}
@@ -1332,7 +1516,7 @@ export function SettingsPage() {
                       onClick={() => void handleStartProCheckout()}
                     >
                       {isOpeningPaddleCheckout
-                        ? "Abriendo Paddle..."
+                        ? "Abriendo cobro..."
                         : primaryProActionLabel}
                     </Button>
                   ) : null}
@@ -1343,6 +1527,35 @@ export function SettingsPage() {
                       variant="secondary"
                     >
                       Cancelar Pro
+                    </Button>
+                  ) : hasScheduledCancellation ? (
+                    <Button
+                      disabled
+                      variant="secondary"
+                    >
+                      Renovacion automatica apagada
+                    </Button>
+                  ) : null}
+                  {canReactivatePaddleRenewal ? (
+                    <Button
+                      disabled={reactivatePaddleSubscriptionMutation.isPending}
+                      onClick={() => void handleReactivatePaddleSubscription()}
+                      variant="secondary"
+                    >
+                      {reactivatePaddleSubscriptionMutation.isPending
+                        ? "Reactivando..."
+                        : "Seguir con renovacion automatica"}
+                    </Button>
+                  ) : null}
+                  {canOpenPaddlePortal ? (
+                    <Button
+                      disabled={createPaddleCustomerPortalMutation.isPending}
+                      onClick={() => void handleOpenPaddleCustomerPortal()}
+                      variant="ghost"
+                    >
+                      {createPaddleCustomerPortalMutation.isPending
+                        ? "Abriendo portal..."
+                        : "Gestionar pagos"}
                     </Button>
                   ) : null}
                   <Button
@@ -1423,12 +1636,137 @@ export function SettingsPage() {
                     <p className="mt-3 text-sm leading-7 text-storm">{nextStepSummary}</p>
                   </article>
                 ) : null}
+
+                <article className="glass-panel-soft rounded-[24px] p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-storm">Historial premium</p>
+                      <p className="mt-2 text-sm text-storm">
+                        Cobros recientes y cambios de estado para que siempre sepas si el plan sigue activo.
+                      </p>
+                    </div>
+                    {billingHistory?.provider ? (
+                      <StatusBadge
+                        status="Sincronizado"
+                        tone="neutral"
+                      />
+                    ) : null}
+                  </div>
+
+                  {billingHistoryQuery.isLoading ? (
+                    <div className="mt-4">
+                      <DataState
+                        description="Buscando los ultimos movimientos premium de tu cuenta."
+                        title="Cargando historial"
+                      />
+                    </div>
+                  ) : billingHistoryQuery.error ? (
+                    <div className="mt-4">
+                      <DataState
+                        description={getQueryErrorMessage(
+                          billingHistoryQuery.error,
+                          "No pudimos leer el historial premium de esta cuenta.",
+                        )}
+                        title="No fue posible cargar el historial"
+                        tone="error"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      {billingHistory?.warning ? (
+                        <div className="rounded-[18px] border border-gold/20 bg-gold/10 px-4 py-3 text-sm leading-7 text-gold">
+                          {billingHistory.warning}
+                        </div>
+                      ) : null}
+
+                      {!hasBillingHistory ? (
+                        <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-storm">
+                          Todavia no hay cobros ni cambios de suscripcion registrados para mostrar en esta cuenta.
+                        </div>
+                      ) : null}
+
+                      {billingHistory?.payments.length ? (
+                        <div className="space-y-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-storm/80">Cobros recientes</p>
+                          <div className="space-y-3">
+                            {billingHistory.payments.map((payment) => (
+                              <div
+                                className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
+                                key={payment.id}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-semibold text-ink">{payment.title}</p>
+                                      <StatusBadge status={payment.statusLabel} tone={payment.tone} />
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-storm">{payment.description}</p>
+                                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-storm/75">
+                                      {formatDateTime(payment.createdAt)}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-2">
+                                    {payment.amountLabel ? (
+                                      <p className="text-sm font-semibold text-ink">{payment.amountLabel}</p>
+                                    ) : null}
+                                    {payment.invoiceNumber ? (
+                                      <StatusBadge status={`Factura ${payment.invoiceNumber}`} tone="neutral" />
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {billingHistory?.events.length ? (
+                        <div className="space-y-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-storm/80">Actividad de suscripcion</p>
+                          <div className="space-y-3">
+                            {billingHistory.events.map((event) => (
+                              <div
+                                className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4"
+                                key={event.id}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-semibold text-ink">{event.title}</p>
+                                      <StatusBadge
+                                        status={event.tone === "success" ? "Confirmado" : event.tone === "warning" ? "Aviso" : event.tone === "danger" ? "Importante" : "Seguimiento"}
+                                        tone={event.tone}
+                                      />
+                                    </div>
+                                    <p className="mt-2 text-sm leading-7 text-storm">{event.description}</p>
+                                  </div>
+                                  <p className="text-xs uppercase tracking-[0.16em] text-storm/75">
+                                    {formatDateTime(event.createdAt)}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </article>
               </div>
             </div>
           )}
         </SurfaceCard>
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        </section>
+        ) : null}
+
+        {activeSettingsSection === "workspace" ? (
+        <section className="space-y-5" id="settings-section-workspace">
+          <SettingsSectionLead
+            description="Revisa el workspace activo, crea espacios compartidos, invita personas y confirma tu contexto actual."
+            eyebrow="Workspace"
+            title="Espacio y colaboracion"
+          />
           <SurfaceCard
             action={<ShieldCheck className="h-5 w-5 text-pine" />}
             description="Detalles, moneda base y opciones del workspace que tenés seleccionado."
@@ -1620,7 +1958,22 @@ export function SettingsPage() {
               />
             )}
           </SurfaceCard>
+          {workspaceErrorMessage ? (
+            <FormFeedbackBanner
+              description={workspaceErrorMessage}
+              title="No pudimos completar el flujo colaborativo"
+            />
+          ) : null}
+        </section>
+        ) : null}
 
+        {activeSettingsSection === "catalogs" ? (
+        <section className="space-y-5" id="settings-section-catalogs">
+          <SettingsSectionLead
+            description="Mira el pulso general de categorias, contrapartes y cuentas registradas dentro del workspace seleccionado."
+            eyebrow="Catalogos"
+            title="Resumen operativo"
+          />
           <SurfaceCard
             action={<Tag className="h-5 w-5 text-gold" />}
             description="Resumen de categorías, cuentas, contactos y suscripciones del workspace activo."
@@ -1669,6 +2022,8 @@ export function SettingsPage() {
             )}
           </SurfaceCard>
         </section>
+        ) : null}
+        </div>
       </form>
 
       {isCreateWorkspaceOpen ? (

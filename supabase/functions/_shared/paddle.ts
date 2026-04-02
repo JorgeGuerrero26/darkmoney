@@ -10,6 +10,30 @@ type PaddleBillingPeriod = {
   ends_at?: string | null;
 };
 
+type PaddleMoney = {
+  amount?: string | null;
+  currency_code?: string | null;
+};
+
+type PaddleTransactionItemPrice = {
+  unit_price?: PaddleMoney | null;
+};
+
+type PaddleTransactionItem = {
+  price?: PaddleTransactionItemPrice | null;
+  quantity?: number | null;
+};
+
+type PaddleTransactionTotals = {
+  total?: PaddleMoney | null;
+  grand_total?: PaddleMoney | null;
+  subtotal?: PaddleMoney | null;
+};
+
+type PaddleTransactionDetails = {
+  totals?: PaddleTransactionTotals | null;
+};
+
 export type PaddleSubscription = {
   id?: string | null;
   status?: string | null;
@@ -26,8 +50,43 @@ export type PaddleSubscription = {
   scheduled_change?: PaddleScheduledChange | null;
 };
 
+export type PaddleTransaction = {
+  id?: string | null;
+  status?: string | null;
+  customer_id?: string | null;
+  subscription_id?: string | null;
+  invoice_number?: string | null;
+  currency_code?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  billed_at?: string | null;
+  details?: PaddleTransactionDetails | null;
+  items?: PaddleTransactionItem[] | null;
+};
+
 type PaddleSubscriptionResponse = {
   data?: PaddleSubscription | null;
+};
+
+type PaddleTransactionsResponse = {
+  data?: PaddleTransaction[] | null;
+};
+
+type PaddleCustomerPortalSessionUrls = {
+  general?: {
+    overview?: string | null;
+  } | null;
+  subscriptions?: Array<{
+    id?: string | null;
+    cancel_subscription?: string | null;
+    update_subscription_payment_method?: string | null;
+  }> | null;
+};
+
+type PaddleCustomerPortalSessionResponse = {
+  data?: {
+    urls?: PaddleCustomerPortalSessionUrls | null;
+  } | null;
 };
 
 function getPaddleApiKey() {
@@ -91,6 +150,55 @@ export async function getPaddleSubscription(subscriptionId: string) {
   const response = await paddleRequest<PaddleSubscriptionResponse>(`/subscriptions/${subscriptionId}`, {
     method: "GET",
   });
+
+  return response.data ?? null;
+}
+
+export async function listPaddleTransactions(subscriptionId: string) {
+  const query = new URLSearchParams({
+    subscription_id: subscriptionId,
+  });
+  const response = await paddleRequest<PaddleTransactionsResponse>(`/transactions?${query.toString()}`, {
+    method: "GET",
+  });
+
+  return response.data ?? [];
+}
+
+export async function createPaddleCustomerPortalSession(customerId: string, subscriptionId?: string | null) {
+  const body = subscriptionId
+    ? {
+      subscription_ids: [subscriptionId],
+    }
+    : {};
+  const response = await paddleRequest<PaddleCustomerPortalSessionResponse>(
+    `/customers/${customerId}/portal-sessions`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  );
+
+  const urls = response.data?.urls;
+  const subscriptionUrls = urls?.subscriptions?.[0];
+
+  return {
+    overviewUrl: urls?.general?.overview ?? null,
+    cancelUrl: subscriptionUrls?.cancel_subscription ?? null,
+    updatePaymentMethodUrl: subscriptionUrls?.update_subscription_payment_method ?? null,
+  };
+}
+
+export async function reactivatePaddleSubscription(subscriptionId: string) {
+  const response = await paddleRequest<PaddleSubscriptionResponse>(
+    `/subscriptions/${subscriptionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        scheduled_change: null,
+      }),
+    },
+  );
 
   return response.data ?? null;
 }

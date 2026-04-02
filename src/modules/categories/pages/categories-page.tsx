@@ -16,7 +16,6 @@ import {
   Landmark,
   Laptop,
   LoaderCircle,
-  MoreHorizontal,
   PartyPopper,
   PawPrint,
   PencilLine,
@@ -69,6 +68,7 @@ import {
 
 type EditorMode = "create" | "edit";
 type KindFilter = "all" | CategoryKind;
+type CategoryStatusFilter = "all" | "active" | "inactive";
 
 type CategoryFormState = {
   name: string;
@@ -84,6 +84,15 @@ type FeedbackState = {
   tone: "success" | "error";
   title: string;
   description: string;
+};
+
+type CategoryTableFilters = {
+  name: string;
+  kind: KindFilter;
+  status: CategoryStatusFilter;
+  parent: string;
+  movements: string;
+  subscriptions: string;
 };
 
 const fieldClassName =
@@ -627,20 +636,25 @@ function CategoryEditorDialog({
 }
 
 
-function StatCard({
-  description,
-  title,
+function CategoriesSummaryChip({
+  label,
+  tone = "neutral",
   value,
 }: {
-  description: string;
-  title: string;
+  label: string;
+  tone?: "neutral" | "info" | "warning";
   value: ReactNode;
 }) {
+  const toneClasses = {
+    neutral: "border-white/10 bg-white/[0.04] text-ink",
+    info: "border-electric/25 bg-electric/10 text-electric",
+    warning: "border-gold/30 bg-gold/10 text-gold",
+  } as const;
+
   return (
-    <div className="glass-panel-soft rounded-[26px] p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
-      <p className="mt-3 font-display text-3xl font-semibold text-ink">{value}</p>
-      <p className="mt-2 text-sm text-storm">{description}</p>
+    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
     </div>
   );
 }
@@ -648,15 +662,20 @@ function StatCard({
 function CategoriesLoadingSkeleton() {
   return (
     <>
-      <div className="shimmer-surface h-[200px] rounded-[32px]" />
-      <div className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div className="shimmer-surface h-[64px] rounded-[22px]" key={i} />
-        ))}
-      </div>
+      <div className="shimmer-surface h-[248px] rounded-[32px]" />
+      <div className="shimmer-surface h-[520px] rounded-[32px]" />
     </>
   );
 }
+
+const defaultCategoryTableFilters = (): CategoryTableFilters => ({
+  name: "",
+  kind: "all",
+  status: "active",
+  parent: "",
+  movements: "",
+  subscriptions: "",
+});
 
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -710,13 +729,15 @@ export function CategoriesPage() {
   });
   const categoryColumns: ColumnDef[] = [
     { key: "tipo", label: "Tipo" },
+    { key: "padre", label: "Categoria padre" },
     { key: "movimientos", label: "Movimientos" },
+    { key: "suscripciones", label: "Suscripciones" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-categories", categoryColumns);
-  const [viewMode, setViewMode] = useViewMode("categories");
-  const [search, setSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
-  const [showInactive, setShowInactive] = useState(false);
+  const [viewMode, setViewMode] = useViewMode("categories", "table");
+  const [categoryFilters, setCategoryFilters] = useState<CategoryTableFilters>(() =>
+    defaultCategoryTableFilters(),
+  );
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -747,47 +768,65 @@ export function CategoriesPage() {
   const { schedule } = useUndoQueue();
 
   const filteredCategories = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedName = categoryFilters.name.trim().toLowerCase();
+    const normalizedParent = categoryFilters.parent.trim().toLowerCase();
+    const normalizedMovements = categoryFilters.movements.trim();
+    const normalizedSubscriptions = categoryFilters.subscriptions.trim();
 
     return categories.filter((category) => {
       if (hiddenIds.has(category.id)) {
         return false;
       }
 
-      if (!showInactive && !category.isActive) {
+      if (categoryFilters.status === "active" && !category.isActive) {
         return false;
       }
 
-      if (kindFilter !== "all" && category.kind !== kindFilter) {
+      if (categoryFilters.status === "inactive" && category.isActive) {
         return false;
       }
 
-      if (!normalizedSearch) {
-        return true;
+      if (categoryFilters.kind !== "all" && category.kind !== categoryFilters.kind) {
+        return false;
       }
 
-      return (
-        category.name.toLowerCase().includes(normalizedSearch) ||
-        getKindDefinition(category.kind).label.toLowerCase().includes(normalizedSearch) ||
-        (category.parentName ?? "").toLowerCase().includes(normalizedSearch) ||
-        (category.icon ?? "").toLowerCase().includes(normalizedSearch)
-      );
-    });
-  }, [categories, hiddenIds, kindFilter, search, showInactive]);
-  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredCategories);
-
-  const topCategories = useMemo(
-    () =>
-      [...categories]
-        .sort(
-          (left, right) =>
-            right.movementCount +
-            right.subscriptionCount -
-            (left.movementCount + left.subscriptionCount),
+      if (
+        normalizedName &&
+        !(
+          category.name.toLowerCase().includes(normalizedName) ||
+          getKindDefinition(category.kind).label.toLowerCase().includes(normalizedName) ||
+          (category.parentName ?? "").toLowerCase().includes(normalizedName) ||
+          (category.icon ?? "").toLowerCase().includes(normalizedName)
         )
-        .slice(0, 3),
-    [categories],
-  );
+      ) {
+        return false;
+      }
+
+      if (
+        normalizedParent &&
+        !(category.parentName ?? "").toLowerCase().includes(normalizedParent)
+      ) {
+        return false;
+      }
+
+      if (
+        normalizedMovements &&
+        !String(category.movementCount).includes(normalizedMovements)
+      ) {
+        return false;
+      }
+
+      if (
+        normalizedSubscriptions &&
+        !String(category.subscriptionCount).includes(normalizedSubscriptions)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [categories, categoryFilters, hiddenIds]);
+  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredCategories);
 
   const totalActive = categories.filter((category) => category.isActive).length;
   const totalInactive = categories.length - totalActive;
@@ -796,6 +835,44 @@ export function CategoriesPage() {
   const totalMixed = categories.filter((category) => category.kind === "both").length;
   const totalLinkedToMovements = categories.filter((category) => category.movementCount > 0).length;
   const totalLinkedToSubscriptions = categories.filter((category) => category.subscriptionCount > 0).length;
+
+  useEffect(() => {
+    if (viewMode === "table") {
+      return;
+    }
+
+    setCategoryFilters((currentValue) => {
+      if (!currentValue.parent && !currentValue.movements && !currentValue.subscriptions) {
+        return currentValue;
+      }
+
+      return {
+        ...currentValue,
+        parent: "",
+        movements: "",
+        subscriptions: "",
+      };
+    });
+  }, [viewMode]);
+
+  const hasActiveCategoryFilters =
+    categoryFilters.name.trim() ||
+    categoryFilters.parent.trim() ||
+    categoryFilters.movements.trim() ||
+    categoryFilters.subscriptions.trim() ||
+    categoryFilters.kind !== "all" ||
+    categoryFilters.status !== "active";
+
+  function updateCategoryFilter<Field extends keyof CategoryTableFilters>(
+    field: Field,
+    value: CategoryTableFilters[Field],
+  ) {
+    setCategoryFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearCategoryFilters() {
+    setCategoryFilters(defaultCategoryTableFilters());
+  }
 
   function updateFormState<Field extends keyof CategoryFormState>(
     field: Field,
@@ -1064,35 +1141,109 @@ export function CategoriesPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <PageHeader
-        actions={
-          <>
-            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-            {viewMode === "table" ? (
-              <ColumnPicker columns={categoryColumns} visible={colVis} onToggle={toggleCol} />
-            ) : null}
-            <Button
-              onClick={() =>
-                downloadCategoriesCSV(
-                  filteredCategories,
-                  `categorias-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
-            <Button onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva categoria
-            </Button>
-          </>
-        }
-        description="Gestiona las categorias que organizan tus movimientos y suscripciones para que la app se sienta clara, consistente y facil de analizar."
-        eyebrow="categorias"
-        title="Categorias"
-      />
+      <section className="glass-panel-strong rounded-[32px] p-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">categorias</p>
+              <h2 className="font-display text-4xl font-semibold text-ink">Categorias del workspace</h2>
+              <p className="max-w-3xl text-sm leading-7 text-storm">
+                Mantén la estructura limpia desde la tabla. Cuando trabajes en vista tabla, los filtros viven
+                dentro de cada columna; en el resto de vistas reaparece el panel para explorar y ajustar con
+                rapidez.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <CategoriesSummaryChip label="categorias" value={String(categories.length)} />
+              <CategoriesSummaryChip label="activas" tone="info" value={String(totalActive)} />
+              {totalInactive > 0 ? (
+                <CategoriesSummaryChip label="inactivas" tone="warning" value={String(totalInactive)} />
+              ) : null}
+              <CategoriesSummaryChip
+                label="con movimientos"
+                tone="info"
+                value={String(totalLinkedToMovements)}
+              />
+              <CategoriesSummaryChip
+                label="con suscripciones"
+                tone="info"
+                value={String(totalLinkedToSubscriptions)}
+              />
+              {snapshotQuery.isFetching ? <CategoriesSummaryChip label="estado" value="Actualizando" /> : null}
+            </div>
+          </div>
+
+          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
+                <p className="text-sm leading-7 text-storm">
+                  Crea categorias, cambia de vista y exporta. En tabla filtras por columna; en otras vistas
+                  vuelves al explorador compacto.
+                </p>
+              </div>
+              <button
+                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva categoria
+              </Button>
+              <Button
+                onClick={() =>
+                  downloadCategoriesCSV(
+                    filteredCategories,
+                    `categorias-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar CSV
+              </Button>
+              {hasActiveCategoryFilters ? (
+                <Button onClick={clearCategoryFilters} variant="ghost">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar filtros
+                </Button>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+              {viewMode === "table" ? (
+                <ColumnPicker columns={categoryColumns} visible={colVis} onToggle={toggleCol} />
+              ) : null}
+              <StatusBadge status={`${filteredCategories.length} visibles`} tone="neutral" />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Gasto</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{totalExpense}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Ingreso</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{totalIncome}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-storm">Mixta</p>
+                <p className="mt-2 text-sm font-semibold text-ink">{totalMixed}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? (
         <DataState
@@ -1102,106 +1253,7 @@ export function CategoriesPage() {
         />
       ) : null}
 
-      <SurfaceCard
-        action={<Shapes className="h-5 w-5 text-gold" />}
-        description="Vista general de como se distribuyen y se usan tus categorias dentro del workspace."
-        title="Mapa de clasificacion"
-      >
-        <div className="grid gap-4 md:grid-cols-4">
-          <StatCard
-            description="Categorias visibles para nuevos registros."
-            title="Activas"
-            value={totalActive}
-          />
-          <StatCard
-            description="Guardadas para historial o uso futuro."
-            title="Inactivas"
-            value={totalInactive}
-          />
-          <StatCard
-            description="Categorias que ya aparecen en movimientos."
-            title="Con movimientos"
-            value={totalLinkedToMovements}
-          />
-          <StatCard
-            description="Categorias usadas por suscripciones."
-            title="Con suscripciones"
-            value={totalLinkedToSubscriptions}
-          />
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink">
-              <MoreHorizontal className="h-4 w-4 text-pine" />
-              Distribucion por tipo
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-3">
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Gasto</p>
-                <p className="mt-3 text-2xl font-semibold text-ink">{totalExpense}</p>
-              </div>
-              <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-3">
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Ingreso</p>
-                <p className="mt-3 text-2xl font-semibold text-ink">{totalIncome}</p>
-              </div>
-              <div className="rounded-[20px] border border-white/8 bg-black/15 px-4 py-3">
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Mixta</p>
-                <p className="mt-3 text-2xl font-semibold text-ink">{totalMixed}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink">
-              <Sparkles className="h-4 w-4 text-ember" />
-              Mas usadas
-            </div>
-            <div className="mt-4 space-y-3">
-              {topCategories.length > 0 ? (
-                topCategories.map((category) => {
-                  const iconDefinition = getIconDefinition(category.icon);
-                  const CategoryIcon = iconDefinition.icon;
-
-                  return (
-                    <div
-                      className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/15 px-4 py-3"
-                      key={category.id}
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-white/10 text-white"
-                          style={{
-                            background: `linear-gradient(160deg, ${category.color ?? "#64748B"}, rgba(8,13,20,0.72))`,
-                          }}
-                        >
-                          <CategoryIcon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-ink">{category.name}</p>
-                          <p className="mt-1 text-xs text-storm">
-                            {category.movementCount} movimientos - {category.subscriptionCount} suscripciones
-                          </p>
-                        </div>
-                      </div>
-                      <StatusBadge
-                        status={getKindDefinition(category.kind).label}
-                        tone={getKindDefinition(category.kind).tone}
-                      />
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-storm">
-                  Aun no hay categorias con actividad suficiente para destacarlas aqui.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      </SurfaceCard>
-
-      {categories.length > 0 ? (
+      {categories.length > 0 && viewMode !== "table" ? (
       <SurfaceCard
         description="Filtra por nombre, tipo o estado para encontrar rapido la categoria que quieres ajustar."
         title="Explorar categorias"
@@ -1219,37 +1271,42 @@ export function CategoriesPage() {
             </button>
             <div className="flex-1">
               <Input
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => updateCategoryFilter("name", event.target.value)}
                 placeholder="Buscar por nombre, tipo o categoria padre..."
                 type="text"
-                value={search}
+                value={categoryFilters.name}
               />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={() => setKindFilter("all")}
-              variant={kindFilter === "all" ? "primary" : "ghost"}
+              onClick={() => updateCategoryFilter("kind", "all")}
+              variant={categoryFilters.kind === "all" ? "primary" : "ghost"}
             >
               Todas
             </Button>
             {kindOptions.map((option) => (
               <Button
                 key={option.value}
-                onClick={() => setKindFilter(option.value)}
-                variant={kindFilter === option.value ? "primary" : "ghost"}
+                onClick={() => updateCategoryFilter("kind", option.value)}
+                variant={categoryFilters.kind === option.value ? "primary" : "ghost"}
               >
                 {option.label}
               </Button>
             ))}
           </div>
           <Button
-            onClick={() => setShowInactive((currentValue) => !currentValue)}
-            variant={showInactive ? "secondary" : "ghost"}
+            onClick={() =>
+              updateCategoryFilter(
+                "status",
+                categoryFilters.status === "active" ? "all" : "active",
+              )
+            }
+            variant={categoryFilters.status !== "active" ? "secondary" : "ghost"}
           >
-            {showInactive
-              ? `Ocultar inactivas (${totalInactive})`
-              : `Ver inactivas (${totalInactive})`}
+            {categoryFilters.status === "active"
+              ? `Ver inactivas (${totalInactive})`
+              : `Ocultar inactivas (${totalInactive})`}
           </Button>
         </div>
       </SurfaceCard>
@@ -1263,12 +1320,16 @@ export function CategoriesPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 Crear primera categoria
               </Button>
+            ) : hasActiveCategoryFilters ? (
+              <Button onClick={clearCategoryFilters} variant="secondary">
+                Quitar filtros
+              </Button>
             ) : undefined
           }
           description={
             categories.length === 0
               ? "Todavia no hay categorias registradas en este workspace."
-              : "Prueba cambiando el texto de busqueda o los filtros."
+              : "Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna."
           }
           title={categories.length === 0 ? "Sin categorias todavia" : "Sin resultados"}
         />
@@ -1320,8 +1381,85 @@ export function CategoriesPage() {
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Categoria</th>
                   <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
                   <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("padre", "hidden lg:table-cell")}`}>Padre</th>
                   <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("movimientos", "hidden md:table-cell")}`}>Movimientos</th>
+                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("suscripciones", "hidden xl:table-cell")}`}>Suscripciones</th>
                   <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
+                </tr>
+                <tr className="border-b border-white/10 bg-[#0c1522]">
+                  <th className="px-4 py-3" />
+                  <th className="px-5 py-3">
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("name", event.target.value)}
+                      placeholder="Filtrar categoria"
+                      type="text"
+                      value={categoryFilters.name}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("tipo", "hidden sm:table-cell")}`}>
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("kind", event.target.value as KindFilter)}
+                      value={categoryFilters.kind}
+                    >
+                      <option value="all">Todos</option>
+                      {kindOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </th>
+                  <th className="px-5 py-3">
+                    <select
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("status", event.target.value as CategoryStatusFilter)}
+                      value={categoryFilters.status}
+                    >
+                      <option value="active">Activas</option>
+                      <option value="all">Todas</option>
+                      <option value="inactive">Inactivas</option>
+                    </select>
+                  </th>
+                  <th className={`px-5 py-3 ${cv("padre", "hidden lg:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("parent", event.target.value)}
+                      placeholder="Filtrar padre"
+                      type="text"
+                      value={categoryFilters.parent}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("movimientos", "hidden md:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("movements", event.target.value)}
+                      placeholder="Mov."
+                      type="text"
+                      value={categoryFilters.movements}
+                    />
+                  </th>
+                  <th className={`px-5 py-3 ${cv("suscripciones", "hidden xl:table-cell")}`}>
+                    <input
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
+                      onChange={(event) => updateCategoryFilter("subscriptions", event.target.value)}
+                      placeholder="Subs."
+                      type="text"
+                      value={categoryFilters.subscriptions}
+                    />
+                  </th>
+                  <th className="px-5 py-3 text-right">
+                    {hasActiveCategoryFilters ? (
+                      <button
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
+                        onClick={clearCategoryFilters}
+                        type="button"
+                      >
+                        Limpiar
+                      </button>
+                    ) : null}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1351,7 +1489,9 @@ export function CategoriesPage() {
                       </td>
                       <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={kindDefinition.label} tone={kindDefinition.tone} /></td>
                       <td className="px-5 py-3.5"><StatusBadge status={category.isActive ? "Activa" : "Inactiva"} tone={category.isActive ? "success" : "neutral"} /></td>
+                      <td className={`px-5 py-3.5 text-storm ${cv("padre", "hidden lg:table-cell")}`}>{category.parentName ?? "-"}</td>
                       <td className={`px-5 py-3.5 text-right text-storm ${cv("movimientos", "hidden md:table-cell")}`}>{category.movementCount}</td>
+                      <td className={`px-5 py-3.5 text-right text-storm ${cv("suscripciones", "hidden xl:table-cell")}`}>{category.subscriptionCount}</td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex justify-end gap-2">
                           <Button className="py-1.5 text-xs" onClick={() => setAnalyticsCategoryId(category.id)} variant="ghost">

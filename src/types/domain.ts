@@ -404,6 +404,22 @@ export type RecurringIncomeSummary = {
   notes?: string | null;
 };
 
+export type RecurringIncomeOccurrenceStatus = "on_time" | "late" | "missed";
+
+export type RecurringIncomeOccurrence = {
+  id: number;
+  workspaceId: number;
+  recurringIncomeId: number;
+  expectedDate: string;
+  actualDate: string | null;
+  amount: number;
+  currencyCode: string;
+  movementId: number | null;
+  status: RecurringIncomeOccurrenceStatus;
+  notes: string | null;
+  createdAt: string;
+};
+
 export type NotificationItem = {
   id: number;
   title: string;
