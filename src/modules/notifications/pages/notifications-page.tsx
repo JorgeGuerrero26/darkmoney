@@ -5,14 +5,8 @@ import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { DataState } from "../../../components/ui/data-state";
-import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
-import {
-  TableColumnFilterMenu,
-  TableFilterOptionButton,
-  tableColumnFilterInputClassName,
-} from "../../../components/ui/table-column-filter-menu";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import {
@@ -48,8 +42,6 @@ type NotificationTableFilters = {
   scheduledTo: string;
 };
 
-type NotificationTableFilterField = keyof NotificationTableFilters;
-
 const filterOptions: Array<{ value: NotificationFilter; label: string }> = [
   { value: "all", label: "Todo" },
   { value: "unread", label: "Pendientes" },
@@ -79,25 +71,6 @@ function defaultNotificationTableFilters(): NotificationTableFilters {
     scheduledFrom: "",
     scheduledTo: "",
   };
-}
-
-function isNotificationTableFilterActive(
-  filters: NotificationTableFilters,
-  field: NotificationTableFilterField,
-) {
-  switch (field) {
-    case "title":
-    case "kind":
-    case "channel":
-    case "scheduledFrom":
-    case "scheduledTo":
-      return Boolean(filters[field].trim());
-    case "source":
-    case "status":
-      return filters[field] !== "all";
-    default:
-      return false;
-  }
 }
 
 function getToneClasses(tone: "info" | "success" | "warning" | "danger" | "neutral") {
@@ -175,10 +148,11 @@ export function NotificationsPage() {
   const filteredNotifications = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     const normalizedTableTitle = tableFilters.title.trim().toLowerCase();
-    const normalizedTableScheduled = tableFilters.scheduled.trim().toLowerCase();
 
     return inbox.notifications.filter((notification) => {
       if (viewMode === "table") {
+        const scheduledDate = notification.scheduledFor.slice(0, 10);
+
         if (
           normalizedTableTitle &&
           !(
@@ -208,10 +182,11 @@ export function NotificationsPage() {
           return false;
         }
 
-        if (
-          normalizedTableScheduled &&
-          !formatDateTime(notification.scheduledFor).toLowerCase().includes(normalizedTableScheduled)
-        ) {
+        if (tableFilters.scheduledFrom && scheduledDate < tableFilters.scheduledFrom) {
+          return false;
+        }
+
+        if (tableFilters.scheduledTo && scheduledDate > tableFilters.scheduledTo) {
           return false;
         }
 
@@ -278,7 +253,8 @@ export function NotificationsPage() {
     tableFilters.source !== "all" ||
     Boolean(tableFilters.channel) ||
     tableFilters.status !== "all" ||
-    Boolean(tableFilters.scheduled.trim());
+    Boolean(tableFilters.scheduledFrom) ||
+    Boolean(tableFilters.scheduledTo);
   const hasActiveFilters = viewMode === "table" ? hasTableFilters : hasExploreFilters;
   const showNotificationExplore = viewMode !== "table" && inbox.notifications.length > 0;
   const isUpdatingReadState = markAllReadMutation.isPending || markSingleReadMutation.isPending;
@@ -654,13 +630,26 @@ export function NotificationsPage() {
                     </select>
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("programada", "hidden xl:table-cell")}`}>
-                    <input
-                      className={fieldClassName}
-                      onChange={(event) => updateNotificationTableFilter("scheduled", event.target.value)}
-                      placeholder="Fecha u hora..."
-                      type="text"
-                      value={tableFilters.scheduled}
-                    />
+                    <div className="grid gap-2">
+                      <input
+                        className={fieldClassName}
+                        onChange={(event) =>
+                          updateNotificationTableFilter("scheduledFrom", event.target.value)
+                        }
+                        placeholder="Desde"
+                        type="date"
+                        value={tableFilters.scheduledFrom}
+                      />
+                      <input
+                        className={fieldClassName}
+                        onChange={(event) =>
+                          updateNotificationTableFilter("scheduledTo", event.target.value)
+                        }
+                        placeholder="Hasta"
+                        type="date"
+                        value={tableFilters.scheduledTo}
+                      />
+                    </div>
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("estado", "hidden sm:table-cell")}`}>
                     <select
