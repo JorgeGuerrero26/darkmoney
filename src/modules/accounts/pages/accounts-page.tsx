@@ -36,6 +36,11 @@ import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
+import {
+  TableColumnFilterMenu,
+  TableFilterOptionButton,
+  tableColumnFilterInputClassName,
+} from "../../../components/ui/table-column-filter-menu";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
 import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
@@ -193,6 +198,51 @@ const currencyOptions = [
 
 type CurrencyOption = (typeof currencyOptions)[number];
 type IconOption = (typeof iconOptions)[number];
+type AccountTableStatusFilter = "all" | "included" | "excluded" | "archived";
+
+type AccountTableFilters = {
+  name: string;
+  type: string;
+  balance: string;
+  currencyCode: string;
+  status: AccountTableStatusFilter;
+};
+
+type AccountTableFilterField = keyof AccountTableFilters;
+
+const accountTableStatusOptions: Array<{ value: AccountTableStatusFilter; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "included", label: "Incluida" },
+  { value: "excluded", label: "Fuera de patrimonio" },
+  { value: "archived", label: "Archivada" },
+];
+
+function defaultAccountTableFilters(): AccountTableFilters {
+  return {
+    name: "",
+    type: "",
+    balance: "",
+    currencyCode: "",
+    status: "all",
+  };
+}
+
+function isAccountTableFilterActive(
+  filters: AccountTableFilters,
+  field: AccountTableFilterField,
+) {
+  switch (field) {
+    case "name":
+    case "type":
+    case "balance":
+    case "currencyCode":
+      return Boolean(filters[field].trim());
+    case "status":
+      return filters.status !== "all";
+    default:
+      return false;
+  }
+}
 
 function getTypePreset(type: string) {
   return accountTypeOptions.find((option) => option.value === type) ?? accountTypeOptions[0];
@@ -1634,6 +1684,11 @@ export function AccountsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [accountTableFilters, setAccountTableFilters] = useState<AccountTableFilters>(
+    defaultAccountTableFilters(),
+  );
+  const [openTableFilter, setOpenTableFilter] =
+    useState<keyof AccountTableFilters | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -1671,7 +1726,32 @@ export function AccountsPage() {
   const visibleAccounts = showArchived
     ? snapshot?.accounts ?? []
     : (snapshot?.accounts.filter((account) => !account.isArchived) ?? []);
-  const hasActiveFilters = searchQuery.trim() !== "" || typeFilter !== "all";
+  const availableAccountTypes = useMemo(
+    () =>
+      Array.from(new Set(visibleAccounts.map((account) => account.type).filter(Boolean))).sort(
+        (left, right) => getTypePreset(left).label.localeCompare(getTypePreset(right).label),
+      ),
+    [visibleAccounts],
+  );
+  const availableCurrencyCodes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          visibleAccounts
+            .map((account) => account.currencyCode.trim().toUpperCase())
+            .filter(Boolean),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [visibleAccounts],
+  );
+  const hasTableFilters =
+    accountTableFilters.name.trim() !== "" ||
+    accountTableFilters.type.trim() !== "" ||
+    accountTableFilters.balance.trim() !== "" ||
+    accountTableFilters.currencyCode.trim() !== "" ||
+    accountTableFilters.status !== "all";
+  const hasActiveFilters =
+    searchQuery.trim() !== "" || typeFilter !== "all" || (viewMode === "table" && hasTableFilters);
   const filteredAccounts = useMemo(() => {
     let result = visibleAccounts.filter((a) => !hiddenIds.has(a.id));
     const q = searchQuery.trim().toLowerCase();
@@ -1686,8 +1766,47 @@ export function AccountsPage() {
     if (typeFilter !== "all") {
       result = result.filter((a) => a.type === typeFilter);
     }
+    if (viewMode === "table") {
+      const normalizedAccountName = accountTableFilters.name.trim().toLowerCase();
+      const normalizedBalance = accountTableFilters.balance.trim().toLowerCase();
+
+      if (normalizedAccountName) {
+        result = result.filter((account) => account.name.toLowerCase().includes(normalizedAccountName));
+      }
+      if (accountTableFilters.type) {
+        result = result.filter((account) => account.type === accountTableFilters.type);
+      }
+      if (normalizedBalance) {
+        result = result.filter((account) => {
+          const formattedBalance = formatCurrency(account.currentBalance, account.currencyCode).toLowerCase();
+          return (
+            formattedBalance.includes(normalizedBalance) ||
+            String(account.currentBalance).toLowerCase().includes(normalizedBalance)
+          );
+        });
+      }
+      if (accountTableFilters.currencyCode) {
+        result = result.filter(
+          (account) => account.currencyCode.toUpperCase() === accountTableFilters.currencyCode,
+        );
+      }
+      if (accountTableFilters.status !== "all") {
+        result = result.filter((account) => {
+          switch (accountTableFilters.status) {
+            case "included":
+              return account.includeInNetWorth;
+            case "excluded":
+              return !account.includeInNetWorth;
+            case "archived":
+              return account.isArchived;
+            default:
+              return true;
+          }
+        });
+      }
+    }
     return result;
-  }, [visibleAccounts, hiddenIds, searchQuery, typeFilter]);
+  }, [accountTableFilters, hiddenIds, searchQuery, typeFilter, viewMode, visibleAccounts]);
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredAccounts);
   const activeAccounts = snapshot?.accounts.filter((account) => !account.isArchived) ?? [];
   const archivedAccounts = snapshot?.accounts.filter((account) => account.isArchived) ?? [];
@@ -1722,6 +1841,12 @@ export function AccountsPage() {
       currencyCode: currentState.currencyCode || activeWorkspace.baseCurrencyCode,
     }));
   }, [activeWorkspace, editorMode, isEditorOpen, isWorkspacesLoading]);
+
+  useEffect(() => {
+    if (viewMode !== "table" && openTableFilter !== null) {
+      setOpenTableFilter(null);
+    }
+  }, [openTableFilter, viewMode]);
 
   useEffect(() => {
     if (hasHydratedEditorDraft.current || !activeWorkspace || !user) {
@@ -1815,6 +1940,38 @@ export function AccountsPage() {
     setFormState(buildFormStateFromAccount(account));
     setIsDirty(false);
     setIsEditorOpen(true);
+  }
+
+  function updateAccountTableFilter<Field extends keyof AccountTableFilters>(
+    field: Field,
+    value: AccountTableFilters[Field],
+  ) {
+    setAccountTableFilters((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  function clearAccountTableFilters() {
+    setAccountTableFilters(defaultAccountTableFilters());
+    setOpenTableFilter(null);
+  }
+
+  function toggleTableFilterMenu(field: keyof AccountTableFilters) {
+    setOpenTableFilter((currentValue) => (currentValue === field ? null : field));
+  }
+
+  function closeTableFilterMenu() {
+    setOpenTableFilter(null);
+  }
+
+  function clearSingleTableFilter(field: keyof AccountTableFilters) {
+    updateAccountTableFilter(field, defaultAccountTableFilters()[field]);
+  }
+
+  function applyAccountTableFilterAndClose<Field extends keyof AccountTableFilters>(
+    field: Field,
+    value: AccountTableFilters[Field],
+  ) {
+    updateAccountTableFilter(field, value);
+    setOpenTableFilter(null);
   }
 
   function closeEditor() {
@@ -2204,6 +2361,7 @@ export function AccountsPage() {
                     onClick={() => {
                       setSearchQuery("");
                       setTypeFilter("all");
+                      clearAccountTableFilters();
                     }}
                     type="button"
                   >
@@ -2299,11 +2457,126 @@ export function AccountsPage() {
                       onChange={() => (allSelected ? clearAll() : selectAll())}
                     />
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">Cuenta</th>
-                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("tipo")}`}>Tipo</th>
-                  <th className={`px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("saldo")}`}>Saldo actual</th>
-                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("moneda")}`}>Moneda</th>
-                  <th className={`px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("estado")}`}>Estado</th>
+                  <th className="relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">
+                    <TableColumnFilterMenu
+                      active={isAccountTableFilterActive(accountTableFilters, "name")}
+                      isOpen={openTableFilter === "name"}
+                      label="Cuenta"
+                      onClear={() => clearSingleTableFilter("name")}
+                      onClose={closeTableFilterMenu}
+                      onToggle={() => toggleTableFilterMenu("name")}
+                    >
+                      <div className="space-y-3">
+                        <input
+                          className={tableColumnFilterInputClassName}
+                          onChange={(event) => updateAccountTableFilter("name", event.target.value)}
+                          placeholder="Buscar cuenta..."
+                          type="text"
+                          value={accountTableFilters.name}
+                        />
+                      </div>
+                    </TableColumnFilterMenu>
+                  </th>
+                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("tipo")}`}>
+                    <TableColumnFilterMenu
+                      active={isAccountTableFilterActive(accountTableFilters, "type")}
+                      isOpen={openTableFilter === "type"}
+                      label="Tipo"
+                      onClear={() => clearSingleTableFilter("type")}
+                      onClose={closeTableFilterMenu}
+                      onToggle={() => toggleTableFilterMenu("type")}
+                    >
+                      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                        <TableFilterOptionButton
+                          onClick={() => applyAccountTableFilterAndClose("type", "")}
+                          selected={!accountTableFilters.type}
+                        >
+                          Todos
+                        </TableFilterOptionButton>
+                        {availableAccountTypes.map((accountType) => (
+                          <TableFilterOptionButton
+                            key={accountType}
+                            onClick={() => applyAccountTableFilterAndClose("type", accountType)}
+                            selected={accountTableFilters.type === accountType}
+                          >
+                            {getTypePreset(accountType).label}
+                          </TableFilterOptionButton>
+                        ))}
+                      </div>
+                    </TableColumnFilterMenu>
+                  </th>
+                  <th className={`relative px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("saldo")}`}>
+                    <TableColumnFilterMenu
+                      active={isAccountTableFilterActive(accountTableFilters, "balance")}
+                      align="right"
+                      isOpen={openTableFilter === "balance"}
+                      label="Saldo actual"
+                      onClear={() => clearSingleTableFilter("balance")}
+                      onClose={closeTableFilterMenu}
+                      onToggle={() => toggleTableFilterMenu("balance")}
+                      triggerClassName="justify-end text-right"
+                    >
+                      <div className="space-y-3">
+                        <input
+                          className={`${tableColumnFilterInputClassName} text-right`}
+                          onChange={(event) => updateAccountTableFilter("balance", event.target.value)}
+                          placeholder="Ej. 514 o 53.19"
+                          type="text"
+                          value={accountTableFilters.balance}
+                        />
+                      </div>
+                    </TableColumnFilterMenu>
+                  </th>
+                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("moneda")}`}>
+                    <TableColumnFilterMenu
+                      active={isAccountTableFilterActive(accountTableFilters, "currencyCode")}
+                      isOpen={openTableFilter === "currencyCode"}
+                      label="Moneda"
+                      onClear={() => clearSingleTableFilter("currencyCode")}
+                      onClose={closeTableFilterMenu}
+                      onToggle={() => toggleTableFilterMenu("currencyCode")}
+                    >
+                      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+                        <TableFilterOptionButton
+                          onClick={() => applyAccountTableFilterAndClose("currencyCode", "")}
+                          selected={!accountTableFilters.currencyCode}
+                        >
+                          Todas
+                        </TableFilterOptionButton>
+                        {availableCurrencyCodes.map((currencyCode) => (
+                          <TableFilterOptionButton
+                            key={currencyCode}
+                            onClick={() => applyAccountTableFilterAndClose("currencyCode", currencyCode)}
+                            selected={accountTableFilters.currencyCode === currencyCode}
+                          >
+                            {currencyCode}
+                          </TableFilterOptionButton>
+                        ))}
+                      </div>
+                    </TableColumnFilterMenu>
+                  </th>
+                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("estado")}`}>
+                    <TableColumnFilterMenu
+                      active={isAccountTableFilterActive(accountTableFilters, "status")}
+                      isOpen={openTableFilter === "status"}
+                      label="Estado"
+                      onClear={() => clearSingleTableFilter("status")}
+                      onClose={closeTableFilterMenu}
+                      onToggle={() => toggleTableFilterMenu("status")}
+                    >
+                      <div className="space-y-1">
+                        {accountTableStatusOptions.map((option) => (
+                          <TableFilterOptionButton
+                            key={option.value}
+                            onClick={() => applyAccountTableFilterAndClose("status", option.value)}
+                            selected={accountTableFilters.status === option.value}
+                          >
+                            {option.label}
+                          </TableFilterOptionButton>
+                        ))}
+                      </div>
+                    </TableColumnFilterMenu>
+                  </th>
                   <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Acciones</th>
                 </tr>
               </thead>
