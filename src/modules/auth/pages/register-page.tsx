@@ -34,6 +34,17 @@ export function RegisterPage() {
   const loginQueryString = loginSearchParams.toString();
   const loginPath = loginQueryString ? `/auth/login?${loginQueryString}` : "/auth/login";
 
+  function clearSubmittedCredentials() {
+    setFullName("");
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
@@ -46,6 +57,8 @@ export function RegisterPage() {
         password,
         fullName,
       });
+
+      clearSubmittedCredentials();
 
       if (result.needsEmailConfirmation) {
         setSuccessMessage(
