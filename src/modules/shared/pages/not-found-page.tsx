@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import { Button } from "../../../components/ui/button";
+import { getButtonClassName } from "../../../components/ui/button";
 
 export function NotFoundPage() {
   return (
@@ -12,10 +12,10 @@ export function NotFoundPage() {
           La página que buscas no existe o fue movida. Vuelve al dashboard para continuar.
         </p>
         <Link
-          className="mt-6 inline-flex"
+          className={getButtonClassName({ className: "mt-6" })}
           to="/app"
         >
-          <Button>Volver al dashboard</Button>
+          Volver al dashboard
         </Link>
       </div>
     </main>

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
-import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineFormError } from "../../../components/ui/inline-form-error";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
 
 export function RecoveryPage() {
@@ -31,8 +32,7 @@ export function RecoveryPage() {
         "Te enviamos un correo con un enlace seguro para cambiar tu contraseña.",
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo enviar el correo.";
-      setErrorMessage(message);
+      setErrorMessage(translateAuthError(error, "No se pudo enviar el correo. Inténtalo de nuevo."));
     } finally {
       setIsSubmitting(false);
     }
@@ -64,12 +64,7 @@ export function RecoveryPage() {
             value={email}
           />
         </label>
-        {errorMessage ? (
-          <FormFeedbackBanner
-            description={errorMessage}
-            title="No pudimos enviar el enlace"
-          />
-        ) : null}
+        {errorMessage ? <InlineFormError message={errorMessage} /> : null}
         <Button
           className="w-full"
           disabled={!isConfigured || isSubmitting}

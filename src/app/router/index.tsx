@@ -5,7 +5,7 @@ import { AppShell } from "../layouts/app-shell";
 import { AuthShell } from "../layouts/auth-shell";
 import { PublicShell } from "../layouts/public-shell";
 import { RouteErrorPage } from "../../modules/shared/pages/route-error-page";
-import { HomeRedirect } from "../guards/home-redirect";
+import { PublicHomeGate } from "../guards/public-home-gate";
 import { PublicOnly } from "../guards/public-only";
 import { RequireAuth } from "../guards/require-auth";
 
@@ -40,16 +40,34 @@ function lazyProtectedRoute<TModule extends Record<string, unknown>, TKey extend
   };
 }
 
+function lazyGatedRoute<TModule extends Record<string, unknown>, TKey extends keyof TModule>(
+  importer: () => Promise<TModule>,
+  exportName: TKey,
+) {
+  return async () => {
+    const module = await importer();
+    const Component = module[exportName] as ComponentType;
+
+    return {
+      Component: () => (
+        <PublicHomeGate>
+          <Component />
+        </PublicHomeGate>
+      ),
+    };
+  };
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <HomeRedirect />,
-    errorElement: <RouteErrorPage />,
-  },
-  {
     element: <PublicShell />,
     errorElement: <RouteErrorPage />,
     children: [
+      {
+        index: true,
+        lazy: lazyGatedRoute(() => import("../../modules/public/pages/home-page"), "HomePage"),
+      },
       {
         path: "pricing",
         lazy: lazyRoute(() => import("../../modules/public/pages/pricing-page"), "PricingPage"),

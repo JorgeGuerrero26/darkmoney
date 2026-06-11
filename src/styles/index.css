@@ -141,6 +141,100 @@
     text-wrap: balance;
   }
 
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition:
+      opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .text-gradient-pine {
+    background: linear-gradient(120deg, #f5f7fb 25%, #6be4c5 65%, #8ea5ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .animate-float-slow {
+    animation: float-slow 9s ease-in-out infinite;
+  }
+
+  .animate-float-slower {
+    animation: float-slow 13s ease-in-out infinite reverse;
+  }
+
+  .coin-flip {
+    perspective: 900px;
+  }
+
+  .coin-flip-inner {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    transform-style: preserve-3d;
+    transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .coin-flip:hover .coin-flip-inner {
+    transform: rotateY(180deg);
+  }
+
+  .coin-face {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .coin-face-back {
+    position: absolute;
+    inset: 0;
+    transform: rotateY(180deg);
+  }
+
+  .chart-line-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: chart-draw 1100ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .chart-area-fade {
+    opacity: 0;
+    animation: fade-in 900ms ease-out 250ms forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+
+    .animate-float-slow,
+    .animate-float-slower {
+      animation: none;
+    }
+
+    .coin-flip-inner {
+      transition: none;
+    }
+
+    .chart-line-draw {
+      animation: none;
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+    }
+
+    .chart-area-fade {
+      animation: none;
+      opacity: 1;
+    }
+  }
+
   .animate-rise-in {
     animation: rise-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -159,6 +253,23 @@
 
   .animate-toast-progress {
     animation: toast-progress linear forwards;
+  }
+}
+
+@keyframes chart-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-14px);
   }
 }
 

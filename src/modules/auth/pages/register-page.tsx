@@ -1,15 +1,18 @@
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
-import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineFormError } from "../../../components/ui/inline-form-error";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
+import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
+import { resolvePostAuthPath } from "../invite-resume";
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isConfigured, signUp } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -22,6 +25,14 @@ export function RegisterPage() {
     clear: () => setSuccessMessage(""),
     title: "Cuenta creada",
   });
+  const nextPath = searchParams.get("next");
+  const resolvedNextPath = resolvePostAuthPath(nextPath);
+  const loginSearchParams = new URLSearchParams();
+  if (nextPath) {
+    loginSearchParams.set("next", resolvedNextPath);
+  }
+  const loginQueryString = loginSearchParams.toString();
+  const loginPath = loginQueryString ? `/auth/login?${loginQueryString}` : "/auth/login";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,10 +54,9 @@ export function RegisterPage() {
         return;
       }
 
-      navigate("/app", { replace: true });
+      navigate(resolvedNextPath, { replace: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo crear la cuenta.";
-      setErrorMessage(message);
+      setErrorMessage(translateAuthError(error, "No se pudo crear la cuenta. Inténtalo de nuevo."));
     } finally {
       setIsSubmitting(false);
     }
@@ -110,12 +120,7 @@ export function RegisterPage() {
             </button>
           </div>
         </label>
-        {errorMessage ? (
-          <FormFeedbackBanner
-            description={errorMessage}
-            title="No pudimos crear tu cuenta"
-          />
-        ) : null}
+        {errorMessage ? <InlineFormError message={errorMessage} /> : null}
         {!isConfigured ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
             Falta configurar <code>VITE_SUPABASE_URL</code> y <code>VITE_SUPABASE_ANON_KEY</code> en <code>.env</code>.
@@ -141,7 +146,7 @@ export function RegisterPage() {
         <span>¿Ya tienes cuenta? </span>
         <NavLink
           className="underline decoration-white/20 underline-offset-4 transition hover:text-ink"
-          to="/auth/login"
+          to={loginPath}
         >
           Volver al login
         </NavLink>

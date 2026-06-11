@@ -2,7 +2,7 @@ import { AlertTriangle, ChevronDown, Copy, Home, RefreshCcw } from "lucide-react
 import { useState } from "react";
 import { Link, isRouteErrorResponse, useRouteError } from "react-router-dom";
 
-import { Button } from "../../../components/ui/button";
+import { Button, getButtonClassName } from "../../../components/ui/button";
 
 type RouteErrorContent = {
   eyebrow: string;
@@ -144,11 +144,9 @@ export function RouteErrorPage() {
                 <RefreshCcw className="h-4 w-4" />
                 Reintentar
               </Button>
-              <Link to="/">
-                <Button className="gap-2" variant="secondary">
-                  <Home className="h-4 w-4" />
-                  Volver al inicio
-                </Button>
+              <Link className={getButtonClassName({ className: "gap-2", variant: "secondary" })} to="/">
+                <Home className="h-4 w-4" />
+                Volver al inicio
               </Link>
             </div>
 

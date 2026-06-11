@@ -6,6 +6,11 @@ type ButtonProps = PropsWithChildren<ButtonHTMLAttributes<HTMLButtonElement>> & 
   variant?: ButtonVariant;
 };
 
+type ButtonClassNameOptions = {
+  className?: string;
+  variant?: ButtonVariant;
+};
+
 const variants: Record<ButtonVariant, string> = {
   primary:
     "bg-ink text-void hover:-translate-y-0.5 hover:brightness-105 focus-visible:outline-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60",
@@ -14,6 +19,13 @@ const variants: Record<ButtonVariant, string> = {
   ghost:
     "bg-white/[0.03] text-storm ring-1 ring-white/8 hover:-translate-y-0.5 hover:bg-white/[0.07] hover:text-ink focus-visible:outline-gold disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60",
 };
+
+export function getButtonClassName({
+  className = "",
+  variant = "primary",
+}: ButtonClassNameOptions = {}) {
+  return `inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${variants[variant]} ${className}`;
+}
 
 export function Button({
   children,
@@ -24,7 +36,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${variants[variant]} ${className}`}
+      className={getButtonClassName({ className, variant })}
       type={type}
       {...props}
     >

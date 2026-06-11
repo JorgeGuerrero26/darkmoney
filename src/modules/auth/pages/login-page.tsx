@@ -5,6 +5,8 @@ import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineFormError } from "../../../components/ui/inline-form-error";
+import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
 import { isInvitePath, resolvePostAuthPath } from "../invite-resume";
 
@@ -23,6 +25,12 @@ export function LoginPage() {
   const nextPath = searchParams.get("next");
   const resolvedNextPath = resolvePostAuthPath(nextPath);
   const isInviteLogin = isInvitePath(nextPath);
+  const registerSearchParams = new URLSearchParams();
+  if (nextPath) {
+    registerSearchParams.set("next", resolvedNextPath);
+  }
+  const registerQueryString = registerSearchParams.toString();
+  const registerPath = registerQueryString ? `/auth/register?${registerQueryString}` : "/auth/register";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,18 +47,19 @@ export function LoginPage() {
       await signIn(email, password);
       navigate(resolvedNextPath, { replace: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo iniciar sesión.";
-      setErrorMessage(message);
+      setErrorMessage(translateAuthError(error, "No se pudo iniciar sesión. Inténtalo de nuevo."));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <section className="space-y-6">
+    <section className="animate-rise-in space-y-6">
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-storm">acceso</p>
-        <h2 className="font-display text-4xl font-semibold text-ink">Entra a tu dinero compartido.</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-pine/80">Acceso</p>
+        <h2 className="font-display text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
+          Hola de nuevo
+        </h2>
         <p className="text-sm leading-7 text-storm">
           Inicia sesión con tu correo y contraseña para entrar a tu espacio personal o compartido.
         </p>
@@ -101,6 +110,7 @@ export function LoginPage() {
             </button>
           </div>
         </label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <label className="flex cursor-pointer items-center gap-3">
           <div className="relative flex shrink-0 items-center justify-center">
             <input
@@ -118,13 +128,15 @@ export function LoginPage() {
           </div>
           <span className="text-sm text-storm">Recordar mi correo</span>
         </label>
+        <NavLink
+          className="text-sm text-storm transition hover:text-pine"
+          to="/auth/recovery"
+        >
+          Olvidé mi contraseña
+        </NavLink>
+        </div>
 
-        {errorMessage ? (
-          <FormFeedbackBanner
-            description={errorMessage}
-            title="No pudimos iniciar sesión"
-          />
-        ) : null}
+        {errorMessage ? <InlineFormError message={errorMessage} /> : null}
         {!isConfigured ? (
           <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-sm text-gold">
             Falta configurar <code>VITE_SUPABASE_URL</code> y <code>VITE_SUPABASE_ANON_KEY</code> en <code>.env</code>.
@@ -146,20 +158,15 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <div className="flex flex-wrap justify-between gap-3 text-sm text-storm">
+      <p className="text-center text-sm text-storm">
+        ¿No tienes cuenta?{" "}
         <NavLink
-          className="underline decoration-white/20 underline-offset-4 transition hover:text-ink"
-          to="/auth/recovery"
+          className="font-semibold text-pine transition hover:text-ink"
+          to={registerPath}
         >
-          Olvidé mi contraseña
+          Crear cuenta gratis
         </NavLink>
-        <NavLink
-          className="underline decoration-white/20 underline-offset-4 transition hover:text-ink"
-          to="/auth/register"
-        >
-          Crear cuenta
-        </NavLink>
-      </div>
+      </p>
     </section>
   );
 }

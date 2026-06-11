@@ -1,120 +1,266 @@
-import { BookText, FileBadge2, Landmark, Mail, Phone } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  BookText,
+  FileBadge2,
+  Landmark,
+  Mail,
+  Menu,
+  MessageCircle,
+  Phone,
+  X,
+} from "lucide-react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { BrandBanner, BrandLogo } from "../../components/ui/brand-logo";
-import { Button } from "../../components/ui/button";
+import { BrandLogo } from "../../components/ui/brand-logo";
+import { getButtonClassName } from "../../components/ui/button";
 import { PUBLIC_CONTACT, PUBLIC_CONTACT_LINKS } from "../../lib/public-contact";
 import { useAuth } from "../../modules/auth/auth-context";
 
-const publicNavigation = [
-  { to: "/pricing", label: "Planes" },
-  { to: "/terms", label: "Terminos" },
+const headerNavigation = [
+  { to: "/", label: "Inicio", end: true },
+  { to: "/#producto", label: "Producto", end: false },
+  { to: "/pricing", label: "Planes", end: false },
+];
+
+const legalNavigation = [
+  { to: "/terms", label: "Términos" },
   { to: "/privacy", label: "Privacidad" },
   { to: "/refunds", label: "Devoluciones" },
-  { to: PUBLIC_CONTACT.claimsBookPath, label: "Libro" },
 ];
 
 export function PublicShell() {
   const { user } = useAuth();
+  const location = useLocation();
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.hash]);
 
   return (
     <div className="min-h-screen bg-glow text-ink">
-      {/* Contenido principal: ancho completo con el mismo padding horizontal que el footer */}
-      <div className="flex w-full flex-col gap-6 px-4 pt-5 sm:px-6 lg:px-8">
-        <header className="glass-panel-strong overflow-hidden rounded-[32px] p-4 sm:p-5">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <Link className="shrink-0" to="/pricing">
-                <BrandLogo
-                  className="h-16 w-16 rounded-[20px]"
-                  imageClassName="scale-[1.02] object-[center_48%]"
-                />
-              </Link>
-              <div className="min-w-0">
-                <p className="text-[0.7rem] uppercase tracking-[0.26em] text-storm/75">
-                  DarkMoney
-                </p>
-                <h1 className="mt-2 font-display text-2xl font-semibold tracking-[-0.04em] text-ink sm:text-3xl">
-                  Informacion publica, contacto y politicas
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-7 text-storm">
-                  SaaS de finanzas personales y colaborativas con cuentas, movimientos,
-                  suscripciones, deudas y espacios compartidos.
-                </p>
-              </div>
-            </div>
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          scrolled || mobileMenuOpen
+            ? "border-b border-white/[0.06] bg-canvas/80 backdrop-blur-xl"
+            : "border-b border-transparent"
+        }`}
+      >
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <Link
+            className="flex items-center gap-2.5"
+            to="/"
+          >
+            <BrandLogo
+              className="h-9 w-9 rounded-xl"
+              imageClassName="scale-[1.02] object-[center_48%]"
+              loading="eager"
+            />
+            <span className="font-display text-base font-semibold tracking-tight text-ink">
+              DarkMoney
+            </span>
+          </Link>
 
-            <div className="flex flex-col gap-4 lg:items-end">
-              <nav className="flex flex-wrap gap-2">
-                {publicNavigation.map((item) => (
-                  <NavLink
-                    className={({ isActive }) =>
-                      `rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                        isActive
-                          ? "border-pine/25 bg-pine/10 text-pine"
-                          : "border-white/10 bg-white/[0.03] text-storm hover:border-white/18 hover:text-ink"
-                      }`
-                    }
-                    key={item.to}
-                    to={item.to}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </nav>
-
-              <div className="flex flex-wrap gap-3">
-                <Link to={user ? "/app" : "/auth/login"}>
-                  <Button variant="ghost">{user ? "Ir a la app" : "Entrar"}</Button>
+          <nav className="hidden items-center gap-1 md:flex">
+            {headerNavigation.map((item) =>
+              item.to.includes("#") ? (
+                <Link
+                  className="rounded-full px-4 py-2 text-sm font-medium text-storm transition hover:text-ink"
+                  key={item.to}
+                  to={item.to}
+                >
+                  {item.label}
                 </Link>
-                {!user ? (
-                  <Link to="/auth/register">
-                    <Button>Crear cuenta</Button>
-                  </Link>
-                ) : null}
-              </div>
+              ) : (
+                <NavLink
+                  className={({ isActive }) =>
+                    `rounded-full px-4 py-2 text-sm font-medium transition ${
+                      isActive ? "bg-white/[0.06] text-ink" : "text-storm hover:text-ink"
+                    }`
+                  }
+                  end={item.end}
+                  key={item.to}
+                  to={item.to}
+                >
+                  {item.label}
+                </NavLink>
+              ),
+            )}
+          </nav>
+
+          <div className="hidden items-center gap-2.5 md:flex">
+            <Link
+              className={getButtonClassName({ variant: "ghost", className: "px-4 py-2" })}
+              to={user ? "/app" : "/auth/login"}
+            >
+              {user ? "Ir a la app" : "Entrar"}
+            </Link>
+            {!user ? (
+              <Link
+                className={getButtonClassName({ className: "px-4 py-2" })}
+                to="/auth/register"
+              >
+                Crear cuenta
+              </Link>
+            ) : null}
+          </div>
+
+          <button
+            aria-expanded={mobileMenuOpen}
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-ink transition hover:bg-white/[0.07] md:hidden"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            type="button"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
+
+        {mobileMenuOpen ? (
+          <div className="border-t border-white/[0.06] bg-canvas/95 px-4 pb-6 pt-4 backdrop-blur-xl md:hidden">
+            <nav className="flex flex-col gap-1">
+              {headerNavigation.map((item) => (
+                <Link
+                  className="rounded-xl px-4 py-3 text-sm font-medium text-storm transition hover:bg-white/[0.05] hover:text-ink"
+                  key={item.to}
+                  to={item.to}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            <div className="mt-4 flex flex-col gap-2.5">
+              <Link
+                className={getButtonClassName({ variant: "ghost" })}
+                to={user ? "/app" : "/auth/login"}
+              >
+                {user ? "Ir a la app" : "Entrar"}
+              </Link>
+              {!user ? (
+                <Link
+                  className={getButtonClassName()}
+                  to="/auth/register"
+                >
+                  Crear cuenta
+                </Link>
+              ) : null}
             </div>
           </div>
-        </header>
+        ) : null}
+      </header>
 
-        <BrandBanner
-          className="hidden h-52 sm:block"
-          imageClassName="object-cover object-center"
+      <main
+        className="mx-auto w-full max-w-6xl px-4 pb-24 pt-10 sm:px-6 lg:px-8"
+        id="main"
+      >
+        <Outlet />
+      </main>
+
+      <footer className="relative bg-[rgba(4,6,9,0.85)]">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-pine/30 to-transparent"
         />
-
-        <div className="pb-16">
-          <Outlet />
-        </div>
-      </div>
-
-      {/* Footer full-width */}
-      <footer className="border-t border-white/[0.06] bg-[rgba(5,7,10,0.72)] backdrop-blur-xl">
-        <div className="w-full px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
-            {/* Brand */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_50%_0%,rgba(107,228,197,0.06),transparent_70%)]"
+        />
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="grid gap-12 lg:grid-cols-[1.5fr_1fr_1fr_1.2fr] sm:grid-cols-2">
             <div>
               <div className="flex items-center gap-3">
                 <BrandLogo
-                  className="h-10 w-10 rounded-[12px]"
+                  className="h-11 w-11 rounded-[14px]"
                   imageClassName="scale-[1.02] object-[center_48%]"
                 />
-                <p className="font-display text-base font-semibold text-ink">DarkMoney</p>
+                <div>
+                  <p className="font-display text-lg font-semibold tracking-tight text-ink">
+                    DarkMoney
+                  </p>
+                  <p className="text-xs text-storm/70">Finanzas claras, propias y compartidas</p>
+                </div>
               </div>
-              <p className="mt-4 max-w-xs text-sm leading-7 text-storm">
+              <p className="mt-5 max-w-xs text-sm leading-7 text-storm">
                 Plataforma web para organizar dinero propio y compartido desde un solo lugar.
               </p>
+              <div className="mt-6 flex flex-wrap gap-2.5">
+                <a
+                  aria-label="Enviar correo"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-storm transition hover:border-pine/30 hover:bg-pine/10 hover:text-pine"
+                  href={PUBLIC_CONTACT_LINKS.email}
+                >
+                  <Mail className="h-4 w-4" />
+                </a>
+                <a
+                  aria-label="Llamar por teléfono"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-storm transition hover:border-pine/30 hover:bg-pine/10 hover:text-pine"
+                  href={PUBLIC_CONTACT_LINKS.phone}
+                >
+                  <Phone className="h-4 w-4" />
+                </a>
+                <a
+                  aria-label="Escribir por WhatsApp"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-storm transition hover:border-pine/30 hover:bg-pine/10 hover:text-pine"
+                  href={PUBLIC_CONTACT_LINKS.whatsapp}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </a>
+              </div>
             </div>
 
-            {/* Navegacion */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
-                Navegacion
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/80">
+                Producto
               </p>
-              <ul className="mt-4 flex flex-col gap-3">
-                {publicNavigation.map((item) => (
+              <ul className="mt-5 flex flex-col gap-3.5">
+                <li>
+                  <Link
+                    className="text-sm text-storm transition hover:translate-x-0.5 hover:text-pine"
+                    to="/"
+                  >
+                    Inicio
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-sm text-storm transition hover:translate-x-0.5 hover:text-pine"
+                    to="/#producto"
+                  >
+                    Funcionalidades
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    className="text-sm text-storm transition hover:translate-x-0.5 hover:text-pine"
+                    to="/pricing"
+                  >
+                    Planes
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/80">
+                Legal
+              </p>
+              <ul className="mt-5 flex flex-col gap-3.5">
+                {legalNavigation.map((item) => (
                   <li key={item.to}>
                     <Link
-                      className="text-sm text-storm transition hover:text-ink"
+                      className="text-sm text-storm transition hover:translate-x-0.5 hover:text-pine"
                       to={item.to}
                     >
                       {item.label}
@@ -124,74 +270,37 @@ export function PublicShell() {
               </ul>
             </div>
 
-            {/* Contacto */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/80">
                 Contacto
               </p>
-              <ul className="mt-4 flex flex-col gap-3 text-sm text-storm">
-                <li>
-                  <a
-                    className="flex items-center gap-2.5 transition hover:text-ink"
-                    href={PUBLIC_CONTACT_LINKS.email}
-                  >
-                    <Mail className="h-3.5 w-3.5 shrink-0 text-pine" />
-                    {PUBLIC_CONTACT.supportEmail}
-                  </a>
-                </li>
-                <li>
-                  <a
-                    className="flex items-center gap-2.5 transition hover:text-ink"
-                    href={PUBLIC_CONTACT_LINKS.phone}
-                  >
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-pine" />
-                    {PUBLIC_CONTACT.supportPhoneDisplay}
-                  </a>
-                </li>
+              <ul className="mt-5 flex flex-col gap-3.5 text-sm text-storm">
                 <li className="flex items-center gap-2.5">
-                  <Landmark className="h-3.5 w-3.5 shrink-0 text-pine" />
+                  <Landmark className="h-3.5 w-3.5 shrink-0 text-pine/70" />
                   {PUBLIC_CONTACT.cityCountry}
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <FileBadge2 className="h-3.5 w-3.5 shrink-0 text-pine" />
+                  <FileBadge2 className="h-3.5 w-3.5 shrink-0 text-pine/70" />
                   {PUBLIC_CONTACT.taxIdLabel} {PUBLIC_CONTACT.taxIdValue}
                 </li>
               </ul>
-            </div>
-
-            {/* Libro de Reclamaciones */}
-            <div className="flex flex-col justify-start">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/60">
-                Legal
-              </p>
               <Link
-                className="mt-4 flex items-center gap-2.5 rounded-[20px] border border-gold/20 bg-gold/[0.08] px-4 py-3.5 text-sm font-semibold text-gold transition hover:border-gold/30 hover:bg-gold/[0.13]"
+                className="mt-6 inline-flex items-center gap-2.5 rounded-[18px] border border-gold/20 bg-gold/[0.08] px-4 py-3 text-sm font-semibold text-gold transition hover:border-gold/35 hover:bg-gold/[0.14] hover:shadow-[0_0_24px_rgba(215,190,123,0.12)]"
                 to={PUBLIC_CONTACT.claimsBookPath}
               >
                 <BookText className="h-4 w-4 shrink-0" />
-                Libro de
-                <br />
-                Reclamaciones
+                Libro de Reclamaciones
               </Link>
             </div>
           </div>
 
-          {/* Bottom bar */}
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-6">
+          <div className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.06] pt-7">
             <p className="text-xs text-storm/50">
               © {new Date().getFullYear()} DarkMoney. Todos los derechos reservados.
             </p>
-            <div className="flex flex-wrap gap-4">
-              {publicNavigation.slice(1, 4).map((item) => (
-                <Link
-                  className="text-xs text-storm/50 transition hover:text-storm"
-                  key={item.to}
-                  to={item.to}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
+            <p className="text-xs text-storm/40">
+              Hecho en {PUBLIC_CONTACT.cityCountry}
+            </p>
           </div>
         </div>
       </footer>

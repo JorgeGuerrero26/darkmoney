@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   Bell,
+  Camera,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   Gauge,
   HandCoins,
   LayoutGrid,
+  LoaderCircle,
   LogOut,
   Menu,
   Minus,
@@ -29,8 +31,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
 import { BrandLogo } from "../../components/ui/brand-logo";
-import { Button } from "../../components/ui/button";
 import { DataState } from "../../components/ui/data-state";
+import { InfoTip } from "../../components/ui/info-tip";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { useToast } from "../../components/ui/toast-provider";
 import { useAuth } from "../../modules/auth/auth-context";
@@ -429,11 +431,12 @@ function AppShellContent() {
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [openNavigationGroup, setOpenNavigationGroup] = useState<NavigationGroupId | null>("operations");
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, signOut, user } = useAuth();
+  const { profile, saveAvatar, signOut, user } = useAuth();
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
   const toggleSidebarCollapsed = useWorkspaceStore((state) => state.toggleSidebarCollapsed);
   const {
@@ -513,6 +516,54 @@ function AppShellContent() {
       navigate("/app/settings");
     } finally {
       setIsOpeningProCheckout(false);
+    }
+  }
+
+  async function handleAvatarChange(file: File | null) {
+    if (!file || !hasProAccess) {
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      await saveAvatar(file);
+      showToast({
+        title: "Foto actualizada",
+        description: "Tu foto de perfil ya se actualizo tambien desde el menu movil.",
+        tone: "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "No pudimos actualizar la foto",
+        description: getQueryErrorMessage(error, "Intenta de nuevo con otra imagen."),
+        tone: "error",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    if (!hasProAccess || !profile?.avatarUrl) {
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      await saveAvatar(null);
+      showToast({
+        title: "Foto eliminada",
+        description: "Tu perfil vuelve a mostrar las iniciales de la cuenta.",
+        tone: "success",
+      });
+    } catch (error) {
+      showToast({
+        title: "No pudimos eliminar la foto",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        tone: "error",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
     }
   }
 
@@ -653,21 +704,21 @@ function AppShellContent() {
               >
                 {isSidebarCollapsed ? (
                   <BrandLogo
-                    className="h-14 w-14 rounded-[18px]"
+                    className="h-12 w-12 rounded-2xl"
                     imageClassName="scale-[1.02] object-[center_48%]"
                   />
                 ) : (
                   <div className="flex w-full items-center gap-3">
                     <BrandLogo
-                      className="h-[74px] w-[74px] rounded-[22px]"
+                      className="h-12 w-12 rounded-2xl"
                       imageClassName="scale-[1.02] object-[center_48%]"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[0.68rem] uppercase tracking-[0.28em] text-storm/72">
-                        Dark Money
+                      <p className="font-display text-base font-semibold tracking-tight text-ink">
+                        DarkMoney
                       </p>
-                      <p className="mt-1.5 max-w-[10.75rem] text-[0.92rem] leading-6 text-storm">
-                        Finanzas personales y compartidas en un solo sistema.
+                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-pine/70">
+                        Finanzas claras
                       </p>
                     </div>
                     <button
@@ -787,21 +838,30 @@ function AppShellContent() {
             </nav>
 
             {!isSidebarCollapsed ? (
-              <nav aria-label="Navegacion principal agrupada" className="mt-8 space-y-3">
+              <nav aria-label="Navegacion principal agrupada" className="mt-7 space-y-1">
                 <NavLink
                   className={({ isActive }) =>
-                    `group flex items-center gap-3 rounded-[22px] px-4 py-3 text-sm font-semibold transition ${
+                    `group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition duration-200 ${
                       isActive
-                        ? "bg-white/[0.08] text-ink ring-1 ring-white/12"
-                        : "text-storm hover:bg-white/[0.04] hover:text-ink"
+                        ? "bg-white/[0.06] text-ink"
+                        : "text-storm hover:translate-x-0.5 hover:bg-white/[0.03] hover:text-ink"
                     }`
                   }
                   end={dashboardNavigationItem.end}
                   onClick={() => setSidebarOpen(false)}
                   to={dashboardNavigationItem.to}
                 >
-                  <LayoutGrid className="h-4 w-4" />
-                  <span>{dashboardNavigationItem.label}</span>
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        className={`absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full transition ${
+                          isActive ? "bg-pine" : "bg-transparent"
+                        }`}
+                      />
+                      <LayoutGrid className="h-4 w-4" />
+                      <span>{dashboardNavigationItem.label}</span>
+                    </>
+                  )}
                 </NavLink>
 
                 {navigationGroups.map((group) => {
@@ -809,36 +869,31 @@ function AppShellContent() {
                   const isOpen = openNavigationGroup === group.id;
 
                   return (
-                    <div
-                      className={`overflow-hidden rounded-[24px] border transition ${
-                        isGroupActive || isOpen
-                          ? "border-white/10 bg-white/[0.035]"
-                          : "border-white/[0.04] bg-transparent"
-                      }`}
-                      key={group.id}
-                    >
+                    <div className="pt-4 first:pt-0" key={group.id}>
                       <button
-                        className={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
-                          isGroupActive || isOpen ? "text-ink" : "text-storm hover:bg-white/[0.03] hover:text-ink"
-                        }`}
+                        className="flex w-full items-center justify-between gap-2 rounded-lg px-3.5 py-1 text-left transition duration-200 hover:text-ink"
                         onClick={() =>
                           setOpenNavigationGroup((current) => (current === group.id ? null : group.id))
                         }
+                        title={group.summary}
                         type="button"
                       >
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold">{group.title}</span>
-                          <span className="mt-1 block text-[0.68rem] uppercase tracking-[0.18em] text-storm/75">
-                            {group.summary}
-                          </span>
+                        <span
+                          className={`text-[0.6rem] font-semibold uppercase tracking-[0.24em] transition ${
+                            isGroupActive || isOpen ? "text-storm/80" : "text-storm/50"
+                          }`}
+                        >
+                          {group.title}
                         </span>
                         <ChevronDown
-                          className={`h-4 w-4 shrink-0 transition ${isOpen ? "rotate-180 text-ink" : "text-storm/70"}`}
+                          className={`h-3.5 w-3.5 shrink-0 transition ${
+                            isOpen ? "rotate-180 text-storm/70" : "text-storm/40"
+                          }`}
                         />
                       </button>
 
                       {isOpen ? (
-                        <div className="border-t border-white/8 px-2 pb-2 pt-2">
+                        <div className="mt-1 space-y-0.5">
                           {group.items.map((item) => {
                             const Icon = item.icon;
                             const isNotificationsItem = item.to === "/app/notifications";
@@ -846,25 +901,34 @@ function AppShellContent() {
                             return (
                               <NavLink
                                 className={({ isActive }) =>
-                                  `group mt-1 flex items-center gap-3 rounded-[18px] px-3 py-2.5 text-sm transition ${
+                                  `group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition duration-200 ${
                                     isActive
-                                      ? "bg-white/[0.08] text-ink ring-1 ring-white/10"
-                                      : "text-storm hover:bg-white/[0.04] hover:text-ink"
+                                      ? "bg-white/[0.06] font-medium text-ink"
+                                      : "text-storm hover:translate-x-0.5 hover:bg-white/[0.03] hover:text-ink"
                                   }`
                                 }
                                 key={item.to}
                                 onClick={() => setSidebarOpen(false)}
                                 to={item.to}
                               >
-                                <span className="relative inline-flex">
-                                  <Icon className="h-4 w-4" />
-                                  {isNotificationsItem && unreadNotificationsCount > 0 ? (
-                                    <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ff6b7a] px-1 text-[9px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.35)]">
-                                      {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                                {({ isActive }) => (
+                                  <>
+                                    <span
+                                      className={`absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full transition ${
+                                        isActive ? "bg-pine" : "bg-transparent"
+                                      }`}
+                                    />
+                                    <span className="relative inline-flex">
+                                      <Icon className="h-4 w-4" />
+                                      {isNotificationsItem && unreadNotificationsCount > 0 ? (
+                                        <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ff6b7a] px-1 text-[9px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.35)]">
+                                          {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                                        </span>
+                                      ) : null}
                                     </span>
-                                  ) : null}
-                                </span>
-                                <span>{item.label}</span>
+                                    <span>{item.label}</span>
+                                  </>
+                                )}
                               </NavLink>
                             );
                           })}
@@ -915,6 +979,48 @@ function AppShellContent() {
                   </button>
                 ) : null}
               </div>
+              {hasProAccess ? (
+                <div className="mt-4 border-t border-white/10 pt-4 lg:hidden">
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/70">
+                    Foto de perfil Pro
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-storm">
+                    Puedes cambiarla desde aqui con JPG, PNG o WebP. La app la recorta al centro automaticamente.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    <label
+                      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-ink transition hover:bg-white/[0.08] ${isUploadingAvatar ? "pointer-events-none opacity-60" : ""}`}
+                    >
+                      {isUploadingAvatar ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                      {profile?.avatarUrl ? "Cambiar foto" : "Subir foto"}
+                      <input
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        disabled={isUploadingAvatar}
+                        onChange={(event) => {
+                          void handleAvatarChange(event.target.files?.[0] ?? null);
+                          event.currentTarget.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
+                    {profile?.avatarUrl ? (
+                      <button
+                        className="inline-flex items-center justify-center rounded-[16px] border border-white/10 bg-transparent px-3 py-2.5 text-sm text-storm transition hover:border-white/15 hover:text-ink disabled:opacity-60"
+                        disabled={isUploadingAvatar}
+                        onClick={() => void handleRemoveAvatar()}
+                        type="button"
+                      >
+                        Eliminar foto
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-6 flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] px-3 py-4 backdrop-blur-2xl`}>
@@ -941,22 +1047,24 @@ function AppShellContent() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1" id="main-content" tabIndex={-1}>
-          <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] p-4">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-3">
+          <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] px-4 py-3.5 sm:px-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
                 <button
                   aria-label="Abrir menú"
-                  className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 text-ink lg:hidden"
+                  className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.05] p-2.5 text-ink lg:hidden"
                   onClick={() => setSidebarOpen(true)}
                   type="button"
                 >
                   <Menu className="h-5 w-5" />
                 </button>
 
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-storm/90">workspace activo</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <h1 className="font-display text-3xl font-semibold">
+                <div className="min-w-0">
+                  <p className="text-[0.62rem] uppercase tracking-[0.26em] text-storm/70">
+                    Workspace activo
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2.5">
+                    <h1 className="truncate font-display text-2xl font-semibold tracking-[-0.02em]">
                       {activeWorkspace?.name ?? (isLoading ? "Tu workspace" : "Sin workspace")}
                     </h1>
                     <StatusBadge
@@ -964,50 +1072,54 @@ function AppShellContent() {
                       status={shellStatus.label}
                       tone={shellStatus.tone}
                     />
+                    <InfoTip ariaLabel="Acerca de este workspace">{shellDescription}</InfoTip>
                   </div>
-                  <p className="mt-2 max-w-2xl text-sm leading-7 text-storm">
-                    {shellDescription}
-                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
-                <Button
-                  className="relative col-span-2 sm:col-span-1"
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <button
+                  aria-label="Ver alertas"
+                  className="relative col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 text-sm font-semibold text-storm transition duration-200 hover:border-white/16 hover:text-ink sm:col-span-1 sm:w-11 sm:gap-0 sm:px-0"
                   onClick={() => navigate("/app/notifications")}
-                  variant="ghost"
+                  title="Alertas"
+                  type="button"
                 >
                   <Bell className="h-4 w-4" />
-                  Alertas
+                  <span className="sm:sr-only">Alertas</span>
                   {unreadNotificationsCount > 0 ? (
-                    <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
+                    <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
                       {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
                     </span>
                   ) : null}
-                </Button>
-                <Button
+                </button>
+                <button
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-rosewood/20 bg-rosewood/[0.08] px-3.5 text-sm font-semibold text-rosewood transition duration-200 hover:border-rosewood/35 hover:bg-rosewood/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("expense")}
-                  variant="ghost"
+                  type="button"
                 >
                   <Minus className="h-4 w-4" />
                   Gasto
-                </Button>
-                <Button
+                </button>
+                <button
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-pine/20 bg-pine/[0.08] px-3.5 text-sm font-semibold text-pine transition duration-200 hover:border-pine/35 hover:bg-pine/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("income")}
-                  variant="secondary"
+                  type="button"
                 >
                   <Plus className="h-4 w-4" />
                   Ingreso
-                </Button>
-                <Button
+                </button>
+                <button
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-ember/20 bg-ember/[0.08] px-3.5 text-sm font-semibold text-ember transition duration-200 hover:border-ember/35 hover:bg-ember/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("transfer")}
+                  type="button"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
                   Transferencia
-                </Button>
+                </button>
               </div>
             </div>
             {!activeWorkspace && !isLoading ? (
@@ -1026,44 +1138,29 @@ function AppShellContent() {
           </header>
 
           {shouldShowProBanner ? (
-            <section className="animate-rise-in overflow-hidden rounded-[30px] border border-pine/16 bg-[linear-gradient(135deg,rgba(10,18,30,0.96),rgba(11,24,33,0.98)_38%,rgba(16,46,40,0.94)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
-              <div className="flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
-                  <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-pine/18 bg-pine/12 text-pine sm:flex">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge status={proBannerContent.badge} tone="info" />
-                      <StatusBadge status="DarkMoney Pro" tone="success" />
-                    </div>
-                    <h2 className="mt-3 font-display text-2xl font-semibold tracking-[-0.04em] text-ink">
-                      {proBannerContent.title}
-                    </h2>
-                    <p className="mt-2 max-w-3xl text-sm leading-7 text-storm">
-                      {proBannerContent.description}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                  <Button
-                    className="min-w-[10.5rem]"
-                    disabled={isOpeningProCheckout}
-                    onClick={() => void handleOpenProCheckout()}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {isOpeningProCheckout ? "Abriendo..." : proBannerContent.ctaLabel}
-                  </Button>
-                  <Button
-                    onClick={handleDismissProBanner}
-                    variant="ghost"
-                  >
-                    <X className="h-4 w-4" />
-                    Cerrar
-                  </Button>
-                </div>
-              </div>
+            <section className="animate-rise-in flex flex-wrap items-center gap-3 rounded-2xl border border-pine/15 bg-[linear-gradient(135deg,rgba(10,18,30,0.96),rgba(16,46,40,0.94))] px-4 py-2.5">
+              <Sparkles className="h-4 w-4 shrink-0 text-pine" />
+              <p className="min-w-0 flex-1 text-sm text-storm">
+                <span className="font-semibold text-ink">{proBannerContent.title}.</span>{" "}
+                <span className="hidden xl:inline">{proBannerContent.description}</span>
+              </p>
+              <button
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-pine/25 bg-pine/10 px-3.5 py-1.5 text-xs font-semibold text-pine transition hover:border-pine/35 hover:bg-pine/15 disabled:opacity-60"
+                disabled={isOpeningProCheckout}
+                onClick={() => void handleOpenProCheckout()}
+                type="button"
+              >
+                <Sparkles className="h-3 w-3" />
+                {isOpeningProCheckout ? "Abriendo..." : proBannerContent.ctaLabel}
+              </button>
+              <button
+                aria-label="Ocultar aviso de Pro"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-storm/60 transition hover:bg-white/[0.06] hover:text-ink"
+                onClick={handleDismissProBanner}
+                type="button"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </section>
           ) : null}
 

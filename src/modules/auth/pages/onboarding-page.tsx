@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { Button } from "../../../components/ui/button";
+import { Button, getButtonClassName } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useAuth } from "../auth-context";
@@ -171,11 +171,9 @@ export function OnboardingPage() {
               >
                 {isSubmitting ? "Guardando..." : "Guardar y continuar"}
               </Button>
-              <Link to="/app">
-                <Button variant="ghost">
-                  Ir al dashboard
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
+              <Link className={getButtonClassName({ variant: "ghost" })} to="/app">
+                Ir al dashboard
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
           </form>

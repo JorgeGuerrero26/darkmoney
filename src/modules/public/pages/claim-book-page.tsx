@@ -1,5 +1,7 @@
 import {
   BookText,
+  CheckCircle2,
+  Clock,
   FileBadge2,
   Landmark,
   Mail,
@@ -12,6 +14,7 @@ import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { StatusBadge } from "../../../components/ui/status-badge";
+import { usePageMeta } from "../../../hooks/use-page-meta";
 import {
   PUBLIC_CONTACT,
   PUBLIC_CONTACT_LINKS,
@@ -81,16 +84,35 @@ function Field({
   );
 }
 
-function FormSection({ title, children }: { title: string; children: ReactNode }) {
+function FormSection({
+  step,
+  title,
+  children,
+}: {
+  step: number;
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="grid gap-5">
-      <p className="text-xs uppercase tracking-[0.2em] text-storm/70">{title}</p>
+    <div className="glass-panel-soft grid gap-5 rounded-[24px] p-6 sm:p-7">
+      <div className="flex items-center gap-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold/25 bg-gold/10 text-xs font-semibold text-gold">
+          {step}
+        </span>
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-ink">{title}</p>
+      </div>
       {children}
     </div>
   );
 }
 
 export function ClaimBookPage() {
+  usePageMeta({
+    title: "Libro de Reclamaciones",
+    description:
+      "Registra un reclamo o queja sobre DarkMoney conforme a la normativa de INDECOPI. Recibirás un código de seguimiento.",
+  });
+
   const submitClaimBookEntryMutation = useSubmitClaimBookEntryMutation();
   const [formState, setFormState] = useState<ClaimBookFormState>(() =>
     createDefaultFormState(),
@@ -202,113 +224,69 @@ export function ClaimBookPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-10 pb-10">
+    <div className="animate-rise-in flex w-full flex-col gap-10 pb-10">
       {/* Hero */}
-      <section className="flex w-full flex-col gap-5 border-b border-white/[0.06] pb-10 pt-4 sm:flex-row sm:items-start sm:gap-6">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-gold/20 bg-gold/10">
-          <BookText className="h-6 w-6 text-gold" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <StatusBadge status="INDECOPI visible" tone="warning" />
-          <h1 className="mt-4 font-display text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
-            Libro de Reclamaciones
-          </h1>
-          <p className="mt-3 text-sm leading-8 text-storm sm:max-w-3xl">
-            Registra un reclamo o queja sobre el servicio. Recibirás un codigo de
-            seguimiento y te responderemos por los canales indicados.
-          </p>
-        </div>
-      </section>
-
-      {/* Info cards */}
-      <div className="grid w-full gap-4 sm:grid-cols-2">
-        <div className="glass-panel-soft rounded-[28px] p-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-storm/70">
-            Contacto del proveedor
-          </p>
-          <div className="mt-5 grid gap-3.5 text-sm text-storm">
-            <a
-              className="flex items-center gap-3 transition hover:text-ink"
-              href={PUBLIC_CONTACT_LINKS.email}
-            >
-              <Mail className="h-4 w-4 shrink-0 text-pine" />
-              {PUBLIC_CONTACT.supportEmail}
-            </a>
-            <a
-              className="flex items-center gap-3 transition hover:text-ink"
-              href={PUBLIC_CONTACT_LINKS.phone}
-            >
-              <Phone className="h-4 w-4 shrink-0 text-pine" />
-              {PUBLIC_CONTACT.supportPhoneDisplay}
-            </a>
-            <div className="flex items-center gap-3">
-              <Landmark className="h-4 w-4 shrink-0 text-pine" />
-              {PUBLIC_CONTACT.cityCountry}
-            </div>
-            <div className="flex items-center gap-3">
-              <FileBadge2 className="h-4 w-4 shrink-0 text-pine" />
-              {PUBLIC_CONTACT.taxIdLabel} {PUBLIC_CONTACT.taxIdValue}
-            </div>
+      <header className="flex max-w-2xl flex-col gap-5 pt-4">
+        <div className="flex items-center gap-3">
+          <div className="rounded-[16px] border border-gold/20 bg-gold/10 p-3">
+            <BookText className="h-5 w-5 text-gold" />
           </div>
+          <StatusBadge
+            status="INDECOPI visible"
+            tone="warning"
+          />
         </div>
-
-        <div className="glass-panel-soft flex flex-col gap-4 rounded-[28px] p-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-storm/70">Nota legal</p>
-          <p className="text-sm leading-7 text-storm">
-            <span className="font-semibold text-ink">Reclamo:</span> disconformidad
-            relacionada con el servicio o su resultado.
-          </p>
-          <p className="text-sm leading-7 text-storm">
-            <span className="font-semibold text-ink">Queja:</span> malestar por
-            atencion, demora o trato que no implica devolucion economica.
-          </p>
-          <div className="mt-auto flex items-start gap-3 rounded-[18px] border border-gold/15 bg-gold/[0.06] p-4">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-            <p className="text-xs leading-6 text-storm">
-              Conserva el codigo de tu registro para dar seguimiento al caso.
-            </p>
-          </div>
-        </div>
-      </div>
+        <h1 className="text-balance font-display text-4xl font-semibold tracking-[-0.035em] text-ink sm:text-5xl">
+          Libro de Reclamaciones
+        </h1>
+        <p className="text-base leading-8 text-storm">
+          Registra un reclamo o queja sobre el servicio. Recibirás un codigo de seguimiento y
+          te responderemos por los canales indicados.
+        </p>
+      </header>
 
       {/* Feedback banners */}
       {errorMessage ? (
-        <div className="w-full">
-          <FormFeedbackBanner
-            description={errorMessage}
-            title="No pudimos registrar tu reclamo"
-            tone="error"
-          />
-        </div>
+        <FormFeedbackBanner
+          description={errorMessage}
+          title="No pudimos registrar tu reclamo"
+          tone="error"
+        />
       ) : null}
 
       {successState ? (
-        <div className="w-full">
-          <FormFeedbackBanner
-            description={`Tu registro fue guardado con el codigo ${successState.claimCode}. Te responderemos por los canales indicados. Fecha referencial de revision: ${responseDeadlineText}.`}
-            title="Libro de reclamaciones registrado"
-            tone="success"
-          />
+        <div className="relative overflow-hidden rounded-[28px] border border-pine/25 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.12),transparent_50%)] p-8">
+          <div className="flex items-start gap-4">
+            <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-pine" />
+            <div>
+              <p className="font-display text-xl font-semibold text-ink">
+                Reclamo registrado correctamente
+              </p>
+              <p className="mt-2 text-sm leading-7 text-storm">
+                Conserva este codigo para dar seguimiento a tu caso:
+              </p>
+              <p className="mt-3 inline-block rounded-2xl border border-pine/25 bg-pine/10 px-5 py-2.5 font-mono text-lg font-semibold tracking-wider text-pine">
+                {successState.claimCode}
+              </p>
+              <p className="mt-4 flex items-center gap-2 text-xs text-storm">
+                <Clock className="h-3.5 w-3.5 text-storm/70" />
+                Fecha referencial de revision: {responseDeadlineText}
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
 
-      {/* Form */}
-      <div className="glass-panel w-full rounded-[32px] p-8 sm:p-10">
-        <div className="mb-8">
-          <h2 className="font-display text-2xl font-semibold text-ink">
-            Formulario de registro
-          </h2>
-          <p className="mt-2 text-sm leading-7 text-storm">
-            Completa la informacion minima para dejar constancia formal del caso.
-          </p>
-        </div>
-
+      <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+        {/* Form */}
         <form
-          className="flex flex-col gap-10"
+          className="flex flex-col gap-6"
           onSubmit={(event) => void handleSubmit(event)}
         >
-          {/* Personal data */}
-          <FormSection title="Datos personales">
+          <FormSection
+            step={1}
+            title="Datos personales"
+          >
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Nombre completo">
                 <input
@@ -337,7 +315,10 @@ export function ClaimBookPage() {
                   value={formState.documentType}
                 >
                   {documentTypeOptions.map((option) => (
-                    <option key={option} value={option}>
+                    <option
+                      key={option}
+                      value={option}
+                    >
                       {option}
                     </option>
                   ))}
@@ -388,10 +369,10 @@ export function ClaimBookPage() {
             </Field>
           </FormSection>
 
-          <div className="border-t border-white/[0.06]" />
-
-          {/* Claim details */}
-          <FormSection title="Detalles del caso">
+          <FormSection
+            step={2}
+            title="Detalles del caso"
+          >
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Bien contratado">
                 <select
@@ -467,10 +448,10 @@ export function ClaimBookPage() {
             </div>
           </FormSection>
 
-          <div className="border-t border-white/[0.06]" />
-
-          {/* Description */}
-          <FormSection title="Descripcion">
+          <FormSection
+            step={3}
+            title="Descripcion"
+          >
             <Field label="Detalle del reclamo o queja">
               <textarea
                 className="field-dark min-h-[150px] resize-y"
@@ -492,10 +473,10 @@ export function ClaimBookPage() {
             </Field>
           </FormSection>
 
-          <div className="border-t border-white/[0.06]" />
-
-          {/* Confirmations */}
-          <div className="grid gap-4 rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-6">
+          <FormSection
+            step={4}
+            title="Confirmaciones"
+          >
             <label className="flex cursor-pointer items-start gap-4">
               <input
                 checked={formState.truthConfirmation}
@@ -525,19 +506,81 @@ export function ClaimBookPage() {
                 dar seguimiento por correo o telefono.
               </span>
             </label>
-          </div>
+          </FormSection>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={submitClaimBookEntryMutation.isPending} type="submit">
+            <Button
+              disabled={submitClaimBookEntryMutation.isPending}
+              type="submit"
+            >
               {submitClaimBookEntryMutation.isPending
                 ? "Registrando..."
                 : "Registrar en el libro"}
             </Button>
-            <a href={PUBLIC_CONTACT_LINKS.whatsapp} rel="noreferrer" target="_blank">
+            <a
+              href={PUBLIC_CONTACT_LINKS.whatsapp}
+              rel="noreferrer"
+              target="_blank"
+            >
               <Button variant="ghost">Contactar soporte</Button>
             </a>
           </div>
         </form>
+
+        {/* Provider aside */}
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-24 lg:self-start">
+          <div className="glass-panel-soft rounded-[24px] p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/70">
+              Contacto del proveedor
+            </p>
+            <div className="mt-5 grid gap-3.5 text-sm text-storm">
+              <a
+                className="flex items-center gap-3 transition hover:text-ink"
+                href={PUBLIC_CONTACT_LINKS.email}
+              >
+                <Mail className="h-4 w-4 shrink-0 text-pine" />
+                {PUBLIC_CONTACT.supportEmail}
+              </a>
+              <a
+                className="flex items-center gap-3 transition hover:text-ink"
+                href={PUBLIC_CONTACT_LINKS.phone}
+              >
+                <Phone className="h-4 w-4 shrink-0 text-pine" />
+                {PUBLIC_CONTACT.supportPhoneDisplay}
+              </a>
+              <div className="flex items-center gap-3">
+                <Landmark className="h-4 w-4 shrink-0 text-pine" />
+                {PUBLIC_CONTACT.cityCountry}
+              </div>
+              <div className="flex items-center gap-3">
+                <FileBadge2 className="h-4 w-4 shrink-0 text-pine" />
+                {PUBLIC_CONTACT.taxIdLabel} {PUBLIC_CONTACT.taxIdValue}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel-soft flex flex-col gap-4 rounded-[24px] p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-storm/70">
+              Nota legal
+            </p>
+            <p className="text-sm leading-7 text-storm">
+              <span className="font-semibold text-ink">Reclamo:</span> disconformidad
+              relacionada con el servicio o su resultado.
+            </p>
+            <p className="text-sm leading-7 text-storm">
+              <span className="font-semibold text-ink">Queja:</span> malestar por atencion,
+              demora o trato que no implica devolucion economica.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-[20px] border border-gold/15 bg-gold/[0.06] p-5">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+            <p className="text-xs leading-6 text-storm">
+              Conserva el codigo de tu registro para dar seguimiento al caso. La fecha
+              referencial de revision es de 15 dias.
+            </p>
+          </div>
+        </aside>
       </div>
     </div>
   );

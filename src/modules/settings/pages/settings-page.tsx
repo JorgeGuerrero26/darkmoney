@@ -813,7 +813,7 @@ export function SettingsPage() {
     }
   }
 
-  async function handleStartProCheckout() {
+  const handleStartProCheckout = useCallback(async () => {
     setBillingErrorMessage("");
     setBillingFeedbackMessage("");
     setShowCancelConfirmation(false);
@@ -846,7 +846,42 @@ export function SettingsPage() {
     } finally {
       setIsOpeningPaddleCheckout(false);
     }
-  }
+  }, [activeWorkspace?.id, user?.email, user?.id]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    const requestedSection = query.get("section");
+    const shouldOpenProCheckout = query.get("checkout") === "pro";
+    const isKnownSection = settingsSectionDefinitions.some(
+      (section) => section.id === requestedSection,
+    );
+
+    if (isKnownSection) {
+      setActiveSettingsSection(requestedSection as SettingsSectionId);
+    }
+
+    if (!shouldOpenProCheckout || entitlementQuery.isLoading || isOpeningPaddleCheckout) {
+      return;
+    }
+
+    query.delete("checkout");
+    query.set("section", "billing");
+    const nextSearch = query.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+
+    if (!isAdminOverride && !canAccessProFeatures) {
+      void handleStartProCheckout();
+    }
+  }, [
+    canAccessProFeatures,
+    entitlementQuery.isLoading,
+    handleStartProCheckout,
+    isAdminOverride,
+    isOpeningPaddleCheckout,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   async function handleCancelProSubscription() {
     setBillingErrorMessage("");

@@ -5,6 +5,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InlineFormError } from "../../../components/ui/inline-form-error";
+import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -43,9 +45,9 @@ export function ResetPasswordPage() {
       setConfirmPassword("");
       setSuccessMessage("Tu contraseña fue actualizada. Ya puedes seguir usando Dark Money.");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo actualizar la contraseña.";
-      setErrorMessage(message);
+      setErrorMessage(
+        translateAuthError(error, "No se pudo actualizar la contraseña. Inténtalo de nuevo."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -136,12 +138,7 @@ export function ResetPasswordPage() {
           </div>
         </label>
 
-        {errorMessage ? (
-          <FormFeedbackBanner
-            description={errorMessage}
-            title="No pudimos actualizar tu contraseña"
-          />
-        ) : null}
+        {errorMessage ? <InlineFormError message={errorMessage} /> : null}
 
         {successMessage ? (
           <FormFeedbackBanner
