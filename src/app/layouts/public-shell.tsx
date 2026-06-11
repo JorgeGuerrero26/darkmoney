@@ -47,6 +47,18 @@ export function PublicShell() {
     setMobileMenuOpen(false);
   }, [location.pathname, location.hash]);
 
+  useEffect(() => {
+    if (location.hash) {
+      return;
+    }
+
+    window.scrollTo({
+      behavior: "auto",
+      left: 0,
+      top: 0,
+    });
+  }, [location.pathname, location.search]);
+
   return (
     <div className="min-h-screen bg-glow text-ink">
       <header
