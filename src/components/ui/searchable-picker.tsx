@@ -1,8 +1,8 @@
 import { Check, ChevronDown, Search, Sparkles } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
 import { TruncatedDescription } from "./truncated-description";
 
 export type PickerOption = {
@@ -38,8 +38,8 @@ function getTriggerStyle(isOpen: boolean) {
   return {
     borderColor: isOpen ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.08)",
     background: isOpen
-      ? "linear-gradient(180deg, rgba(15, 22, 34, 0.98), rgba(10, 16, 27, 0.98))"
-      : "linear-gradient(180deg, rgba(12, 18, 28, 0.96), rgba(9, 14, 22, 0.96))",
+      ? "linear-gradient(180deg, rgb(15, 22, 34), rgb(10, 16, 27))"
+      : "linear-gradient(180deg, rgb(12, 18, 28), rgb(9, 14, 22))",
     boxShadow: isOpen
       ? "0 0 0 4px rgba(107, 228, 197, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
       : "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
@@ -54,10 +54,10 @@ function getOptionStyle(isSelected: boolean, isHighlighted: boolean) {
         ? "rgba(255, 255, 255, 0.14)"
         : "rgba(255, 255, 255, 0.04)",
     background: isSelected
-      ? "linear-gradient(180deg, rgba(18, 31, 41, 0.98), rgba(12, 22, 33, 0.98))"
+      ? "linear-gradient(180deg, rgb(18, 31, 41), rgb(12, 22, 33))"
       : isHighlighted
-        ? "linear-gradient(180deg, rgba(18, 26, 39, 0.98), rgba(13, 20, 31, 0.98))"
-        : "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
+        ? "linear-gradient(180deg, rgb(18, 26, 39), rgb(13, 20, 31))"
+        : "linear-gradient(180deg, rgb(14, 21, 32), rgb(11, 17, 26))",
     boxShadow: isSelected ? "0 12px 30px rgba(0, 0, 0, 0.18)" : "none",
   };
 }
@@ -95,7 +95,10 @@ export function SearchablePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -127,6 +130,74 @@ export function SearchablePicker({
   useEffect(() => {
     setHighlightedIndex(0);
   }, [query]);
+
+  const updateDropdownPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 12;
+    const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left),
+      window.innerWidth - width - viewportPadding,
+    );
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const spaceAbove = rect.top - viewportPadding;
+    const nextStyle: CSSProperties = {
+      left,
+      position: "fixed",
+      width,
+      zIndex: 9999,
+    };
+
+    if (spaceBelow >= 320 || spaceBelow >= spaceAbove) {
+      nextStyle.top = rect.bottom + 10;
+    } else {
+      nextStyle.bottom = window.innerHeight - rect.top + 10;
+    }
+
+    setDropdownStyle(nextStyle);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    updateDropdownPosition();
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (
+        target &&
+        (containerRef.current?.contains(target) || dropdownRef.current?.contains(target))
+      ) {
+        return;
+      }
+      setIsOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    window.addEventListener("resize", updateDropdownPosition);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+      window.removeEventListener("resize", updateDropdownPosition);
+    };
+  }, [isOpen, updateDropdownPosition]);
 
   function selectOption(option: PickerOption) {
     onChange(option.value);
@@ -172,7 +243,13 @@ export function SearchablePicker({
         aria-haspopup="listbox"
         className={triggerClassName}
         disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={() => {
+          if (!isOpen) {
+            updateDropdownPosition();
+          }
+          setIsOpen((currentValue) => !currentValue);
+        }}
+        ref={triggerRef}
         style={getTriggerStyle(isOpen)}
         type="button"
       >
@@ -196,8 +273,12 @@ export function SearchablePicker({
         />
       </button>
 
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
+      {isOpen ? createPortal(
+        <div
+          className="animate-rise-in rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgb(10,15,24),rgb(8,12,20))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          ref={dropdownRef}
+          style={dropdownStyle}
+        >
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
             <input
@@ -213,7 +294,7 @@ export function SearchablePicker({
 
           {onAction && actionLabel ? (
             <button
-              className="mt-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-pine/25 bg-[linear-gradient(180deg,rgba(16,31,36,0.96),rgba(10,22,24,0.96))] px-4 py-3 text-left text-ink transition duration-200 hover:border-pine/35 hover:bg-[linear-gradient(180deg,rgba(18,35,40,0.98),rgba(12,25,28,0.98))]"
+              className="mt-3 flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-pine/25 bg-[linear-gradient(180deg,rgb(16,31,36),rgb(10,22,24))] px-4 py-3 text-left text-ink transition duration-200 hover:border-pine/35 hover:bg-[linear-gradient(180deg,rgb(18,35,40),rgb(12,25,28))]"
               onClick={() => {
                 setIsOpen(false);
                 onAction();
@@ -280,12 +361,13 @@ export function SearchablePicker({
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(14,21,32,0.96),rgba(11,17,26,0.96))] px-4 py-5 text-sm text-storm">
+              <div className="rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgb(14,21,32),rgb(11,17,26))] px-4 py-5 text-sm text-storm">
                 {emptyMessage}
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
