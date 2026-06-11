@@ -1,22 +1,36 @@
 import {
   Archive,
+  BadgeDollarSign,
   Banknote,
   BarChart3,
   BriefcaseBusiness,
+  Building2,
+  CarFront,
   Check,
   ChevronDown,
+  CircleDollarSign,
+  Coins,
   CreditCard,
   Download,
+  Gem,
+  HandCoins,
+  House,
   Landmark,
   LoaderCircle,
   PiggyBank,
+  Plane,
   Plus,
   RefreshCw,
+  ReceiptText,
   RotateCcw,
   Search,
+  Shield,
   Sparkles,
+  Smartphone,
+  Store,
   Trash2,
   TrendingUp,
+  Vault,
   Wallet2,
   X,
 } from "lucide-react";
@@ -133,13 +147,27 @@ const accountTypeFilters = [
 ] as const;
 
 const iconOptions = [
-  { value: "wallet", label: "Wallet", description: "Billetera, cash o caja general." },
-  { value: "landmark", label: "Landmark", description: "Banco, fintech o cuenta principal." },
-  { value: "piggy-bank", label: "Piggy bank", description: "Ahorro, reserva o meta." },
-  { value: "credit-card", label: "Credit card", description: "Tarjeta, consumo o linea." },
-  { value: "trending-up", label: "Trending", description: "Inversiones y crecimiento." },
-  { value: "briefcase", label: "Briefcase", description: "Prestamos y cartera financiera." },
-  { value: "banknote", label: "Banknote", description: "Caja, fondos o categoria libre." },
+  { value: "wallet", label: "Billetera", description: "Billetera, cash o caja general." },
+  { value: "landmark", label: "Banco", description: "Banco, fintech o cuenta principal." },
+  { value: "piggy-bank", label: "Alcancia", description: "Ahorro, reserva o meta." },
+  { value: "credit-card", label: "Tarjeta", description: "Tarjeta, consumo o linea." },
+  { value: "trending-up", label: "Inversiones", description: "Portafolio, broker o crecimiento." },
+  { value: "briefcase", label: "Cartera", description: "Prestamos y cartera financiera." },
+  { value: "banknote", label: "Billetes", description: "Caja, fondos o categoria libre." },
+  { value: "building-2", label: "Edificio", description: "Banco corporativo o institucion." },
+  { value: "smartphone", label: "App movil", description: "Billetera digital, app o neobanco." },
+  { value: "vault", label: "Caja fuerte", description: "Reserva protegida o fondo seguro." },
+  { value: "coins", label: "Monedas", description: "Efectivo, monedas o saldo pequeno." },
+  { value: "circle-dollar-sign", label: "Dolar", description: "Cuenta en dolares o saldo principal." },
+  { value: "badge-dollar-sign", label: "Bono", description: "Bonos, recompensas o ingresos variables." },
+  { value: "hand-coins", label: "Prestamo", description: "Dinero prestado, cobros o cartera por recibir." },
+  { value: "receipt-text", label: "Recibos", description: "Gastos, comprobantes o pagos recurrentes." },
+  { value: "store", label: "Negocio", description: "Caja de tienda, ventas o negocio propio." },
+  { value: "house", label: "Casa", description: "Hogar, hipoteca o patrimonio inmobiliario." },
+  { value: "car-front", label: "Auto", description: "Vehiculo, credito vehicular o movilidad." },
+  { value: "plane", label: "Viajes", description: "Fondos para viajes o gastos en el exterior." },
+  { value: "gem", label: "Activos", description: "Joyas, cripto, colecciones o valor especial." },
+  { value: "shield", label: "Seguro", description: "Fondo de emergencia, seguro o respaldo." },
 ] as const;
 
 const editorColorSwatches = [
@@ -329,6 +357,34 @@ function getAccountIcon(icon: string, type: string) {
       return BriefcaseBusiness;
     case "banknote":
       return Banknote;
+    case "building-2":
+      return Building2;
+    case "smartphone":
+      return Smartphone;
+    case "vault":
+      return Vault;
+    case "coins":
+      return Coins;
+    case "circle-dollar-sign":
+      return CircleDollarSign;
+    case "badge-dollar-sign":
+      return BadgeDollarSign;
+    case "hand-coins":
+      return HandCoins;
+    case "receipt-text":
+      return ReceiptText;
+    case "store":
+      return Store;
+    case "house":
+      return House;
+    case "car-front":
+      return CarFront;
+    case "plane":
+      return Plane;
+    case "gem":
+      return Gem;
+    case "shield":
+      return Shield;
     default:
       return Wallet2;
   }
@@ -806,7 +862,7 @@ function AccountIconSelect({
                 className="rounded-[22px] border px-4 py-5 text-sm text-storm"
                 style={pickerEmptyStateStyle}
               >
-                No encontramos un icono con ese termino. Prueba con `wallet`, `bank` o `trending`.
+                No encontramos un icono con ese termino. Prueba con `billetera`, `banco` o `inversion`.
               </div>
             )}
           </div>
