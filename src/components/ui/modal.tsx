@@ -81,7 +81,7 @@ export function Modal({
           aria-label={ariaLabel}
           aria-labelledby={labelledBy}
           aria-modal="true"
-          className={`animate-rise-in w-full rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl ${sizeClassNames[size]} ${className}`}
+          className={`animate-rise-in flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[24px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-[28px] ${sizeClassNames[size]} ${className}`}
           ref={cardRef}
           role="dialog"
         >
