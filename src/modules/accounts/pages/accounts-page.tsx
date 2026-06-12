@@ -2340,7 +2340,7 @@ export function AccountsPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={openCreateEditor}>
+                <Button data-tour="create-account" onClick={openCreateEditor}>
                   <Plus className="mr-2 h-4 w-4" />
                   Nueva cuenta
                 </Button>

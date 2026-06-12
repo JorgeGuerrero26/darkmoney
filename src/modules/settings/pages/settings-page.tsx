@@ -10,6 +10,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { RestartTourCard } from "../../../components/onboarding/restart-tour-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -1253,6 +1254,7 @@ export function SettingsPage() {
             eyebrow="General"
             title="Perfil y preferencias"
           />
+        <RestartTourCard />
         <section className="grid gap-6">
           <div className="relative z-20">
             <SurfaceCard

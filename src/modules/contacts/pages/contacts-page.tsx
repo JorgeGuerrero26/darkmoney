@@ -1041,7 +1041,7 @@ export function ContactsPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={openCreateEditor}>
+              <Button data-tour="create-contact" onClick={openCreateEditor}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nuevo contacto
               </Button>

@@ -30,6 +30,9 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
+import { CommandPalette, type CommandAction } from "../../components/command-palette/command-palette";
+import { OnboardingTour } from "../../components/onboarding/onboarding-tour";
+import { useOnboardingTour } from "../../components/onboarding/use-onboarding-tour";
 import { BrandLogo } from "../../components/ui/brand-logo";
 import { DataState } from "../../components/ui/data-state";
 import { InfoTip } from "../../components/ui/info-tip";
@@ -428,6 +431,7 @@ export function AppShell() {
 
 function AppShellContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
@@ -583,6 +587,119 @@ function AppShellContent() {
   const canUseQuickMovement =
     Boolean(activeWorkspace && user?.id && workspaceSnapshotQuery.data) &&
     !workspaceSnapshotQuery.isLoading;
+
+  const tourSnapshot = workspaceSnapshotQuery.data;
+  const tourCounts = useMemo(
+    () => ({
+      accounts: tourSnapshot?.accounts.length ?? 0,
+      movements: tourSnapshot?.movements.length ?? 0,
+      categories: tourSnapshot?.catalogs.categories.length ?? 0,
+      counterparties: tourSnapshot?.catalogs.counterparties.length ?? 0,
+    }),
+    [tourSnapshot],
+  );
+  const onboardingTour = useOnboardingTour({
+    isWorkspaceEmpty: tourSnapshot
+      ? tourSnapshot.accounts.length === 0 && tourSnapshot.movements.length === 0
+      : null,
+  });
+
+  // Atajo global Ctrl/Cmd+K para la paleta de comandos.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        const target = event.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable)
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsPaletteOpen((open) => !open);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const paletteActions = useMemo<CommandAction[]>(() => {
+    const navigationActions: CommandAction[] = compactNavigation.map((item) => ({
+      id: `nav-${item.to}`,
+      label: `Ir a ${item.label}`,
+      keywords: item.label,
+      group: "Navegación",
+      icon: item.icon,
+      run: () => navigate(item.to),
+    }));
+
+    const quickActions: CommandAction[] = [
+      {
+        id: "quick-expense",
+        label: "Registrar gasto",
+        keywords: "gasto salida pago expense",
+        group: "Acciones rápidas",
+        icon: Minus,
+        disabled: !canUseQuickMovement,
+        run: () => openQuickMovement("expense"),
+      },
+      {
+        id: "quick-income",
+        label: "Registrar ingreso",
+        keywords: "ingreso entrada cobro income",
+        group: "Acciones rápidas",
+        icon: Plus,
+        disabled: !canUseQuickMovement,
+        run: () => openQuickMovement("income"),
+      },
+      {
+        id: "quick-transfer",
+        label: "Registrar transferencia",
+        keywords: "transferencia mover dinero transfer",
+        group: "Acciones rápidas",
+        icon: ArrowLeftRight,
+        disabled: !canUseQuickMovement,
+        run: () => openQuickMovement("transfer"),
+      },
+    ];
+
+    const systemActions: CommandAction[] = [
+      {
+        id: "start-tour",
+        label: "Ver tutorial interactivo",
+        keywords: "tour tutorial onboarding ayuda guia",
+        group: "Sistema",
+        icon: Sparkles,
+        run: () => {
+          navigate("/app");
+          onboardingTour.start();
+        },
+      },
+      {
+        id: "toggle-sidebar",
+        label: isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral",
+        keywords: "sidebar menu colapsar",
+        group: "Sistema",
+        icon: isSidebarCollapsed ? ChevronRight : ChevronLeft,
+        run: () => toggleSidebarCollapsed(),
+      },
+      {
+        id: "sign-out",
+        label: "Cerrar sesión",
+        keywords: "logout salir sesion",
+        group: "Sistema",
+        icon: LogOut,
+        run: () => void handleSignOut(),
+      },
+    ];
+
+    return [...quickActions, ...navigationActions, ...systemActions];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseQuickMovement, isSidebarCollapsed, navigate, onboardingTour.start, toggleSidebarCollapsed]);
   const proBannerContent = useMemo(() => {
     if (normalizedBillingStatus === "expired") {
       return {
@@ -761,7 +878,7 @@ function AppShellContent() {
             </div>
 
             <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
-            <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+            <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`} data-tour="workspace-picker">
               <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
                 Workspace
               </p>
@@ -1083,6 +1200,18 @@ function AppShellContent() {
 
               <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <button
+                  aria-label="Abrir paleta de comandos"
+                  className="hidden h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 text-xs text-storm transition duration-200 hover:border-white/16 hover:text-ink lg:inline-flex"
+                  onClick={() => setIsPaletteOpen(true)}
+                  title="Paleta de comandos (Ctrl+K)"
+                  type="button"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <kbd className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px]">
+                    Ctrl K
+                  </kbd>
+                </button>
+                <button
                   aria-label="Ver alertas"
                   className="relative col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 text-sm font-semibold text-storm transition duration-200 hover:border-white/16 hover:text-ink sm:col-span-1 sm:w-11 sm:gap-0 sm:px-0"
                   onClick={() => navigate("/app/notifications")}
@@ -1171,6 +1300,24 @@ function AppShellContent() {
           <Outlet />
         </main>
       </div>
+
+      {isPaletteOpen ? (
+        <CommandPalette
+          actions={paletteActions}
+          onClose={() => setIsPaletteOpen(false)}
+        />
+      ) : null}
+
+      {onboardingTour.isActive && tourSnapshot ? (
+        <OnboardingTour
+          counts={tourCounts}
+          onComplete={onboardingTour.complete}
+          onDismiss={onboardingTour.dismiss}
+          onNavigate={(route) => navigate(route)}
+          onSetStep={onboardingTour.setStep}
+          step={onboardingTour.step}
+        />
+      ) : null}
 
       {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data ? (
         <QuickMovementDialog
