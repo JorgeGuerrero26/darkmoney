@@ -1500,7 +1500,8 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="glass-panel sticky top-2 z-30 flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2">
+      <div className="glass-panel sticky top-2 z-30 rounded-2xl px-3 py-2">
+        <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <PillControl
           ariaLabel="Período de comparación"
           onChange={setComparisonPreset}
@@ -1519,9 +1520,9 @@ export function DashboardPage() {
           options={topOptions.map((option) => ({ value: option, label: `Top ${option}` }))}
           value={topCount}
         />
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition duration-200 ${
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs font-semibold transition duration-200 sm:py-1.5 ${
               isFiltersPanelOpen || hasActiveFilters
                 ? "border-gold/30 bg-gold/10 text-gold"
                 : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:text-ink"
@@ -1538,7 +1539,7 @@ export function DashboardPage() {
             ) : null}
           </button>
           <button
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition duration-200 ${
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-2 text-xs font-semibold transition duration-200 sm:py-1.5 ${
               isCustomizerOpen
                 ? "border-pine/30 bg-pine/10 text-pine"
                 : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:text-ink"
@@ -1547,7 +1548,7 @@ export function DashboardPage() {
             type="button"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
-            Personalizar
+            <span className="hidden sm:inline">Personalizar</span>
           </button>
           <button
             aria-label={snapshotQuery.isFetching ? "Actualizando dashboard" : "Actualizar dashboard"}
@@ -1559,6 +1560,7 @@ export function DashboardPage() {
           >
             <RefreshCw className={`h-3.5 w-3.5${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
           </button>
+        </div>
         </div>
       </div>
 
@@ -1924,7 +1926,7 @@ export function DashboardPage() {
       {isWidgetVisible("overview_kpis") ? (
       <section className="grid gap-4">
         {/* ── Hero KPIs ───────────────────────────────────────────── */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2" data-tour="dashboard-hero">
           <DashboardKpiHelpWrap
             className="relative overflow-hidden rounded-[28px] border border-pine/20 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.12),transparent_55%)] p-6"
             metricId="kpi_total_money"

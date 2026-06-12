@@ -1,6 +1,9 @@
+import type { PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useState } from "react";
 
 import { DataState } from "../../../components/ui/data-state";
 import { formatCurrency } from "../../../lib/formatting/money";
+import { useInView } from "../../../hooks/use-in-view";
 import type { MovementRecord } from "../../../types/domain";
 import {
   classifyMovement,
@@ -11,6 +14,209 @@ import {
 import { fullDateFormatter } from "../lib/dashboard-format";
 import type { DailyFlowPoint, DailySavingsPoint } from "../lib/dashboard-types";
 import { DeltaBadge } from "./dashboard-bits";
+
+const CHART_VIEW_WIDTH = 760;
+const CHART_VIEW_HEIGHT = 260;
+const CHART_PADDING_X = 22;
+const CHART_PADDING_Y = 24;
+
+type ChartPointBase = {
+  key: string;
+  label: string;
+  fullLabel: string;
+  cumulative: number;
+  previousCumulative: number;
+};
+
+type ChartTooltipRow = { label: string; value: string; accentClassName?: string };
+
+/**
+ * SVG de líneas responsive (mobile-first: escala con el contenedor, sin scroll
+ * horizontal) con hover/tap para inspeccionar el punto más cercano.
+ */
+function LineChartSvg<P extends ChartPointBase>({
+  points,
+  selectedIndex,
+  onSelect,
+  lineColor,
+  gradientId,
+  fillTop,
+  fillBottom,
+  buildTooltipRows,
+}: {
+  points: P[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  lineColor: string;
+  gradientId: string;
+  fillTop: string;
+  fillBottom: string;
+  buildTooltipRows: (point: P) => ChartTooltipRow[];
+}) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const { ref: inViewRef, isInView } = useInView<HTMLDivElement>();
+
+  const width = CHART_VIEW_WIDTH;
+  const height = CHART_VIEW_HEIGHT;
+  const paddingX = CHART_PADDING_X;
+  const paddingY = CHART_PADDING_Y;
+  const values = points.flatMap((point) => [point.cumulative, point.previousCumulative, 0]);
+  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values);
+  const range = Math.max(1, maxValue - minValue);
+  const stepX = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0;
+  const getY = (value: number) =>
+    paddingY + ((maxValue - value) / range) * (height - paddingY * 2);
+  const currentPath = points
+    .map((point, index) => `${paddingX + stepX * index},${getY(point.cumulative)}`)
+    .join(" ");
+  const previousPath = points
+    .map((point, index) => `${paddingX + stepX * index},${getY(point.previousCumulative)}`)
+    .join(" ");
+  const areaPath = `${paddingX},${height - paddingY} ${currentPath} ${
+    paddingX + stepX * (points.length - 1)
+  },${height - paddingY}`;
+
+  function resolveIndexFromClientX(clientX: number, target: SVGSVGElement) {
+    const rect = target.getBoundingClientRect();
+    if (rect.width === 0) {
+      return 0;
+    }
+    const xView = ((clientX - rect.left) / rect.width) * width;
+    const rawIndex = stepX > 0 ? Math.round((xView - paddingX) / stepX) : 0;
+    return Math.min(Math.max(rawIndex, 0), points.length - 1);
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    setHoverIndex(resolveIndexFromClientX(event.clientX, event.currentTarget));
+  }
+
+  function handleClick(event: ReactMouseEvent<SVGSVGElement>) {
+    onSelect(resolveIndexFromClientX(event.clientX, event.currentTarget));
+  }
+
+  const hoverPoint = hoverIndex !== null ? points[hoverIndex] : null;
+  const hoverX = hoverIndex !== null ? paddingX + stepX * hoverIndex : 0;
+
+  return (
+    <div className="relative" ref={inViewRef}>
+      {hoverPoint ? (
+        <div
+          className="pointer-events-none absolute top-2 z-10 w-max max-w-[220px] -translate-x-1/2 rounded-xl border border-white/12 bg-shell/95 px-3 py-2 shadow-haze backdrop-blur-xl"
+          style={{ left: `${Math.min(Math.max((hoverX / width) * 100, 16), 84)}%` }}
+        >
+          <p className="text-[0.65rem] font-semibold text-ink">{hoverPoint.fullLabel}</p>
+          {buildTooltipRows(hoverPoint).map((row) => (
+            <p
+              className="mt-0.5 flex items-baseline justify-between gap-3 text-[0.65rem] text-storm"
+              key={row.label}
+            >
+              <span>{row.label}</span>
+              <span className={`font-semibold ${row.accentClassName ?? "text-ink"}`}>
+                {row.value}
+              </span>
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      <svg
+        className="h-auto w-full cursor-pointer touch-pan-y"
+        onClick={handleClick}
+        onPointerLeave={() => setHoverIndex(null)}
+        onPointerMove={handlePointerMove}
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={fillTop} />
+            <stop offset="100%" stopColor={fillBottom} />
+          </linearGradient>
+        </defs>
+        {[0, 0.5, 1].map((step) => (
+          <line
+            key={`grid-${step}`}
+            stroke="rgba(255,255,255,0.08)"
+            strokeDasharray="4 6"
+            x1={paddingX}
+            x2={width - paddingX}
+            y1={paddingY + (height - paddingY * 2) * step}
+            y2={paddingY + (height - paddingY * 2) * step}
+          />
+        ))}
+        <polygon
+          className={isInView ? "chart-area-fade" : "opacity-0"}
+          fill={`url(#${gradientId})`}
+          points={areaPath}
+        />
+        <polyline
+          className={isInView ? "animate-fade-in" : "opacity-0"}
+          fill="none"
+          points={previousPath}
+          stroke="rgba(255,255,255,0.48)"
+          strokeDasharray="7 7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <polyline
+          className={isInView ? "chart-line-draw" : "opacity-0"}
+          fill="none"
+          pathLength={1}
+          points={currentPath}
+          stroke={lineColor}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="4"
+        />
+        {hoverPoint ? (
+          <g pointerEvents="none">
+            <line
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth="1.5"
+              x1={hoverX}
+              x2={hoverX}
+              y1={paddingY}
+              y2={height - paddingY}
+            />
+            <circle
+              cx={hoverX}
+              cy={getY(hoverPoint.cumulative)}
+              fill="none"
+              r="8"
+              stroke={lineColor}
+              strokeWidth="2"
+            />
+          </g>
+        ) : null}
+        {points.map((point, index) => {
+          const x = paddingX + stepX * index;
+          const isSelected = index === selectedIndex;
+
+          return (
+            <g key={point.key}>
+              <circle
+                cx={x}
+                cy={getY(point.previousCumulative)}
+                fill="rgba(255,255,255,0.3)"
+                r="4"
+              />
+              <circle
+                cx={x}
+                cy={getY(point.cumulative)}
+                fill={isSelected ? "rgba(255,255,255,1)" : lineColor}
+                r={isSelected ? 7 : 5}
+                stroke={isSelected ? lineColor : "rgba(255,255,255,0.12)"}
+                strokeWidth="2"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
 
 export const FLOW_CHART_THEME = {
   expense: {
@@ -173,10 +379,6 @@ export function FlowLineChart({
   comparisonDailyLabel: string;
 }) {
   const theme = FLOW_CHART_THEME[variant];
-  const width = 760;
-  const height = 260;
-  const paddingX = 22;
-  const paddingY = 24;
 
   if (!points.length) {
     return (
@@ -189,26 +391,14 @@ export function FlowLineChart({
   const values = points.flatMap((point) => [point.cumulative, point.previousCumulative, 0]);
   const maxValue = Math.max(...values);
   const minValue = Math.min(...values);
-  const range = Math.max(1, maxValue - minValue);
-  const stepX = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0;
-  const getY = (value: number) => paddingY + ((maxValue - value) / range) * (height - paddingY * 2);
-  const currentPath = points
-    .map((point, index) => `${paddingX + stepX * index},${getY(point.cumulative)}`)
-    .join(" ");
-  const previousPath = points
-    .map((point, index) => `${paddingX + stepX * index},${getY(point.previousCumulative)}`)
-    .join(" ");
-  const areaPath = `${paddingX},${height - paddingY} ${currentPath} ${
-    paddingX + stepX * (points.length - 1)
-  },${height - paddingY}`;
   const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
   const selected = points[selectedIndex];
 
   return (
     <>
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="glass-panel-soft rounded-[28px] p-4">
-          <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-storm">{chartTitle}</p>
               <p className="mt-2 text-sm text-storm">
@@ -235,70 +425,27 @@ export function FlowLineChart({
                 </span>
               ))}
             </div>
-            <div className="overflow-x-auto">
-              <svg className="min-w-[680px]" height={height} viewBox={`0 0 ${width} ${height}`}>
-                <defs>
-                  <linearGradient id={theme.gradientId} x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor={theme.fillTop} />
-                    <stop offset="100%" stopColor={theme.fillBottom} />
-                  </linearGradient>
-                </defs>
-                {[0, 0.5, 1].map((step) => (
-                  <line
-                    key={`flow-grid-${step}`}
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeDasharray="4 6"
-                    x1={paddingX}
-                    x2={width - paddingX}
-                    y1={paddingY + (height - paddingY * 2) * step}
-                    y2={paddingY + (height - paddingY * 2) * step}
-                  />
-                ))}
-                <polygon fill={`url(#${theme.gradientId})`} points={areaPath} />
-                <polyline
-                  fill="none"
-                  points={previousPath}
-                  stroke="rgba(255,255,255,0.48)"
-                  strokeDasharray="7 7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="3"
-                />
-                <polyline
-                  fill="none"
-                  points={currentPath}
-                  stroke={theme.line}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="4"
-                />
-                {points.map((point, index) => {
-                  const x = paddingX + stepX * index;
-                  const isSelected = index === selectedIndex;
-
-                  return (
-                    <g key={point.key}>
-                      <circle
-                        cx={x}
-                        cy={getY(point.previousCumulative)}
-                        fill="rgba(255,255,255,0.3)"
-                        r="4"
-                      />
-                      <circle
-                        className="cursor-pointer"
-                        cx={x}
-                        cy={getY(point.cumulative)}
-                        fill={isSelected ? "rgba(255,255,255,1)" : theme.line}
-                        onClick={() => onSelect(index)}
-                        r={isSelected ? 7 : 5}
-                        stroke={isSelected ? theme.line : "rgba(255,255,255,0.12)"}
-                        strokeWidth="2"
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
+            <LineChartSvg
+              buildTooltipRows={(point) => [
+                {
+                  label: dailyLabel,
+                  value: formatCurrency(point.daily, currencyCode),
+                  accentClassName: theme.accentClass,
+                },
+                { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
+                {
+                  label: "Comparativo",
+                  value: formatCurrency(point.previousCumulative, currencyCode),
+                },
+              ]}
+              fillBottom={theme.fillBottom}
+              fillTop={theme.fillTop}
+              gradientId={theme.gradientId}
+              lineColor={theme.line}
+              onSelect={onSelect}
+              points={points}
+              selectedIndex={selectedIndex}
+            />
           </div>
 
           <div className="mt-4 flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4 text-xs text-storm">
@@ -401,32 +548,16 @@ export function SavingsLineChart({
     );
   }
 
-  const width = 760;
-  const height = 260;
-  const paddingX = 22;
-  const paddingY = 24;
   const values = points.flatMap((point) => [point.cumulative, point.previousCumulative, 0]);
   const maxValue = Math.max(...values);
   const minValue = Math.min(...values);
-  const range = Math.max(1, maxValue - minValue);
-  const stepX = points.length > 1 ? (width - paddingX * 2) / (points.length - 1) : 0;
-  const getY = (value: number) => paddingY + ((maxValue - value) / range) * (height - paddingY * 2);
-  const currentPath = points
-    .map((point, index) => `${paddingX + stepX * index},${getY(point.cumulative)}`)
-    .join(" ");
-  const previousPath = points
-    .map((point, index) => `${paddingX + stepX * index},${getY(point.previousCumulative)}`)
-    .join(" ");
-  const areaPath = `${paddingX},${height - paddingY} ${currentPath} ${
-    paddingX + stepX * (points.length - 1)
-  },${height - paddingY}`;
   const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
 
   return (
     <>
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-      <div className="glass-panel-soft rounded-[28px] p-4">
-        <div className="mb-4 flex items-center justify-between gap-4">
+      <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-storm">Ahorro acumulado</p>
             <p className="mt-2 text-sm text-storm">
@@ -453,70 +584,27 @@ export function SavingsLineChart({
               </span>
             ))}
           </div>
-          <div className="overflow-x-auto">
-            <svg className="min-w-[680px]" height={height} viewBox={`0 0 ${width} ${height}`}>
-              <defs>
-                <linearGradient id="dashboard-savings-fill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(56, 161, 105, 0.28)" />
-                  <stop offset="100%" stopColor="rgba(56, 161, 105, 0.02)" />
-                </linearGradient>
-              </defs>
-              {[0, 0.5, 1].map((step) => (
-                <line
-                  key={`grid-${step}`}
-                  stroke="rgba(255,255,255,0.08)"
-                  strokeDasharray="4 6"
-                  x1={paddingX}
-                  x2={width - paddingX}
-                  y1={paddingY + (height - paddingY * 2) * step}
-                  y2={paddingY + (height - paddingY * 2) * step}
-                />
-              ))}
-              <polygon fill="url(#dashboard-savings-fill)" points={areaPath} />
-              <polyline
-                fill="none"
-                points={previousPath}
-                stroke="rgba(255,255,255,0.48)"
-                strokeDasharray="7 7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="3"
-              />
-              <polyline
-                fill="none"
-                points={currentPath}
-                stroke="rgba(56, 161, 105, 0.95)"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="4"
-              />
-              {points.map((point, index) => {
-                const x = paddingX + stepX * index;
-                const isSelected = index === selectedIndex;
-
-                return (
-                  <g key={point.key}>
-                    <circle
-                      cx={x}
-                      cy={getY(point.previousCumulative)}
-                      fill="rgba(255,255,255,0.3)"
-                      r="4"
-                    />
-                    <circle
-                      className="cursor-pointer"
-                      cx={x}
-                      cy={getY(point.cumulative)}
-                      fill={isSelected ? "rgba(255,255,255,1)" : "rgba(56, 161, 105, 1)"}
-                      onClick={() => onSelect(index)}
-                      r={isSelected ? 7 : 5}
-                      stroke={isSelected ? "rgba(56, 161, 105, 1)" : "rgba(255,255,255,0.12)"}
-                      strokeWidth="2"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
+          <LineChartSvg
+            buildTooltipRows={(point) => [
+              {
+                label: "Ahorro del día",
+                value: formatCurrency(point.net, currencyCode),
+                accentClassName: "text-pine",
+              },
+              { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
+              {
+                label: "Comparativo",
+                value: formatCurrency(point.previousCumulative, currencyCode),
+              },
+            ]}
+            fillBottom="rgba(56, 161, 105, 0.02)"
+            fillTop="rgba(56, 161, 105, 0.28)"
+            gradientId="dashboard-savings-fill"
+            lineColor="rgba(56, 161, 105, 0.95)"
+            onSelect={onSelect}
+            points={points}
+            selectedIndex={selectedIndex}
+          />
         </div>
 
         <div className="mt-4 flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4 text-xs text-storm">

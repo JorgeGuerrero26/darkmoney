@@ -12,6 +12,7 @@ type SegmentedControlProps<T extends string | number> = {
   ariaLabel?: string;
   /** "pill" = pista compacta de una línea; "card" = botones con helper (estilo dashboard actual). */
   variant?: "pill" | "card";
+  className?: string;
 };
 
 export function SegmentedControl<T extends string | number>({
@@ -20,12 +21,13 @@ export function SegmentedControl<T extends string | number>({
   onChange,
   ariaLabel,
   variant = "pill",
+  className = "",
 }: SegmentedControlProps<T>) {
   if (variant === "pill") {
     return (
       <div
         aria-label={ariaLabel}
-        className="inline-flex flex-wrap items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1"
+        className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1 ${className}`}
         role="group"
       >
         {options.map((option) => {
@@ -35,7 +37,7 @@ export function SegmentedControl<T extends string | number>({
           return (
             <button
               aria-pressed={isActive}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition duration-200 ${
+              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition duration-200 sm:py-1.5 ${
                 isDisabled
                   ? "cursor-not-allowed text-storm/45"
                   : isActive
