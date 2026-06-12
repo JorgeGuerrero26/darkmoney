@@ -1,24 +1,21 @@
-import {
+﻿import {
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowUpCircle,
-  Check,
-  ChevronDown,
   LoaderCircle,
-  Search,
   Sparkles,
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
+import { SearchablePicker as QuickPicker } from "../../../components/ui/searchable-picker";
 import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -68,39 +65,12 @@ type QuickFieldProps = {
   label: string;
 };
 
-type PickerOption = {
-  value: string;
-  label: string;
-  description: string;
-  leadingLabel: string;
-  leadingColor?: string;
-  searchText?: string;
-};
-
-type QuickPickerProps = {
-  actionDescription?: string;
-  actionLabel?: string;
-  actionLeadingColor?: string;
-  actionLeadingLabel?: string;
-  value: string;
-  onChange: (value: string) => void;
-  onAction?: () => void;
-  options: PickerOption[];
-  placeholderLabel: string;
-  placeholderDescription: string;
-  queryPlaceholder: string;
-  emptyMessage: string;
-};
-
 const quickFieldClassName =
   "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 const quickInputClassName = `${quickFieldClassName} h-12 sm:h-16`;
 const quickFieldLabelClassName =
   "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
 const quickFieldHintClassName = "mt-1.5 sm:mt-2 break-words text-xs leading-6 text-storm/75";
-const quickPickerTriggerClassName = `${quickFieldClassName} flex h-12 sm:h-16 items-center justify-between gap-3 text-left`;
-const quickPickerSearchInputClassName =
-  "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
 
 const quickMovementModes: Array<{
   kind: QuickMovementKind;
@@ -185,28 +155,6 @@ function parseOptionalNumber(value: string) {
 
 function getQuickMovementMode(kind: QuickMovementKind) {
   return quickMovementModes.find((mode) => mode.kind === kind) ?? quickMovementModes[0];
-}
-
-function getQuickPickerTriggerStyle(isOpen: boolean) {
-  return {
-    borderColor: isOpen ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.08)",
-    background: isOpen
-      ? "linear-gradient(180deg, rgba(15, 22, 34, 0.98), rgba(10, 16, 27, 0.98))"
-      : "linear-gradient(180deg, rgba(12, 18, 28, 0.96), rgba(9, 14, 22, 0.96))",
-    boxShadow: isOpen
-      ? "0 0 0 4px rgba(107, 228, 197, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
-      : "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
-  };
-}
-
-function getQuickPickerOptionStyle(isSelected: boolean) {
-  return {
-    borderColor: isSelected ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.04)",
-    background: isSelected
-      ? "linear-gradient(180deg, rgba(18, 31, 41, 0.98), rgba(12, 22, 33, 0.98))"
-      : "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
-    boxShadow: isSelected ? "0 12px 30px rgba(0, 0, 0, 0.18)" : "none",
-  };
 }
 
 function getCategoryColor(kind: CategorySummary["kind"]) {
@@ -315,7 +263,6 @@ function QuickField({ children, errorKey, hint, invalidFields, label }: QuickFie
     </label>
   );
 }
-
 function QuickInput({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -325,178 +272,6 @@ function QuickInput({ className = "", ...props }: InputHTMLAttributes<HTMLInputE
   );
 }
 
-function QuickPicker({
-  actionDescription,
-  actionLabel,
-  actionLeadingColor,
-  actionLeadingLabel,
-  emptyMessage,
-  onChange,
-  onAction,
-  options,
-  placeholderDescription,
-  placeholderLabel,
-  queryPlaceholder,
-  value,
-}: QuickPickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value],
-  );
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return options;
-    }
-
-    return options.filter((option) => {
-      const searchableValue = (
-        option.searchText ?? `${option.label} ${option.description} ${option.leadingLabel}`
-      ).toLowerCase();
-      return searchableValue.includes(normalizedQuery);
-    });
-  }, [options, query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={quickPickerTriggerClassName}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        style={getQuickPickerTriggerStyle(isOpen)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span
-            className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              color: selectedOption?.leadingColor ? "#ffffff" : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <span className="mt-1 block truncate text-xs text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className={quickPickerSearchInputClassName}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={queryPlaceholder}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          {onAction && actionLabel ? (
-            <button
-              className="mt-3 flex w-full items-center justify-between gap-3 rounded-[24px] border border-dashed border-pine/25 bg-[linear-gradient(180deg,rgba(16,31,36,0.96),rgba(10,22,24,0.96))] px-4 py-3.5 text-left text-ink transition duration-200 hover:border-pine/35 hover:bg-[linear-gradient(180deg,rgba(18,35,40,0.98),rgba(12,25,28,0.98))]"
-              onClick={() => {
-                setIsOpen(false);
-                onAction();
-              }}
-              type="button"
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <span
-                  className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-                  style={{
-                    backgroundColor: actionLeadingColor ? `${actionLeadingColor}22` : undefined,
-                    color: actionLeadingColor ? "#ffffff" : undefined,
-                    borderColor: actionLeadingColor ? `${actionLeadingColor}55` : undefined,
-                  }}
-                >
-                  {actionLeadingLabel ?? "+"}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-ink">{actionLabel}</span>
-                  <span className="mt-1 block truncate text-xs text-storm">
-                    {actionDescription ?? "Agrega un nuevo registro sin salir de este flujo."}
-                  </span>
-                </span>
-              </span>
-              <Sparkles className="h-4 w-4 shrink-0 text-pine" />
-            </button>
-          ) : null}
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const isSelected = option.value === value;
-
-                return (
-                  <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
-                      isSelected ? "text-ink" : "text-storm hover:text-ink"
-                    }`}
-                    key={`${option.value}-${option.label}`}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    style={getQuickPickerOptionStyle(isSelected)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-                        style={{
-                          backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
-                          color: option.leadingColor ? "#ffffff" : undefined,
-                          borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
-                        }}
-                      >
-                        {option.leadingLabel}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-ink">{option.label}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">
-                          {option.description}
-                        </span>
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] px-4 py-5 text-sm text-storm">
-                {emptyMessage}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function QuickMovementDialog({
   initialKind,
