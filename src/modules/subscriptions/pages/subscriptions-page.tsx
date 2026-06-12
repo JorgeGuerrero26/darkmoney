@@ -1,7 +1,5 @@
 import {
   BarChart3,
-  Check,
-  ChevronDown,
   Download,
   LoaderCircle,
   PencilLine,
@@ -21,7 +19,6 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -38,10 +35,10 @@ import {
   TableFilterOptionButton,
   tableColumnFilterInputClassName,
 } from "../../../components/ui/table-column-filter-menu";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { TruncatedDescription } from "../../../components/ui/truncated-description";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -104,26 +101,6 @@ type SubscriptionTableFilters = {
   amount: string;
   nextDueDateFrom: string;
   nextDueDateTo: string;
-};
-
-type PickerOption = {
-  value: string;
-  label: string;
-  description: string;
-  leadingLabel: string;
-  leadingColor?: string;
-  searchText?: string;
-};
-
-type PickerProps = {
-  value: string;
-  onChange: (value: string) => void;
-  options: PickerOption[];
-  placeholderLabel: string;
-  placeholderDescription: string;
-  queryPlaceholder: string;
-  emptyMessage: string;
-  disabled?: boolean;
 };
 
 const frequencyOptions = [
@@ -271,140 +248,6 @@ function buildFormStateFromSubscription(subscription: SubscriptionSummary): Subs
     description: subscription.description ?? "",
     notes: subscription.notes ?? "",
   };
-}
-
-function Picker({
-  disabled = false,
-  emptyMessage,
-  onChange,
-  options,
-  placeholderDescription,
-  placeholderLabel,
-  queryPlaceholder,
-  value,
-}: PickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value],
-  );
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return options;
-    }
-    return options.filter((option) =>
-      (option.searchText ?? `${option.label} ${option.description} ${option.leadingLabel}`)
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [options, query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={`${fieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-        disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span
-            className="flex h-7 min-w-[2.25rem] sm:h-10 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-              color: selectedOption?.leadingColor ? "#fff" : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <TruncatedDescription
-              className="mt-0.5 sm:mt-1 text-[0.65rem] sm:text-xs text-storm"
-              text={selectedOption ? selectedOption.description : placeholderDescription}
-            />
-          </span>
-        </span>
-        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className="w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={queryPlaceholder}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const isSelected = option.value === value;
-
-                return (
-                  <button
-                    className="flex w-full items-center justify-between gap-2 sm:gap-3 rounded-[18px] sm:rounded-[24px] border border-white/5 bg-[#0d1623] px-3 sm:px-4 py-2.5 sm:py-3.5 text-left transition duration-200 hover:border-white/12"
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="flex h-8 min-w-[2.25rem] sm:h-11 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
-                        style={{
-                          backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
-                          borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
-                          color: option.leadingColor ? "#fff" : undefined,
-                        }}
-                      >
-                        {option.leadingLabel}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-ink">{option.label}</span>
-                        <TruncatedDescription
-                          className="mt-1 text-xs text-storm"
-                          text={option.description}
-                        />
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="rounded-[22px] border border-white/8 bg-[#0d1623] px-4 py-5 text-sm text-storm">
-                {emptyMessage}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function Field({ children, errorKey, hint, invalidFields, label }: { children: ReactNode; errorKey?: string; hint?: string; invalidFields?: Set<string>; label: string }) {
@@ -699,13 +542,13 @@ function EditorDialog({
                       <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Netflix familiar" type="text" value={formState.name} />
                     </Field>
                     <Field hint="Proveedor o servicio relacionado." label="Proveedor">
-                      <Picker disabled={counterpartyOptions.length === 0} emptyMessage="No tienes contrapartes disponibles aun." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Puedes dejarlo libre si aun no lo registras." placeholderLabel="Sin proveedor fijo" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
+                      <SearchablePicker disabled={counterpartyOptions.length === 0} emptyMessage="No tienes contrapartes disponibles aun." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Puedes dejarlo libre si aun no lo registras." placeholderLabel="Sin proveedor fijo" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
                     </Field>
                     <Field hint="Categoria contable sugerida." label="Categoria">
-                      <Picker disabled={categoryOptions.length === 0} emptyMessage="No tienes categorias disponibles aun." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Puedes dejarla vacia por ahora." placeholderLabel="Sin categoria" queryPlaceholder="Buscar categoria..." value={formState.categoryId} />
+                      <SearchablePicker disabled={categoryOptions.length === 0} emptyMessage="No tienes categorias disponibles aun." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Puedes dejarla vacia por ahora." placeholderLabel="Sin categoria" queryPlaceholder="Buscar categoria..." value={formState.categoryId} />
                     </Field>
                     <Field hint="Cuenta recomendada para registrar el pago." label="Cuenta sugerida">
-                      <Picker disabled={accountOptions.length === 0} emptyMessage="No tienes cuentas disponibles aun." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Puedes definirla mas adelante." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
+                      <SearchablePicker disabled={accountOptions.length === 0} emptyMessage="No tienes cuentas disponibles aun." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Puedes definirla mas adelante." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
                     </Field>
                   </div>
                 </div>
@@ -718,7 +561,7 @@ function EditorDialog({
                       <Input inputMode="decimal" min="0" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
                     </Field>
                     <Field hint="Moneda principal de la suscripcion." label="Moneda">
-                      <Picker emptyMessage="No hay monedas configuradas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Selecciona la moneda principal." placeholderLabel="Selecciona una moneda" queryPlaceholder="Buscar PEN, USD, EUR..." value={formState.currencyCode} />
+                      <SearchablePicker emptyMessage="No hay monedas configuradas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Selecciona la moneda principal." placeholderLabel="Selecciona una moneda" queryPlaceholder="Buscar PEN, USD, EUR..." value={formState.currencyCode} />
                     </Field>
                   </div>
                 </div>
@@ -728,7 +571,7 @@ function EditorDialog({
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
                   <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
                     <Field hint="Define cada cuanto esperas el cobro." label="Frecuencia">
-                      <Picker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as SubscriptionFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
+                      <SearchablePicker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as SubscriptionFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
                     </Field>
                     <Field hint="Usa 1 para la frecuencia normal, 2 para cada dos ciclos, etc." label="Intervalo">
                       <Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" step="1" type="number" value={formState.intervalCount} />
@@ -752,7 +595,7 @@ function EditorDialog({
                     ) : null}
                     {needsDayOfWeek ? (
                       <Field hint="Opcional. Dia semanal habitual." label="Dia de la semana">
-                        <Picker emptyMessage="No hay dias disponibles." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((option) => ({ value: option.value, label: option.label, description: option.description, leadingLabel: option.leadingLabel, leadingColor: "#4566d6" }))} placeholderDescription="Selecciona el dia mas comun." placeholderLabel="Sin dia fijo" queryPlaceholder="Buscar dia..." value={formState.dayOfWeek} />
+                        <SearchablePicker emptyMessage="No hay dias disponibles." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((option) => ({ value: option.value, label: option.label, description: option.description, leadingLabel: option.leadingLabel, leadingColor: "#4566d6" }))} placeholderDescription="Selecciona el dia mas comun." placeholderLabel="Sin dia fijo" queryPlaceholder="Buscar dia..." value={formState.dayOfWeek} />
                       </Field>
                     ) : null}
                     <Field hint="Opcional. Si termina en una fecha puntual." label="Fin">
@@ -769,7 +612,7 @@ function EditorDialog({
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Estado y recordatorios</h3>
                   <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5">
                     <Field hint="Controla si sigue activa, pausada o cerrada." label="Estado">
-                      <Picker emptyMessage="No hay estados disponibles." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Selecciona el estado actual." placeholderLabel="Selecciona un estado" queryPlaceholder="Buscar estado..." value={formState.status} />
+                      <SearchablePicker emptyMessage="No hay estados disponibles." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Selecciona el estado actual." placeholderLabel="Selecciona un estado" queryPlaceholder="Buscar estado..." value={formState.status} />
                     </Field>
                     <Field hint="Cuantos dias antes quieres ver el aviso." label="Recordatorio">
                       <Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" step="1" type="number" value={formState.remindDaysBefore} />

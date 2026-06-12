@@ -16,7 +16,7 @@ import {
 } from "../../../lib/formatting/labels";
 import type { NotificationItem } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
-import { useNotificationInbox } from "../use-notification-inbox";
+import { isActionRequiredNotificationKind, useNotificationInbox } from "../use-notification-inbox";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
@@ -25,6 +25,7 @@ import {
   useMarkNotificationReadMutation,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
+  usePendingNotificationInvitesQuery,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 
@@ -96,6 +97,7 @@ export function NotificationsPage() {
   const { profile, user } = useAuth();
   const { activeWorkspace } = useActiveWorkspace();
   const notificationsQuery = useNotificationsQuery(user?.id);
+  const pendingInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const preferencesQuery = useNotificationPreferencesQuery(user?.id);
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
@@ -115,6 +117,8 @@ export function NotificationsPage() {
   const inbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
     entitlement: entitlementQuery.data,
+    pendingObligationShares: pendingInvitesQuery.data?.obligationShares,
+    pendingWorkspaceInvitations: pendingInvitesQuery.data?.workspaceInvitations,
     snapshot: snapshotQuery.data,
     workspaceName: activeWorkspace?.name,
   });
@@ -296,7 +300,11 @@ export function NotificationsPage() {
   }
 
   function renderNotificationCard(notification: (typeof filteredNotifications)[number]) {
-    const canMarkRead = notification.status !== "read" && notification.kind !== "invite";
+    const canMarkRead =
+      notification.status !== "read" &&
+      !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
+    const hasInviteAction =
+      notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
 
     return (
       <article
@@ -341,7 +349,7 @@ export function NotificationsPage() {
                 className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
                 to={notification.href}
               >
-                {notification.kind === "invite" ? "Abrir invitacion" : "Ir al modulo"}
+                {hasInviteAction ? "Abrir invitacion" : "Ir al modulo"}
               </Link>
               {canMarkRead ? (
                 <Button
@@ -385,7 +393,7 @@ export function NotificationsPage() {
                 tone={inbox.unreadDatabaseCount > 0 ? "info" : "neutral"}
               />
               <StatusBadge status={`${filteredNotifications.length} visibles`} tone="neutral" />
-              {snapshotQuery.isFetching || notificationsQuery.isFetching ? (
+              {snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching ? (
                 <StatusBadge status="Actualizando" tone="neutral" />
               ) : null}
             </div>
@@ -402,17 +410,20 @@ export function NotificationsPage() {
               </div>
               <button
                 className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching || notificationsQuery.isFetching}
+                disabled={snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching}
                 onClick={() => {
                   void snapshotQuery.refetch();
                   void notificationsQuery.refetch();
+                  void pendingInvitesQuery.refetch();
                 }}
                 title="Actualizar"
                 type="button"
               >
                 <RefreshCw
                   className={`h-4 w-4${
-                    snapshotQuery.isFetching || notificationsQuery.isFetching ? " animate-spin" : ""
+                    snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching
+                      ? " animate-spin"
+                      : ""
                   }`}
                 />
               </button>
@@ -677,7 +688,11 @@ export function NotificationsPage() {
               </thead>
               <tbody>
                 {filteredNotifications.map((notification) => {
-                  const canMarkRead = notification.status !== "read" && notification.kind !== "invite";
+                  const canMarkRead =
+                    notification.status !== "read" &&
+                    !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
+                  const hasInviteAction =
+                    notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
 
                   return (
                     <tr
@@ -726,7 +741,7 @@ export function NotificationsPage() {
                             className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
                             to={notification.href}
                           >
-                            {notification.kind === "invite" ? "Abrir" : "Ir"}
+                            {hasInviteAction ? "Abrir" : "Ir"}
                           </Link>
                           {canMarkRead ? (
                             <Button

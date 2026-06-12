@@ -9,8 +9,10 @@ import type {
   MovementRecord,
   NotificationItem,
   ObligationSummary,
+  ObligationShareSummary,
   SubscriptionSummary,
   UserEntitlementSummary,
+  WorkspaceInvitationSummary,
 } from "../../types/domain";
 import type { PendingInvite } from "../auth/invite-resume";
 import { usePendingInvite } from "../auth/invite-resume";
@@ -63,6 +65,96 @@ function toTimestamp(date: string, hour = 9) {
   return next.toISOString();
 }
 
+const criticalNotificationKinds = new Set([
+  "workspace_invite",
+  "obligation_payment_request",
+  "obligation_event_delete_request",
+  "obligation_event_edit_request",
+  "negative_balance",
+  "obligation_overdue",
+  "multiple_obligations_overdue",
+  "subscription_overdue",
+]);
+
+const importantNotificationKinds = new Set([
+  "budget_alert",
+  "budget_period_ending",
+  "subscription_reminder",
+  "multiple_subscriptions_due",
+  "obligation_due",
+  "obligation_no_payment",
+  "high_interest_obligation",
+  "low_balance",
+  "account_dormant",
+  "no_income_month",
+  "high_expense_month",
+  "category_spending_spike",
+  "expense_income_imbalance",
+  "net_worth_negative",
+  "savings_rate_low",
+  "subscription_cost_heavy",
+  "upcoming_annual_subscription",
+  "no_movements_week",
+  "detected_movement_suggestion",
+  "obligation_share_invite",
+  "obligation_request_accepted",
+  "obligation_request_rejected",
+  "obligation_event_unlinked",
+  "obligation_event_updated",
+  "obligation_event_deleted",
+  "obligation_event_delete_pending",
+  "obligation_event_delete_accepted",
+  "obligation_event_delete_rejected",
+  "obligation_event_edit_pending",
+  "obligation_event_edit_accepted",
+  "obligation_event_edit_rejected",
+  "recurring_income_reminder",
+  "obligation_reminder",
+  "movement_detection",
+]);
+
+const actionRequiredNotificationKinds = new Set([
+  "invite",
+  "workspace_invite",
+  "obligation_share_invite",
+  "obligation_payment_request",
+  "obligation_event_delete_request",
+  "obligation_event_edit_request",
+]);
+
+export function isActionRequiredNotificationKind(kind: string) {
+  return actionRequiredNotificationKinds.has(kind.trim().toLowerCase());
+}
+
+function getNotificationPriority(kind: string) {
+  const normalizedKind = kind.trim().toLowerCase();
+  if (criticalNotificationKinds.has(normalizedKind)) {
+    return 0;
+  }
+  if (importantNotificationKinds.has(normalizedKind)) {
+    return 1;
+  }
+  return 2;
+}
+
+function getDatabaseNotificationTone(notification: NotificationItem): SmartNotificationTone {
+  if (notification.status === "failed") {
+    return "danger";
+  }
+  if (notification.status === "read") {
+    return "neutral";
+  }
+
+  const priority = getNotificationPriority(notification.kind);
+  if (priority === 0) {
+    return "danger";
+  }
+  if (priority === 1) {
+    return "warning";
+  }
+  return "info";
+}
+
 function sortNotifications(notifications: InboxNotification[]) {
   return [...notifications].sort((left, right) => {
     const leftUnread = left.status !== "read";
@@ -73,6 +165,11 @@ function sortNotifications(notifications: InboxNotification[]) {
     }
 
     if (leftUnread) {
+      const priorityDelta = getNotificationPriority(left.kind) - getNotificationPriority(right.kind);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
       return new Date(left.scheduledFor).getTime() - new Date(right.scheduledFor).getTime();
     }
 
@@ -92,12 +189,7 @@ function buildDatabaseNotifications(notifications: NotificationItem[]): InboxNot
     kind: notification.kind,
     channel: notification.channel,
     readAt: notification.readAt,
-    tone:
-      notification.status === "failed"
-        ? "danger"
-        : notification.status === "read"
-          ? "neutral"
-          : "info",
+    tone: getDatabaseNotificationTone(notification),
     href: "/app/notifications",
   }));
 }
@@ -722,38 +814,109 @@ function buildPendingInviteNotifications(
   ];
 }
 
+function buildPendingObligationShareNotifications(
+  shares: ObligationShareSummary[] | null | undefined,
+): InboxNotification[] {
+  return (shares ?? [])
+    .filter((share) => share.status === "pending")
+    .map((share) => ({
+      id: `smart:obligation-share-invite:${share.id}:${share.updatedAt}`,
+      source: "smart" as const,
+      title: "Tienes una obligacion compartida pendiente",
+      body: `${share.ownerDisplayName ?? "Un usuario DarkMoney"} te invito a revisar y aceptar un credito o deuda compartida.${share.message ? ` Mensaje: ${share.message}` : ""}`,
+      status: "pending" as const,
+      scheduledFor: share.lastSentAt ?? share.updatedAt ?? share.createdAt,
+      kind: "obligation_share_invite",
+      channel: "in_app",
+      readAt: null,
+      tone: "warning" as const,
+      href: `/share/obligations/${share.token}`,
+    }));
+}
+
+function buildPendingWorkspaceInviteNotifications(
+  invitations: WorkspaceInvitationSummary[] | null | undefined,
+): InboxNotification[] {
+  return (invitations ?? [])
+    .filter((invitation) => invitation.status === "pending")
+    .map((invitation) => ({
+      id: `smart:workspace-invite:${invitation.id}:${invitation.updatedAt}`,
+      source: "smart" as const,
+      title: "Tienes un workspace pendiente por aceptar",
+      body: `${invitation.invitedByDisplayName ?? "Un usuario DarkMoney"} te invito a un workspace compartido como ${invitation.role}.${invitation.note ? ` Nota: ${invitation.note}` : ""}`,
+      status: "pending" as const,
+      scheduledFor: invitation.lastSentAt ?? invitation.updatedAt ?? invitation.createdAt,
+      kind: "workspace_invite",
+      channel: "in_app",
+      readAt: null,
+      tone: "danger" as const,
+      href: `/share/workspaces/${invitation.token}`,
+    }));
+}
+
+function dedupeSmartNotifications(notifications: InboxNotification[]) {
+  const seen = new Set<string>();
+
+  return notifications.filter((notification) => {
+    const key = isActionRequiredNotificationKind(notification.kind)
+      ? `${notification.kind}:${notification.href}`
+      : notification.id;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 export function useNotificationInbox({
   databaseNotifications,
   snapshot,
   workspaceName,
   entitlement,
+  pendingObligationShares,
+  pendingWorkspaceInvitations,
 }: {
   databaseNotifications: NotificationItem[];
   snapshot?: WorkspaceSnapshot | null;
   workspaceName?: string | null;
   entitlement?: UserEntitlementSummary | null;
+  pendingObligationShares?: ObligationShareSummary[] | null;
+  pendingWorkspaceInvitations?: WorkspaceInvitationSummary[] | null;
 }) {
   const { smartReadMap, markSmartAsRead } = useNotificationReads();
   const pendingInvite = usePendingInvite();
 
   const smartNotifications = useMemo(
-    () => [
-      ...buildPendingInviteNotifications(pendingInvite),
-      ...buildBillingNotifications(entitlement),
-      ...buildSmartNotifications(snapshot, workspaceName),
+    () =>
+      dedupeSmartNotifications([
+        ...buildPendingInviteNotifications(pendingInvite),
+        ...buildPendingWorkspaceInviteNotifications(pendingWorkspaceInvitations),
+        ...buildPendingObligationShareNotifications(pendingObligationShares),
+        ...buildBillingNotifications(entitlement),
+        ...buildSmartNotifications(snapshot, workspaceName),
+      ]),
+    [
+      entitlement,
+      pendingInvite,
+      pendingObligationShares,
+      pendingWorkspaceInvitations,
+      snapshot,
+      workspaceName,
     ],
-    [entitlement, pendingInvite, snapshot, workspaceName],
   );
 
   const mergedNotifications = useMemo(() => {
     const databaseItems = buildDatabaseNotifications(databaseNotifications);
     const smartItems = smartNotifications.map<InboxNotification>((notification) => {
-      const isInviteNotification = notification.kind === "invite";
-      const readAt = isInviteNotification ? null : smartReadMap[notification.id] ?? null;
+      const isActionRequiredNotification = isActionRequiredNotificationKind(notification.kind);
+      const readAt = isActionRequiredNotification ? null : smartReadMap[notification.id] ?? null;
 
       return {
         ...notification,
-        status: isInviteNotification ? "pending" : readAt ? "read" : "pending",
+        status: isActionRequiredNotification ? "pending" : readAt ? "read" : "pending",
         readAt,
       };
     });
@@ -774,7 +937,7 @@ export function useNotificationInbox({
       ids?.length
         ? ids
         : smartNotifications
-            .filter((notification) => notification.kind !== "invite")
+            .filter((notification) => !isActionRequiredNotificationKind(notification.kind))
             .map((notification) => notification.id);
 
     markSmartAsRead(targetIds);

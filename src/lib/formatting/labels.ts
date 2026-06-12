@@ -77,6 +77,102 @@ export function formatNotificationKindLabel(kind: string) {
   const normalizedKind = kind.trim().toLowerCase();
 
   switch (normalizedKind) {
+    case "daily_workspace_summary":
+      return "Resumen diario";
+    case "daily_cashflow_check":
+      return "Chequeo de flujo";
+    case "daily_budget_review":
+      return "Revision diaria";
+    case "budget_alert":
+      return "Alerta de presupuesto";
+    case "budget_period_ending":
+      return "Presupuesto por cerrar";
+    case "subscription_reminder":
+      return "Recordatorio de suscripcion";
+    case "subscription_overdue":
+      return "Suscripcion vencida";
+    case "multiple_subscriptions_due":
+      return "Suscripciones proximas";
+    case "obligation_due":
+      return "Obligacion por vencer";
+    case "obligation_overdue":
+      return "Obligacion vencida";
+    case "multiple_obligations_overdue":
+      return "Obligaciones vencidas";
+    case "obligation_no_payment":
+      return "Obligacion sin pago";
+    case "high_interest_obligation":
+      return "Obligacion con interes alto";
+    case "low_balance":
+      return "Saldo bajo";
+    case "negative_balance":
+      return "Saldo negativo";
+    case "account_dormant":
+      return "Cuenta inactiva";
+    case "no_income_month":
+      return "Mes sin ingresos";
+    case "high_expense_month":
+      return "Gastos elevados";
+    case "category_spending_spike":
+      return "Pico por categoria";
+    case "expense_income_imbalance":
+      return "Desbalance ingreso/gasto";
+    case "net_worth_negative":
+      return "Patrimonio negativo";
+    case "savings_rate_low":
+      return "Ahorro bajo";
+    case "subscription_cost_heavy":
+      return "Suscripciones pesadas";
+    case "upcoming_annual_subscription":
+      return "Suscripcion anual proxima";
+    case "no_movements_week":
+      return "Semana sin movimientos";
+    case "daily_ai_digest":
+      return "Resumen IA diario";
+    case "daily_digest":
+      return "Resumen diario";
+    case "detected_movement_suggestion":
+      return "Movimiento detectado";
+    case "movement_detection":
+      return "Deteccion Android";
+    case "obligation_reminder":
+      return "Recordatorio de obligacion";
+    case "recurring_income_reminder":
+      return "Recordatorio de ingreso fijo";
+    case "obligation_share_invite":
+      return "Invitacion de obligacion";
+    case "workspace_invite":
+      return "Invitacion de workspace";
+    case "invite":
+      return "Invitacion";
+    case "obligation_payment_request":
+      return "Solicitud de pago/cobro";
+    case "obligation_request_accepted":
+      return "Solicitud aceptada";
+    case "obligation_request_rejected":
+      return "Solicitud rechazada";
+    case "obligation_event_unlinked":
+      return "Evento por asociar";
+    case "obligation_event_updated":
+      return "Evento actualizado";
+    case "obligation_event_deleted":
+      return "Evento eliminado";
+    case "obligation_event_delete_request":
+      return "Solicitud de eliminacion";
+    case "obligation_event_delete_pending":
+      return "Eliminacion pendiente";
+    case "obligation_event_delete_accepted":
+      return "Eliminacion aceptada";
+    case "obligation_event_delete_rejected":
+      return "Eliminacion rechazada";
+    case "obligation_event_edit_request":
+      return "Solicitud de edicion";
+    case "obligation_event_edit_pending":
+      return "Edicion pendiente";
+    case "obligation_event_edit_accepted":
+      return "Edicion aceptada";
+    case "obligation_event_edit_rejected":
+      return "Edicion rechazada";
     case "movement":
       return "Movimiento";
     case "subscription":

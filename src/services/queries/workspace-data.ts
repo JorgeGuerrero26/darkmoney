@@ -242,6 +242,25 @@ type ObligationShareRow = {
   updated_at: string;
 };
 
+type WorkspaceInvitationRow = {
+  id: number;
+  workspace_id: number;
+  invited_by_user_id: string;
+  invited_user_id: string;
+  invited_email: string;
+  invited_display_name: string | null;
+  invited_by_display_name: string | null;
+  role: WorkspaceRole;
+  status: WorkspaceInvitationStatus;
+  token: string;
+  note: string | null;
+  accepted_at: string | null;
+  responded_at: string | null;
+  last_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type SubscriptionRow = {
   id: number;
   workspace_id: number;
@@ -318,6 +337,7 @@ type NotificationRow = {
   title: string;
   body: string;
   scheduled_for: string;
+  kind?: string | null;
   related_entity_type: string | null;
   read_at: string | null;
 };
@@ -471,6 +491,11 @@ export type NotificationPreferences = {
   emailEnabled: boolean;
   smartReads: Record<string, string>;
   uiPrefs: UiPrefs | null;
+};
+
+export type PendingNotificationInvites = {
+  obligationShares: ObligationShareSummary[];
+  workspaceInvitations: WorkspaceInvitationSummary[];
 };
 
 export type SharedWorkspaceFormInput = {
@@ -2088,30 +2113,69 @@ async function upsertWorkspaceFinancialGoal(input: {
   }
 }
 
-async function fetchNotifications(userId: string) {
-  const client = getClient();
+const notificationsSelectWithKind =
+  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, read_at";
+const notificationsSelectLegacy =
+  "id, channel, status, title, body, scheduled_for, related_entity_type, read_at";
+const notificationsPageSize = 1000;
 
-  const { data, error } = await client
-    .from("notifications")
-    .select("id, channel, status, title, body, scheduled_for, related_entity_type, read_at")
-    .eq("user_id", userId)
-    .order("scheduled_for", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    throw error;
-  }
-
-  return ((data ?? []) as NotificationRow[]).map<NotificationItem>((row) => ({
+function mapNotificationRow(row: NotificationRow) {
+  return {
     id: row.id,
     title: row.title,
     body: row.body,
     status: row.status,
     scheduledFor: row.scheduled_for,
-    kind: row.related_entity_type ?? row.channel,
+    kind: row.kind ?? row.related_entity_type ?? row.channel,
     channel: row.channel,
     readAt: row.read_at,
-  }));
+  } satisfies NotificationItem;
+}
+
+async function fetchNotificationsPage(userId: string, selectColumns: string, page: number) {
+  const client = getClient();
+  const from = page * notificationsPageSize;
+  const to = from + notificationsPageSize - 1;
+
+  const { data, error } = await client
+    .from("notifications")
+    .select(selectColumns)
+    .eq("user_id", userId)
+    .order("scheduled_for", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as unknown as NotificationRow[];
+}
+
+async function fetchNotificationsWithSelect(userId: string, selectColumns: string) {
+  const rows: NotificationRow[] = [];
+
+  for (let page = 0; ; page += 1) {
+    const pageRows = await fetchNotificationsPage(userId, selectColumns, page);
+    rows.push(...pageRows);
+
+    if (pageRows.length < notificationsPageSize) {
+      break;
+    }
+  }
+
+  return rows.map(mapNotificationRow);
+}
+
+async function fetchNotifications(userId: string) {
+  try {
+    return await fetchNotificationsWithSelect(userId, notificationsSelectWithKind);
+  } catch (error) {
+    if (isMissingRelationError(error, "kind")) {
+      return await fetchNotificationsWithSelect(userId, notificationsSelectLegacy);
+    }
+
+    throw error;
+  }
 }
 
 async function fetchEntityAttachments(
@@ -2177,6 +2241,27 @@ function mapObligationShareRow(row: ObligationShareRow) {
   } satisfies ObligationShareSummary;
 }
 
+function mapWorkspaceInvitationRow(row: WorkspaceInvitationRow) {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    invitedByUserId: row.invited_by_user_id,
+    invitedUserId: row.invited_user_id,
+    invitedEmail: row.invited_email,
+    invitedDisplayName: row.invited_display_name,
+    invitedByDisplayName: row.invited_by_display_name,
+    role: row.role,
+    status: row.status,
+    token: row.token,
+    note: row.note,
+    acceptedAt: row.accepted_at,
+    respondedAt: row.responded_at,
+    lastSentAt: row.last_sent_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  } satisfies WorkspaceInvitationSummary;
+}
+
 async function fetchObligationShares(workspaceId: number) {
   const client = getClient();
   const { data, error } = await client
@@ -2197,6 +2282,49 @@ async function fetchObligationShares(workspaceId: number) {
   }
 
   return ((data ?? []) as ObligationShareRow[]).map(mapObligationShareRow);
+}
+
+async function fetchPendingNotificationInvites(userId: string) {
+  const client = getClient();
+
+  const [obligationSharesResult, workspaceInvitationsResult] = await Promise.all([
+    client
+      .from("obligation_shares")
+      .select(
+        "id, workspace_id, obligation_id, owner_user_id, invited_by_user_id, invited_user_id, owner_display_name, invited_display_name, invited_email, status, token, message, accepted_at, responded_at, last_sent_at, created_at, updated_at",
+      )
+      .eq("invited_user_id", userId)
+      .eq("status", "pending")
+      .order("updated_at", { ascending: false }),
+    client
+      .from("workspace_invitations")
+      .select(
+        "id, workspace_id, invited_by_user_id, invited_user_id, invited_email, invited_display_name, invited_by_display_name, role, status, token, note, accepted_at, responded_at, last_sent_at, created_at, updated_at",
+      )
+      .eq("invited_user_id", userId)
+      .eq("status", "pending")
+      .order("updated_at", { ascending: false }),
+  ]);
+
+  if (obligationSharesResult.error && !isMissingRelationError(obligationSharesResult.error, "obligation_shares")) {
+    throw obligationSharesResult.error;
+  }
+
+  if (
+    workspaceInvitationsResult.error &&
+    !isMissingRelationError(workspaceInvitationsResult.error, "workspace_invitations")
+  ) {
+    throw workspaceInvitationsResult.error;
+  }
+
+  return {
+    obligationShares: obligationSharesResult.error
+      ? []
+      : ((obligationSharesResult.data ?? []) as ObligationShareRow[]).map(mapObligationShareRow),
+    workspaceInvitations: workspaceInvitationsResult.error
+      ? []
+      : ((workspaceInvitationsResult.data ?? []) as WorkspaceInvitationRow[]).map(mapWorkspaceInvitationRow),
+  } satisfies PendingNotificationInvites;
 }
 
 async function fetchObligationShareInviteDetails(token: string) {
@@ -2766,6 +2894,9 @@ export function useAcceptWorkspaceInvitationMutation(userId?: string) {
           queryKey: ["workspace-collaboration"],
           exact: false,
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["pending-notification-invites", userId ?? null],
+        }),
       ]);
     },
   });
@@ -2827,6 +2958,15 @@ export function useNotificationsQuery(userId?: string) {
   return useQuery({
     queryKey: ["notifications", userId],
     queryFn: () => fetchNotifications(userId as string),
+    enabled: Boolean(userId),
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export function usePendingNotificationInvitesQuery(userId?: string) {
+  return useQuery({
+    queryKey: ["pending-notification-invites", userId ?? null],
+    queryFn: () => fetchPendingNotificationInvites(userId as string),
     enabled: Boolean(userId),
     placeholderData: (previousData) => previousData,
   });
@@ -3191,6 +3331,9 @@ export function useAcceptObligationShareMutation(userId?: string) {
         }),
         queryClient.invalidateQueries({
           queryKey: ["obligation-share-invite", token],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["pending-notification-invites", userId ?? null],
         }),
       ]);
     },

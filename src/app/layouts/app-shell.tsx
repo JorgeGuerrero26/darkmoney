@@ -48,6 +48,7 @@ import {
   getQueryErrorMessage,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
+  usePendingNotificationInvitesQuery,
   useCurrentUserEntitlementQuery,
   useWorkspaceSnapshotQuery,
 } from "../../services/queries/workspace-data";
@@ -449,11 +450,14 @@ function AppShellContent() {
   } = useActiveWorkspace();
   const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const notificationsQuery = useNotificationsQuery(user?.id);
+  const pendingNotificationInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const notificationInbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
     entitlement: entitlementQuery.data,
+    pendingObligationShares: pendingNotificationInvitesQuery.data?.obligationShares,
+    pendingWorkspaceInvitations: pendingNotificationInvitesQuery.data?.workspaceInvitations,
     snapshot: workspaceSnapshotQuery.data,
     workspaceName: activeWorkspace?.name,
   });
