@@ -1814,10 +1814,14 @@ export function DashboardPage() {
 
                 return (
                   <Button
-                    className="justify-start"
+                    className={`justify-start border px-3 py-2 sm:px-4 ${
+                      visible
+                        ? "border-pine/24 bg-pine/10 text-pine hover:bg-pine/15 hover:text-ink"
+                        : "border-white/10 bg-white/[0.03] text-storm hover:bg-white/[0.07] hover:text-ink"
+                    }`}
                     key={widget.id}
                     onClick={() => toggleWidgetVisibility(widget.id)}
-                    variant={visible ? "primary" : "ghost"}
+                    variant="ghost"
                   >
                     {visible ? "Ocultar" : "Mostrar"} {widget.label}
                   </Button>
