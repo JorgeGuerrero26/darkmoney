@@ -97,6 +97,58 @@ type MovementSummaryChipProps = {
   value: string;
 };
 
+type MovementDisplayInfo = {
+  accountLabel: string;
+  amount: number | null;
+  currencyCode: string;
+};
+
+function getMovementDisplayInfo(
+  movement: MovementRecord,
+  fallbackCurrencyCode: string,
+): MovementDisplayInfo {
+  if (incomeLikeMovementTypes.has(movement.movementType)) {
+    return {
+      accountLabel: movement.destinationAccountName ?? "-",
+      amount: movement.destinationAmount,
+      currencyCode: movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  if (movement.movementType === "transfer") {
+    const accountLabel =
+      movement.sourceAccountName && movement.destinationAccountName
+        ? `${movement.sourceAccountName} -> ${movement.destinationAccountName}`
+        : movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
+
+    return {
+      accountLabel,
+      amount: movement.sourceAmount ?? movement.destinationAmount,
+      currencyCode:
+        movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  if (expenseLikeMovementTypes.has(movement.movementType)) {
+    return {
+      accountLabel: movement.sourceAccountName ?? "-",
+      amount: movement.sourceAmount,
+      currencyCode: movement.sourceCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  const amount = movement.sourceAmount ?? movement.destinationAmount;
+  const accountLabel =
+    movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
+
+  return {
+    accountLabel,
+    amount,
+    currencyCode:
+      movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+  };
+}
+
 function MovementSummaryChip({
   label,
   tone = "neutral",
@@ -127,7 +179,7 @@ export function MovementsPage() {
     { key: "estado", label: "Estado" },
     { key: "categoria", label: "Categoria" },
     { key: "contraparte", label: "Contraparte" },
-    { key: "cuenta_origen", label: "Cuenta origen" },
+    { key: "cuenta_origen", label: "Cuenta" },
     { key: "fecha", label: "Fecha" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-movements", movementColumns);
@@ -284,7 +336,10 @@ export function MovementsPage() {
       Array.from(
         new Set(
           (snapshot?.movements ?? [])
-            .map((movement) => movement.sourceAccountName)
+            .flatMap((movement) => [
+              movement.sourceAccountName,
+              movement.destinationAccountName,
+            ])
             .filter((value): value is string => Boolean(value)),
         ),
       ).sort((a, b) => a.localeCompare(b)),
@@ -306,7 +361,12 @@ export function MovementsPage() {
         return false;
       }
 
+      const displayInfo = getMovementDisplayInfo(
+        movement,
+        snapshot.workspace.baseCurrencyCode,
+      );
       const amountCandidates = [
+        displayInfo.amount,
         movement.sourceAmount,
         movement.destinationAmount,
       ]
@@ -325,7 +385,9 @@ export function MovementsPage() {
         !normalizedCounterparty || movement.counterparty.toLowerCase().includes(normalizedCounterparty);
       const matchesSourceAccount =
         !normalizedSourceAccount ||
-        (movement.sourceAccountName ?? "").toLowerCase().includes(normalizedSourceAccount);
+        displayInfo.accountLabel.toLowerCase().includes(normalizedSourceAccount) ||
+        (movement.sourceAccountName ?? "").toLowerCase().includes(normalizedSourceAccount) ||
+        (movement.destinationAccountName ?? "").toLowerCase().includes(normalizedSourceAccount);
       const matchesAmount =
         !normalizedAmount || amountCandidates.some((candidate) => candidate.includes(normalizedAmount));
       const matchesDateFrom = !tableFilters.dateFrom || occurredDate >= tableFilters.dateFrom;
@@ -1054,7 +1116,10 @@ export function MovementsPage() {
             <div className="space-y-2">
               {paginatedMovements.map((movement) => {
                 const movementTypeOption = getMovementTypeOption(movement.movementType);
-                const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
+                const displayInfo = getMovementDisplayInfo(
+                  movement,
+                  snapshot.workspace.baseCurrencyCode,
+                );
                 return (
                   <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-3.5 transition hover:border-white/16" key={movement.id}>
                     <SelectionCheckbox
@@ -1069,7 +1134,7 @@ export function MovementsPage() {
                       <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
                       <StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} />
                     </div>
-                    {movement.sourceAmount !== null ? <p className="text-sm font-semibold text-ink shrink-0">{formatCurrency(movement.sourceAmount, sourceCurrencyCode)}</p> : null}
+                    {displayInfo.amount !== null ? <p className="text-sm font-semibold text-ink shrink-0">{formatCurrency(displayInfo.amount, displayInfo.currencyCode)}</p> : null}
                     <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
                   </article>
                 );
@@ -1227,7 +1292,7 @@ export function MovementsPage() {
                       <TableColumnFilterMenu
                         active={isMovementTableFilterActive(tableFilters, "sourceAccount")}
                         isOpen={openTableFilter === "sourceAccount"}
-                        label="Cuenta origen"
+                        label="Cuenta"
                         onClear={() => clearSingleTableFilter("sourceAccount")}
                         onClose={closeTableFilterMenu}
                         onToggle={() => toggleTableFilterMenu("sourceAccount")}
@@ -1313,7 +1378,10 @@ export function MovementsPage() {
                 <tbody>
                   {paginatedMovements.map((movement, index) => {
                     const movementTypeOption = getMovementTypeOption(movement.movementType);
-                    const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
+                    const displayInfo = getMovementDisplayInfo(
+                      movement,
+                      snapshot.workspace.baseCurrencyCode,
+                    );
                     return (
                       <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === paginatedMovements.length - 1 ? "border-b-0" : ""}`} key={movement.id}>
                         <td className="w-10 px-4 py-3.5">
@@ -1328,8 +1396,8 @@ export function MovementsPage() {
                         <td className={`px-5 py-3.5 ${cv("estado", "hidden sm:table-cell")}`}><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
                         <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{movement.category}</td>
                         <td className={`px-5 py-3.5 text-storm ${cv("contraparte", "hidden xl:table-cell")}`}>{movement.counterparty}</td>
-                        <td className={`px-5 py-3.5 text-storm ${cv("cuenta_origen", "hidden md:table-cell")}`}>{movement.sourceAccountName ?? "-"}</td>
-                        <td className="px-5 py-3.5 text-right font-medium text-ink">{movement.sourceAmount !== null ? formatCurrency(movement.sourceAmount, sourceCurrencyCode) : "-"}</td>
+                        <td className={`px-5 py-3.5 text-storm ${cv("cuenta_origen", "hidden md:table-cell")}`}>{displayInfo.accountLabel}</td>
+                        <td className="px-5 py-3.5 text-right font-medium text-ink">{displayInfo.amount !== null ? formatCurrency(displayInfo.amount, displayInfo.currencyCode) : "-"}</td>
                         <td className={`px-5 py-3.5 text-right text-storm ${cv("fecha", "hidden md:table-cell")}`}>{formatDateTime(movement.occurredAt)}</td>
                         <td className="px-5 py-3.5 text-right">
                           <Button className="py-1.5 text-xs" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
