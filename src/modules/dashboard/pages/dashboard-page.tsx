@@ -36,7 +36,20 @@ import {
 import { useProFeatureAccess } from "../../shared/use-pro-feature-access";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
-  buildMonthEndEstimate,
+  buildParityConversionCtx,
+  buildParityInputs,
+} from "../lib/parity/adapters";
+import {
+  getPeriodBounds as getParityPeriodBounds,
+  selectPeriodTotals as selectParityPeriodTotals,
+} from "../lib/parity/aggregations";
+import { buildFutureFlowWindows as buildParityFutureFlowWindows } from "../lib/parity/future-flow";
+import { buildMonthProjection } from "../lib/parity/month-projection";
+import { buildParityNetWorth } from "../lib/parity/net-worth";
+import { buildReadiness as buildParityReadiness } from "../lib/parity/readiness";
+import { buildReviewInboxSnapshot as buildParityReviewInbox } from "../lib/parity/review-inbox";
+import type { Period as ParityPeriod } from "../lib/parity/types";
+import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
   buildUnusualSpendingLines,
@@ -75,7 +88,6 @@ import {
 import {
   buildPeriodTotals,
   classifyMovement,
-  classifyScheduledMovement,
   getExpenseAmount,
   getIncomeAmount,
   pickExpenseDailyAmount,
@@ -414,6 +426,70 @@ export function DashboardPage() {
   }
 
   const comparison = buildComparisonDefinition(comparisonPreset);
+
+  // ── Capa de PARIDAD con el dashboard móvil (DarkMoneyApp). Estas métricas usan
+  // el contrato del móvil: datos crudos del snapshot, conversión robusta vía
+  // moneda base, y universo de 90 días. NO mezclar con los cálculos web-only de
+  // abajo (que siguen usando displayMovements pre-convertidos).
+  const parityNow = new Date();
+  const parityCtx = buildParityConversionCtx({
+    accounts: snapshot.accounts,
+    exchangeRates: snapshot.exchangeRates,
+    displayCurrency: displayCurrencyCode,
+    baseCurrency: baseCurrencyCode,
+  });
+  const parityInputs = buildParityInputs(snapshot, parityNow);
+  const parityNetWorth = buildParityNetWorth(snapshot.accounts, parityCtx);
+  const parityPeriod: ParityPeriod =
+    comparisonPreset === "today"
+      ? "today"
+      : comparisonPreset === "week"
+        ? "week"
+        : comparisonPreset === "last30"
+          ? "last_30"
+          : "month";
+  const parityPeriodBounds = getParityPeriodBounds(parityPeriod, parityNow);
+  const parityCurrentTotals = selectParityPeriodTotals(
+    parityInputs.movements,
+    parityPeriodBounds.curStart,
+    parityPeriodBounds.curEnd,
+    parityCtx,
+  );
+  const parityPreviousTotals = selectParityPeriodTotals(
+    parityInputs.movements,
+    parityPeriodBounds.prevStart,
+    parityPeriodBounds.prevEnd,
+    parityCtx,
+  );
+  const parityFutureWindows = buildParityFutureFlowWindows(
+    parityInputs.obligations,
+    parityInputs.subscriptions,
+    parityInputs.recurringIncome,
+    displayCurrencyCode,
+    parityCtx.exchangeRateMap,
+    parityNetWorth.amount,
+    baseCurrencyCode,
+    parityNow,
+  );
+  const parityMonthProjection = buildMonthProjection(
+    parityInputs.movements,
+    parityInputs.obligations,
+    parityInputs.subscriptions,
+    parityInputs.recurringIncome,
+    parityNetWorth.amount,
+    parityCtx,
+    parityNow,
+  );
+  const parityReviewInbox = buildParityReviewInbox(
+    parityInputs.movements,
+    parityInputs.subscriptions,
+    parityInputs.obligations,
+    parityNow,
+  );
+  const parityReadiness = buildParityReadiness(parityInputs.movements, parityNow);
+  const parityUnconvertedCount =
+    parityNetWorth.unconvertedCount + parityFutureWindows[2].unconvertedCount;
+
   const displayAccounts = snapshot.accounts.map((account) => {
     const convertedBalance = convertDashboardAmount({
       amount: account.currentBalance,
@@ -957,41 +1033,14 @@ export function DashboardPage() {
   const totalSavings = visibleAccounts
     .filter((account) => account.type === "savings")
     .reduce((total, account) => total + account.currentBalance, 0);
-  const futureFlowWindows = [7, 15, 30].map((days) => {
-    const limitDate = endOfDay(addDays(new Date(), days));
-    const scheduledWindow = scheduledMovements.filter(
-      (movement) => new Date(movement.occurredAt).getTime() <= limitDate.getTime(),
-    );
-    const scheduledIncome = scheduledWindow.reduce((total, movement) => {
-      const classified = classifyScheduledMovement(movement);
-      return classified?.kind === "income" ? total + classified.amount : total;
-    }, 0);
-    const scheduledExpense = scheduledWindow.reduce((total, movement) => {
-      const classified = classifyScheduledMovement(movement);
-      return classified?.kind === "expense" ? total + classified.amount : total;
-    }, 0);
-    const commitmentsWindow = upcomingCommitments.filter(
-      (item) => new Date(item.date).getTime() <= limitDate.getTime(),
-    );
-    const expectedInflow = commitmentsWindow
-      .filter((item) => item.kind === "Por cobrar" || item.kind === "Ingreso fijo")
-      .reduce((total, item) => total + item.amount, 0) + scheduledIncome;
-    const expectedOutflow = commitmentsWindow
-      .filter((item) => item.kind !== "Por cobrar" && item.kind !== "Ingreso fijo")
-      .reduce((total, item) => total + item.amount, 0) + scheduledExpense;
-
-    return {
-      days,
-      expectedInflow,
-      expectedOutflow,
-      receivableCount: commitmentsWindow.filter((item) => item.kind === "Por cobrar" || item.kind === "Ingreso fijo").length,
-      payableCount: commitmentsWindow.filter((item) => item.kind !== "Por cobrar" && item.kind !== "Ingreso fijo").length,
-      scheduledCount: scheduledWindow.length,
-      estimatedBalance: liquidMoneyTotal + expectedInflow - expectedOutflow,
-    };
-  });
+  // Flujo futuro con paridad móvil: solo agenda comprometida (obligaciones con
+  // lógica de cuota, suscripciones e ingresos fijos activos) sobre el patrimonio.
+  // Los movimientos planned/pending NO entran al inflow/outflow; se reportan
+  // aparte como dato informativo.
+  const futureFlowWindows = parityFutureWindows;
+  const scheduledMovementsCount = scheduledMovements.length;
   const projectedLiquidBalance30Days =
-    futureFlowWindows.find((window) => window.days === 30)?.estimatedBalance ?? liquidMoneyTotal;
+    futureFlowWindows.find((window) => window.days === 30)?.estimatedBalance ?? parityNetWorth.amount;
   const averageDailySpend = currentTotals.expense / Math.max(1, comparisonDaySpan);
   const averageWeeklySpend = currentTotals.expense / Math.max(1, comparisonDaySpan / 7);
   const averageMonthlySavings =
@@ -1209,15 +1258,9 @@ export function DashboardPage() {
   ).length;
   const subscriptionsNeedingAttentionCount = countSubscriptionsNeedingAttention(activeSubscriptions);
   const obligationsStaleActivityCount = countObligationsWithoutRecentActivity(displayObligations);
-  const reviewInboxTotalIssues =
-    uncategorizedMovements.length +
-    pendingMovementsForReviewCount +
-    duplicateExpenseMovementGroups +
-    movementsNeedingMetadataReviewCount +
-    subscriptionsNeedingAttentionCount +
-    obligationsWithoutPlan.length +
-    obligationsStaleActivityCount +
-    overdueObligations.length;
+  // Total de la bandeja con paridad móvil: 7 contadores del contrato. El de
+  // metadata (movementsNeedingMetadataReviewCount) queda como chip aparte.
+  const reviewInboxTotalIssues = parityReviewInbox.totalIssues;
 
   const idleSubscriptionForHint = findIdleSubscriptionName(
     new Date(),
@@ -1225,14 +1268,16 @@ export function DashboardPage() {
     activeSubscriptions,
   );
 
-  const monthEndEstimate = buildMonthEndEstimate(
-    new Date(),
-    liquidMoneyTotal,
-    postedMovements,
-    classifyMovement,
-    getIncomeAmount,
-    getExpenseAmount,
-  );
+  // Cierre de mes con paridad móvil: parte del patrimonio (no del líquido) y
+  // suma flujos comprometidos a 30 días + proyección variable. Mantiene la forma
+  // del antiguo monthEndEstimate para no romper los consumidores de la UI.
+  const monthEndEstimate = {
+    estimatedLiquidAtMonthEnd: parityMonthProjection.expectedBalance,
+    incomeMonthToDate: parityMonthProjection.variableIncomeObserved,
+    expenseMonthToDate: parityMonthProjection.variableExpenseObserved,
+    daysElapsedInMonth: parityMonthProjection.daysElapsed,
+    daysRemainingInMonth: parityMonthProjection.remainingDays,
+  };
 
   const suggestedProActions = buildSuggestedProActions({
     overdueAmount,
@@ -1932,18 +1977,19 @@ export function DashboardPage() {
             metricId="kpi_total_money"
           >
             <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-pine">
-              Dinero total
+              Patrimonio
             </p>
             <p className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
-              {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
+              {formatCurrency(parityNetWorth.amount, displayCurrencyCode)}
             </p>
             <p className="mt-2 text-sm text-storm">
-              {visibleAccounts.length} {visibleAccounts.length === 1 ? "cuenta activa" : "cuentas activas"}
+              Cuentas en patrimonio · Dinero total en cuentas{" "}
+              {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
             </p>
           </DashboardKpiHelpWrap>
           <DashboardKpiHelpWrap
             className={`relative overflow-hidden rounded-[28px] border p-6 ${
-              currentTotals.net >= 0
+              parityCurrentTotals.net >= 0
                 ? "border-gold/20 bg-[radial-gradient(circle_at_top_left,rgba(215,190,123,0.1),transparent_55%)]"
                 : "border-rosewood/20 bg-[radial-gradient(circle_at_top_left,rgba(255,143,158,0.08),transparent_55%)]"
             }`}
@@ -1951,18 +1997,18 @@ export function DashboardPage() {
           >
             <p
               className={`text-[0.65rem] font-semibold uppercase tracking-[0.22em] ${
-                currentTotals.net >= 0 ? "text-gold" : "text-rosewood"
+                parityCurrentTotals.net >= 0 ? "text-gold" : "text-rosewood"
               }`}
             >
               Ahorro del período
             </p>
             <p className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
-              {formatCurrency(currentTotals.net, displayCurrencyCode)}
+              {formatCurrency(parityCurrentTotals.net, displayCurrencyCode)}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-storm">
               <DeltaBadge
                 currencyCode={displayCurrencyCode}
-                value={currentTotals.net - previousTotals.net}
+                value={parityCurrentTotals.net - parityPreviousTotals.net}
               />
               <span>vs {comparison.previous.label.toLowerCase()}</span>
             </div>
@@ -2099,26 +2145,26 @@ export function DashboardPage() {
               <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_income">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Ingresos</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
-                  {formatCurrency(currentTotals.income, displayCurrencyCode)}
+                  {formatCurrency(parityCurrentTotals.income, displayCurrencyCode)}
                 </p>
                 <p className="mt-1 text-xs text-storm">
-                  {formatVsPreviousPeriodLabel(currentTotals.income, previousTotals.income, comparison.previous.label)}
+                  {formatVsPreviousPeriodLabel(parityCurrentTotals.income, parityPreviousTotals.income, comparison.previous.label)}
                 </p>
               </DashboardKpiHelpWrap>
               <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/10 p-3" metricId="kpi_expense">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-ember">Gastos</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
-                  {formatCurrency(currentTotals.expense, displayCurrencyCode)}
+                  {formatCurrency(parityCurrentTotals.expense, displayCurrencyCode)}
                 </p>
                 <p className="mt-1 text-xs text-storm">
-                  {formatVsPreviousPeriodLabel(currentTotals.expense, previousTotals.expense, comparison.previous.label)}
+                  {formatVsPreviousPeriodLabel(parityCurrentTotals.expense, parityPreviousTotals.expense, comparison.previous.label)}
                 </p>
               </DashboardKpiHelpWrap>
               <div className="grid grid-cols-2 gap-2">
                 <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/10 p-3" metricId="kpi_period_savings">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Ahorro neto</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
-                    {formatCurrency(currentTotals.net, displayCurrencyCode)}
+                    {formatCurrency(parityCurrentTotals.net, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
                 <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_avg_daily_spend">
@@ -4101,6 +4147,20 @@ export function DashboardPage() {
                     <p className="mt-2 text-xs text-storm">
                       Misma estimación que en Resumen principal; aquí abajo el detalle por ventana de días.
                     </p>
+                    {scheduledMovementsCount > 0 ? (
+                      <p className="mt-2 text-xs text-storm/80">
+                        Además tienes {scheduledMovementsCount}{" "}
+                        {scheduledMovementsCount === 1 ? "movimiento planificado" : "movimientos planificados"} que
+                        no entran en esta proyección de compromisos.
+                      </p>
+                    ) : null}
+                    {parityUnconvertedCount > 0 ? (
+                      <p className="mt-2 text-xs text-rosewood/90">
+                        {parityUnconvertedCount}{" "}
+                        {parityUnconvertedCount === 1 ? "monto sin tasa de cambio configurada" : "montos sin tasa de cambio configurada"}{" "}
+                        no se sumaron a esta lectura.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="grid gap-4">
                     {futureFlowWindows.map((window) => (
@@ -4468,7 +4528,7 @@ export function DashboardPage() {
                     <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="learn_confidence">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Confianza actual</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {learningSnapshot.readinessScore}%
+                        {parityReadiness.readinessScore}%
                       </p>
                     </DashboardKpiHelpWrap>
                   </div>
