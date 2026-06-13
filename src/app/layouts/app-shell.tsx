@@ -811,7 +811,7 @@ function AppShellContent() {
           className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-5 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
-            isSidebarCollapsed ? "lg:w-[118px] lg:px-4" : "lg:w-[296px] lg:px-5"
+            isSidebarCollapsed ? "lg:w-[132px] lg:px-4" : "lg:w-[296px] lg:px-5"
           }`}
         >
           <div className="flex h-full min-h-0 flex-col">
@@ -877,7 +877,13 @@ function AppShellContent() {
               </button>
             </div>
 
-            <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+            <div
+              className={`lg:min-h-0 lg:flex-1 lg:overflow-y-auto ${
+                isSidebarCollapsed
+                  ? "lg:pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  : "lg:pr-1"
+              }`}
+            >
             <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`} data-tour="workspace-picker">
               <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
                 Workspace

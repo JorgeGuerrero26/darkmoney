@@ -161,12 +161,35 @@ export function DatePickerField({
   function calcPosition() {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const style: CSSProperties = { position: "fixed", left: rect.left, width: rect.width, zIndex: 9999 };
-    if (spaceBelow >= 380 || spaceBelow >= rect.top) {
-      style.top = rect.bottom + 10;
+    const viewportPadding = 12;
+    const gap = 10;
+    const panelMinWidth = mode === "datetime-local" ? 320 : 300;
+    const expectedPanelHeight = mode === "datetime-local" ? 560 : 430;
+    const width = Math.min(
+      Math.max(rect.width, panelMinWidth),
+      window.innerWidth - viewportPadding * 2,
+    );
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left),
+      window.innerWidth - width - viewportPadding,
+    );
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+    const spaceAbove = rect.top - viewportPadding;
+    const openBelow = spaceBelow >= expectedPanelHeight || spaceBelow >= spaceAbove;
+    const availableSpace = Math.max(openBelow ? spaceBelow : spaceAbove, 120);
+    const style: CSSProperties = {
+      left,
+      maxHeight: Math.max(120, Math.min(expectedPanelHeight, availableSpace - gap)),
+      overscrollBehavior: "contain",
+      position: "fixed",
+      width,
+      zIndex: 9999,
+    };
+
+    if (openBelow) {
+      style.top = rect.bottom + gap;
     } else {
-      style.bottom = window.innerHeight - rect.top + 10;
+      style.bottom = window.innerHeight - rect.top + gap;
     }
     setDropdownStyle(style);
   }
@@ -270,7 +293,7 @@ export function DatePickerField({
       {isOpen ? createPortal(
         <div
           ref={panelRef}
-          className="animate-rise-in rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           style={dropdownStyle}
         >
           <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] px-3 py-2">

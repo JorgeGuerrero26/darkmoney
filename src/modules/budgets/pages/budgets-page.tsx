@@ -1,7 +1,5 @@
 import {
   BarChart3,
-  Check,
-  ChevronDown,
   Download,
   LoaderCircle,
   PencilLine,
@@ -16,7 +14,6 @@ import {
 import type { FormEvent, InputHTMLAttributes } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -28,6 +25,7 @@ import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
@@ -83,14 +81,7 @@ type FeedbackState = {
   description: string;
 };
 
-type BudgetPickerOption = {
-  value: string;
-  label: string;
-  description: string;
-  leadingLabel: string;
-  leadingColor?: string;
-  searchText?: string;
-};
+type BudgetPickerOption = PickerOption;
 
 type DisplayBudgetOverview = BudgetOverview & {
   displayCurrencyCode: string;
@@ -188,126 +179,17 @@ function BudgetPicker({
   queryPlaceholder?: string;
   value: string;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false), true);
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value],
-  );
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return options;
-    }
-
-    return options.filter((option) =>
-      (option.searchText ?? `${option.label} ${option.description} ${option.leadingLabel}`)
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [options, query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
   return (
-    <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
-      <button
-        className={`${fieldClassName} flex min-h-[5.25rem] items-start justify-between gap-3 py-3.5 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-        disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-start gap-3">
-          <span
-            className="mt-0.5 flex h-10 min-w-[3.3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-              color: selectedOption?.leadingColor ? "#fff" : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block whitespace-normal text-sm font-semibold leading-6 text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
-          </span>
-        </span>
-        <ChevronDown className={`mt-2 h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
-          {queryPlaceholder ? (
-            <div className="relative mb-3">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-              <input
-                autoFocus
-                className="w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={queryPlaceholder}
-                type="text"
-                value={query}
-              />
-            </div>
-          ) : null}
-
-          <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? filteredOptions.map((option) => {
-              const isSelected = option.value === value;
-
-              return (
-                <button
-                  className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
-                  key={option.value}
-                  onClick={() => {
-                    onChange(option.value);
-                    setIsOpen(false);
-                  }}
-                  type="button"
-                >
-                  <span className="flex min-w-0 items-start gap-3">
-                    <span
-                      className="mt-0.5 flex h-11 min-w-[3.3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-                      style={{
-                        backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
-                        borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
-                        color: option.leadingColor ? "#fff" : undefined,
-                      }}
-                    >
-                      {option.leadingLabel}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block whitespace-normal font-medium leading-6 text-ink">
-                        {option.label}
-                      </span>
-                      <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-                        {option.description}
-                      </span>
-                    </span>
-                  </span>
-                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                </button>
-              );
-            }) : (
-              <div className="rounded-[22px] border border-white/8 bg-[#0d1623] px-4 py-5 text-sm text-storm">
-                {emptyMessage ?? "No encontramos resultados con ese filtro."}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <SearchablePicker
+      disabled={disabled}
+      emptyMessage={emptyMessage ?? "No encontramos resultados con ese filtro."}
+      onChange={onChange}
+      options={options}
+      placeholderDescription={placeholderDescription}
+      placeholderLabel={placeholderLabel}
+      queryPlaceholder={queryPlaceholder ?? "Buscar opcion..."}
+      value={value}
+    />
   );
 }
 
@@ -562,6 +444,68 @@ function isBudgetCurrent(budget: BudgetOverview) {
 
 function getBudgetScopeDetails(scopeKind: BudgetScopeKind) {
   return scopeOptions.find((option) => option.value === scopeKind) ?? scopeOptions[0];
+}
+
+function getBudgetScopeFilterLeadingLabel(scope: ScopeFilter) {
+  switch (scope) {
+    case "general":
+      return "GE";
+    case "category":
+      return "CA";
+    case "account":
+      return "CU";
+    case "category_account":
+      return "CC";
+    case "all":
+    default:
+      return "TA";
+  }
+}
+
+function getBudgetScopeFilterColor(scope: ScopeFilter) {
+  switch (scope) {
+    case "general":
+      return "#1B6A58";
+    case "category":
+      return "#C46A31";
+    case "account":
+      return "#4566D6";
+    case "category_account":
+      return "#8366F2";
+    case "all":
+    default:
+      return "#64748B";
+  }
+}
+
+function getBudgetStatusFilterDetails(status: StatusFilter) {
+  switch (status) {
+    case "active":
+      return {
+        description: "Presupuestos activos sin filtrar por alerta.",
+        leadingLabel: "AC",
+        leadingColor: "#1B6A58",
+      };
+    case "critical":
+      return {
+        description: "Incluye presupuestos cerca del limite o excedidos.",
+        leadingLabel: "CR",
+        leadingColor: "#B48B34",
+      };
+    case "inactive":
+      return {
+        description: "Presupuestos desactivados conservados para historial.",
+        leadingLabel: "IN",
+        leadingColor: "#64748B",
+      };
+    case "all":
+    default:
+      return {
+        description: "Muestra cualquier estado del presupuesto.",
+        leadingLabel: "TO",
+        leadingColor: "#64748B",
+      };
+  }
 }
 
 function BudgetEditorDialog({
@@ -1172,6 +1116,41 @@ export function BudgetsPage() {
           normalizeCurrencyCode(budget.currencyCode) !== normalizeCurrencyCode(displayCurrencyCode),
       })),
     [baseCurrencyCode, budgets, displayCurrencyCode, exchangeRateMap],
+  );
+  const budgetScopeFilterOptions = useMemo<BudgetPickerOption[]>(
+    () =>
+      scopeFilterOptions.map((option) => {
+        const description =
+          option.value === "all"
+            ? "Muestra cualquier alcance del presupuesto."
+            : getBudgetScopeDetails(option.value).description;
+
+        return {
+          value: option.value,
+          label: option.label,
+          description,
+          leadingLabel: getBudgetScopeFilterLeadingLabel(option.value),
+          leadingColor: getBudgetScopeFilterColor(option.value),
+          searchText: `${option.label} ${option.value} ${description}`,
+        };
+      }),
+    [],
+  );
+  const budgetStatusFilterOptions = useMemo<BudgetPickerOption[]>(
+    () =>
+      statusOptions.map((option) => {
+        const details = getBudgetStatusFilterDetails(option.value);
+
+        return {
+          value: option.value,
+          label: option.label,
+          description: details.description,
+          leadingLabel: details.leadingLabel,
+          leadingColor: details.leadingColor,
+          searchText: `${option.label} ${option.value} ${details.description}`,
+        };
+      }),
+    [],
   );
   const selectedBudget = displayBudgets.find((budget) => budget.id === selectedBudgetId) ?? null;
   const deleteTarget = displayBudgets.find((budget) => budget.id === deleteTargetId) ?? null;
@@ -1802,28 +1781,24 @@ export function BudgetsPage() {
                 value={budgetFilters.name}
               />
             </div>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => updateBudgetFilter("scope", event.target.value as ScopeFilter)}
+            <BudgetPicker
+              emptyMessage="No encontramos alcances con ese filtro."
+              onChange={(value) => updateBudgetFilter("scope", value as ScopeFilter)}
+              options={budgetScopeFilterOptions}
+              placeholderDescription="Muestra cualquier alcance del presupuesto."
+              placeholderLabel="Todo alcance"
+              queryPlaceholder="Buscar alcance..."
               value={budgetFilters.scope}
-            >
-              {scopeFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => updateBudgetFilter("status", event.target.value as StatusFilter)}
+            />
+            <BudgetPicker
+              emptyMessage="No encontramos estados con ese filtro."
+              onChange={(value) => updateBudgetFilter("status", value as StatusFilter)}
+              options={budgetStatusFilterOptions}
+              placeholderDescription="Muestra cualquier estado del presupuesto."
+              placeholderLabel="Todo"
+              queryPlaceholder="Buscar estado..."
               value={budgetFilters.status}
-            >
-              {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
             <Button
               className="h-16 px-6"
               onClick={() => updateBudgetFilter("currentOnly", !budgetFilters.currentOnly)}
@@ -2419,17 +2394,15 @@ export function BudgetsPage() {
                     />
                   </th>
                   <th className={`px-5 py-3 ${cv("alcance", "hidden sm:table-cell")}`}>
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateBudgetFilter("scope", event.target.value as ScopeFilter)}
+                    <BudgetPicker
+                      emptyMessage="No encontramos alcances con ese filtro."
+                      onChange={(value) => updateBudgetFilter("scope", value as ScopeFilter)}
+                      options={budgetScopeFilterOptions}
+                      placeholderDescription="Muestra cualquier alcance del presupuesto."
+                      placeholderLabel="Todo alcance"
+                      queryPlaceholder="Buscar alcance..."
                       value={budgetFilters.scope}
-                    >
-                      {scopeFilterOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className={`px-5 py-3 ${cv("periodo", "hidden lg:table-cell")}`}>
                     <input
@@ -2468,17 +2441,15 @@ export function BudgetsPage() {
                     />
                   </th>
                   <th className="px-5 py-3">
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateBudgetFilter("status", event.target.value as StatusFilter)}
+                    <BudgetPicker
+                      emptyMessage="No encontramos estados con ese filtro."
+                      onChange={(value) => updateBudgetFilter("status", value as StatusFilter)}
+                      options={budgetStatusFilterOptions}
+                      placeholderDescription="Muestra cualquier estado del presupuesto."
+                      placeholderLabel="Todo"
+                      queryPlaceholder="Buscar estado..."
                       value={budgetFilters.status}
-                    >
-                      {statusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className="px-5 py-3 text-right">
                     {hasActiveFilters ? (

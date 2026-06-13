@@ -42,6 +42,7 @@ import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
@@ -85,6 +86,8 @@ type FeedbackState = {
   title: string;
   description: string;
 };
+
+type CategoryPickerOption = PickerOption;
 
 type CategoryTableFilters = {
   name: string;
@@ -271,7 +274,37 @@ function CategoryEditorDialog({
   const iconDefinition = getIconDefinition(formState.icon);
   const PreviewIcon = iconDefinition.icon;
   const title = formState.name.trim() || "Nueva categoria";
-  const availableParentOptions = categories.filter((category) => category.id !== selectedCategoryId);
+  const availableParentOptions = useMemo(
+    () => categories.filter((category) => category.id !== selectedCategoryId),
+    [categories, selectedCategoryId],
+  );
+  const parentOptions = useMemo<CategoryPickerOption[]>(
+    () => [
+      {
+        value: "",
+        label: "Sin categoria padre",
+        description: "Categoria principal sin dependencia.",
+        leadingLabel: "SP",
+        leadingColor: "#64748B",
+        searchText: "sin categoria padre principal",
+      },
+      ...availableParentOptions.map((category) => {
+        const categoryKind = getKindDefinition(category.kind);
+
+        return {
+          value: String(category.id),
+          label: category.name,
+          description: `${categoryKind.label} · ${
+            category.parentName ? `Depende de ${category.parentName}` : "Categoria principal"
+          }`,
+          leadingLabel: buildCategoryMonogram(category.name),
+          leadingColor: category.color ?? categoryKind.defaultColor,
+          searchText: `${category.name} ${category.parentName ?? ""} ${category.kind}`,
+        };
+      }),
+    ],
+    [availableParentOptions],
+  );
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -553,25 +586,20 @@ function CategoryEditorDialog({
                         Categoria padre
                       </span>
                       <div className="mt-3">
-                        <select
-                          className="field-dark h-14 w-full"
-                          onChange={(event) =>
+                        <SearchablePicker
+                          emptyMessage="No encontramos una categoria padre con ese nombre."
+                          onChange={(value) =>
                             updateFormState(
                               "parentId",
-                              event.target.value ? Number(event.target.value) : null,
+                              value ? Number(value) : null,
                             )
                           }
-                          value={formState.parentId ?? ""}
-                        >
-                          <option className="bg-shell text-ink" value="">
-                            Sin categoria padre
-                          </option>
-                          {availableParentOptions.map((category) => (
-                            <option className="bg-shell text-ink" key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={parentOptions}
+                          placeholderDescription="Elige si esta categoria depende de otra."
+                          placeholderLabel="Sin categoria padre"
+                          queryPlaceholder="Buscar categoria padre..."
+                          value={formState.parentId ? String(formState.parentId) : ""}
+                        />
                       </div>
                     </label>
                   </div>
@@ -766,6 +794,58 @@ export function CategoriesPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
+
+  const categoryKindFilterOptions = useMemo<CategoryPickerOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos",
+        description: "Muestra cualquier tipo de categoria.",
+        leadingLabel: "TO",
+        leadingColor: "#64748B",
+        searchText: "todos tipos categorias",
+      },
+      ...kindOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description,
+        leadingLabel: option.label.slice(0, 2).toUpperCase(),
+        leadingColor: option.defaultColor,
+        searchText: `${option.label} ${option.value}`,
+      })),
+    ],
+    [],
+  );
+
+  const categoryStatusFilterOptions = useMemo<CategoryPickerOption[]>(
+    () => [
+      {
+        value: "active",
+        label: "Activas",
+        description: "Categorias disponibles para usar.",
+        leadingLabel: "AC",
+        leadingColor: "#1B6A58",
+        searchText: "activas active",
+      },
+      {
+        value: "all",
+        label: "Todas",
+        description: "Incluye categorias activas e inactivas.",
+        leadingLabel: "TO",
+        leadingColor: "#64748B",
+        searchText: "todas estados categorias",
+      },
+      {
+        value: "inactive",
+        label: "Inactivas",
+        description: "Categorias conservadas para historial.",
+        leadingLabel: "IN",
+        leadingColor: "#8F3E3E",
+        searchText: "inactivas inactive",
+      },
+    ],
+    [],
+  );
 
   const filteredCategories = useMemo(() => {
     const normalizedName = categoryFilters.name.trim().toLowerCase();
@@ -1398,29 +1478,26 @@ export function CategoriesPage() {
                     />
                   </th>
                   <th className={`px-5 py-3 ${cv("tipo", "hidden sm:table-cell")}`}>
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateCategoryFilter("kind", event.target.value as KindFilter)}
+                    <SearchablePicker
+                      emptyMessage="No encontramos tipos con ese filtro."
+                      onChange={(value) => updateCategoryFilter("kind", value as KindFilter)}
+                      options={categoryKindFilterOptions}
+                      placeholderDescription="Muestra cualquier tipo de categoria."
+                      placeholderLabel="Todos"
+                      queryPlaceholder="Buscar tipo..."
                       value={categoryFilters.kind}
-                    >
-                      <option value="all">Todos</option>
-                      {kindOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className="px-5 py-3">
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateCategoryFilter("status", event.target.value as CategoryStatusFilter)}
+                    <SearchablePicker
+                      emptyMessage="No encontramos estados con ese filtro."
+                      onChange={(value) => updateCategoryFilter("status", value as CategoryStatusFilter)}
+                      options={categoryStatusFilterOptions}
+                      placeholderDescription="Categorias disponibles para usar."
+                      placeholderLabel="Activas"
+                      queryPlaceholder="Buscar estado..."
                       value={categoryFilters.status}
-                    >
-                      <option value="active">Activas</option>
-                      <option value="all">Todas</option>
-                      <option value="inactive">Inactivas</option>
-                    </select>
+                    />
                   </th>
                   <th className={`px-5 py-3 ${cv("padre", "hidden lg:table-cell")}`}>
                     <input

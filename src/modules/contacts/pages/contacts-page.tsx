@@ -23,6 +23,7 @@ import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { SurfaceCard } from "../../../components/ui/surface-card";
@@ -74,6 +75,8 @@ type FeedbackState = {
   title: string;
   description: string;
 };
+
+type ContactPickerOption = PickerOption;
 
 const fieldClassName =
   "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] disabled:cursor-not-allowed disabled:opacity-60";
@@ -145,6 +148,22 @@ function getRoleDefinition(role: CounterpartyRoleType) {
 function buildInitials(name: string) {
   const value = name.trim().split(/\s+/).slice(0, 2).map((chunk) => chunk.slice(0, 1).toUpperCase()).join("");
   return value || "CT";
+}
+
+function getPickerToneColor(tone: (typeof roleOptions)[number]["tone"]) {
+  switch (tone) {
+    case "success":
+      return "#1B6A58";
+    case "info":
+      return "#4566D6";
+    case "warning":
+      return "#B48B34";
+    case "danger":
+      return "#8F3E3E";
+    case "neutral":
+    default:
+      return "#64748B";
+  }
 }
 
 function getLastActivityLabel(value?: string | null) {
@@ -640,6 +659,80 @@ export function ContactsPage() {
     });
   }, [contacts, obligations]);
 
+  const contactTypeFilterOptions = useMemo<ContactPickerOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos los tipos",
+        description: "Incluye personas, empresas, comercios y bancos.",
+        leadingLabel: "TT",
+        leadingColor: "#64748B",
+        searchText: "todos tipos contactos",
+      },
+      ...typeOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description,
+        leadingLabel: buildInitials(option.label),
+        leadingColor: option.color,
+        searchText: `${option.label} ${option.value}`,
+      })),
+    ],
+    [],
+  );
+
+  const contactRoleFilterOptions = useMemo<ContactPickerOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos los roles",
+        description: "Incluye cualquier rol asignado.",
+        leadingLabel: "TR",
+        leadingColor: "#64748B",
+        searchText: "todos roles contactos",
+      },
+      ...roleOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description,
+        leadingLabel: buildInitials(option.label),
+        leadingColor: getPickerToneColor(option.tone),
+        searchText: `${option.label} ${option.value}`,
+      })),
+    ],
+    [],
+  );
+
+  const contactStatusFilterOptions = useMemo<ContactPickerOption[]>(
+    () => [
+      {
+        value: "active",
+        label: "Activos",
+        description: "Contactos disponibles para nuevos registros.",
+        leadingLabel: "AC",
+        leadingColor: "#1B6A58",
+        searchText: "activos active",
+      },
+      {
+        value: "all",
+        label: "Todos los estados",
+        description: "Incluye activos y archivados.",
+        leadingLabel: "TE",
+        leadingColor: "#64748B",
+        searchText: "todos estados",
+      },
+      {
+        value: "archived",
+        label: "Archivados",
+        description: "Contactos conservados para historial.",
+        leadingLabel: "AR",
+        leadingColor: "#B48B34",
+        searchText: "archivados archived",
+      },
+    ],
+    [],
+  );
+
   const hasActiveFilters =
     contactFilters.name.trim() !== "" ||
     contactFilters.type !== "all" ||
@@ -1114,29 +1207,24 @@ export function ContactsPage() {
               type="text"
               value={contactFilters.name}
             />
-            <select
-              className={`${inputClassName} appearance-none`}
-              onChange={(event) => updateContactFilter("role", event.target.value as RoleFilter)}
+            <SearchablePicker
+              emptyMessage="No encontramos roles con ese filtro."
+              onChange={(value) => updateContactFilter("role", value as RoleFilter)}
+              options={contactRoleFilterOptions}
+              placeholderDescription="Incluye cualquier rol asignado."
+              placeholderLabel="Todos los roles"
+              queryPlaceholder="Buscar rol..."
               value={contactFilters.role}
-            >
-              <option value="all">Todos los roles</option>
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className={`${inputClassName} appearance-none`}
-              onChange={(event) =>
-                updateContactFilter("status", event.target.value as ContactStatusFilter)
-              }
+            />
+            <SearchablePicker
+              emptyMessage="No encontramos estados con ese filtro."
+              onChange={(value) => updateContactFilter("status", value as ContactStatusFilter)}
+              options={contactStatusFilterOptions}
+              placeholderDescription="Incluye activos y archivados."
+              placeholderLabel="Todos los estados"
+              queryPlaceholder="Buscar estado..."
               value={contactFilters.status}
-            >
-              <option value="all">Todos los estados</option>
-              <option value="active">Solo activos</option>
-              <option value="archived">Solo archivados</option>
-            </select>
+            />
             <Button
               className="h-14 px-6"
               onClick={clearContactFilters}
@@ -1229,37 +1317,28 @@ export function ContactsPage() {
                     />
                   </th>
                   <th className={`px-5 py-3 ${cv("tipo", "hidden sm:table-cell")}`}>
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) =>
-                        updateContactFilter(
-                          "type",
-                          event.target.value as ContactTableFilters["type"],
-                        )
+                    <SearchablePicker
+                      emptyMessage="No encontramos tipos con ese filtro."
+                      onChange={(value) =>
+                        updateContactFilter("type", value as ContactTableFilters["type"])
                       }
+                      options={contactTypeFilterOptions}
+                      placeholderDescription="Incluye personas, empresas, comercios y bancos."
+                      placeholderLabel="Todos los tipos"
+                      queryPlaceholder="Buscar tipo..."
                       value={contactFilters.type}
-                    >
-                      <option value="all">Todos</option>
-                      {typeOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className={`px-5 py-3 ${cv("roles", "hidden lg:table-cell")}`}>
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateContactFilter("role", event.target.value as RoleFilter)}
+                    <SearchablePicker
+                      emptyMessage="No encontramos roles con ese filtro."
+                      onChange={(value) => updateContactFilter("role", value as RoleFilter)}
+                      options={contactRoleFilterOptions}
+                      placeholderDescription="Incluye cualquier rol asignado."
+                      placeholderLabel="Todos los roles"
+                      queryPlaceholder="Buscar rol..."
                       value={contactFilters.role}
-                    >
-                      <option value="all">Todos</option>
-                      {roleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className={`px-5 py-3 ${cv("por_cobrar", "hidden md:table-cell")}`}>
                     <input
@@ -1280,17 +1359,15 @@ export function ContactsPage() {
                     />
                   </th>
                   <th className="px-5 py-3">
-                    <select
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) =>
-                        updateContactFilter("status", event.target.value as ContactStatusFilter)
-                      }
+                    <SearchablePicker
+                      emptyMessage="No encontramos estados con ese filtro."
+                      onChange={(value) => updateContactFilter("status", value as ContactStatusFilter)}
+                      options={contactStatusFilterOptions}
+                      placeholderDescription="Contactos disponibles para nuevos registros."
+                      placeholderLabel="Activos"
+                      queryPlaceholder="Buscar estado..."
                       value={contactFilters.status}
-                    >
-                      <option value="all">Todos</option>
-                      <option value="active">Activos</option>
-                      <option value="archived">Archivados</option>
-                    </select>
+                    />
                   </th>
                   <th className="px-5 py-3 text-right">
                     {hasActiveFilters ? (

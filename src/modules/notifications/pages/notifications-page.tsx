@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { DataState } from "../../../components/ui/data-state";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
@@ -61,6 +62,15 @@ const notificationColumns: ColumnDef[] = [
 
 const fieldClassName =
   "h-10 w-full rounded-[16px] border border-white/10 bg-[#0d1420]/95 px-3 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
+
+function buildFilterInitials(label: string) {
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word.slice(0, 1).toUpperCase())
+    .join("") || "FI";
+}
 
 function defaultNotificationTableFilters(): NotificationTableFilters {
   return {
@@ -147,6 +157,123 @@ export function NotificationsPage() {
         formatNotificationChannelLabel(left).localeCompare(formatNotificationChannelLabel(right)),
       ),
     [inbox.notifications],
+  );
+  const kindFilterOptions = useMemo<PickerOption[]>(
+    () => [
+      {
+        value: "",
+        label: "Todos los tipos",
+        description: "Muestra cualquier tipo de notificacion.",
+        leadingLabel: "TT",
+        leadingColor: "#64748B",
+        searchText: "todos los tipos notificacion",
+      },
+      ...availableKinds.map((kind) => {
+        const label = formatNotificationKindLabel(kind);
+
+        return {
+          value: kind,
+          label,
+          description: `Filtra por ${label}.`,
+          leadingLabel: buildFilterInitials(label),
+          leadingColor: "#4566D6",
+          searchText: `${label} ${kind}`,
+        };
+      }),
+    ],
+    [availableKinds],
+  );
+  const sourceFilterOptions = useMemo<PickerOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todo",
+        description: "Incluye notificaciones guardadas e inteligentes.",
+        leadingLabel: "TO",
+        leadingColor: "#64748B",
+        searchText: "todo todas origen",
+      },
+      {
+        value: "smart",
+        label: "Inteligente",
+        description: "Alertas calculadas desde tus datos actuales.",
+        leadingLabel: "IN",
+        leadingColor: "#1B6A58",
+      },
+      {
+        value: "database",
+        label: "Guardada",
+        description: "Notificaciones persistidas para tu cuenta.",
+        leadingLabel: "GU",
+        leadingColor: "#4566D6",
+      },
+    ],
+    [],
+  );
+  const channelFilterOptions = useMemo<PickerOption[]>(
+    () => [
+      {
+        value: "",
+        label: "Todos los canales",
+        description: "Muestra cualquier canal de entrega.",
+        leadingLabel: "TC",
+        leadingColor: "#64748B",
+        searchText: "todos los canales canal",
+      },
+      ...availableChannels.map((channel) => {
+        const label = formatNotificationChannelLabel(channel);
+
+        return {
+          value: channel,
+          label,
+          description: `Filtra por canal ${label}.`,
+          leadingLabel: buildFilterInitials(label),
+          leadingColor: "#1B6A58",
+          searchText: `${label} ${channel}`,
+        };
+      }),
+    ],
+    [availableChannels],
+  );
+  const statusFilterOptions = useMemo<PickerOption[]>(
+    () => [
+      {
+        value: "all",
+        label: "Todos los estados",
+        description: "Incluye pendientes, enviadas, leidas y fallidas.",
+        leadingLabel: "TE",
+        leadingColor: "#64748B",
+      },
+      {
+        value: "pending",
+        label: "Pendiente",
+        description: "Aun requiere atencion o envio.",
+        leadingLabel: "PE",
+        leadingColor: "#B48B34",
+      },
+      {
+        value: "sent",
+        label: "Enviada",
+        description: "Ya fue enviada al canal configurado.",
+        leadingLabel: "EN",
+        leadingColor: "#4566D6",
+      },
+      {
+        value: "read",
+        label: "Leida",
+        description: "Ya fue marcada como leida.",
+        leadingLabel: "LE",
+        leadingColor: "#64748B",
+      },
+      {
+        value: "failed",
+        label: "Fallida",
+        description: "No se pudo completar el envio.",
+        leadingLabel: "FA",
+        leadingColor: "#8F3E3E",
+      },
+    ],
+    [],
   );
 
   const filteredNotifications = useMemo(() => {
@@ -600,45 +727,39 @@ export function NotificationsPage() {
                     />
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("tipo", "hidden md:table-cell")}`}>
-                    <select
-                      className={fieldClassName}
-                      onChange={(event) => updateNotificationTableFilter("kind", event.target.value)}
+                    <SearchablePicker
+                      emptyMessage="No encontramos tipos con ese filtro."
+                      onChange={(value) => updateNotificationTableFilter("kind", value)}
+                      options={kindFilterOptions}
+                      placeholderDescription="Muestra cualquier tipo de notificacion."
+                      placeholderLabel="Todos los tipos"
+                      queryPlaceholder="Buscar tipo..."
                       value={tableFilters.kind}
-                    >
-                      <option value="">Todos los tipos</option>
-                      {availableKinds.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {formatNotificationKindLabel(kind)}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("origen", "hidden md:table-cell")}`}>
-                    <select
-                      className={fieldClassName}
-                      onChange={(event) =>
-                        updateNotificationTableFilter("source", event.target.value as NotificationSourceFilter)
+                    <SearchablePicker
+                      emptyMessage="No encontramos origenes con ese filtro."
+                      onChange={(value) =>
+                        updateNotificationTableFilter("source", value as NotificationSourceFilter)
                       }
+                      options={sourceFilterOptions}
+                      placeholderDescription="Incluye notificaciones guardadas e inteligentes."
+                      placeholderLabel="Todo"
+                      queryPlaceholder="Buscar origen..."
                       value={tableFilters.source}
-                    >
-                      <option value="all">Todo</option>
-                      <option value="smart">Inteligente</option>
-                      <option value="database">Guardada</option>
-                    </select>
+                    />
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("canal", "hidden lg:table-cell")}`}>
-                    <select
-                      className={fieldClassName}
-                      onChange={(event) => updateNotificationTableFilter("channel", event.target.value)}
+                    <SearchablePicker
+                      emptyMessage="No encontramos canales con ese filtro."
+                      onChange={(value) => updateNotificationTableFilter("channel", value)}
+                      options={channelFilterOptions}
+                      placeholderDescription="Muestra cualquier canal de entrega."
+                      placeholderLabel="Todos los canales"
+                      queryPlaceholder="Buscar canal..."
                       value={tableFilters.channel}
-                    >
-                      <option value="">Todos los canales</option>
-                      {availableChannels.map((channel) => (
-                        <option key={channel} value={channel}>
-                          {formatNotificationChannelLabel(channel)}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("programada", "hidden xl:table-cell")}`}>
                     <div className="grid gap-2">
@@ -663,19 +784,17 @@ export function NotificationsPage() {
                     </div>
                   </th>
                   <th className={`px-4 py-3 align-top ${cv("estado", "hidden sm:table-cell")}`}>
-                    <select
-                      className={fieldClassName}
-                      onChange={(event) =>
-                        updateNotificationTableFilter("status", event.target.value as NotificationStatusFilter)
+                    <SearchablePicker
+                      emptyMessage="No encontramos estados con ese filtro."
+                      onChange={(value) =>
+                        updateNotificationTableFilter("status", value as NotificationStatusFilter)
                       }
+                      options={statusFilterOptions}
+                      placeholderDescription="Incluye pendientes, enviadas, leidas y fallidas."
+                      placeholderLabel="Todos los estados"
+                      queryPlaceholder="Buscar estado..."
                       value={tableFilters.status}
-                    >
-                      <option value="all">Todos los estados</option>
-                      <option value="pending">Pendiente</option>
-                      <option value="sent">Enviada</option>
-                      <option value="read">Leida</option>
-                      <option value="failed">Fallida</option>
-                    </select>
+                    />
                   </th>
                   <th className="px-4 py-3 text-right align-top">
                     {hasTableFilters ? (

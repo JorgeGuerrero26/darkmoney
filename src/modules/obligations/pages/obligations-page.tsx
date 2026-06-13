@@ -2,8 +2,6 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   BarChart3,
-  Check,
-  ChevronDown,
   CircleDollarSign,
   Download,
   Eye,
@@ -27,7 +25,6 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
@@ -37,12 +34,12 @@ import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { PageHeader } from "../../../components/ui/page-header";
 import { ProgressBar } from "../../../components/ui/progress-bar";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { TruncatedDescription } from "../../../components/ui/truncated-description";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
@@ -151,15 +148,6 @@ type ObligationTableFilters = {
   status: StatusFilterValue;
   principal: string;
   pending: string;
-};
-
-type PickerOption = {
-  value: string;
-  label: string;
-  description: string;
-  leadingLabel: string;
-  leadingColor?: string;
-  searchText?: string;
 };
 
 type PickerProps = {
@@ -883,131 +871,17 @@ function Picker({
   queryPlaceholder,
   value,
 }: PickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value],
-  );
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return options;
-    }
-
-    return options.filter((option) =>
-      (option.searchText ?? `${option.label} ${option.description} ${option.leadingLabel}`)
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [options, query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
   return (
-    <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={`${fieldClassName} flex h-16 items-center justify-between gap-3 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-        disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span
-            className="flex h-10 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-              color: selectedOption?.leadingColor ? "#fff" : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <TruncatedDescription
-              className="mt-1 text-xs text-storm"
-              text={selectedOption ? selectedOption.description : placeholderDescription}
-            />
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className="w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={queryPlaceholder}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const isSelected = option.value === value;
-
-                return (
-                  <button
-                    className="flex w-full items-center justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-                        style={{
-                          backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
-                          borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
-                          color: option.leadingColor ? "#fff" : undefined,
-                        }}
-                      >
-                        {option.leadingLabel}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium text-ink">
-                          {option.label}
-                        </span>
-                        <TruncatedDescription
-                          className="mt-1 text-xs text-storm"
-                          text={option.description}
-                        />
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div className="rounded-[22px] border border-white/8 bg-[#0d1623] px-4 py-5 text-sm text-storm">
-                {emptyMessage}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <SearchablePicker
+      disabled={disabled}
+      emptyMessage={emptyMessage}
+      onChange={onChange}
+      options={options}
+      placeholderDescription={placeholderDescription}
+      placeholderLabel={placeholderLabel}
+      queryPlaceholder={queryPlaceholder}
+      value={value}
+    />
   );
 }
 
