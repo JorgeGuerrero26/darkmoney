@@ -808,7 +808,7 @@ function AppShellContent() {
       <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:h-full lg:min-h-0 lg:gap-5 lg:px-4 lg:py-4">
         <aside
           aria-label="Menú principal"
-          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/10 bg-shell/95 px-5 py-5 text-ink shadow-haze backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
+          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/[0.08] bg-canvas/80 px-5 py-5 text-ink backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
             isSidebarCollapsed ? "lg:w-[132px] lg:px-4" : "lg:w-[296px] lg:px-5"
@@ -885,7 +885,7 @@ function AppShellContent() {
               }`}
             >
             <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`} data-tour="workspace-picker">
-              <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.24em] text-storm/55">
+              <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.22em] text-storm/55">
                 Workspace
               </p>
               <WorkspacePicker
@@ -1006,7 +1006,7 @@ function AppShellContent() {
                         type="button"
                       >
                         <span
-                          className={`text-[0.6rem] font-semibold uppercase tracking-[0.24em] transition ${
+                          className={`text-[0.6rem] font-semibold uppercase tracking-[0.22em] transition ${
                             isGroupActive || isOpen ? "text-storm/80" : "text-storm/50"
                           }`}
                         >
@@ -1157,7 +1157,7 @@ function AppShellContent() {
                 size="regular"
                 title={currentUserName}
               />
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-storm/70">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-storm/70">
                 perfil
               </p>
               <button
@@ -1174,7 +1174,7 @@ function AppShellContent() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1" id="main-content" tabIndex={-1}>
-          <header aria-label="Encabezado del workspace" className="glass-panel-strong rounded-[30px] px-4 py-3.5 sm:px-5">
+          <header aria-label="Encabezado del workspace" className="glass-panel rounded-[24px] px-4 py-3.5 sm:px-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -1187,7 +1187,7 @@ function AppShellContent() {
                 </button>
 
                 <div className="min-w-0">
-                  <p className="text-[0.62rem] uppercase tracking-[0.26em] text-storm/70">
+                  <p className="text-[0.62rem] uppercase tracking-[0.22em] text-storm/70">
                     Workspace activo
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2.5">
@@ -1277,7 +1277,7 @@ function AppShellContent() {
           </header>
 
           {shouldShowProBanner ? (
-            <section className="animate-rise-in flex flex-wrap items-center gap-3 rounded-2xl border border-pine/15 bg-[linear-gradient(135deg,rgba(10,18,30,0.96),rgba(16,46,40,0.94))] px-4 py-2.5">
+            <section className="animate-rise-in flex flex-wrap items-center gap-3 rounded-2xl border border-pine/20 bg-pine/[0.06] px-4 py-2.5">
               <Sparkles className="h-4 w-4 shrink-0 text-pine" />
               <p className="min-w-0 flex-1 text-sm text-storm">
                 <span className="font-semibold text-ink">{proBannerContent.title}.</span>{" "}
