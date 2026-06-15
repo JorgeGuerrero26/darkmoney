@@ -389,14 +389,14 @@ export function MovementEditorDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
+      className="animate-fade-in fixed inset-0 z-40 isolate bg-void/70 backdrop-blur-sm"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="glass-panel-strong animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[28px] [transform:translateZ(0)]"
+          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -950,7 +950,7 @@ export function MovementEditorDialog({
               </div>
               </div>
 
-              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[28px] border-t border-white/10 bg-canvas/90 px-4 py-5 sm:px-6 backdrop-blur-md">
+              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[28px] border-t border-white/10 bg-shell/95 px-4 py-5 sm:px-6 backdrop-blur-md">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <p className="max-w-xl text-sm leading-7 text-storm">
                   {isCreateMode
