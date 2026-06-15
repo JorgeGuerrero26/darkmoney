@@ -1,4 +1,4 @@
-import { Archive, Save, Trash2, WalletCards } from "lucide-react";
+import { Archive, Check, Save, Trash2, WalletCards } from "lucide-react";
 import type { FormEvent } from "react";
 import { useMemo } from "react";
 
@@ -251,13 +251,21 @@ export function AccountEditorDialog({
                 </div>
               </FormField>
 
-              <label className="flex min-h-14 items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                <input
-                  checked={formState.includeInNetWorth}
-                  className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded accent-pine"
-                  onChange={(event) => onFieldChange("includeInNetWorth", event.target.checked)}
-                  type="checkbox"
-                />
+              <label className="flex min-h-14 cursor-pointer items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/16">
+                <span className="relative mt-0.5 inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                  <input
+                    checked={formState.includeInNetWorth}
+                    className="peer sr-only"
+                    onChange={(event) => onFieldChange("includeInNetWorth", event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border border-white/20 bg-white/[0.04] text-transparent transition duration-150 peer-checked:border-pine peer-checked:bg-pine peer-checked:text-void peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                </span>
                 <span>
                   <span className="block text-sm font-semibold text-ink">
                     Incluir en patrimonio

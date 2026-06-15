@@ -1,3 +1,4 @@
+import { Check, Minus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 // Module-level timestamp — survives React re-renders caused by state changes
@@ -92,15 +93,33 @@ export function SelectionCheckbox({
     if (ref.current) ref.current.indeterminate = indeterminate;
   }, [indeterminate]);
 
+  const active = checked || indeterminate;
+
   return (
-    <input
-      aria-label={ariaLabel ?? "Seleccionar"}
-      checked={checked}
-      className="h-4 w-4 cursor-pointer rounded accent-pine"
-      onChange={onChange}
-      ref={ref}
-      type="checkbox"
-    />
+    <label className="relative inline-flex h-[18px] w-[18px] cursor-pointer items-center justify-center">
+      <input
+        aria-label={ariaLabel ?? "Seleccionar"}
+        checked={checked}
+        className="peer sr-only"
+        onChange={onChange}
+        ref={ref}
+        type="checkbox"
+      />
+      <span
+        aria-hidden="true"
+        className={`flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border transition duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-canvas ${
+          active
+            ? "border-pine bg-pine text-void"
+            : "border-white/20 bg-white/[0.04] text-transparent hover:border-white/35"
+        }`}
+      >
+        {indeterminate ? (
+          <Minus className="h-3 w-3" strokeWidth={3} />
+        ) : (
+          <Check className="h-3 w-3" strokeWidth={3} />
+        )}
+      </span>
+    </label>
   );
 }
 
