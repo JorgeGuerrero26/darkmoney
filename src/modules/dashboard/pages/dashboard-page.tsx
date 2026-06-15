@@ -4257,32 +4257,42 @@ export function DashboardPage() {
                         {obligationAgingBuckets.map((bucket) => {
                           const isBucketActive = activeObligationStatusFilter === bucket.key;
                           return (
-                          <button
-                            className={`relative rounded-[22px] border p-4 text-left transition ${
-                              isBucketActive
-                                ? "border-gold/40 bg-gold/10"
-                                : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
-                            }`}
-                            key={bucket.key}
-                            onClick={() =>
-                              setActiveObligationStatusFilter(
-                                activeObligationStatusFilter === bucket.key ? null : bucket.key,
-                              )
-                            }
-                            type="button"
-                          >
-                            <div className="absolute right-3 top-3 z-[1]">
-                              <DashboardHelpTrigger metricId={`obligation_bucket_${bucket.key}`} />
+                            <div
+                              aria-pressed={isBucketActive}
+                              className={`relative cursor-pointer rounded-[22px] border p-4 text-left transition ${
+                                isBucketActive
+                                  ? "border-gold/40 bg-gold/10"
+                                  : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                              }`}
+                              key={bucket.key}
+                              onClick={() =>
+                                setActiveObligationStatusFilter(
+                                  activeObligationStatusFilter === bucket.key ? null : bucket.key,
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setActiveObligationStatusFilter(
+                                    activeObligationStatusFilter === bucket.key ? null : bucket.key,
+                                  );
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                            >
+                              <div className="absolute right-3 top-3 z-[1]">
+                                <DashboardHelpTrigger metricId={`obligation_bucket_${bucket.key}`} />
+                              </div>
+                              <div className="flex items-start justify-between gap-3 pr-10">
+                                <p className="text-sm font-semibold text-ink">{bucket.label}</p>
+                                <StatusBadge status={`${bucket.count}`} tone={bucket.tone} />
+                              </div>
+                              <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                                {formatCurrency(bucket.amount, displayCurrencyCode)}
+                              </p>
                             </div>
-                            <div className="flex items-start justify-between gap-3 pr-10">
-                              <p className="text-sm font-semibold text-ink">{bucket.label}</p>
-                              <StatusBadge status={`${bucket.count}`} tone={bucket.tone} />
-                            </div>
-                            <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                              {formatCurrency(bucket.amount, displayCurrencyCode)}
-                            </p>
-                          </button>
-                        );
+                          );
                         })}
                       </div>
                     </div>
@@ -5016,4 +5026,3 @@ export function DashboardPage() {
     </DashboardHelpProvider>
   );
 }
-
