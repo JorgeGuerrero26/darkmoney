@@ -46,24 +46,8 @@ export type MovementFieldProps = {
   children: ReactNode;
 };
 
-export type PickerOption = {
-  value: string;
-  label: string;
-  description: string;
-  leadingLabel: string;
-  leadingColor?: string;
-  searchText?: string;
-};
-
-export type SearchablePickerProps = {
-  value: string;
-  onChange: (value: string) => void;
-  options: PickerOption[];
-  placeholderLabel: string;
-  placeholderDescription: string;
-  queryPlaceholder: string;
-  emptyMessage: string;
-};
+// Fuente única del tipo de opción: el SearchablePicker compartido.
+export type { PickerOption } from "../../../components/ui/searchable-picker";
 
 export type MovementTableFilters = {
   description: string;

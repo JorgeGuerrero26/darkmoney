@@ -1,11 +1,9 @@
 ﻿import {
   BriefcaseBusiness,
   CalendarClock,
-  Check,
   ChevronDown,
   LoaderCircle,
   ReceiptText,
-  Search,
   Trash2,
   Wallet,
   X,
@@ -17,12 +15,11 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { TruncatedDescription } from "../../../components/ui/truncated-description";
+import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -56,7 +53,6 @@ import {
 import type {
   MovementFieldProps,
   MovementFormState,
-  SearchablePickerProps,
 } from "../lib/movement-form";
 
 const movementFieldClassName =
@@ -68,50 +64,6 @@ const movementEditorPanelClassName =
 const movementFieldLabelClassName =
   "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
 const movementFieldHintClassName = "mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75";
-const movementPickerTriggerClassName = `${movementFieldClassName} flex h-10 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left`;
-const movementPickerSearchInputClassName =
-  "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-
-function getMovementPickerTriggerStyle(isOpen: boolean) {
-  return {
-    borderColor: isOpen ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.08)",
-    background: isOpen
-      ? "linear-gradient(180deg, rgba(15, 22, 34, 0.98), rgba(10, 16, 27, 0.98))"
-      : "linear-gradient(180deg, rgba(12, 18, 28, 0.96), rgba(9, 14, 22, 0.96))",
-    boxShadow: isOpen
-      ? "0 0 0 4px rgba(107, 228, 197, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
-      : "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
-  };
-}
-
-const movementPickerPanelStyle = {
-  borderColor: "rgba(255, 255, 255, 0.1)",
-  background:
-    "linear-gradient(180deg, rgba(10, 15, 24, 0.98) 0%, rgba(8, 12, 20, 0.98) 100%)",
-};
-
-const movementPickerSearchInputStyle = {
-  borderColor: "rgba(255, 255, 255, 0.08)",
-  background:
-    "linear-gradient(180deg, rgba(17, 25, 39, 0.95), rgba(13, 20, 31, 0.95))",
-};
-
-function getMovementPickerOptionStyle(isSelected: boolean) {
-  return {
-    borderColor: isSelected ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.04)",
-    background: isSelected
-      ? "linear-gradient(180deg, rgba(18, 31, 41, 0.98), rgba(12, 22, 33, 0.98))"
-      : "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
-    boxShadow: isSelected ? "0 12px 30px rgba(0, 0, 0, 0.18)" : "none",
-  };
-}
-
-const movementPickerEmptyStateStyle = {
-  borderColor: "rgba(255, 255, 255, 0.08)",
-  background:
-    "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
-};
-
 function MovementField({ children, errorKey, hint, invalidFields, label }: MovementFieldProps) {
   const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
@@ -145,151 +97,6 @@ function EditorTextarea({ className = "", ...props }: TextareaHTMLAttributes<HTM
   );
 }
 
-function SearchablePicker({
-  emptyMessage,
-  onChange,
-  options,
-  placeholderDescription,
-  placeholderLabel,
-  queryPlaceholder,
-  value,
-}: SearchablePickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value) ?? null,
-    [options, value],
-  );
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return options;
-    }
-
-    return options.filter((option) => {
-      const searchableValue = (
-        option.searchText ?? `${option.label} ${option.description} ${option.leadingLabel}`
-      ).toLowerCase();
-      return searchableValue.includes(normalizedQuery);
-    });
-  }, [options, query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative min-w-0 ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={movementPickerTriggerClassName}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        style={getMovementPickerTriggerStyle(isOpen)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span
-            className="flex h-7 min-w-[2.25rem] sm:h-10 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              color: selectedOption?.leadingColor ? "#ffffff" : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-xs sm:text-sm font-semibold text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <TruncatedDescription
-              className="mt-0.5 sm:mt-1 text-[0.65rem] sm:text-xs text-storm"
-              text={selectedOption ? selectedOption.description : placeholderDescription}
-            />
-          </span>
-        </span>
-        <ChevronDown className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
-          style={movementPickerPanelStyle}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className={movementPickerSearchInputClassName}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={queryPlaceholder}
-              style={movementPickerSearchInputStyle}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredOptions.length ? (
-              filteredOptions.map((option) => {
-                const isSelected = option.value === value;
-
-                return (
-                  <button
-                    className={`flex w-full items-center justify-between gap-2 sm:gap-3 rounded-[18px] sm:rounded-[24px] border px-3 sm:px-4 py-2.5 sm:py-3.5 text-left transition duration-200 ${
-                      isSelected ? "text-ink" : "text-storm hover:text-ink"
-                    }`}
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    style={getMovementPickerOptionStyle(isSelected)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-2 sm:gap-3">
-                      <span
-                        className="flex h-8 min-w-[2.25rem] sm:h-11 sm:min-w-[3rem] shrink-0 items-center justify-center rounded-[12px] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink"
-                        style={{
-                          backgroundColor: option.leadingColor ? `${option.leadingColor}22` : undefined,
-                          color: option.leadingColor ? "#ffffff" : undefined,
-                          borderColor: option.leadingColor ? `${option.leadingColor}55` : undefined,
-                        }}
-                      >
-                        {option.leadingLabel}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-ink">{option.label}</span>
-                        <TruncatedDescription
-                          className="mt-1 text-xs text-storm"
-                          text={option.description}
-                        />
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div
-                className="rounded-[22px] border px-4 py-5 text-sm text-storm"
-                style={movementPickerEmptyStateStyle}
-              >
-                {emptyMessage}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export type MovementEditorDialogProps = {
   accounts: AccountSummary[];
