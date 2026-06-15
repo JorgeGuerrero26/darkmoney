@@ -135,6 +135,58 @@ import type {
   DashboardWidgetId,
 } from "../lib/dashboard-types";
 
+/**
+ * Encabezado de sección del dashboard, estilo landing (minimalista): eyebrow pine
+ * sobrio + título + descripción, sin círculo numerado. Si recibe `onToggle` se
+ * comporta como acordeón (chip Ver/Ocultar).
+ */
+function SectionLead({
+  title,
+  hint,
+  isOpen,
+  onToggle,
+  controls,
+}: {
+  title: string;
+  hint?: string;
+  isOpen?: boolean;
+  onToggle?: () => void;
+  controls?: string;
+}) {
+  const body = (
+    <>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">{title}</p>
+        {hint ? <p className="mt-1.5 text-xs leading-5 text-storm/60">{hint}</p> : null}
+      </div>
+      {onToggle ? (
+        <span className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-ink/80">
+          {isOpen ? "Ocultar" : "Ver"}
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (onToggle) {
+    return (
+      <button
+        aria-controls={controls}
+        aria-expanded={isOpen}
+        className="mb-2 mt-6 flex w-full items-start gap-3 border-t border-white/[0.06] pt-6 text-left transition hover:opacity-90"
+        onClick={onToggle}
+        type="button"
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mb-2 mt-6 flex items-start gap-3 border-t border-white/[0.06] pt-6">{body}</div>
+  );
+}
+
 export function DashboardPage() {
   const { profile, user } = useAuth();
   const { canAccessProFeatures, isAdminOverride, isLoadingEntitlement } = useProFeatureAccess();
@@ -1874,15 +1926,10 @@ export function DashboardPage() {
       </SurfaceCard>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          01
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Atención inmediata</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Tareas pendientes, alertas y señales que requieren acción antes de analizar el resto.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Tareas pendientes, alertas y señales que requieren acción antes de analizar el resto."
+        title="Atención inmediata"
+      />
       {showReviewInboxSection ? (
         <SurfaceCard
           action={
@@ -2004,24 +2051,19 @@ export function DashboardPage() {
         </SurfaceCard>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          02
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Tu posición financiera</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Balances, flujo del período y salud global. El punto de partida para entender cómo estás parado hoy.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Balances, flujo del período y salud global. El punto de partida para entender cómo estás parado hoy."
+        title="Tu posición financiera"
+      />
       {isWidgetVisible("overview_kpis") ? (
       <section className="grid gap-4">
         {/* ── Hero KPIs: ¿cómo voy este mes? (banda ancha) ─────────── */}
         <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]" data-tour="dashboard-hero">
           <DashboardKpiHelpWrap
-            className="relative overflow-hidden rounded-[28px] border border-pine/20 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.12),transparent_55%)] p-6"
+            className="glass-panel-soft relative overflow-hidden rounded-[24px] p-6"
             metricId="kpi_total_money"
           >
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-pine">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">
               Patrimonio
             </p>
             <p className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
@@ -2033,21 +2075,17 @@ export function DashboardPage() {
             </p>
           </DashboardKpiHelpWrap>
           <DashboardKpiHelpWrap
-            className={`relative overflow-hidden rounded-[28px] border p-6 ${
-              parityCurrentTotals.net >= 0
-                ? "border-gold/20 bg-[radial-gradient(circle_at_top_left,rgba(215,190,123,0.1),transparent_55%)]"
-                : "border-rosewood/20 bg-[radial-gradient(circle_at_top_left,rgba(255,143,158,0.08),transparent_55%)]"
-            }`}
+            className="glass-panel-soft relative overflow-hidden rounded-[24px] p-6"
             metricId="kpi_period_savings"
           >
-            <p
-              className={`text-[0.65rem] font-semibold uppercase tracking-[0.22em] ${
-                parityCurrentTotals.net >= 0 ? "text-gold" : "text-rosewood"
-              }`}
-            >
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
               Ahorro del período
             </p>
-            <p className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
+            <p
+              className={`mt-3 font-display text-4xl font-semibold tracking-[-0.03em] sm:text-5xl ${
+                parityCurrentTotals.net >= 0 ? "text-ink" : "text-rosewood"
+              }`}
+            >
               {formatCurrency(parityCurrentTotals.net, displayCurrencyCode)}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-storm">
@@ -2059,17 +2097,9 @@ export function DashboardPage() {
             </div>
           </DashboardKpiHelpWrap>
           {/* Salud financiera como tercer KPI del hero (score 0-100) */}
-          <div
-            className={`relative overflow-hidden rounded-[28px] border p-6 ${
-              healthScore.tone === "success"
-                ? "border-pine/20 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.1),transparent_55%)]"
-                : healthScore.tone === "warning"
-                  ? "border-gold/20 bg-[radial-gradient(circle_at_top_left,rgba(215,190,123,0.1),transparent_55%)]"
-                  : "border-rosewood/20 bg-[radial-gradient(circle_at_top_left,rgba(255,143,158,0.08),transparent_55%)]"
-            }`}
-          >
+          <div className="glass-panel-soft relative overflow-hidden rounded-[24px] p-6">
             <div className="flex items-center gap-2">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-ink/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
                 Salud financiera
               </p>
               <DashboardHelpTrigger className="h-5 w-5" metricId="kpi_savings_rate" />
@@ -2106,16 +2136,8 @@ export function DashboardPage() {
         />
 
         {/* ── Salud financiera: detalle de los 4 indicadores ────────── */}
-        <div
-          className={`rounded-[24px] border p-5 ${
-            healthScore.tone === "success"
-              ? "border-pine/25 bg-pine/8"
-              : healthScore.tone === "warning"
-                ? "border-gold/25 bg-gold/8"
-                : "border-rosewood/25 bg-rosewood/8"
-          }`}
-        >
-          <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-ink/70">
+        <div className="glass-panel-soft rounded-[24px] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
             Qué compone tu salud
           </p>
 
@@ -2163,12 +2185,12 @@ export function DashboardPage() {
             <div className="absolute right-4 top-4 z-[1]">
               <DashboardHelpTrigger metricId="adv_liquidity" />
             </div>
-            <p className="pr-10 text-[0.6rem] font-bold uppercase tracking-[0.24em] text-pine">Liquidez</p>
+            <p className="pr-10 text-xs font-semibold uppercase tracking-[0.22em] text-pine">Liquidez</p>
             <p className="mt-1 text-[0.65rem] text-storm/50">
               Totales al día, desglose por tipo de cuenta y una estimación de cómo podría quedar la caja en ~30 días.
             </p>
             <div className="mt-4 grid gap-3">
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_total_money">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_total_money">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Dinero total</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
@@ -2202,7 +2224,7 @@ export function DashboardPage() {
                   </p>
                 </DashboardKpiHelpWrap>
               </div>
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="adv_projected_cash_30">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_projected_cash_30">
                 <p className="text-[0.58rem] uppercase tracking-[0.16em] text-pine">Caja estimada a 30 días</p>
                 <p className="mt-1.5 font-display text-base font-semibold text-ink">
                   {formatCurrency(projectedLiquidBalance30Days, displayCurrencyCode)}
@@ -2216,12 +2238,12 @@ export function DashboardPage() {
 
           {/* FLUJO DEL PERÍODO */}
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-gold">Flujo del período</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold">Flujo del período</p>
             <p className="mt-1 text-[0.65rem] text-storm/50">
               Ingresos, gastos y ahorro neto del corte; abajo, transferencias internas, cartera y recurrentes en resumen.
             </p>
             <div className="mt-4 grid gap-3">
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="kpi_income">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_income">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Ingresos</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(parityCurrentTotals.income, displayCurrencyCode)}
@@ -2230,7 +2252,7 @@ export function DashboardPage() {
                   {formatVsPreviousPeriodLabel(parityCurrentTotals.income, parityPreviousTotals.income, comparison.previous.label)}
                 </p>
               </DashboardKpiHelpWrap>
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/10 p-3" metricId="kpi_expense">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_expense">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-ember">Gastos</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(parityCurrentTotals.expense, displayCurrencyCode)}
@@ -2240,7 +2262,7 @@ export function DashboardPage() {
                 </p>
               </DashboardKpiHelpWrap>
               <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/10 p-3" metricId="kpi_period_savings">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_period_savings">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Ahorro neto</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
                     {formatCurrency(parityCurrentTotals.net, displayCurrencyCode)}
@@ -2264,7 +2286,7 @@ export function DashboardPage() {
                     {currentPeriodTransfers.length === 1 ? "transferencia" : "transferencias"} en el período
                   </p>
                 </DashboardKpiHelpWrap>
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/8 p-3" metricId="kpi_overdue">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_overdue">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-ember">Vencido</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
                     {formatCurrency(overdueAmount, displayCurrencyCode)}
@@ -2274,7 +2296,7 @@ export function DashboardPage() {
                     {overdueObligations.length === 1 ? "obligación vencida" : "obligaciones vencidas"} con saldo pendiente
                   </p>
                 </DashboardKpiHelpWrap>
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/8 p-3" metricId="kpi_upcoming_payments">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_upcoming_payments">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Pagos próximos</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
                     {formatCurrency(upcomingOutflows, displayCurrencyCode)}
@@ -2290,7 +2312,7 @@ export function DashboardPage() {
                     Costo mensual recurrente aproximado: {formatCurrency(monthlyRecurringCost, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/8 p-3" metricId="kpi_recurring_income">
+                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_recurring_income">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-pine">Ingresos fijos</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">{displayRecurringIncome.filter((r) => r.status === "active").length} activos</p>
                   <p className="mt-1 text-[0.65rem] text-storm/80">
@@ -2303,10 +2325,10 @@ export function DashboardPage() {
 
           {/* PATRIMONIO */}
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-ink/70">Patrimonio</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-ink/70">Patrimonio</p>
             <p className="mt-1 text-[0.65rem] text-storm/50">Valor neto ampliado incluyendo lo que te deben y debes.</p>
             <div className="mt-4 grid gap-3">
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-pine/18 bg-pine/10 p-3" metricId="adv_net_worth">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_net_worth">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-pine">Patrimonio neto</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(expandedNetWorth, displayCurrencyCode)}
@@ -2320,7 +2342,7 @@ export function DashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-storm">{receivableLeaders.length} contactos con saldo pendiente.</p>
               </DashboardKpiHelpWrap>
-              <DashboardKpiHelpWrap className="rounded-[20px] border border-ember/18 bg-ember/10 p-3" metricId="kpi_payable">
+              <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_payable">
                 <p className="text-[0.6rem] uppercase tracking-[0.18em] text-ember">Debes</p>
                 <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {formatCurrency(payableDisplay.amount, payableDisplay.currencyCode)}
@@ -2332,7 +2354,7 @@ export function DashboardPage() {
 
           {/* SALUD */}
           <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-[0.6rem] font-bold uppercase tracking-[0.24em] text-storm">Salud</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm">Salud</p>
             <p className="mt-1 text-[0.65rem] text-storm/50">Métricas de sostenibilidad y riesgo financiero personal.</p>
             <div className="mt-4 grid gap-3">
               <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_savings_capacity">
@@ -2397,7 +2419,7 @@ export function DashboardPage() {
               <div className="absolute right-4 top-4 z-[1]">
                 <DashboardHelpTrigger metricId="dashboard_period_close" />
               </div>
-              <p className="pr-10 text-[0.6rem] font-bold uppercase tracking-[0.24em] text-ink/70">
+              <p className="pr-10 text-xs font-semibold uppercase tracking-[0.22em] text-ink/70">
                 De dónde sale el cierre de mes
               </p>
               <p className="mt-1 text-[0.65rem] text-storm/50">
@@ -2687,15 +2709,10 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          03
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Flujo de dinero</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Cómo entró y salió el dinero en el período. Gráficos diarios y proyección hacia el cierre del mes.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Cómo entró y salió el dinero en el período. Gráficos diarios y proyección hacia el cierre del mes."
+        title="Flujo de dinero"
+      />
       {showSavingsSection ? (
       <section
         className={`grid gap-6 ${
@@ -2883,15 +2900,10 @@ export function DashboardPage() {
       </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          04
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Cuentas y cartera</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Dónde está el dinero ahora y a quiénes estás expuesto por cobrar o pagar.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Dónde está el dinero ahora y a quiénes estás expuesto por cobrar o pagar."
+        title="Cuentas y cartera"
+      />
       {showPortfolioSection ? (
       <section className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]">
         {isWidgetVisible("accounts_breakdown") ? (
@@ -3185,15 +3197,10 @@ export function DashboardPage() {
       </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          05
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Presupuestos activos</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Tus límites de gasto vigentes. Mirá cuánto espacio te queda antes de ver el detalle por categoría.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Tus límites de gasto vigentes. Mirá cuánto espacio te queda antes de ver el detalle por categoría."
+        title="Presupuestos activos"
+      />
       {showBudgetSection ? (
       <section className="grid gap-6 xl:grid-cols-1">
         <SurfaceCard
@@ -3343,15 +3350,10 @@ export function DashboardPage() {
       </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          06
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Categorías de gasto</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Comparativo de en qué gastaste este período vs el anterior. Identificá dónde está la oportunidad de mejora.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Comparativo de en qué gastaste este período vs el anterior. Identificá dónde está la oportunidad de mejora."
+        title="Categorías de gasto"
+      />
       {showSpendingSection ? (
       <section
         className={`grid gap-6 ${
@@ -3575,13 +3577,13 @@ export function DashboardPage() {
                     {selectedMonth.label}
                   </h4>
                   <div className="mt-5 grid gap-3">
-                    <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Entradas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(selectedMonth.income, displayCurrencyCode)}
                       </p>
                     </div>
-                    <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-ember">Salidas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(selectedMonth.expense, displayCurrencyCode)}
@@ -3608,15 +3610,10 @@ export function DashboardPage() {
       </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          07
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Hábitos y próximos compromisos</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Qué días concentrás más gasto, qué vence pronto y los últimos movimientos registrados.</p>
-        </div>
-      </div>
+      <SectionLead
+        hint="Qué días concentrás más gasto, qué vence pronto y los últimos movimientos registrados."
+        title="Hábitos y próximos compromisos"
+      />
       {showTimingSection ? (
       <section
         className={`grid gap-6 ${
@@ -3711,13 +3708,13 @@ export function DashboardPage() {
                     {crossFilteredSelectedWeekday.label}
                   </h4>
                   <div className="mt-5 grid gap-3">
-                    <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-pine">Entradas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(crossFilteredSelectedWeekday.income, displayCurrencyCode)}
                       </p>
                     </div>
-                    <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-ember">Salidas</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(crossFilteredSelectedWeekday.expense, displayCurrencyCode)}
@@ -3846,27 +3843,13 @@ export function DashboardPage() {
       ) : null}
 
       {showProFocusSection ? (
-        <button
-          aria-controls="pro-focus-section"
-          aria-expanded={isProFocusOpen}
-          className="mb-2 mt-4 flex w-full items-start gap-3 border-t border-white/8 pt-6 text-left transition hover:opacity-90"
-          onClick={() => setIsProFocusOpen((open) => !open)}
-          type="button"
-        >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-            08
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Centro de mando</p>
-            <p className="mt-1 text-xs leading-5 text-storm/50">Acciones sugeridas, meta de ahorro del mes, presión de la semana y señales del período (Pro).</p>
-          </div>
-          <span className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-ink/80">
-            {isProFocusOpen ? "Ocultar" : "Ver"}
-            <ChevronRight
-              className={`h-3.5 w-3.5 transition-transform ${isProFocusOpen ? "rotate-90" : ""}`}
-            />
-          </span>
-        </button>
+        <SectionLead
+          controls="pro-focus-section"
+          hint="Acciones sugeridas, meta de ahorro del mes, presión de la semana y señales del período (Pro)."
+          isOpen={isProFocusOpen}
+          onToggle={() => setIsProFocusOpen((open) => !open)}
+          title="Centro de mando"
+        />
       ) : null}
       {showProFocusSection && isProFocusOpen ? (
         <div id="pro-focus-section">
@@ -4187,27 +4170,13 @@ export function DashboardPage() {
       ) : null}
 
       {showAdvancedOpsSection ? (
-        <button
-          aria-controls="advanced-ops-section"
-          aria-expanded={isAdvancedOpsOpen}
-          className="mb-2 mt-4 flex w-full items-start gap-3 border-t border-white/8 pt-6 text-left transition hover:opacity-90"
-          onClick={() => setIsAdvancedOpsOpen((open) => !open)}
-          type="button"
-        >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-            09
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Análisis avanzado</p>
-            <p className="mt-1 text-xs leading-5 text-storm/50">Riesgo de cartera, flujo futuro, recurrentes, aprendizaje automático y contexto del equipo.</p>
-          </div>
-          <span className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-ink/80">
-            {isAdvancedOpsOpen ? "Ocultar" : "Ver"}
-            <ChevronRight
-              className={`h-3.5 w-3.5 transition-transform ${isAdvancedOpsOpen ? "rotate-90" : ""}`}
-            />
-          </span>
-        </button>
+        <SectionLead
+          controls="advanced-ops-section"
+          hint="Riesgo de cartera, flujo futuro, recurrentes, aprendizaje automático y contexto del equipo."
+          isOpen={isAdvancedOpsOpen}
+          onToggle={() => setIsAdvancedOpsOpen((open) => !open)}
+          title="Análisis avanzado"
+        />
       ) : null}
       {showAdvancedOpsSection && isAdvancedOpsOpen ? (
         <div id="advanced-ops-section">
@@ -4371,13 +4340,13 @@ export function DashboardPage() {
                           />
                         </div>
                         <div className="mt-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
-                          <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
+                          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                             <p className="text-xs uppercase tracking-[0.18em] text-pine">Ingresos esperados</p>
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
                               {formatCurrency(window.expectedInflow, displayCurrencyCode)}
                             </p>
                           </div>
-                          <div className="rounded-[20px] border border-ember/18 bg-ember/10 p-4">
+                          <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                             <p className="text-xs uppercase tracking-[0.18em] text-ember">Pagos esperados</p>
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
                               {formatCurrency(window.expectedOutflow, displayCurrencyCode)}

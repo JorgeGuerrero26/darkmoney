@@ -9,10 +9,10 @@ type MetricCardProps = {
 };
 
 const accents = {
-  pine: "from-pine/22 to-pine/5 text-pine",
-  ember: "from-ember/20 to-ember/5 text-ember",
-  gold: "from-gold/20 to-gold/5 text-gold",
-  ink: "from-white/16 to-white/5 text-ink",
+  pine: "border-pine/20 bg-pine/10 text-pine",
+  ember: "border-ember/20 bg-ember/10 text-ember",
+  gold: "border-gold/20 bg-gold/10 text-gold",
+  ink: "border-white/10 bg-white/[0.04] text-ink",
 };
 
 export function MetricCard({
@@ -23,15 +23,15 @@ export function MetricCard({
   value,
 }: MetricCardProps) {
   return (
-    <article className="glass-panel rounded-[28px] p-5">
+    <article className="glass-panel-soft rounded-[24px] p-5 transition duration-300 hover:border-white/15">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.24em] text-storm/90">{label}</p>
+          <p className="text-xs uppercase tracking-[0.22em] text-storm/80">{label}</p>
           <p className="mt-3 min-w-0 break-words font-display text-3xl font-semibold leading-tight text-ink">
             {value}
           </p>
         </div>
-        <div className={`shrink-0 rounded-3xl bg-gradient-to-br p-3 ring-1 ring-white/8 ${accents[accent]}`}>
+        <div className={`inline-flex shrink-0 rounded-[14px] border p-2.5 ${accents[accent]}`}>
           {icon}
         </div>
       </div>
