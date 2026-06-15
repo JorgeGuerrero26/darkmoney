@@ -15,6 +15,7 @@ import { Pagination } from "../../../components/ui/pagination";
 import { DataState } from "../../../components/ui/data-state";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
+import { InfoTip } from "../../../components/ui/info-tip";
 import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
@@ -25,7 +26,7 @@ import { useViewMode, ViewSelector } from "../../../components/ui/view-selector"
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
-import { formatMovementStatusLabel, formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
+import { formatMovementStatusLabel } from "../../../lib/formatting/labels";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
   AttachmentSummary,
@@ -154,17 +155,19 @@ function MovementSummaryChip({
   tone = "neutral",
   value,
 }: MovementSummaryChipProps) {
-  const toneClasses = {
-    neutral: "border-white/10 bg-white/[0.04] text-ink",
-    info: "border-electric/25 bg-electric/10 text-electric",
-    warning: "border-gold/30 bg-gold/10 text-gold",
+  const valueTone = {
+    neutral: "text-ink",
+    info: "text-ember",
+    warning: "text-gold",
   } as const;
 
   return (
-    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
-      <span className="text-sm font-semibold">{value}</span>
-    </div>
+    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
+      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
+      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
+        {value}
+      </p>
+    </article>
   );
 }
 
@@ -502,8 +505,6 @@ export function MovementsPage() {
     (movement) => movement.status === "planned" || movement.status === "pending",
   ).length;
   const latestMovement = snapshot.movements[0] ?? null;
-  const postedIncomeCount = snapshot.movements.filter((movement) => incomeLikeMovementTypes.has(movement.movementType)).length;
-  const postedExpenseCount = snapshot.movements.filter((movement) => expenseLikeMovementTypes.has(movement.movementType)).length;
   const hasAnyMovements = snapshot.movements.length > 0;
   const hasActiveFilters = Boolean(
     tableFilters.description.trim() ||
@@ -902,106 +903,78 @@ export function MovementsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <section className="glass-panel-strong rounded-[32px] p-6">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.28em] text-storm/90">movimientos</p>
-                <h2 className="font-display text-4xl font-semibold text-ink">Libro de movimientos</h2>
-                <p className="max-w-3xl text-sm leading-7 text-storm">
-                  Entra directo a tus registros, revisa el estado de cada movimiento y filtra por columna cuando
-                  necesites encontrar algo puntual. La tabla manda; el resumen solo acompaña.
-                </p>
-              </div>
+        {/* Header compacto (estándar de cuentas) */}
+        <section className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Movimientos</p>
+          <div className="mt-1 flex items-center gap-2.5">
+            <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
+              Libro de movimientos
+            </h2>
+            <InfoTip ariaLabel="Sobre el libro de movimientos">
+              Entra directo a tus registros, revisa el estado de cada movimiento y filtra por columna
+              cuando necesites encontrar algo puntual. La tabla manda; el resumen solo acompaña.
+            </InfoTip>
+          </div>
+          <p className="mt-1 text-xs text-storm">
+            Historial de ingresos, gastos y transferencias del workspace.
+          </p>
+        </section>
 
-              <div className="flex flex-wrap gap-3">
-                <MovementSummaryChip label="movimientos" value={String(snapshot.movements.length)} />
-                <MovementSummaryChip label="aplicados" tone="info" value={String(snapshot.metrics.postedCount)} />
-                {queuedCount > 0 ? (
-                  <MovementSummaryChip label="en cola" tone="warning" value={String(queuedCount)} />
-                ) : null}
-                <MovementSummaryChip label="transferencias" tone="info" value={String(transferCount)} />
-                <MovementSummaryChip label="workspace" tone="info" value={formatWorkspaceKindLabel(snapshot.workspace.kind)} />
-                {snapshotQuery.isFetching ? <MovementSummaryChip label="estado" value="Actualizando" /> : null}
-              </div>
+        {/* Métricas compactas */}
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+          <MovementSummaryChip label="movimientos" value={String(snapshot.movements.length)} />
+          <MovementSummaryChip label="aplicados" tone="info" value={String(snapshot.metrics.postedCount)} />
+          {queuedCount > 0 ? (
+            <MovementSummaryChip label="en cola" tone="warning" value={String(queuedCount)} />
+          ) : null}
+          <MovementSummaryChip label="transferencias" tone="info" value={String(transferCount)} />
+          {hasAnyMovements ? (
+            <MovementSummaryChip label="ult. registro" value={latestMovement ? formatDateTime(latestMovement.occurredAt) : "—"} />
+          ) : null}
+        </div>
+
+        {/* Toolbar sticky (estándar de cuentas) */}
+        <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            {viewMode === "table" ? (
+              <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
+            ) : null}
+            <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+                disabled={snapshotQuery.isFetching}
+                onClick={() => snapshotQuery.refetch()}
+                title="Actualizar"
+                type="button"
+              >
+                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+              </button>
+              {hasActiveFilters ? (
+                <Button onClick={clearTableFilters} variant="ghost">
+                  <X className="mr-2 h-4 w-4" />
+                  Limpiar
+                </Button>
+              ) : null}
+              <Button
+                disabled={!filteredMovements.length}
+                onClick={() =>
+                  downloadMovementsCSV(
+                    filteredMovements,
+                    `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
+                  )
+                }
+                variant="ghost"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar
+              </Button>
+              <Button data-tour="create-movement" onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo movimiento
+              </Button>
             </div>
-
-            <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
-                  <p className="text-sm leading-7 text-storm">
-                    Crea movimientos, cambia de vista y exporta. En tabla, los filtros viven dentro de cada columna.
-                  </p>
-                </div>
-                <button
-                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                  disabled={snapshotQuery.isFetching}
-                  onClick={() => snapshotQuery.refetch()}
-                  title="Actualizar"
-                  type="button"
-                >
-                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-                </button>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button data-tour="create-movement" onClick={openCreateEditor}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nuevo movimiento
-                </Button>
-                <Button
-                  disabled={!filteredMovements.length}
-                  onClick={() =>
-                    downloadMovementsCSV(
-                      filteredMovements,
-                      `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
-                    )
-                  }
-                  variant="ghost"
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-                {hasActiveFilters ? (
-                  <Button onClick={clearTableFilters} variant="ghost">
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar filtros
-                  </Button>
-                ) : null}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-                {viewMode === "table" ? (
-                  <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
-                ) : null}
-                <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
-              </div>
-
-              {hasAnyMovements ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Salidas</p>
-                    <p className="mt-2 text-sm font-semibold text-ink">{postedExpenseCount}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Entradas</p>
-                    <p className="mt-2 text-sm font-semibold text-ink">{postedIncomeCount}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultimo registro</p>
-                    <p className="mt-2 text-sm font-semibold text-ink">
-                      {latestMovement ? formatDateTime(latestMovement.occurredAt) : "Sin actividad"}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm leading-7 text-storm">
-                  Tu primera fila activara el historial, las vistas y los filtros por columna.
-                </p>
-              )}
-            </aside>
           </div>
         </section>
 
