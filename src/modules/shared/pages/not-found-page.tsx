@@ -9,13 +9,13 @@ export function NotFoundPage() {
         <p className="text-xs uppercase tracking-[0.28em] text-storm">404</p>
         <h1 className="mt-4 font-display text-5xl font-semibold">Página no encontrada</h1>
         <p className="mt-4 text-sm leading-7 text-storm">
-          La página que buscas no existe o fue movida. Vuelve al dashboard para continuar.
+          La página que buscas no existe o fue movida. Vuelve al inicio para continuar.
         </p>
         <Link
           className={getButtonClassName({ className: "mt-6" })}
-          to="/app"
+          to="/"
         >
-          Volver al dashboard
+          Volver al inicio
         </Link>
       </div>
     </main>
