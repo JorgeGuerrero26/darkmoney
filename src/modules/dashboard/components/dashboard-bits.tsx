@@ -7,16 +7,16 @@ import { formatCurrency } from "../../../lib/formatting/money";
 export function DashboardLoadingSkeleton() {
   return (
     <>
-      <section className="grid gap-4 xl:grid-cols-6">
+      <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
         {Array.from({ length: 6 }).map((_, index) => (
           <div className="shimmer-surface h-[164px]" key={`dashboard-metric-${index}`} />
         ))}
       </section>
-      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid gap-6 min-[1700px]:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
         <div className="shimmer-surface h-[440px]" />
         <div className="shimmer-surface h-[440px]" />
       </section>
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]">
         <div className="shimmer-surface h-[420px]" />
         <div className="shimmer-surface h-[420px]" />
         <div className="shimmer-surface h-[420px]" />

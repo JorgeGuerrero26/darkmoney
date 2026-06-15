@@ -1788,7 +1788,7 @@ export function DashboardPage() {
         title="Personalizar dashboard"
         titleAccessory={<DashboardHelpTrigger metricId="panel_control" />}
       >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div className="grid gap-4 min-[1500px]:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-5">
             <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/80">Modo general</p>
             <div className="mt-4">
@@ -1901,7 +1901,7 @@ export function DashboardPage() {
               tone="success"
             />
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
               {uncategorizedMovements.length > 0 ? (
                 <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
                   <div>
@@ -2015,7 +2015,7 @@ export function DashboardPage() {
       {isWidgetVisible("overview_kpis") ? (
       <section className="grid gap-4">
         {/* ── Hero KPIs: ¿cómo voy este mes? (banda ancha) ─────────── */}
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" data-tour="dashboard-hero">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]" data-tour="dashboard-hero">
           <DashboardKpiHelpWrap
             className="relative overflow-hidden rounded-[28px] border border-pine/20 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.12),transparent_55%)] p-6"
             metricId="kpi_total_money"
@@ -2059,7 +2059,7 @@ export function DashboardPage() {
           </DashboardKpiHelpWrap>
           {/* Salud financiera como tercer KPI del hero (score 0-100) */}
           <div
-            className={`relative overflow-hidden rounded-[28px] border p-6 md:col-span-2 2xl:col-span-1 ${
+            className={`relative overflow-hidden rounded-[28px] border p-6 ${
               healthScore.tone === "success"
                 ? "border-pine/20 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.1),transparent_55%)]"
                 : healthScore.tone === "warning"
@@ -2119,7 +2119,7 @@ export function DashboardPage() {
           </p>
 
           {/* 4 indicadores con barras (en pantallas anchas, 4 columnas) */}
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
             {healthScore.indicators.map((indicator) => (
               <div key={indicator.key}>
                 <div className="flex items-baseline justify-between gap-2">
@@ -2155,7 +2155,7 @@ export function DashboardPage() {
         </div>
 
         {/* ── Sub-panel grid ──────────────────────────────────────── */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))]">
 
           {/* LIQUIDEZ */}
           <div className="relative rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
@@ -2181,22 +2181,22 @@ export function DashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-storm">Liquidez hoy menos salidas previstas en los próximos ~30 días.</p>
               </DashboardKpiHelpWrap>
-              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_cash">
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+                <DashboardKpiHelpWrap className="min-h-[92px] rounded-[20px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_cash">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Efectivo</p>
-                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                  <p className="mt-2 font-display text-lg font-semibold leading-tight text-ink">
                     {formatCurrency(totalCash, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_bank">
+                <DashboardKpiHelpWrap className="min-h-[92px] rounded-[20px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_bank">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Bancos</p>
-                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                  <p className="mt-2 font-display text-lg font-semibold leading-tight text-ink">
                     {formatCurrency(totalBank, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
-                <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_savings">
+                <DashboardKpiHelpWrap className="min-h-[92px] rounded-[20px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_savings">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Ahorros</p>
-                  <p className="mt-1.5 font-display text-base font-semibold text-ink">
+                  <p className="mt-2 font-display text-lg font-semibold leading-tight text-ink">
                     {formatCurrency(totalSavings, displayCurrencyCode)}
                   </p>
                 </DashboardKpiHelpWrap>
@@ -2238,7 +2238,7 @@ export function DashboardPage() {
                   {formatVsPreviousPeriodLabel(parityCurrentTotals.expense, parityPreviousTotals.expense, comparison.previous.label)}
                 </p>
               </DashboardKpiHelpWrap>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
                 <DashboardKpiHelpWrap className="rounded-[20px] border border-gold/18 bg-gold/10 p-3" metricId="kpi_period_savings">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-gold">Ahorro neto</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
@@ -2252,7 +2252,7 @@ export function DashboardPage() {
                   </p>
                 </DashboardKpiHelpWrap>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
                 <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="kpi_transferred">
                   <p className="text-[0.58rem] uppercase tracking-[0.16em] text-storm">Transferido</p>
                   <p className="mt-1.5 font-display text-base font-semibold text-ink">
@@ -2403,7 +2403,7 @@ export function DashboardPage() {
                 Tu saldo de hoy, más lo comprometido por cobrar y por pagar en ~30 días, más la
                 proyección del ritmo variable del mes.
               </p>
-              <div className="mt-4 grid gap-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-end">
+              <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                 {steps.map((step) => (
                   <div key={step.label}>
                     <p className="text-[0.6rem] uppercase tracking-[0.16em] text-storm">{step.label}</p>
@@ -2431,7 +2431,7 @@ export function DashboardPage() {
         })()}
 
         {/* ── Cierre estimado + meta + categoría que subió ────────── */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))]">
           <div className="relative rounded-[24px] border border-gold/22 bg-gold/10 p-5">
             <div className="absolute right-4 top-4 z-[1]">
               <DashboardHelpTrigger metricId="dashboard_period_close" />
@@ -2558,7 +2558,7 @@ export function DashboardPage() {
           ) : sharedObligationsQuery.error ? (
             <p className="text-sm text-ember">No se pudo cargar la cartera compartida.</p>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
               <DashboardKpiHelpWrap className="rounded-[24px] border border-pine/18 bg-pine/10 p-4" metricId="shared_receivable">
                 <p className="text-xs uppercase tracking-[0.18em] text-pine">
                   Créditos compartidos
@@ -2613,7 +2613,7 @@ export function DashboardPage() {
       ) : null}
 
       {isWidgetVisible("overview_kpis") && effectiveDashboardMode === "advanced" ? (
-        <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+        <section className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
           <DashboardKpiHelpWrap className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4" metricId="adv_avg_weekly_spend">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Gasto semanal medio</p>
             <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -2699,7 +2699,7 @@ export function DashboardPage() {
       <section
         className={`grid gap-6 ${
           isWidgetVisible("savings_trend") && isWidgetVisible("period_radar")
-            ? "xl:grid-cols-[1.35fr_0.65fr]"
+            ? "min-[1700px]:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]"
             : "xl:grid-cols-1"
         }`}
       >
@@ -2892,7 +2892,7 @@ export function DashboardPage() {
         </div>
       </div>
       {showPortfolioSection ? (
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]">
         {isWidgetVisible("accounts_breakdown") ? (
         <SurfaceCard
           action={<GhostLink label="Ver cuentas" to="/app/accounts" />}
@@ -2978,7 +2978,7 @@ export function DashboardPage() {
                   <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
                     {selectedAccount.account.name}
                   </h4>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
                     <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Saldo actual</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -3208,9 +3208,9 @@ export function DashboardPage() {
               title="Aún no hay presupuestos vigentes"
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+            <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
               <div className="grid gap-4">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                   <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="budget_ceiling">
                     <p className="text-xs uppercase tracking-[0.18em] text-storm">Techo activo</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -3295,7 +3295,7 @@ export function DashboardPage() {
                         style={{ width: `${Math.min(Math.max(budget.usedPercent, 4), 100)}%` }}
                       />
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr))]">
                       <div>
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Limite</p>
                         <p className="mt-2 font-semibold text-ink">
@@ -3355,7 +3355,7 @@ export function DashboardPage() {
       <section
         className={`grid gap-6 ${
           isWidgetVisible("category_comparison") && isWidgetVisible("monthly_pulse")
-            ? "xl:grid-cols-[1.1fr_0.9fr]"
+            ? "min-[1700px]:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
             : "xl:grid-cols-1"
         }`}
       >
@@ -3373,7 +3373,7 @@ export function DashboardPage() {
               title="Aún no hay categorías con gasto"
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
               <div className="grid gap-3">
                 {visibleCategories.map((item) => {
                   const isActive = selectedCategory?.key === item.key;
@@ -3498,7 +3498,7 @@ export function DashboardPage() {
               title="Sin historia mensual"
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
               <div className="grid gap-3">
                 {monthlyPulse.map((item, monthIndex) => {
                   const isActive = selectedMonth?.key === item.key;
@@ -3536,7 +3536,7 @@ export function DashboardPage() {
                           tone={item.net >= 0 ? "success" : "danger"}
                         />
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
                         <div>
                           <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-storm">
                             <span>Entradas</span>
@@ -3620,7 +3620,7 @@ export function DashboardPage() {
       <section
         className={`grid gap-6 ${
           isWidgetVisible("weekly_pattern") && isWidgetVisible("upcoming_recent")
-            ? "xl:grid-cols-[0.9fr_1.1fr]"
+            ? "min-[1700px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
             : "xl:grid-cols-1"
         }`}
       >
@@ -3656,7 +3656,7 @@ export function DashboardPage() {
               title="Sin patrón semanal todavía"
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <div className="grid gap-3">
                 {crossFilteredWeekdayPattern.map((item) => {
                   const isActive = crossFilteredSelectedWeekday?.key === item.key;
@@ -3684,7 +3684,7 @@ export function DashboardPage() {
                           tone={item.net >= 0 ? "success" : "danger"}
                         />
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
+                      <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]">
                         <div className="h-2 rounded-full bg-white/[0.08]">
                           <div
                             className="h-full rounded-full bg-pine"
@@ -3742,7 +3742,7 @@ export function DashboardPage() {
           title="Lo que viene y lo que movió tu período"
           titleAccessory={<DashboardHelpTrigger metricId="widget_upcoming_recent" />}
         >
-          <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+          <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-storm">Próximos 30 días</p>
               {upcomingCommitments.length === 0 ? (
@@ -3860,7 +3860,7 @@ export function DashboardPage() {
             isWidgetVisible("pro_command_center") &&
             isWidgetVisible("pro_intelligence_digest") &&
             isWidgetVisible("pro_goals_strip")
-              ? "xl:grid-cols-[1.1fr_1fr_0.9fr]"
+              ? "[grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]"
               : "xl:grid-cols-1"
           }`}
         >
@@ -3897,7 +3897,7 @@ export function DashboardPage() {
 
                 <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Próxima presión financiera (7 días)</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]">
                     <div className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
                       <p className="text-xs uppercase tracking-[0.16em] text-pine">Entra</p>
                       <p className="mt-2 font-display text-lg font-semibold text-ink">
@@ -3925,7 +3925,7 @@ export function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
                   <div className="rounded-[22px] border border-gold/20 bg-gold/10 p-4">
                     <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Caja estimada a fin de mes</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4355,7 +4355,7 @@ export function DashboardPage() {
                             tone={window.expectedOutflow > window.expectedInflow ? "warning" : "success"}
                           />
                         </div>
-                        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        <div className="mt-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                           <div className="rounded-[20px] border border-pine/18 bg-pine/10 p-4">
                             <p className="text-xs uppercase tracking-[0.18em] text-pine">Ingresos esperados</p>
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4391,7 +4391,7 @@ export function DashboardPage() {
             <section
               className={`grid gap-6 ${
                 isWidgetVisible("alert_center") && isWidgetVisible("data_quality")
-                  ? "xl:grid-cols-[1.05fr_0.95fr]"
+                  ? "min-[1700px]:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
                   : "xl:grid-cols-1"
               }`}
             >
@@ -4473,7 +4473,7 @@ export function DashboardPage() {
           {(isWidgetVisible("subscriptions_snapshot") ||
             isWidgetVisible("transfer_snapshot") ||
             isWidgetVisible("currency_exposure")) ? (
-            <section className="grid gap-6 xl:grid-cols-3">
+            <section className="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))]">
               {isWidgetVisible("subscriptions_snapshot") ? (
                 <SurfaceCard
                   action={<GhostLink label="Ver suscripciones" to="/app/subscriptions" />}
@@ -4489,7 +4489,7 @@ export function DashboardPage() {
                     />
                   ) : (
                     <div className="grid gap-5">
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                         <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="sub_monthly_cost">
                           <p className="text-xs uppercase tracking-[0.18em] text-pine">Costo mensual</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4551,7 +4551,7 @@ export function DashboardPage() {
                     />
                   ) : (
                     <div className="grid gap-5">
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                         <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="transfer_total_snapshot">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Transferido</p>
                           <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4652,7 +4652,7 @@ export function DashboardPage() {
             <div className="h-px flex-1 bg-white/6" />
           </div>
           {isWidgetVisible("learning_panel") ? (
-            <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <section className="grid gap-6 min-[1700px]:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
               <SurfaceCard
                 action={
                   <StatusBadge
@@ -4675,7 +4675,7 @@ export function DashboardPage() {
                 titleAccessory={<DashboardHelpTrigger metricId="widget_learning_panel" />}
               >
                 <div className="grid gap-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11.5rem),1fr))]">
                     <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="learn_movements_useful">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Movimientos utiles</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4702,7 +4702,7 @@ export function DashboardPage() {
                     </DashboardKpiHelpWrap>
                   </div>
 
-                  <div className="grid gap-3 xl:grid-cols-2">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
                     {learningSnapshot.phases.map((phase) => (
                       <article
                         className={`rounded-[22px] border p-4 ${
@@ -4826,7 +4826,7 @@ export function DashboardPage() {
             <div className="h-px flex-1 bg-white/6" />
           </div>
           {isWidgetVisible("workspace_collaboration") ? (
-            <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <section className="grid gap-6 min-[1700px]:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <SurfaceCard
                 action={<StatusBadge status={`Workspace ${formatWorkspaceKindLabel(activeWorkspace.kind)}`} tone="info" />}
                 description="Lectura del workspace activo y de la colaboración reciente para saber cuánto movimiento humano hubo en este entorno."
@@ -4834,7 +4834,7 @@ export function DashboardPage() {
                 titleAccessory={<DashboardHelpTrigger metricId="widget_workspace_collaboration" />}
               >
                 <div className="grid gap-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11.5rem),1fr))]">
                     <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="collab_role">
                       <p className="text-xs uppercase tracking-[0.18em] text-storm">Tu rol</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4907,7 +4907,7 @@ export function DashboardPage() {
             <section
               className={`grid gap-6 ${
                 isWidgetVisible("health_center") && isWidgetVisible("activity_timeline")
-                  ? "xl:grid-cols-[0.95fr_1.05fr]"
+                  ? "min-[1700px]:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"
                   : "xl:grid-cols-1"
               }`}
             >
@@ -4923,7 +4923,7 @@ export function DashboardPage() {
                       <p className="text-sm leading-7 text-storm">{healthScore.headline}</p>
                     </article>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
                       <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_real_liquidity">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Liquidez real</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
@@ -4950,7 +4950,7 @@ export function DashboardPage() {
                       </DashboardKpiHelpWrap>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
                       <article className="relative rounded-[22px] border border-gold/18 bg-gold/10 p-4">
                         <div className="absolute right-3 top-3 z-[1]">
                           <DashboardHelpTrigger metricId="health_next_payable" />

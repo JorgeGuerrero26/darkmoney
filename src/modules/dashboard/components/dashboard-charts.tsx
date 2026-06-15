@@ -273,7 +273,7 @@ export function ChronologicalMovementList({
       <ul className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
         {movements.map((movement) => (
           <li
-            className="flex items-start justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 py-2"
+            className="flex flex-wrap items-start justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 py-2"
             key={movement.id}
           >
             <div className="min-w-0">
@@ -330,7 +330,7 @@ export function DayMovementsBreakdown({
       }
     >
       <p className="text-sm font-semibold text-ink">Movimientos del día seleccionado</p>
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
         <ChronologicalMovementList
           currencyCode={currencyCode}
           emptyHint="Sin ingresos este día."
@@ -396,7 +396,7 @@ export function FlowLineChart({
 
   return (
     <>
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -473,7 +473,7 @@ export function FlowLineChart({
                 Frente a {fullDateFormatter.format(selected.previousDate)}
               </p>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="mt-6 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
                 <div className={`rounded-[22px] border p-4 ${theme.panelClass}`}>
                   <p className={`text-xs uppercase tracking-[0.18em] ${theme.accentClass}`}>{dailyLabel}</p>
                   <p className="mt-3 font-display text-3xl font-semibold text-ink">
@@ -495,7 +495,7 @@ export function FlowLineChart({
               </div>
 
               <div className="mt-4 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-ink">Cambio frente al comparativo (día)</p>
                   <DeltaBadge currencyCode={currencyCode} inverse={false} value={selected.daily - selected.previousDaily} />
                 </div>
@@ -555,7 +555,7 @@ export function SavingsLineChart({
 
   return (
     <>
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -634,7 +634,7 @@ export function SavingsLineChart({
               Frente a {fullDateFormatter.format(points[selectedIndex].previousDate)}
             </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-6 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
               <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-pine">Ahorro del dia</p>
                 <p className="mt-3 font-display text-3xl font-semibold text-ink">
@@ -657,7 +657,7 @@ export function SavingsLineChart({
             </div>
 
             <div className="mt-4 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-ink">Cambio frente al comparativo</p>
                 <DeltaBadge
                   currencyCode={currencyCode}
