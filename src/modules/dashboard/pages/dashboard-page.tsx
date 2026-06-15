@@ -4204,7 +4204,7 @@ export function DashboardPage() {
             <section
               className={`grid gap-6 ${
                 isWidgetVisible("obligation_watch") && isWidgetVisible("future_flow")
-                  ? "xl:grid-cols-[1.05fr_0.95fr]"
+                  ? "min-[1700px]:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
                   : "xl:grid-cols-1"
               }`}
             >
@@ -4223,43 +4223,43 @@ export function DashboardPage() {
                     />
                   ) : (
                     <div className="grid gap-5">
-                      <div className="grid gap-3 sm:grid-cols-4">
-                        <DashboardKpiHelpWrap className="rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="obligation_due_soon">
+                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11.5rem),1fr))]">
+                        <DashboardKpiHelpWrap className="min-h-[118px] rounded-[22px] border border-pine/18 bg-pine/10 p-4" metricId="obligation_due_soon">
                           <p className="text-xs uppercase tracking-[0.18em] text-pine">Por vencer</p>
-                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink">
                             {formatCurrency(
                               obligationAgingBuckets.find((item) => item.key === "due_soon")?.amount ?? 0,
                               displayCurrencyCode,
                             )}
                           </p>
                         </DashboardKpiHelpWrap>
-                        <DashboardKpiHelpWrap className="rounded-[22px] border border-ember/18 bg-ember/10 p-4" metricId="obligation_overdue_block">
+                        <DashboardKpiHelpWrap className="min-h-[118px] rounded-[22px] border border-ember/18 bg-ember/10 p-4" metricId="obligation_overdue_block">
                           <p className="text-xs uppercase tracking-[0.18em] text-ember">Vencido</p>
-                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink">
                             {formatCurrency(overdueAmount, displayCurrencyCode)}
                           </p>
                         </DashboardKpiHelpWrap>
-                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_collected_period">
+                        <DashboardKpiHelpWrap className="min-h-[118px] rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_collected_period">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Cobrado este corte</p>
-                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink">
                             {formatCurrency(collectedThisPeriod, displayCurrencyCode)}
                           </p>
                         </DashboardKpiHelpWrap>
-                        <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_paid_period">
+                        <DashboardKpiHelpWrap className="min-h-[118px] rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="obligation_paid_period">
                           <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagado este corte</p>
-                          <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink">
                             {formatCurrency(paidThisPeriod, displayCurrencyCode)}
                           </p>
                         </DashboardKpiHelpWrap>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                         {obligationAgingBuckets.map((bucket) => {
                           const isBucketActive = activeObligationStatusFilter === bucket.key;
                           return (
                             <div
                               aria-pressed={isBucketActive}
-                              className={`relative cursor-pointer rounded-[22px] border p-4 text-left transition ${
+                              className={`relative min-h-[118px] cursor-pointer rounded-[22px] border p-4 text-left outline-none transition focus-visible:border-gold/45 focus-visible:ring-2 focus-visible:ring-gold/20 ${
                                 isBucketActive
                                   ? "border-gold/40 bg-gold/10"
                                   : "border-white/10 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
@@ -4285,10 +4285,10 @@ export function DashboardPage() {
                                 <DashboardHelpTrigger metricId={`obligation_bucket_${bucket.key}`} />
                               </div>
                               <div className="flex items-start justify-between gap-3 pr-10">
-                                <p className="text-sm font-semibold text-ink">{bucket.label}</p>
-                                <StatusBadge status={`${bucket.count}`} tone={bucket.tone} />
+                                <p className="min-w-0 text-sm font-semibold leading-5 text-ink">{bucket.label}</p>
+                                <StatusBadge className="shrink-0 px-2.5" status={`${bucket.count}`} tone={bucket.tone} />
                               </div>
-                              <p className="mt-3 font-display text-2xl font-semibold text-ink">
+                              <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink">
                                 {formatCurrency(bucket.amount, displayCurrencyCode)}
                               </p>
                             </div>
