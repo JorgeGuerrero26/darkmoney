@@ -1,9 +1,7 @@
 ﻿import {
   Download,
-  PencilLine,
   Plus,
   RefreshCw,
-  Trash2,
   X,
 } from "lucide-react";
 import type { FormEvent } from "react";
@@ -15,18 +13,14 @@ import { DataState } from "../../../components/ui/data-state";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { InfoTip } from "../../../components/ui/info-tip";
-import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
-import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
+import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
-import { formatMovementStatusLabel } from "../../../lib/formatting/labels";
-import { formatCurrency } from "../../../lib/formatting/money";
 import type {
   AttachmentSummary,
   JsonValue,
@@ -57,17 +51,14 @@ import {
 import { MovementEditorDialog } from "../components/movement-editor-dialog";
 import { MovementsList } from "../components/movements-list";
 import { MovementsGrid } from "../components/movements-grid";
+import { MovementsTable } from "../components/movements-table";
 import {
   buildFormStateFromMovement,
   createDefaultMovementFormState,
   downloadMovementsCSV,
   expenseLikeMovementTypes,
   getMovementDisplayInfo,
-  getMovementStatusTone,
-  getMovementTypeOption,
-  getMovementTypeTone,
   incomeLikeMovementTypes,
-  isMovementTableFilterActive,
   movementStatusOptions,
   movementTypeOptions,
   parseMetadataValue,
@@ -88,9 +79,6 @@ function MovementsLoadingSkeleton() {
     </>
   );
 }
-const movementTableFilterInputClassName =
-  "w-full rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-
 type MovementSummaryChipProps = {
   label: string;
   tone?: "neutral" | "info" | "warning";
@@ -900,395 +888,29 @@ export function MovementsPage() {
               selectedIds={selectedIds}
             />
           ) : viewMode === "table" ? (
-            <div className="overflow-x-auto rounded-[24px] border border-white/10">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 bg-white/[0.02]">
-                    <th className="w-10 px-4 py-3">
-                      <SelectionCheckbox
-                        ariaLabel="Seleccionar todos"
-                        checked={allSelected}
-                        indeterminate={someSelected}
-                        onChange={() => (allSelected ? clearAll() : selectAll())}
-                      />
-                    </th>
-                    <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "description")}
-                        isOpen={openTableFilter === "description"}
-                        label="Descripcion"
-                        onClear={() => clearSingleTableFilter("description")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("description")}
-                      >
-                        <div className="space-y-3">
-                          <input
-                            className={movementTableFilterInputClassName}
-                            onChange={(event) => updateTableFilter("description", event.target.value)}
-                            placeholder="Buscar descripcion"
-                            type="text"
-                            value={tableFilters.description}
-                          />
-                          <p className="text-xs leading-6 text-storm">
-                            Busca por texto parcial en la descripcion del movimiento.
-                          </p>
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("tipo", "hidden sm:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "type")}
-                        isOpen={openTableFilter === "type"}
-                        label="Tipo"
-                        onClear={() => clearSingleTableFilter("type")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("type")}
-                      >
-                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                          <TableFilterOptionButton
-                            onClick={() => applyTableFilterAndClose("type", "all")}
-                            selected={tableFilters.type === "all"}
-                          >
-                            Todos
-                          </TableFilterOptionButton>
-                          {movementTypeOptions.map((option) => (
-                            <TableFilterOptionButton
-                              key={option.value}
-                              onClick={() => applyTableFilterAndClose("type", option.value)}
-                              selected={tableFilters.type === option.value}
-                            >
-                              {option.label}
-                            </TableFilterOptionButton>
-                          ))}
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("estado", "hidden sm:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "status")}
-                        isOpen={openTableFilter === "status"}
-                        label="Estado"
-                        onClear={() => clearSingleTableFilter("status")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("status")}
-                      >
-                        <div className="space-y-1">
-                          <TableFilterOptionButton
-                            onClick={() => applyTableFilterAndClose("status", "all")}
-                            selected={tableFilters.status === "all"}
-                          >
-                            Todos
-                          </TableFilterOptionButton>
-                          {movementStatusOptions.map((option) => (
-                            <TableFilterOptionButton
-                              key={option.value}
-                              onClick={() => applyTableFilterAndClose("status", option.value)}
-                              selected={tableFilters.status === option.value}
-                            >
-                              {option.label}
-                            </TableFilterOptionButton>
-                          ))}
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("categoria", "hidden lg:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "category")}
-                        isOpen={openTableFilter === "category"}
-                        label="Categoria"
-                        onClear={() => clearSingleTableFilter("category")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("category")}
-                      >
-                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                          <TableFilterOptionButton
-                            onClick={() => applyTableFilterAndClose("category", "")}
-                            selected={!tableFilters.category}
-                          >
-                            Todas
-                          </TableFilterOptionButton>
-                          {movementCategories.map((category) => (
-                            <TableFilterOptionButton
-                              key={category}
-                              onClick={() => applyTableFilterAndClose("category", category)}
-                              selected={tableFilters.category === category}
-                            >
-                              {category}
-                            </TableFilterOptionButton>
-                          ))}
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("contraparte", "hidden xl:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "counterparty")}
-                        isOpen={openTableFilter === "counterparty"}
-                        label="Contraparte"
-                        onClear={() => clearSingleTableFilter("counterparty")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("counterparty")}
-                      >
-                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                          <TableFilterOptionButton
-                            onClick={() => applyTableFilterAndClose("counterparty", "")}
-                            selected={!tableFilters.counterparty}
-                          >
-                            Todas
-                          </TableFilterOptionButton>
-                          {movementCounterparties.map((counterparty) => (
-                            <TableFilterOptionButton
-                              key={counterparty}
-                              onClick={() => applyTableFilterAndClose("counterparty", counterparty)}
-                              selected={tableFilters.counterparty === counterparty}
-                            >
-                              {counterparty}
-                            </TableFilterOptionButton>
-                          ))}
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("cuenta_origen", "hidden md:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "sourceAccount")}
-                        isOpen={openTableFilter === "sourceAccount"}
-                        label="Cuenta"
-                        onClear={() => clearSingleTableFilter("sourceAccount")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("sourceAccount")}
-                      >
-                        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                          <TableFilterOptionButton
-                            onClick={() => applyTableFilterAndClose("sourceAccount", "")}
-                            selected={!tableFilters.sourceAccount}
-                          >
-                            Todas
-                          </TableFilterOptionButton>
-                          {movementSourceAccounts.map((accountName) => (
-                            <TableFilterOptionButton
-                              key={accountName}
-                              onClick={() => applyTableFilterAndClose("sourceAccount", accountName)}
-                              selected={tableFilters.sourceAccount === accountName}
-                            >
-                              {accountName}
-                            </TableFilterOptionButton>
-                          ))}
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className="relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
-                      <TableColumnFilterMenu
-                        active={isMovementTableFilterActive(tableFilters, "amount")}
-                        align="right"
-                        isOpen={openTableFilter === "amount"}
-                        label="Monto"
-                        onClear={() => clearSingleTableFilter("amount")}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("amount")}
-                        triggerClassName="justify-end text-right"
-                      >
-                        <div className="space-y-3">
-                          <input
-                            className={`${movementTableFilterInputClassName} text-right`}
-                            onChange={(event) => updateTableFilter("amount", event.target.value)}
-                            placeholder="Ej. 120 o 120.50"
-                            type="text"
-                            value={tableFilters.amount}
-                          />
-                          <p className="text-xs leading-6 text-storm">
-                            Filtra por coincidencia en el monto visible de la tabla.
-                          </p>
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className={`relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("fecha", "hidden md:table-cell")}`}>
-                      <TableColumnFilterMenu
-                        active={
-                          isMovementTableFilterActive(tableFilters, "dateFrom") ||
-                          isMovementTableFilterActive(tableFilters, "dateTo")
-                        }
-                        align="right"
-                        isOpen={openTableFilter === "dateFrom" || openTableFilter === "dateTo"}
-                        label="Fecha"
-                        minWidthClassName="min-w-[320px]"
-                        onClear={() => {
-                          clearSingleTableFilter("dateFrom");
-                          clearSingleTableFilter("dateTo");
-                        }}
-                        onClose={closeTableFilterMenu}
-                        onToggle={() => toggleTableFilterMenu("dateFrom")}
-                        triggerClassName="justify-end text-right"
-                      >
-                        <div className="space-y-3">
-                          <InlineDateRangePicker
-                            endDate={tableFilters.dateTo}
-                            onEndDateChange={(value) => updateTableFilter("dateTo", value)}
-                            onStartDateChange={(value) => updateTableFilter("dateFrom", value)}
-                            startDate={tableFilters.dateFrom}
-                          />
-                          <p className="text-xs leading-6 text-storm">
-                            Filtra por rango cronologico para trabajar como una hoja de calculo.
-                          </p>
-                        </div>
-                      </TableColumnFilterMenu>
-                    </th>
-                    <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedMovements.map((movement, index) => {
-                    const movementTypeOption = getMovementTypeOption(movement.movementType);
-                    const displayInfo = getMovementDisplayInfo(
-                      movement,
-                      snapshot.workspace.baseCurrencyCode,
-                    );
-                    return (
-                      <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === paginatedMovements.length - 1 ? "border-b-0" : ""}`} key={movement.id}>
-                        <td className="w-10 px-4 py-3.5">
-                          <SelectionCheckbox
-                            ariaLabel={`Seleccionar ${movement.description}`}
-                            checked={selectedIds.has(movement.id)}
-                            onChange={() => toggleSelect(movement.id)}
-                          />
-                        </td>
-                        <td className="px-5 py-3.5 font-medium text-ink">{movement.description}</td>
-                        <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} /></td>
-                        <td className={`px-5 py-3.5 ${cv("estado", "hidden sm:table-cell")}`}><StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} /></td>
-                        <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{movement.category}</td>
-                        <td className={`px-5 py-3.5 text-storm ${cv("contraparte", "hidden xl:table-cell")}`}>{movement.counterparty}</td>
-                        <td className={`px-5 py-3.5 text-storm ${cv("cuenta_origen", "hidden md:table-cell")}`}>{displayInfo.accountLabel}</td>
-                        <td className="px-5 py-3.5 text-right font-medium text-ink">{displayInfo.amount !== null ? formatCurrency(displayInfo.amount, displayInfo.currencyCode) : "-"}</td>
-                        <td className={`px-5 py-3.5 text-right text-storm ${cv("fecha", "hidden md:table-cell")}`}>{formatDateTime(movement.occurredAt)}</td>
-                        <td className="px-5 py-3.5 text-right">
-                          <Button className="py-1.5 text-xs" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {paginatedMovements.map((movement) => {
-                const movementTypeOption = getMovementTypeOption(movement.movementType);
-                const sourceCurrencyCode = movement.sourceCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
-                const destinationCurrencyCode =
-                  movement.destinationCurrencyCode ?? snapshot.workspace.baseCurrencyCode;
-                const isSelected = selectedIds.has(movement.id);
-                const longPressHandlers = createLongPressHandlers(() => toggleSelect(movement.id));
-
-                return (
-                  <article
-                    className={`glass-panel-soft relative rounded-[28px] p-5 transition duration-200 hover:border-white/16 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
-                    key={movement.id}
-                    onClick={(e) => {
-                      if (wasRecentLongPress()) return;
-                      if (selectedCount === 0) return;
-                      if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
-                      toggleSelect(movement.id);
-                    }}
-                    {...longPressHandlers}
-                  >
-                    <div className="flex flex-col gap-5">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <p className="font-medium text-ink">{movement.description}</p>
-                            <StatusBadge
-                              status={movementTypeOption.label}
-                              tone={getMovementTypeTone(movement.movementType)}
-                            />
-                            <StatusBadge
-                              status={formatMovementStatusLabel(movement.status)}
-                              tone={getMovementStatusTone(movement.status)}
-                            />
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-storm">
-                            <span>{movement.category}</span>
-                            <span className="text-white/20">/</span>
-                            <span>{movement.counterparty}</span>
-                            <span className="text-white/20">/</span>
-                            <span>{formatDateTime(movement.occurredAt)}</span>
-                          </div>
-
-                          {movement.notes ? (
-                            <p className="max-w-4xl text-sm leading-7 text-storm">{movement.notes}</p>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                          <Button
-                            onClick={() => openEditEditor(movement)}
-                            variant="secondary"
-                          >
-                            <PencilLine className="mr-2 h-4 w-4" />
-                            Editar
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              openEditEditor(movement);
-                            }}
-                            variant="ghost"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Revisar o eliminar
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.8fr]">
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-storm">Origen</p>
-                          <p className="mt-2 text-sm font-medium text-ink">
-                            {movement.sourceAccountName ?? "Sin salida"}
-                          </p>
-                          <p className="mt-1 text-sm text-storm">
-                            {movement.sourceAmount !== null
-                              ? formatCurrency(movement.sourceAmount, sourceCurrencyCode)
-                              : "-"}
-                          </p>
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-storm">Destino</p>
-                          <p className="mt-2 text-sm font-medium text-ink">
-                            {movement.destinationAccountName ?? "Sin destino"}
-                          </p>
-                          <p className="mt-1 text-sm text-storm">
-                            {movement.destinationAmount !== null
-                              ? formatCurrency(movement.destinationAmount, destinationCurrencyCode)
-                              : "-"}
-                          </p>
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-storm">Relacion</p>
-                          <p className="mt-2 text-sm font-medium text-ink">
-                            {movement.subscriptionId
-                              ? "Ligado a suscripcion"
-                              : movement.obligationId
-                                ? "Ligado a obligacion"
-                                : "Libre"}
-                          </p>
-                          <p className="mt-1 text-sm text-storm">
-                            {movement.fxRate
-                              ? `FX ${movement.fxRate.toFixed(6)}`
-                              : movement.metadata &&
-                                  typeof movement.metadata === "object" &&
-                                  !Array.isArray(movement.metadata) &&
-                                  Object.keys(movement.metadata).length > 0
-                                ? "Con detalles adicionales"
-                                : "Sin extras"}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
+            <MovementsTable
+              allSelected={allSelected}
+              baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+              categories={movementCategories}
+              counterparties={movementCounterparties}
+              cv={cv}
+              filters={tableFilters}
+              movements={paginatedMovements}
+              onApplyFilterAndClose={applyTableFilterAndClose}
+              onClearAll={clearAll}
+              onClearSingleFilter={clearSingleTableFilter}
+              onCloseFilterMenu={closeTableFilterMenu}
+              onOpen={openEditEditor}
+              onSelectAll={selectAll}
+              onToggleFilterMenu={toggleTableFilterMenu}
+              onToggleSelect={toggleSelect}
+              onUpdateFilter={updateTableFilter}
+              openFilter={openTableFilter}
+              someSelected={someSelected}
+              selectedIds={selectedIds}
+              sourceAccounts={movementSourceAccounts}
+            />
+          ) : null}
 
           <Pagination
             className="mt-5"
