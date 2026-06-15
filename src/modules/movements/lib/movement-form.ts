@@ -154,6 +154,58 @@ export const expenseLikeMovementTypes = new Set<MovementType>([
 ]);
 export const incomeLikeMovementTypes = new Set<MovementType>(["income", "refund"]);
 
+export type MovementDisplayInfo = {
+  accountLabel: string;
+  amount: number | null;
+  currencyCode: string;
+};
+
+/** Cuenta, monto y moneda a mostrar según el tipo de movimiento. */
+export function getMovementDisplayInfo(
+  movement: MovementRecord,
+  fallbackCurrencyCode: string,
+): MovementDisplayInfo {
+  if (incomeLikeMovementTypes.has(movement.movementType)) {
+    return {
+      accountLabel: movement.destinationAccountName ?? "-",
+      amount: movement.destinationAmount,
+      currencyCode: movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  if (movement.movementType === "transfer") {
+    const accountLabel =
+      movement.sourceAccountName && movement.destinationAccountName
+        ? `${movement.sourceAccountName} -> ${movement.destinationAccountName}`
+        : movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
+
+    return {
+      accountLabel,
+      amount: movement.sourceAmount ?? movement.destinationAmount,
+      currencyCode:
+        movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  if (expenseLikeMovementTypes.has(movement.movementType)) {
+    return {
+      accountLabel: movement.sourceAccountName ?? "-",
+      amount: movement.sourceAmount,
+      currencyCode: movement.sourceCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
+  const amount = movement.sourceAmount ?? movement.destinationAmount;
+  const accountLabel = movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
+
+  return {
+    accountLabel,
+    amount,
+    currencyCode:
+      movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
+  };
+}
+
 export function getMovementTypeOption(movementType: MovementType) {
   return movementTypeOptions.find((option) => option.value === movementType) ?? movementTypeOptions[0];
 }

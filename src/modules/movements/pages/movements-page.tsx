@@ -56,12 +56,15 @@ import {
 } from "../../../services/queries/workspace-data";
 
 import { MovementEditorDialog } from "../components/movement-editor-dialog";
+import { MovementsList } from "../components/movements-list";
+import { MovementsGrid } from "../components/movements-grid";
 import {
   buildFormStateFromMovement,
   createDefaultMovementFormState,
   defaultMovementTableFilters,
   downloadMovementsCSV,
   expenseLikeMovementTypes,
+  getMovementDisplayInfo,
   getMovementStatusTone,
   getMovementTypeOption,
   getMovementTypeTone,
@@ -97,58 +100,6 @@ type MovementSummaryChipProps = {
   tone?: "neutral" | "info" | "warning";
   value: string;
 };
-
-type MovementDisplayInfo = {
-  accountLabel: string;
-  amount: number | null;
-  currencyCode: string;
-};
-
-function getMovementDisplayInfo(
-  movement: MovementRecord,
-  fallbackCurrencyCode: string,
-): MovementDisplayInfo {
-  if (incomeLikeMovementTypes.has(movement.movementType)) {
-    return {
-      accountLabel: movement.destinationAccountName ?? "-",
-      amount: movement.destinationAmount,
-      currencyCode: movement.destinationCurrencyCode ?? fallbackCurrencyCode,
-    };
-  }
-
-  if (movement.movementType === "transfer") {
-    const accountLabel =
-      movement.sourceAccountName && movement.destinationAccountName
-        ? `${movement.sourceAccountName} -> ${movement.destinationAccountName}`
-        : movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
-
-    return {
-      accountLabel,
-      amount: movement.sourceAmount ?? movement.destinationAmount,
-      currencyCode:
-        movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
-    };
-  }
-
-  if (expenseLikeMovementTypes.has(movement.movementType)) {
-    return {
-      accountLabel: movement.sourceAccountName ?? "-",
-      amount: movement.sourceAmount,
-      currencyCode: movement.sourceCurrencyCode ?? fallbackCurrencyCode,
-    };
-  }
-
-  const amount = movement.sourceAmount ?? movement.destinationAmount;
-  const accountLabel =
-    movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
-
-  return {
-    accountLabel,
-    amount,
-    currencyCode:
-      movement.sourceCurrencyCode ?? movement.destinationCurrencyCode ?? fallbackCurrencyCode,
-  };
-}
 
 function MovementSummaryChip({
   label,
@@ -1048,33 +999,21 @@ export function MovementsPage() {
               title={hasActiveFilters ? "Sin resultados" : "Sin movimientos"}
             />
           ) : viewMode === "list" ? (
-            <div className="space-y-2">
-              {paginatedMovements.map((movement) => {
-                const movementTypeOption = getMovementTypeOption(movement.movementType);
-                const displayInfo = getMovementDisplayInfo(
-                  movement,
-                  snapshot.workspace.baseCurrencyCode,
-                );
-                return (
-                  <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-3.5 transition hover:border-white/16" key={movement.id}>
-                    <SelectionCheckbox
-                      checked={selectedIds.has(movement.id)}
-                      onChange={() => toggleSelect(movement.id)}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-ink">{movement.description}</p>
-                      <p className="text-xs text-storm">{movement.category} · {movement.counterparty} · {formatDateTime(movement.occurredAt)}</p>
-                    </div>
-                    <div className="hidden sm:flex gap-2">
-                      <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
-                      <StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} />
-                    </div>
-                    {displayInfo.amount !== null ? <p className="text-sm font-semibold text-ink shrink-0">{formatCurrency(displayInfo.amount, displayInfo.currencyCode)}</p> : null}
-                    <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(movement)} variant="ghost">Ver</Button>
-                  </article>
-                );
-              })}
-            </div>
+            <MovementsList
+              baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+              movements={paginatedMovements}
+              onOpen={openEditEditor}
+              onToggleSelect={toggleSelect}
+              selectedIds={selectedIds}
+            />
+          ) : viewMode === "grid" ? (
+            <MovementsGrid
+              baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+              movements={paginatedMovements}
+              onOpen={openEditEditor}
+              onToggleSelect={toggleSelect}
+              selectedIds={selectedIds}
+            />
           ) : viewMode === "table" ? (
             <div className="overflow-x-auto rounded-[24px] border border-white/10">
               <table className="w-full text-sm">
