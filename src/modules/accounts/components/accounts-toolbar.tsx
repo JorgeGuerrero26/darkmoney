@@ -123,7 +123,7 @@ export function AccountsToolbar({
     filters.currency.trim() !== "";
 
   return (
-    <section className="sticky top-3 z-30 rounded-[28px] border border-white/10 bg-[#080d14]/95 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+    <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">

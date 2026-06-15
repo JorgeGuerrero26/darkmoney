@@ -38,7 +38,7 @@ export function AccountsTable({
   visibleColumns,
 }: AccountsTableProps) {
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#090f18]/95">
+    <div className="glass-panel-soft overflow-hidden rounded-[24px]">
       <div className="overflow-x-auto">
         <table className="min-w-[960px] w-full text-sm">
           <thead>

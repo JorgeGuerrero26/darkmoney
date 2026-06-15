@@ -578,7 +578,7 @@ export function AccountsPage() {
             )}
 
             <Pagination
-              className="rounded-[22px] border border-white/10 bg-[#090f18]/95 px-4 py-3"
+              className="glass-panel-soft rounded-[24px] px-4 py-3"
               onPageChange={(page) => writeFilters({ page })}
               page={paginatedAccounts.page}
               pageSize={ACCOUNT_PAGE_SIZE}

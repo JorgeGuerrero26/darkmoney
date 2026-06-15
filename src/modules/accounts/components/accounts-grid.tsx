@@ -41,8 +41,8 @@ export function AccountsGrid({
 
         return (
           <article
-            className={`rounded-[28px] border bg-[#090f18]/95 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition hover:-translate-y-0.5 hover:border-white/16 ${
-              isSelected ? "border-pine/30 ring-2 ring-pine/20" : "border-white/10"
+            className={`glass-panel-soft rounded-[24px] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-white/15 ${
+              isSelected ? "border-pine/30 ring-2 ring-pine/20" : ""
             }`}
             key={account.id}
             onClick={(event) => {

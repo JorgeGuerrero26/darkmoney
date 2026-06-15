@@ -35,10 +35,10 @@ function MetricCard({
   }[tone];
 
   return (
-    <article className="min-w-0 rounded-[22px] border border-white/10 bg-[#0b111b]/96 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-storm">
+          <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
             {label}
           </p>
           <p className="mt-2 break-words font-display text-2xl font-semibold leading-tight text-ink">
