@@ -55,15 +55,13 @@ import type {
   MovementFormState,
 } from "../lib/movement-form";
 
-const movementFieldClassName =
-  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const movementTextInputClassName = `${movementFieldClassName} h-10 sm:h-16`;
-const movementTextareaClassName = `${movementFieldClassName} min-h-[120px] sm:min-h-[160px] py-3 sm:py-4 leading-7`;
+const movementTextInputClassName = "field-dark";
+const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
 const movementEditorPanelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
+  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
 const movementFieldLabelClassName =
-  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
-const movementFieldHintClassName = "mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75";
+  "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
+const movementFieldHintClassName = "mt-1.5 break-words text-xs leading-6 text-storm/70";
 function MovementField({ children, errorKey, hint, invalidFields, label }: MovementFieldProps) {
   const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
@@ -398,32 +396,16 @@ export function MovementEditorDialog({
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="glass-panel-strong animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[28px] [transform:translateZ(0)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="pointer-events-none absolute inset-0">
-            <div
-              className="absolute -left-20 top-12 h-64 w-64 rounded-full blur-3xl animate-soft-pulse"
-              style={{ backgroundColor: `${movementVisual.color}2b` }}
-            />
-            <div
-              className="absolute right-0 top-0 h-48 w-48 rounded-full blur-3xl animate-soft-pulse [animation-delay:240ms]"
-              style={{ backgroundColor: "rgba(142, 165, 255, 0.14)" }}
-            />
-            <div
-              className="absolute bottom-0 left-1/2 h-40 w-56 -translate-x-1/2 blur-3xl animate-soft-pulse [animation-delay:420ms]"
-              style={{ backgroundColor: "rgba(215, 190, 123, 0.12)" }}
-            />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
-          </div>
-
           <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-2xl space-y-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
                     {isCreateMode ? "nuevo movimiento" : "editar movimiento"}
                   </span>
                   <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-storm/75">
@@ -459,14 +441,14 @@ export function MovementEditorDialog({
                 />
               ) : null}
 
-              <section className="relative hidden min-w-0 overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 sm:rounded-[34px] sm:p-6 lg:block lg:p-7">
+              <section className="glass-panel-soft relative hidden min-w-0 overflow-hidden rounded-[24px] p-4 sm:p-6 lg:block lg:p-7">
               <div
                 className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
                 style={{ backgroundColor: `${movementVisual.color}3d` }}
               />
               <div className="relative">
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
+                  <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">
                     Live preview
                   </span>
                   <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
@@ -492,7 +474,7 @@ export function MovementEditorDialog({
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                         Vista previa
                       </p>
                       <h3 className="mt-1 sm:mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
@@ -517,7 +499,7 @@ export function MovementEditorDialog({
 
                   <div className="grid gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-1">
                     <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                         Impacto
                       </p>
                       <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
@@ -526,7 +508,7 @@ export function MovementEditorDialog({
                     </div>
 
                     <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                         Flujo
                       </p>
                       <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm font-medium text-ink">{previewFlowLabel}</p>
@@ -534,7 +516,7 @@ export function MovementEditorDialog({
                     </div>
 
                     <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                         Conversion
                       </p>
                       <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm font-medium text-ink">{conversionLabel}</p>
@@ -549,7 +531,7 @@ export function MovementEditorDialog({
                   {balanceImpacts.length > 0 ? (
                     <div className="mt-4 sm:mt-5 rounded-[16px] sm:rounded-[20px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                        <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                           Impacto en cuentas
                         </p>
                         {formState.status !== "posted" ? (
@@ -611,7 +593,7 @@ export function MovementEditorDialog({
 
               <div className="mt-8 flex items-center gap-4 px-1">
               <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-white/5" />
-              <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/70">
+              <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/70">
                 Configuracion del movimiento
               </span>
               <div className="h-px flex-1 bg-gradient-to-r from-white/5 via-white/10 to-transparent" />
@@ -779,8 +761,8 @@ export function MovementEditorDialog({
                       />
                     </MovementField>
 
-                    <div className="rounded-[18px] sm:rounded-[28px] border border-white/8 bg-[#0c1320]/80 p-3 sm:p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
                         Preview financiero
                       </p>
                       <p className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl font-semibold text-ink">
@@ -968,7 +950,7 @@ export function MovementEditorDialog({
               </div>
               </div>
 
-              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#060b12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
+              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[28px] border-t border-white/10 bg-canvas/90 px-4 py-5 sm:px-6 backdrop-blur-md">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <p className="max-w-xl text-sm leading-7 text-storm">
                   {isCreateMode
