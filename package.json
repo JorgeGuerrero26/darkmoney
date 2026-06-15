@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@darkmoney/shared": "file:../DarkMoneyShared",
+    "@darkmoney/shared": "github:JorgeGuerrero26/darkmoneyshare",
     "@supabase/supabase-js": "^2.57.4",
     "@tanstack/react-query": "^5.90.2",
     "lucide-react": "^0.544.0",
