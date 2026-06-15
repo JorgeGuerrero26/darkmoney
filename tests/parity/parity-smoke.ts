@@ -17,6 +17,7 @@ import {
   isExpense,
   isIncome,
 } from "@darkmoney/shared/aggregations";
+import { convertParityAmount } from "@darkmoney/shared/currency";
 import {
   buildAccountCurrencyMap,
   buildParityExchangeRateMap,
@@ -43,6 +44,7 @@ type Fixture = {
   exchangeRates: Array<{ fromCurrencyCode: string; toCurrencyCode: string; rate: number; effectiveAt: string }>;
   accounts: Array<{
     id: number;
+    type: string;
     currencyCode: string;
     currentBalance: number;
     currentBalanceInBaseCurrency?: number | null;
@@ -53,7 +55,7 @@ type Fixture = {
   obligations: ParityObligation[];
   subscriptions: ParitySubscription[];
   recurringIncome: ParityRecurringIncome[];
-  healthInputs: { liquidMoney: number; averageMonthlyExpense: number; totalPayable: number };
+  healthInputs: { averageMonthlyExpense: number; totalPayable: number };
 };
 
 const DIR = join(process.cwd(), "tests", "parity");
@@ -131,10 +133,27 @@ const reviewInbox = buildReviewInboxSnapshot(
 
 const readiness = buildReadiness(fixture.movements, now);
 
-// Salud: usa el período "month" (mismo en web y móvil) + inputs explícitos del fixture.
+// Salud: liquidMoney se DERIVA de las cuentas (regla cash/bank/savings, no archivadas)
+// para que el smoke pruebe la misma regla que el call-site real, no un valor fijo.
+const liquidAccountTypes = new Set(["cash", "bank", "savings"]);
+const liquidMoney = fixture.accounts
+  .filter((a) => liquidAccountTypes.has(a.type) && !a.isArchived)
+  .reduce((sum, a) => {
+    const raw = a.currentBalanceInBaseCurrency ?? a.currentBalance;
+    return sum +
+      (convertParityAmount({
+        amount: raw,
+        currencyCode: fixture.baseCurrency,
+        baseCurrencyCode: fixture.baseCurrency,
+        targetCurrencyCode: fixture.displayCurrency,
+        exchangeRateMap: ctx.exchangeRateMap,
+      }) ?? 0);
+  }, 0);
+
+// Salud: usa el período "month" (mismo en web y móvil).
 const monthTotals = periodTotals("month");
 const health = buildHealthScore({
-  liquidMoney: fixture.healthInputs.liquidMoney,
+  liquidMoney,
   averageMonthlyExpense: fixture.healthInputs.averageMonthlyExpense,
   periodIncome: monthTotals.income,
   periodNet: monthTotals.net,
