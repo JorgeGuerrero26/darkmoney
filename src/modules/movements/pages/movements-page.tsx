@@ -517,7 +517,6 @@ export function MovementsPage() {
       tableFilters.status !== "all" ||
       tableFilters.type !== "all",
   );
-  const showMovementExplore = viewMode !== "table" && hasAnyMovements;
 
   function updateTableFilter<Field extends keyof MovementTableFilters>(
     field: Field,
@@ -976,6 +975,41 @@ export function MovementsPage() {
               </Button>
             </div>
           </div>
+
+          {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <input
+              className="field-dark"
+              onChange={(event) => updateTableFilter("description", event.target.value)}
+              placeholder="Buscar por descripcion, categoria o contraparte..."
+              type="text"
+              value={tableFilters.description}
+            />
+            <select
+              className="field-dark"
+              onChange={(event) => updateTableFilter("status", event.target.value as MovementStatus | "all")}
+              value={tableFilters.status}
+            >
+              <option value="all">Todos los estados</option>
+              {movementStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="field-dark"
+              onChange={(event) => updateTableFilter("type", event.target.value as MovementType | "all")}
+              value={tableFilters.type}
+            >
+              <option value="all">Todos los tipos</option>
+              {movementTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </section>
 
         {errorMessage && !isEditorOpen ? (
@@ -985,87 +1019,15 @@ export function MovementsPage() {
           tone="error"
         />
       ) : null}
-        {showMovementExplore ? (
-          <SurfaceCard
-            description="Busca por descripcion y filtra por estado o tipo cuando prefieras recorrer la vista lista o tarjetas."
-            title="Explorar movimientos"
-          >
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
-              <div className="flex items-center gap-2">
-                <button
-                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                  disabled={snapshotQuery.isFetching}
-                  onClick={() => snapshotQuery.refetch()}
-                  title="Actualizar"
-                  type="button"
-                >
-                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-                </button>
-                <div className="flex-1">
-                  <input
-                    className="w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 py-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                    onChange={(event) => updateTableFilter("description", event.target.value)}
-                    placeholder="Buscar por descripcion, categoria o contraparte..."
-                    type="text"
-                    value={tableFilters.description}
-                  />
-                </div>
-              </div>
-
-              <select
-                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(event) => updateTableFilter("status", event.target.value as MovementStatus | "all")}
-                value={tableFilters.status}
-              >
-                <option value="all">Todos los estados</option>
-                {movementStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(event) => updateTableFilter("type", event.target.value as MovementType | "all")}
-                value={tableFilters.type}
-              >
-                <option value="all">Todos los tipos</option>
-                {movementTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-
-              <Button
-                className="h-16 px-6"
-                onClick={clearTableFilters}
-                variant={hasActiveFilters ? "secondary" : "ghost"}
-              >
-                Limpiar filtros
-              </Button>
-            </div>
-          </SurfaceCard>
-        ) : null}
         <SurfaceCard
-          action={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {hasActiveFilters ? (
-                <Button
-                  className="h-10 px-4"
-                  onClick={clearTableFilters}
-                  variant="ghost"
-                >
-                  Limpiar filtros
-                </Button>
-              ) : null}
-              <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
-            </div>
-          }
           className="relative z-10"
-          description="La tabla queda al final como vista principal. Desde aqui abres cualquier movimiento para editarlo o revisarlo."
           title="Movimientos registrados"
+          titleAccessory={
+            <InfoTip ariaLabel="Sobre la lista de movimientos">
+              Abre cualquier movimiento para editarlo o revisarlo. Los filtros de la barra superior
+              aplican a todas las vistas.
+            </InfoTip>
+          }
         >
           {filteredMovements.length === 0 ? (
             <DataState
