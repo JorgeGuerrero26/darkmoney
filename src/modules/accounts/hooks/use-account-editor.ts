@@ -6,6 +6,7 @@ import {
   createDefaultFormState,
   type AccountFormState,
 } from "../lib/account-validation";
+import { getTypePreset } from "../lib/account-options";
 
 export type AccountEditorMode = "create" | "edit";
 
@@ -195,6 +196,21 @@ export function useAccountEditor({
     }));
   }
 
+  function handleAccountTypeChange(nextType: string) {
+    const currentPreset = getTypePreset(formState.type);
+    const nextPreset = getTypePreset(nextType);
+
+    setIsDirty(true);
+    setFormState((currentState) => ({
+      ...currentState,
+      type: nextType,
+      color:
+        currentState.color === currentPreset.color ? nextPreset.color : currentState.color,
+      icon:
+        currentState.icon === currentPreset.icon ? nextPreset.icon : currentState.icon,
+    }));
+  }
+
   function replaceFormState(nextFormState: AccountFormState) {
     setFormState(nextFormState);
     setIsDirty(false);
@@ -220,6 +236,7 @@ export function useAccountEditor({
     closeEditor,
     editorMode,
     formState,
+    handleAccountTypeChange,
     isDirty,
     isEditorOpen,
     openCreateEditor,

@@ -1,2077 +1,304 @@
-import {
-  Archive,
-  BadgeDollarSign,
-  Banknote,
-  BarChart3,
-  BriefcaseBusiness,
-  Building2,
-  CarFront,
-  Check,
-  ChevronDown,
-  CircleDollarSign,
-  Coins,
-  CreditCard,
-  Download,
-  Gem,
-  HandCoins,
-  House,
-  Landmark,
-  LoaderCircle,
-  PiggyBank,
-  Plane,
-  Plus,
-  RefreshCw,
-  ReceiptText,
-  RotateCcw,
-  Search,
-  Shield,
-  Sparkles,
-  Smartphone,
-  Store,
-  Trash2,
-  TrendingUp,
-  Vault,
-  Wallet2,
-  X,
-} from "lucide-react";
+import { Archive, Plus } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close";
 import { Button } from "../../../components/ui/button";
+import {
+  BulkActionBar,
+  useSelection,
+} from "../../../components/ui/bulk-action-bar";
+import { type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { useUndoQueue } from "../../../components/ui/undo-queue";
-import { PageHeader } from "../../../components/ui/page-header";
+import { InfoTip } from "../../../components/ui/info-tip";
+import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
+import { ModalBody } from "../../../components/ui/modal-body";
+import { Pagination } from "../../../components/ui/pagination";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
-import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
-import {
-  TableColumnFilterMenu,
-  TableFilterOptionButton,
-  tableColumnFilterInputClassName,
-} from "../../../components/ui/table-column-filter-menu";
-import { formatDateTime } from "../../../lib/formatting/dates";
-import { formatWorkspaceKindLabel } from "../../../lib/formatting/labels";
-import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
-import { useAuth } from "../../auth/auth-context";
-import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
-import { AccountAnalyticsModal } from "../components/account-analytics-modal";
-import type { AccountSummary } from "../../../types/domain";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
+import { formatCurrency } from "../../../lib/formatting/money";
 import {
   getQueryErrorMessage,
-  type AccountFormInput,
   useArchiveAccountMutation,
   useCreateAccountMutation,
   useDeleteAccountMutation,
-  useWorkspaceSnapshotQuery,
   useUpdateAccountMutation,
+  useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
+import type { AccountSummary } from "../../../types/domain";
+import { useAuth } from "../../auth/auth-context";
+import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { AccountAnalyticsModal } from "../components/account-analytics-modal";
+import { AccountArchiveDialog } from "../components/account-archive-dialog";
+import { AccountEditorDialog } from "../components/account-editor-dialog";
+import { AccountSummaryStrip } from "../components/account-summary-strip";
+import { AccountsGrid } from "../components/accounts-grid";
+import { AccountsList } from "../components/accounts-list";
+import { AccountsTable } from "../components/accounts-table";
+import { AccountsToolbar } from "../components/accounts-toolbar";
+import { useAccountEditor } from "../hooks/use-account-editor";
+import { useAccountFilters } from "../hooks/use-account-filters";
+import {
+  ACCOUNT_PAGE_SIZE,
+  filterAccounts,
+  getAvailableAccountTypes,
+  getAvailableCurrencyCodes,
+  paginateAccounts,
+} from "../lib/account-filters";
+import { downloadAccountsCSV } from "../lib/account-formatters";
+import { getAccountIcon, getTypePreset } from "../lib/account-options";
+import {
+  getFirstAccountFormError,
+  toAccountInput,
+  validateAccountForm,
+  type AccountFormErrors,
+  type AccountFormField,
+  type AccountFormState,
+} from "../lib/account-validation";
 
-type AccountEditorMode = "create" | "edit";
-
-type AccountFormState = {
-  name: string;
-  type: string;
-  currencyCode: string;
-  openingBalance: string;
-  includeInNetWorth: boolean;
-  color: string;
-  icon: string;
-};
-
-const accountTypeOptions = [
-  {
-    value: "cash",
-    label: "Efectivo",
-    icon: "wallet",
-    color: "#1b6a58",
-    description: "Billeteras, efectivo diario y caja chica.",
-  },
-  {
-    value: "bank",
-    label: "Cuenta bancaria",
-    icon: "landmark",
-    color: "#4566d6",
-    description: "Cuenta corriente, bancaria o digital.",
-  },
-  {
-    value: "savings",
-    label: "Ahorros",
-    icon: "piggy-bank",
-    color: "#b48b34",
-    description: "Fondos reservados y metas de ahorro.",
-  },
-  {
-    value: "credit_card",
-    label: "Tarjeta de credito",
-    icon: "credit-card",
-    color: "#8f3e3e",
-    description: "Lineas de consumo y tarjetas activas.",
-  },
-  {
-    value: "investment",
-    label: "Inversion",
-    icon: "trending-up",
-    color: "#8366f2",
-    description: "Brokers, portafolios y activos invertidos.",
-  },
-  {
-    value: "loan_wallet",
-    label: "Prestamos",
-    icon: "briefcase",
-    color: "#c46a31",
-    description: "Creditos, deudas o cartera prestada.",
-  },
-  {
-    value: "other",
-    label: "Otro",
-    icon: "banknote",
-    color: "#6b7280",
-    description: "Contenedores especiales o cuentas mixtas.",
-  },
-] as const;
-
-const accountTypeFilters = [
-  { value: "all", label: "Todos" },
-  { value: "cash", label: "Efectivo" },
-  { value: "bank", label: "Banco" },
-  { value: "savings", label: "Ahorros" },
-  { value: "credit_card", label: "Tarjeta" },
-  { value: "investment", label: "Inversion" },
-  { value: "loan_wallet", label: "Prestamos" },
-] as const;
-
-const iconOptions = [
-  { value: "wallet", label: "Billetera", description: "Billetera, cash o caja general." },
-  { value: "landmark", label: "Banco", description: "Banco, fintech o cuenta principal." },
-  { value: "piggy-bank", label: "Alcancia", description: "Ahorro, reserva o meta." },
-  { value: "credit-card", label: "Tarjeta", description: "Tarjeta, consumo o linea." },
-  { value: "trending-up", label: "Inversiones", description: "Portafolio, broker o crecimiento." },
-  { value: "briefcase", label: "Cartera", description: "Prestamos y cartera financiera." },
-  { value: "banknote", label: "Billetes", description: "Caja, fondos o categoria libre." },
-  { value: "building-2", label: "Edificio", description: "Banco corporativo o institucion." },
-  { value: "smartphone", label: "App movil", description: "Billetera digital, app o neobanco." },
-  { value: "vault", label: "Caja fuerte", description: "Reserva protegida o fondo seguro." },
-  { value: "coins", label: "Monedas", description: "Efectivo, monedas o saldo pequeno." },
-  { value: "circle-dollar-sign", label: "Dolar", description: "Cuenta en dolares o saldo principal." },
-  { value: "badge-dollar-sign", label: "Bono", description: "Bonos, recompensas o ingresos variables." },
-  { value: "hand-coins", label: "Prestamo", description: "Dinero prestado, cobros o cartera por recibir." },
-  { value: "receipt-text", label: "Recibos", description: "Gastos, comprobantes o pagos recurrentes." },
-  { value: "store", label: "Negocio", description: "Caja de tienda, ventas o negocio propio." },
-  { value: "house", label: "Casa", description: "Hogar, hipoteca o patrimonio inmobiliario." },
-  { value: "car-front", label: "Auto", description: "Vehiculo, credito vehicular o movilidad." },
-  { value: "plane", label: "Viajes", description: "Fondos para viajes o gastos en el exterior." },
-  { value: "gem", label: "Activos", description: "Joyas, cripto, colecciones o valor especial." },
-  { value: "shield", label: "Seguro", description: "Fondo de emergencia, seguro o respaldo." },
-] as const;
-
-const editorColorSwatches = [
-  "#1b6a58",
-  "#2d9076",
-  "#4566d6",
-  "#6f82f1",
-  "#b48b34",
-  "#d39d3a",
-  "#8f3e3e",
-  "#c55f5f",
-  "#8366f2",
-  "#9c7dff",
-  "#c46a31",
-  "#6b7280",
-] as const;
-
-const currencyOptions = [
-  { code: "PEN", label: "Sol peruano", region: "Peru", symbol: "S/" },
-  { code: "USD", label: "Dolar estadounidense", region: "Estados Unidos", symbol: "$" },
-  { code: "EUR", label: "Euro", region: "Union Europea", symbol: "EUR" },
-  { code: "GBP", label: "Libra esterlina", region: "Reino Unido", symbol: "GBP" },
-  { code: "JPY", label: "Yen japones", region: "Japon", symbol: "JPY" },
-  { code: "CNY", label: "Yuan chino", region: "China", symbol: "CNY" },
-  { code: "AUD", label: "Dolar australiano", region: "Australia", symbol: "AUD" },
-  { code: "CAD", label: "Dolar canadiense", region: "Canada", symbol: "CAD" },
-  { code: "CHF", label: "Franco suizo", region: "Suiza", symbol: "CHF" },
-  { code: "BRL", label: "Real brasileno", region: "Brasil", symbol: "R$" },
-  { code: "MXN", label: "Peso mexicano", region: "Mexico", symbol: "MXN" },
-  { code: "CLP", label: "Peso chileno", region: "Chile", symbol: "CLP" },
-  { code: "COP", label: "Peso colombiano", region: "Colombia", symbol: "COP" },
-  { code: "ARS", label: "Peso argentino", region: "Argentina", symbol: "ARS" },
-  { code: "BOB", label: "Boliviano", region: "Bolivia", symbol: "BOB" },
-  { code: "UYU", label: "Peso uruguayo", region: "Uruguay", symbol: "UYU" },
-  { code: "PYG", label: "Guarani", region: "Paraguay", symbol: "PYG" },
-  { code: "VES", label: "Bolivar digital", region: "Venezuela", symbol: "VES" },
-  { code: "CRC", label: "Colon costarricense", region: "Costa Rica", symbol: "CRC" },
-  { code: "DOP", label: "Peso dominicano", region: "Republica Dominicana", symbol: "DOP" },
-  { code: "GTQ", label: "Quetzal", region: "Guatemala", symbol: "GTQ" },
-  { code: "HNL", label: "Lempira", region: "Honduras", symbol: "HNL" },
-  { code: "NIO", label: "Cordoba oro", region: "Nicaragua", symbol: "NIO" },
-  { code: "PAB", label: "Balboa", region: "Panama", symbol: "PAB" },
-  { code: "SGD", label: "Dolar de Singapur", region: "Singapur", symbol: "SGD" },
-  { code: "HKD", label: "Dolar de Hong Kong", region: "Hong Kong", symbol: "HKD" },
-  { code: "NZD", label: "Dolar neozelandes", region: "Nueva Zelanda", symbol: "NZD" },
-  { code: "SEK", label: "Corona sueca", region: "Suecia", symbol: "SEK" },
-  { code: "NOK", label: "Corona noruega", region: "Noruega", symbol: "NOK" },
-  { code: "DKK", label: "Corona danesa", region: "Dinamarca", symbol: "DKK" },
-  { code: "ZAR", label: "Rand sudafricano", region: "Sudafrica", symbol: "ZAR" },
-  { code: "AED", label: "Dirham de Emiratos", region: "Emiratos Arabes Unidos", symbol: "AED" },
-  { code: "SAR", label: "Riyal saudita", region: "Arabia Saudita", symbol: "SAR" },
-  { code: "INR", label: "Rupia india", region: "India", symbol: "INR" },
-  { code: "KRW", label: "Won surcoreano", region: "Corea del Sur", symbol: "KRW" },
-  { code: "TRY", label: "Lira turca", region: "Turquia", symbol: "TRY" },
-] as const;
-
-type CurrencyOption = (typeof currencyOptions)[number];
-type IconOption = (typeof iconOptions)[number];
-type AccountTableStatusFilter = "all" | "included" | "excluded" | "archived";
-
-type AccountTableFilters = {
-  name: string;
-  type: string;
-  balance: string;
-  currencyCode: string;
-  status: AccountTableStatusFilter;
-};
-
-type AccountTableFilterField = keyof AccountTableFilters;
-
-const accountTableStatusOptions: Array<{ value: AccountTableStatusFilter; label: string }> = [
-  { value: "all", label: "Todos" },
-  { value: "included", label: "Incluida" },
-  { value: "excluded", label: "Fuera de patrimonio" },
-  { value: "archived", label: "Archivada" },
+const accountColumns: ColumnDef[] = [
+  { key: "type", label: "Tipo" },
+  { key: "balance", label: "Saldo actual" },
+  { key: "currency", label: "Moneda" },
+  { key: "status", label: "Estado" },
+  { key: "activity", label: "Ultima actividad", defaultVisible: false },
 ];
-
-function defaultAccountTableFilters(): AccountTableFilters {
-  return {
-    name: "",
-    type: "",
-    balance: "",
-    currencyCode: "",
-    status: "all",
-  };
-}
-
-function isAccountTableFilterActive(
-  filters: AccountTableFilters,
-  field: AccountTableFilterField,
-) {
-  switch (field) {
-    case "name":
-    case "type":
-    case "balance":
-    case "currencyCode":
-      return Boolean(filters[field].trim());
-    case "status":
-      return filters.status !== "all";
-    default:
-      return false;
-  }
-}
-
-function getTypePreset(type: string) {
-  return accountTypeOptions.find((option) => option.value === type) ?? accountTypeOptions[0];
-}
-
-function getIconOption(icon: string): IconOption {
-  return iconOptions.find((option) => option.value === icon) ?? iconOptions[0];
-}
-
-function getCurrencyOption(currencyCode: string): CurrencyOption | null {
-  return currencyOptions.find((option) => option.code === currencyCode.toUpperCase()) ?? null;
-}
-
-function buildCurrencyLabel(currencyCode: string) {
-  const option = getCurrencyOption(currencyCode);
-
-  if (option) {
-    return option;
-  }
-
-  const normalizedCode = currencyCode.trim().toUpperCase();
-
-  return normalizedCode
-    ? {
-        code: normalizedCode,
-        label: "Moneda actual",
-        region: "Configurada en la base",
-        symbol: normalizedCode,
-      }
-    : null;
-}
-
-function createDefaultFormState(currencyCode: string): AccountFormState {
-  const preset = accountTypeOptions[0];
-
-  return {
-    name: "",
-    type: preset.value,
-    currencyCode,
-    openingBalance: "0",
-    includeInNetWorth: true,
-    color: preset.color,
-    icon: preset.icon,
-  };
-}
-
-function buildFormStateFromAccount(account: AccountSummary): AccountFormState {
-  return {
-    name: account.name,
-    type: account.type,
-    currencyCode: account.currencyCode,
-    openingBalance: String(account.openingBalance),
-    includeInNetWorth: account.includeInNetWorth,
-    color: account.color,
-    icon: account.icon || getTypePreset(account.type).icon,
-  };
-}
-
-function toAccountInput(formState: AccountFormState): AccountFormInput {
-  return {
-    name: formState.name.trim(),
-    type: formState.type,
-    currencyCode: formState.currencyCode.trim().toUpperCase(),
-    openingBalance: Number(formState.openingBalance || 0),
-    includeInNetWorth: formState.includeInNetWorth,
-    color: formState.color,
-    icon: formState.icon,
-  };
-}
-
-function getAccountIcon(icon: string, type: string) {
-  const resolvedIcon = icon || getTypePreset(type).icon;
-
-  switch (resolvedIcon) {
-    case "landmark":
-      return Landmark;
-    case "piggy-bank":
-      return PiggyBank;
-    case "credit-card":
-      return CreditCard;
-    case "trending-up":
-      return TrendingUp;
-    case "briefcase":
-      return BriefcaseBusiness;
-    case "banknote":
-      return Banknote;
-    case "building-2":
-      return Building2;
-    case "smartphone":
-      return Smartphone;
-    case "vault":
-      return Vault;
-    case "coins":
-      return Coins;
-    case "circle-dollar-sign":
-      return CircleDollarSign;
-    case "badge-dollar-sign":
-      return BadgeDollarSign;
-    case "hand-coins":
-      return HandCoins;
-    case "receipt-text":
-      return ReceiptText;
-    case "store":
-      return Store;
-    case "house":
-      return House;
-    case "car-front":
-      return CarFront;
-    case "plane":
-      return Plane;
-    case "gem":
-      return Gem;
-    case "shield":
-      return Shield;
-    default:
-      return Wallet2;
-  }
-}
-
-function getPickerTriggerStyle(isOpen: boolean) {
-  return {
-    borderColor: isOpen ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.08)",
-    background: isOpen
-      ? "linear-gradient(180deg, rgba(15, 22, 34, 0.98), rgba(10, 16, 27, 0.98))"
-      : "linear-gradient(180deg, rgba(12, 18, 28, 0.96), rgba(9, 14, 22, 0.96))",
-    boxShadow: isOpen
-      ? "0 0 0 4px rgba(107, 228, 197, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04)"
-      : "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
-  };
-}
-
-const pickerPanelStyle = {
-  borderColor: "rgba(255, 255, 255, 0.1)",
-  background:
-    "linear-gradient(180deg, rgba(10, 15, 24, 0.98) 0%, rgba(8, 12, 20, 0.98) 100%)",
-};
-
-const pickerSearchInputStyle = {
-  borderColor: "rgba(255, 255, 255, 0.08)",
-  background:
-    "linear-gradient(180deg, rgba(17, 25, 39, 0.95), rgba(13, 20, 31, 0.95))",
-};
-
-function getPickerOptionStyle(isSelected: boolean) {
-  return {
-    borderColor: isSelected ? "rgba(107, 228, 197, 0.18)" : "rgba(255, 255, 255, 0.04)",
-    background: isSelected
-      ? "linear-gradient(180deg, rgba(18, 31, 41, 0.98), rgba(12, 22, 33, 0.98))"
-      : "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
-    boxShadow: isSelected ? "0 12px 30px rgba(0, 0, 0, 0.18)" : "none",
-  };
-}
-
-const pickerEmptyStateStyle = {
-  borderColor: "rgba(255, 255, 255, 0.08)",
-  background:
-    "linear-gradient(180deg, rgba(14, 21, 32, 0.96), rgba(11, 17, 26, 0.96))",
-};
-
-const accountFieldClassName =
-  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-
-const accountTextInputClassName = `${accountFieldClassName} h-14 sm:h-16`;
-const accountPickerTriggerClassName = `${accountFieldClassName} flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-3 text-left`;
-const accountPickerSearchInputClassName =
-  "w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const editorPanelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
-const accountFieldLabelClassName =
-  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
-const accountFieldHintClassName = "mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75";
-
-const ACCOUNT_EDITOR_DRAFT_STORAGE_KEY = "darkmoney-account-editor-draft";
-const ACCOUNT_EDITOR_DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
-
-type PersistedAccountEditorState = {
-  editorMode: AccountEditorMode;
-  formState: AccountFormState;
-  isEditorOpen: boolean;
-  savedAt: number;
-  selectedAccountId: number | null;
-  userId: string;
-  workspaceId: number;
-};
-
-function readPersistedAccountEditorState() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const rawValue = window.sessionStorage.getItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
-
-  if (!rawValue) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(rawValue) as PersistedAccountEditorState;
-  } catch {
-    window.sessionStorage.removeItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
-    return null;
-  }
-}
-
-function clearPersistedAccountEditorState() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.sessionStorage.removeItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
-}
-
-function persistAccountEditorState(value: PersistedAccountEditorState) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.sessionStorage.setItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY, JSON.stringify(value));
-}
-
-type CurrencySelectProps = {
-  value: string;
-  onChange: (currencyCode: string) => void;
-};
-
-function CurrencySelect({ onChange, value }: CurrencySelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedCurrency = useMemo(() => buildCurrencyLabel(value), [value]);
-  const filteredCurrencies = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return currencyOptions;
-    }
-
-    return currencyOptions.filter((option) => {
-      const searchableValue = `${option.code} ${option.label} ${option.region} ${option.symbol}`.toLowerCase();
-      return searchableValue.includes(normalizedQuery);
-    });
-  }, [query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={accountPickerTriggerClassName}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        style={getPickerTriggerStyle(isOpen)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 min-w-[2.5rem] shrink-0 items-center justify-center rounded-[14px] sm:h-10 sm:min-w-[3rem] sm:rounded-[18px] border border-white/10 bg-white/[0.04] px-2 sm:px-3 text-xs sm:text-sm font-semibold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            {selectedCurrency?.symbol ?? "?"}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">
-              {selectedCurrency ? selectedCurrency.code : "Selecciona una moneda"}
-            </span>
-            <span className="mt-1 block truncate text-xs text-storm">
-              {selectedCurrency
-                ? `${selectedCurrency.label} · ${selectedCurrency.region}`
-                : "Elige la divisa base de la cuenta"}
-            </span>
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
-          style={pickerPanelStyle}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className={accountPickerSearchInputClassName}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar PEN, USD, Euro..."
-              style={pickerSearchInputStyle}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredCurrencies.length ? (
-              filteredCurrencies.map((option) => {
-                const isSelected = option.code === value.toUpperCase();
-
-                return (
-                  <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
-                      isSelected
-                        ? "text-ink"
-                        : "text-storm hover:text-ink"
-                    }`}
-                    key={option.code}
-                    onClick={() => {
-                      onChange(option.code);
-                      setIsOpen(false);
-                    }}
-                    style={getPickerOptionStyle(isSelected)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-11 min-w-[3rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink">
-                        {option.symbol}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.code}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">
-                          {option.label} · {option.region}
-                        </span>
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div
-                className="rounded-[22px] border px-4 py-5 text-sm text-storm"
-                style={pickerEmptyStateStyle}
-              >
-                No encontramos una moneda con ese termino. Prueba con `PEN`, `USD`, `EUR` o el nombre del pais.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type AccountTypeSelectProps = {
-  value: string;
-  onChange: (type: string) => void;
-};
-
-function AccountTypeSelect({ onChange, value }: AccountTypeSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedType = getTypePreset(value);
-  const SelectedTypeIcon = getAccountIcon(selectedType.icon, selectedType.value);
-  const filteredTypes = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return accountTypeOptions;
-    }
-
-    return accountTypeOptions.filter((option) => {
-      const searchableValue = `${option.label} ${option.description} ${option.value}`.toLowerCase();
-      return searchableValue.includes(normalizedQuery);
-    });
-  }, [query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={accountPickerTriggerClassName}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        style={getPickerTriggerStyle(isOpen)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] sm:h-10 sm:w-10 sm:rounded-[18px] text-white shadow-lg"
-            style={{ backgroundColor: selectedType.color }}
-          >
-            <SelectedTypeIcon className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">{selectedType.label}</span>
-            <span className="mt-1 block truncate text-xs text-storm">{selectedType.description}</span>
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
-          style={pickerPanelStyle}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className={accountPickerSearchInputClassName}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar tipo de cuenta..."
-              style={pickerSearchInputStyle}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredTypes.length ? (
-              filteredTypes.map((option) => {
-                const isSelected = option.value === value;
-                const TypeIcon = getAccountIcon(option.icon, option.value);
-
-                return (
-                  <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
-                      isSelected ? "text-ink" : "text-storm hover:text-ink"
-                    }`}
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    style={getPickerOptionStyle(isSelected)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] text-white shadow-lg"
-                        style={{ backgroundColor: option.color }}
-                      >
-                        <TypeIcon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.label}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">{option.description}</span>
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div
-                className="rounded-[22px] border px-4 py-5 text-sm text-storm"
-                style={pickerEmptyStateStyle}
-              >
-                No encontramos un tipo con ese termino. Prueba con `ahorros`, `banco` o `credito`.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type AccountIconSelectProps = {
-  accountType: string;
-  color: string;
-  value: string;
-  onChange: (icon: string) => void;
-};
-
-function AccountIconSelect({
-  accountType,
-  color,
-  onChange,
-  value,
-}: AccountIconSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
-  const selectedIcon = getIconOption(value);
-  const SelectedIcon = getAccountIcon(selectedIcon.value, accountType);
-  const filteredIcons = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return iconOptions;
-    }
-
-    return iconOptions.filter((option) => {
-      const searchableValue = `${option.label} ${option.description} ${option.value}`.toLowerCase();
-      return searchableValue.includes(normalizedQuery);
-    });
-  }, [query]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setQuery("");
-    }
-  }, [isOpen]);
-
-  return (
-    <div
-      className={`relative ${isOpen ? "z-50" : "z-10"}`}
-      ref={containerRef}
-    >
-      <button
-        className={accountPickerTriggerClassName}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        style={getPickerTriggerStyle(isOpen)}
-        type="button"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] text-white shadow-lg"
-            style={{ backgroundColor: color }}
-          >
-            <SelectedIcon className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">{selectedIcon.label}</span>
-            <span className="mt-1 block truncate text-xs text-storm">{selectedIcon.description}</span>
-          </span>
-        </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen ? (
-        <div
-          className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
-          style={pickerPanelStyle}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className={accountPickerSearchInputClassName}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar icono..."
-              style={pickerSearchInputStyle}
-              type="text"
-              value={query}
-            />
-          </div>
-
-          <div className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1">
-            {filteredIcons.length ? (
-              filteredIcons.map((option) => {
-                const isSelected = option.value === value;
-                const IconPreview = getAccountIcon(option.value, accountType);
-
-                return (
-                  <button
-                    className={`flex w-full items-center justify-between gap-3 rounded-[24px] border px-4 py-3.5 text-left transition duration-200 ${
-                      isSelected ? "text-ink" : "text-storm hover:text-ink"
-                    }`}
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setIsOpen(false);
-                    }}
-                    style={getPickerOptionStyle(isSelected)}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] text-white shadow-lg"
-                        style={{ backgroundColor: color }}
-                      >
-                        <IconPreview className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium text-ink">{option.label}</span>
-                        <span className="mt-1 block truncate text-xs text-storm">{option.description}</span>
-                      </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <div
-                className="rounded-[22px] border px-4 py-5 text-sm text-storm"
-                style={pickerEmptyStateStyle}
-              >
-                No encontramos un icono con ese termino. Prueba con `billetera`, `banco` o `inversion`.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function AccountsLoadingSkeleton() {
   return (
-    <>
-      <section className="shimmer-surface h-[252px]" />
-      <section className="shimmer-surface h-[420px]" />
-    </>
-  );
-}
-
-type AccountsSummaryChipProps = {
-  label: string;
-  tone?: "neutral" | "info" | "warning";
-  value: string;
-};
-
-function AccountsSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: AccountsSummaryChipProps) {
-  const toneClasses = {
-    neutral: "border-white/10 bg-white/[0.04] text-ink",
-    info: "border-electric/25 bg-electric/10 text-electric",
-    warning: "border-gold/30 bg-gold/10 text-gold",
-  } as const;
-
-  return (
-    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
-      <span className="text-sm font-semibold">{value}</span>
+    <div className="grid gap-4">
+      <div className="h-48 animate-pulse rounded-[30px] border border-white/10 bg-white/[0.04]" />
+      <div className="h-28 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.035]" />
+      <div className="h-96 animate-pulse rounded-[24px] border border-white/10 bg-white/[0.03]" />
     </div>
   );
 }
 
-type AccountEditorDialogProps = {
-  baseCurrencyCode: string;
-  clearFieldError: (field: string) => void;
-  closeEditor: () => void;
-  errorMessage: string;
-  formState: AccountFormState;
-  handleAccountTypeChange: (type: string) => void;
-  handleArchiveToggle: (account: AccountSummary) => Promise<void> | void;
-  handleDeleteAccount: () => Promise<void> | void;
-  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void> | void;
-  invalidFields: Set<string>;
-  isCreateMode: boolean;
-  isSaving: boolean;
-  selectedAccount: AccountSummary | null;
-  updateFormState: <Field extends keyof AccountFormState>(
-    field: Field,
-    value: AccountFormState[Field],
-  ) => void;
-};
-
-function AccountEditorDialog({
-  baseCurrencyCode,
-  clearFieldError,
-  closeEditor,
-  errorMessage,
-  formState,
-  handleAccountTypeChange,
-  handleArchiveToggle,
-  handleDeleteAccount,
-  handleSubmit,
-  invalidFields,
-  isCreateMode,
-  isSaving,
-  selectedAccount,
-  updateFormState,
-}: AccountEditorDialogProps) {
-  const previewType = getTypePreset(formState.type);
-  const previewCurrencyCode = formState.currencyCode || baseCurrencyCode;
-  const previewCurrency = buildCurrencyLabel(previewCurrencyCode);
-  const parsedPreviewOpeningBalance = Number(formState.openingBalance);
-  const previewOpeningBalance = Number.isFinite(parsedPreviewOpeningBalance)
-    ? parsedPreviewOpeningBalance
-    : 0;
-  const previewAccountName = formState.name.trim() || "Cuenta sin nombre";
-  const previewIconOption = getIconOption(formState.icon || previewType.icon);
-  const PreviewAccountIcon = getAccountIcon(previewIconOption.value, formState.type);
-
-  useEffect(() => {
-    if (invalidFields.size === 0) return;
-    const firstField = [...invalidFields][0];
-    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
-    if (firstEl) {
-      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
-      }, 300);
-    }
-    invalidFields.forEach((field) => {
-      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
-      if (!el) return;
-      el.classList.remove("field-error-shake");
-      void el.offsetWidth;
-      el.classList.add("field-error-shake");
-    });
-  }, [invalidFields]);
-
-  return (
-    <div
-      aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-40 isolate bg-black/62 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/48 before:backdrop-blur-2xl before:content-['']"
-      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
-      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
-      role="dialog"
-    >
-      <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
-        <div
-          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="pointer-events-none absolute inset-0">
-            <div
-              className="absolute -left-20 top-12 h-64 w-64 rounded-full blur-3xl animate-soft-pulse"
-              style={{ backgroundColor: `${formState.color}2b` }}
-            />
-            <div
-              className="absolute right-0 top-0 h-48 w-48 rounded-full blur-3xl animate-soft-pulse [animation-delay:240ms]"
-              style={{ backgroundColor: "rgba(142, 165, 255, 0.14)" }}
-            />
-            <div
-              className="absolute bottom-0 left-1/2 h-40 w-56 -translate-x-1/2 blur-3xl animate-soft-pulse [animation-delay:420ms]"
-              style={{ backgroundColor: "rgba(215, 190, 123, 0.12)" }}
-            />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_22%,transparent_78%,rgba(255,255,255,0.03))]" />
-          </div>
-
-          <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="max-w-2xl space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                    {isCreateMode ? "nueva cuenta" : "editar cuenta"}
-                  </span>
-                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-storm/75">
-                    Se refleja en el dashboard al guardar
-                  </span>
-                </div>
-                <div>
-                  <h2 className="font-display text-3xl font-semibold text-ink sm:text-[2.7rem]">
-                    {isCreateMode ? "Crear cuenta" : selectedAccount?.name ?? "Cuenta"}
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
-                    {isCreateMode
-                      ? "Configura una cuenta real con una identidad visual clara, saldo inicial y moneda base para que se integre al workspace desde el primer momento."
-                      : "Ajusta la presentacion y la configuracion financiera de esta cuenta sin perder el contexto de su saldo y actividad actual."}
-                  </p>
-                </div>
-              </div>
-              <button
-                aria-label="Cerrar editor de cuenta"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:-translate-y-0.5 hover:bg-white/[0.08] hover:text-ink"
-                onClick={closeEditor}
-                type="button"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form
-              className="mt-6 flex flex-1 flex-col"
-              noValidate
-              onSubmit={(event) => void handleSubmit(event)}
-            >
-              <div className="space-y-6">
-                {errorMessage ? (
-                  <FormFeedbackBanner
-                    description={errorMessage}
-                    title="Revisa los datos antes de guardar"
-                  />
-                ) : null}
-                <div className="space-y-6">
-                  <section className="relative overflow-hidden rounded-[24px] sm:rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-3 sm:p-6 lg:p-7">
-                    <div
-                      className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
-                      style={{ backgroundColor: `${formState.color}3d` }}
-                    />
-                    <div className="relative">
-                      <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
-                          Live preview
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
-                          {formState.includeInNetWorth
-                            ? "Incluida en patrimonio"
-                            : "Fuera de patrimonio"}
-                        </span>
-                      </div>
-
-                      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] lg:items-end">
-                        <div className="flex items-start gap-5">
-                          <div className="relative flex h-16 w-16 shrink-0 items-center justify-center sm:h-24 sm:w-24">
-                            <div
-                              className="absolute inset-0 rounded-[20px] sm:rounded-[30px] opacity-80 blur-2xl"
-                              style={{ backgroundColor: `${formState.color}5f` }}
-                            />
-                            <div
-                              className="relative flex h-full w-full items-center justify-center rounded-[20px] sm:rounded-[30px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
-                              style={{
-                                background: `linear-gradient(160deg, ${formState.color}, rgba(8, 13, 20, 0.72))`,
-                              }}
-                            >
-                              <PreviewAccountIcon className="h-6 w-6 sm:h-9 sm:w-9" />
-                            </div>
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Vista previa
-                            </p>
-                            <h3 className="mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
-                              {previewAccountName}
-                            </h3>
-                            <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
-                              {previewType.description}
-                            </p>
-                            <div className="mt-5 flex flex-wrap gap-2">
-                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                                {previewType.label}
-                              </span>
-                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                                {previewCurrency?.code ?? baseCurrencyCode}
-                              </span>
-                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                                {previewIconOption.label}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Saldo inicial
-                            </p>
-                            <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
-                              {formatCurrency(
-                                previewOpeningBalance,
-                                previewCurrency?.code ?? baseCurrencyCode,
-                              )}
-                            </p>
-                          </div>
-
-                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Moneda
-                            </p>
-                            <p className="mt-2 sm:mt-3 text-xs sm:text-sm font-medium text-ink">
-                              {previewCurrency?.label ?? "Moneda configurada"}
-                            </p>
-                            <p className="mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">
-                              {previewCurrency
-                                ? `${previewCurrency.code} - ${previewCurrency.region}`
-                                : "Usaremos la moneda base del workspace."}
-                            </p>
-                          </div>
-
-                          <div className="rounded-[18px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Estado patrimonio
-                            </p>
-                            <p className="mt-2 sm:mt-3 text-xs sm:text-sm font-medium text-ink">
-                              {formState.includeInNetWorth
-                                ? "Incluida en el net worth"
-                                : "Excluida del net worth"}
-                            </p>
-                            <p className="mt-1.5 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">
-                              {formState.includeInNetWorth
-                                ? "Aportara al resumen general del workspace."
-                                : "Quedara fuera del calculo patrimonial."}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className={`${editorPanelClassName} z-40`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                          Identidad
-                        </p>
-                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                          Base de la cuenta
-                        </h3>
-                        <p className="mt-2 max-w-xl text-sm leading-7 text-storm">
-                          Define como se vera esta cuenta en tarjetas, filtros y reportes.
-                        </p>
-                      </div>
-                      <div className="rounded-[24px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                        <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/75">
-                          Tipo sugerido
-                        </p>
-                        <p className="mt-2 text-sm font-medium text-ink">{previewType.label}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 space-y-5">
-                      <label className="block">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className={accountFieldLabelClassName}>Nombre</span>
-                          <span className="text-xs text-storm/65">
-                            Visible en dashboard y movimientos
-                          </span>
-                        </div>
-                        <div
-                          className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`}
-                          data-field="name"
-                        >
-                          <input
-                            className={accountTextInputClassName}
-                            onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }}
-                            placeholder="Ej. Cuenta principal"
-                            type="text"
-                            value={formState.name}
-                          />
-                        </div>
-                        <p className={accountFieldHintClassName}>
-                          Usa un nombre corto y facil de reconocer, por ejemplo "Cuenta principal"
-                          o "Caja operativa".
-                        </p>
-                      </label>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <label className="block space-y-3">
-                          <span className={accountFieldLabelClassName}>Tipo</span>
-                          <AccountTypeSelect
-                            onChange={handleAccountTypeChange}
-                            value={formState.type}
-                          />
-                          <p className="text-xs leading-6 text-storm/75">
-                            El tipo propone un icono y color iniciales para acelerar el setup.
-                          </p>
-                        </label>
-
-                        <label className="block space-y-3">
-                          <span className={accountFieldLabelClassName}>Moneda</span>
-                          <CurrencySelect
-                            onChange={(currencyCode) =>
-                              updateFormState("currencyCode", currencyCode)
-                            }
-                            value={formState.currencyCode}
-                          />
-                          <p className="text-xs leading-6 text-storm/75">
-                            Se usara para el saldo inicial y para mostrar el balance principal.
-                          </p>
-                        </label>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className={`${editorPanelClassName} z-10`}>
-                    <div>
-                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                        Finanzas
-                      </p>
-                      <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                        Saldo de arranque
-                      </h3>
-                      <p className="mt-2 max-w-xl text-sm leading-7 text-storm">
-                        Este valor actua como punto de partida para el historial de movimientos.
-                      </p>
-                    </div>
-
-                    <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,0.74fr)_minmax(0,1.26fr)]">
-                      <label className="block">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className={accountFieldLabelClassName}>Saldo inicial</span>
-                          <span className="text-xs text-storm/65">
-                            {previewCurrency?.code ?? baseCurrencyCode}
-                          </span>
-                        </div>
-                        <div
-                          className={`mt-3${invalidFields.has("openingBalance") ? " field-error-ring" : ""}`}
-                          data-field="openingBalance"
-                        >
-                          <input
-                            className={accountTextInputClassName}
-                            inputMode="decimal"
-                            onChange={(event) => { clearFieldError("openingBalance"); updateFormState("openingBalance", event.target.value); }}
-                            placeholder="0.00"
-                            type="text"
-                            value={formState.openingBalance}
-                          />
-                        </div>
-                        <p className={accountFieldHintClassName}>
-                          Acepta decimales y puede ser 0 si la cuenta empieza vacia.
-                        </p>
-                      </label>
-
-                      <div className="rounded-[28px] border border-white/8 bg-[#0c1320]/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-                        <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                          Preview financiero
-                        </p>
-                        <p className="mt-4 font-display text-3xl font-semibold text-ink">
-                          {formatCurrency(
-                            previewOpeningBalance,
-                            previewCurrency?.code ?? baseCurrencyCode,
-                          )}
-                        </p>
-                        <p className="mt-2 text-sm text-storm">
-                          {previewCurrency
-                            ? `${previewCurrency.label} - ${previewCurrency.region}`
-                            : "Sin moneda seleccionada"}
-                        </p>
-                        <div className="mt-4 h-px bg-white/8" />
-                        <p className="mt-4 text-xs leading-6 text-storm/75">
-                          El dashboard tomara este monto como base y luego le sumara o restara los
-                          movimientos reales.
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-
-                <div className="space-y-6">
-                  <section className={`${editorPanelClassName} z-30`}>
-                    <div>
-                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                        Visual
-                      </p>
-                      <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                        Icono y color
-                      </h3>
-                      <p className="mt-2 text-sm leading-7 text-storm">
-                        Dale una identidad limpia para reconocerla mas rapido en toda la app.
-                      </p>
-                    </div>
-
-                    <div className="mt-6 space-y-5">
-                      <label className="block space-y-3">
-                        <span className={accountFieldLabelClassName}>Icono</span>
-                        <AccountIconSelect
-                          accountType={formState.type}
-                          color={formState.color}
-                          onChange={(icon) => updateFormState("icon", icon)}
-                          value={formState.icon}
-                        />
-                        <p className="text-xs leading-6 text-storm/75">
-                          Puedes mantener el sugerido o elegir uno mas representativo.
-                        </p>
-                      </label>
-
-                      <div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className={accountFieldLabelClassName}>Color principal</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-storm/80">
-                            {formState.color.toUpperCase()}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-6">
-                          {editorColorSwatches.map((swatch) => {
-                            const isSelected = swatch.toLowerCase() === formState.color.toLowerCase();
-
-                            return (
-                              <button
-                                className={`group relative h-12 rounded-[18px] border transition duration-200 ${
-                                  isSelected
-                                    ? "scale-[1.02] border-white/30"
-                                    : "border-white/10 hover:-translate-y-0.5 hover:border-white/20"
-                                }`}
-                                key={swatch}
-                                onClick={() => updateFormState("color", swatch)}
-                                style={{
-                                  background: `linear-gradient(135deg, ${swatch}, ${swatch}88)`,
-                                }}
-                                type="button"
-                              >
-                                <span className="absolute inset-[3px] rounded-[14px] border border-white/15" />
-                                {isSelected ? (
-                                  <Check className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                          <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 px-4 py-4">
-                            <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Aplicacion
-                            </p>
-                            <div
-                              className="mt-3 h-12 rounded-[18px] border border-white/10"
-                              style={{
-                                background: `linear-gradient(135deg, ${formState.color}, rgba(9, 13, 20, 0.7))`,
-                              }}
-                            />
-                          </div>
-
-                          <label className="block">
-                            <span className="mb-3 block text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                              Custom
-                            </span>
-                            <input
-                              className={`${accountFieldClassName} h-16 cursor-pointer p-2`}
-                              onChange={(event) => updateFormState("color", event.target.value)}
-                              type="color"
-                              value={formState.color}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className={`${editorPanelClassName} z-20`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                          Patrimonio
-                        </p>
-                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                          Impacto en el resumen general
-                        </h3>
-                        <p className="mt-2 text-sm leading-7 text-storm">
-                          Decide si esta cuenta suma al patrimonio neto del workspace.
-                        </p>
-                      </div>
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                          formState.includeInNetWorth
-                            ? "border-pine/25 bg-pine/10 text-pine"
-                            : "border-white/10 bg-white/[0.04] text-storm"
-                        }`}
-                      >
-                        {formState.includeInNetWorth ? "Activa" : "Desactivada"}
-                      </span>
-                    </div>
-
-                    <button
-                      aria-checked={formState.includeInNetWorth}
-                      className={`mt-6 flex w-full items-center justify-between gap-4 rounded-[28px] border px-5 py-5 text-left transition duration-200 ${
-                        formState.includeInNetWorth
-                          ? "border-pine/20 bg-pine/[0.08] hover:bg-pine/[0.1]"
-                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
-                      }`}
-                      onClick={() =>
-                        updateFormState("includeInNetWorth", !formState.includeInNetWorth)
-                      }
-                      role="switch"
-                      type="button"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ink">
-                          {formState.includeInNetWorth
-                            ? "La cuenta se incluye en patrimonio"
-                            : "La cuenta queda fuera de patrimonio"}
-                        </p>
-                        <p className="mt-2 text-sm leading-7 text-storm">
-                          Activalo para que el balance de esta cuenta entre en el net worth del
-                          workspace. Si es una cuenta auxiliar o temporal, puedes dejarla fuera.
-                        </p>
-                      </div>
-                      <span
-                        className={`relative h-7 w-14 shrink-0 rounded-full border transition ${
-                          formState.includeInNetWorth
-                            ? "border-pine/30 bg-pine/20"
-                            : "border-white/12 bg-white/[0.05]"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-[0_6px_18px_rgba(0,0,0,0.28)] transition duration-200 ${
-                            formState.includeInNetWorth ? "left-8" : "left-1"
-                          }`}
-                        />
-                      </span>
-                    </button>
-                  </section>
-
-                  {selectedAccount ? (
-                    <section className={`${editorPanelClassName} z-10`}>
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                          Contexto actual
-                        </p>
-                        <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                          Datos de la cuenta
-                        </h3>
-                      </div>
-
-                      <div className="mt-6 grid gap-3">
-                        <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 p-4">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Balance actual
-                          </p>
-                          <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                            {formatCurrency(
-                              selectedAccount.currentBalance,
-                              selectedAccount.currencyCode,
-                            )}
-                          </p>
-                        </div>
-                        <div className="rounded-[24px] border border-white/8 bg-[#0c1320]/80 p-4">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Ultima actividad
-                          </p>
-                          <p className="mt-3 text-sm font-medium text-ink">
-                            {formatDateTime(selectedAccount.lastActivity)}
-                          </p>
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#060b12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <p className="max-w-xl text-sm leading-7 text-storm">
-                    {isCreateMode
-                      ? "La cuenta se creara en este workspace y el dashboard se refrescara en segundo plano."
-                      : "Los cambios visuales y financieros se aplicaran inmediatamente en esta cuenta real."}
-                  </p>
-
-                  <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                    <Button
-                      className="min-w-[140px] justify-center"
-                      disabled={isSaving}
-                      onClick={closeEditor}
-                      type="button"
-                      variant="ghost"
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      className="min-w-[180px] justify-center shadow-[0_18px_50px_rgba(245,247,251,0.12)]"
-                      disabled={isSaving}
-                      type="submit"
-                    >
-                      {isSaving ? (
-                        <>
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          Guardando...
-                        </>
-                      ) : isCreateMode ? (
-                        "Crear cuenta"
-                      ) : (
-                        "Guardar cambios"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                {selectedAccount ? (
-                  <div className="mt-6 grid gap-3">
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        className="justify-center"
-                        disabled={isSaving}
-                        onClick={() => void handleArchiveToggle(selectedAccount)}
-                        type="button"
-                        variant="secondary"
-                      >
-                        {selectedAccount.isArchived ? (
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                        ) : (
-                          <Archive className="mr-2 h-4 w-4" />
-                        )}
-                        {selectedAccount.isArchived ? "Reactivar cuenta" : "Archivar cuenta"}
-                      </Button>
-
-                      <Button
-                        className="justify-center bg-rosewood/14 text-rosewood ring-1 ring-rosewood/20 hover:bg-rosewood/20 hover:brightness-100"
-                        disabled={isSaving || !selectedAccount.isArchived}
-                        onClick={() => void handleDeleteAccount()}
-                        type="button"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar permanente
-                      </Button>
-                    </div>
-
-                    {!selectedAccount.isArchived ? (
-                      <div className="rounded-[24px] border border-gold/18 bg-gold/10 p-4 text-sm leading-7 text-storm">
-                        <Sparkles className="mb-3 h-4 w-4 text-gold" />
-                        Para proteger el historial financiero, primero archiva la cuenta y luego
-                        decide si necesitas eliminarla permanentemente.
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-function AccountArchiveDialog({
-  account,
-  isSaving,
-  onCancel,
-  onConfirm,
+function AccountsModuleHeader({
+  onCreate,
 }: {
-  account: AccountSummary;
-  isSaving: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
+  onCreate: () => void;
 }) {
-  const nextArchivedValue = !account.isArchived;
-  const AccountIcon = getAccountIcon(account.icon, account.type);
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel(); }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#02060d]/78 p-4 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="acc-archive-title">
-      <div className="w-full max-w-[720px] rounded-[38px] border border-white/12 bg-[#090e16]/96 p-6 shadow-[0_40px_130px_rgba(0,0,0,0.62)] sm:p-7">
-        <div className="flex items-start gap-4">
-          <div
-            className={`flex h-14 w-14 items-center justify-center rounded-[22px] border ${
-              nextArchivedValue
-                ? "border-gold/18 bg-gold/10 text-gold"
-                : "border-pine/20 bg-pine/10 text-pine"
-            }`}
-          >
-            {nextArchivedValue ? <Archive className="h-6 w-6" /> : <RotateCcw className="h-6 w-6" />}
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap gap-2">
-              <span
-                className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${
-                  nextArchivedValue
-                    ? "border-gold/25 bg-gold/10 text-gold"
-                    : "border-pine/25 bg-pine/10 text-pine"
-                }`}
-              >
-                {nextArchivedValue ? "Archivar cuenta" : "Reactivar cuenta"}
-              </span>
-            </div>
-            <h3 className="mt-4 font-display text-4xl font-semibold text-ink" id="acc-archive-title">
-              {nextArchivedValue ? "Confirma antes de archivarla" : "Confirma antes de reactivarla"}
-            </h3>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-storm">
-              {nextArchivedValue
-                ? "La cuenta seguira existiendo con su historial, pero dejara de aparecer en la vista principal hasta que la reactives."
-                : "La cuenta volvera a mostrarse como activa y quedara disponible otra vez en los paneles principales del workspace."}
-            </p>
-          </div>
+    <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status="Cuentas" tone="info" />
+          <InfoTip title="Objetivo del modulo">
+            Inventario operativo para saber donde esta tu dinero, que suma al patrimonio y que
+            requiere orden antes de tomar decisiones.
+          </InfoTip>
         </div>
-
-        <div className="mt-7 rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
-          <div className="flex items-start gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-[22px] text-white shadow-lg"
-              style={{ backgroundColor: account.color }}
-            >
-              <AccountIcon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-semibold text-ink">{account.name}</p>
-              <p className="mt-2 text-sm text-storm">
-                {account.type} - {account.currencyCode}
-              </p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                {formatCurrency(account.currentBalance, account.currencyCode)}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <StatusBadge
-                  status={account.includeInNetWorth ? "Incluida en patrimonio" : "Fuera de patrimonio"}
-                  tone={account.includeInNetWorth ? "success" : "warning"}
-                />
-                {account.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
-          <Button disabled={isSaving} onClick={onCancel} variant="ghost">
-            Cancelar
-          </Button>
-          <Button
-            className={
-              nextArchivedValue
-                ? "bg-gold text-[#0b0d12] hover:brightness-105 focus-visible:outline-gold"
-                : "bg-pine text-[#07110e] hover:brightness-105 focus-visible:outline-pine"
-            }
-            disabled={isSaving}
-            onClick={onConfirm}
-          >
-            {isSaving ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-            ) : nextArchivedValue ? (
-              <Archive className="mr-2 h-4 w-4" />
-            ) : (
-              <RotateCcw className="mr-2 h-4 w-4" />
-            )}
-            {nextArchivedValue ? "Archivar cuenta" : "Reactivar cuenta"}
-          </Button>
-        </div>
+        <h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
+          Cuentas
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm leading-7 text-storm">
+          Administra saldos, monedas, archivo e impacto patrimonial desde una vista pensada para
+          operar rapido y revisar con contexto.
+        </p>
       </div>
-    </div>
+      <Button className="w-full sm:w-auto" data-tour="create-account" onClick={onCreate}>
+        <Plus className="h-4 w-4" />
+        Nueva cuenta
+      </Button>
+    </section>
   );
 }
 
-function downloadCSV(csv: string, filename: string) {
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+function EmptyAccountsState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <DataState
+      action={<Button onClick={onCreate}>Crear primera cuenta</Button>}
+      description="Registra una cuenta real para activar saldos, filtros, vistas y analitica por cuenta."
+      title="Aun no hay cuentas"
+    />
+  );
 }
 
-function escape(v: string | number | boolean | null | undefined): string {
-  if (v === null || v === undefined) return "";
-  const s = String(v);
-  return s.includes(",") || s.includes('"') || s.includes("\n")
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
+function NoFilteredAccountsState({
+  onReset,
+  status,
+}: {
+  onReset: () => void;
+  status: string;
+}) {
+  const isArchivedOnly = status === "archived";
 
-function downloadAccountsCSV(accounts: AccountSummary[], filename: string) {
-  const headers = ["Nombre", "Tipo", "Moneda", "Saldo actual", "Saldo inicial", "En patrimonio neto", "Archivada", "Ultima actividad"];
-  const rows = accounts.map((a) => [
-    escape(a.name),
-    escape(a.type),
-    escape(a.currencyCode),
-    escape(a.currentBalance),
-    escape(a.openingBalance),
-    escape(a.includeInNetWorth ? "Si" : "No"),
-    escape(a.isArchived ? "Si" : "No"),
-    escape(a.lastActivity),
-  ]);
-  downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
+  return (
+    <DataState
+      action={<Button onClick={onReset} variant="secondary">Limpiar filtros</Button>}
+      description={
+        isArchivedOnly
+          ? "No hay cuentas archivadas con los filtros actuales."
+          : "Prueba cambiando busqueda, tipo, estado o moneda."
+      }
+      title={isArchivedOnly ? "Sin cuentas archivadas" : "Sin resultados"}
+    />
+  );
 }
 
 export function AccountsPage() {
   const { profile, user } = useAuth();
-  const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
+  const {
+    activeWorkspace,
+    error: workspaceError,
+    isLoading: isWorkspacesLoading,
+  } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const snapshot = snapshotQuery.data;
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+  const baseCurrencyCode =
+    snapshot?.workspace.baseCurrencyCode ??
+    activeWorkspace?.baseCurrencyCode ??
+    profile?.baseCurrencyCode ??
+    "USD";
 
-  function clearFieldError(field: string) {
-    setInvalidFields((prev) => {
-      if (!prev.has(field)) return prev;
-      const next = new Set(prev);
-      next.delete(field);
-      return next;
-    });
-  }
-  const [editorMode, setEditorMode] = useState<AccountEditorMode>("create");
-  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const { filters, resetFilters, writeFilters } = useAccountFilters();
+  const { visible: visibleColumns, toggle: toggleColumn } = useColumnVisibility(
+    "columns-accounts",
+    accountColumns,
+  );
+  const [formErrors, setFormErrors] = useState<AccountFormErrors>({});
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
+  const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const { schedule } = useUndoQueue();
-  const [showArchived, setShowArchived] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [accountTableFilters, setAccountTableFilters] = useState<AccountTableFilters>(
-    defaultAccountTableFilters(),
+
+  const accounts = useMemo(
+    () => (snapshot?.accounts ?? []).filter((account) => !hiddenIds.has(account.id)),
+    [hiddenIds, snapshot?.accounts],
   );
-  const [openTableFilter, setOpenTableFilter] =
-    useState<keyof AccountTableFilters | null>(null);
-  const [feedbackMessage, setFeedbackMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const accountColumns: ColumnDef[] = [
-    { key: "tipo", label: "Tipo" },
-    { key: "saldo", label: "Saldo actual" },
-    { key: "moneda", label: "Moneda" },
-    { key: "estado", label: "Estado" },
-  ];
-  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-accounts", accountColumns);
-  const [viewMode, setViewMode] = useViewMode("accounts", "table");
-  const [formState, setFormState] = useState<AccountFormState>(() =>
-    createDefaultFormState(profile?.baseCurrencyCode ?? "USD"),
+  const availableTypes = useMemo(() => getAvailableAccountTypes(accounts), [accounts]);
+  const availableCurrencyCodes = useMemo(
+    () => getAvailableCurrencyCodes(accounts),
+    [accounts],
   );
-  const hasHydratedEditorDraft = useRef(false);
-  const isEditorDraftReady = useRef(false);
+  const filteredAccounts = useMemo(
+    () => filterAccounts(accounts, filters),
+    [accounts, filters],
+  );
+  const paginatedAccounts = useMemo(
+    () => paginateAccounts(filteredAccounts, filters.page, ACCOUNT_PAGE_SIZE),
+    [filteredAccounts, filters.page],
+  );
+  const archiveTarget =
+    archiveTargetId !== null
+      ? accounts.find((account) => account.id === archiveTargetId) ?? null
+      : null;
+  const analyticsAccount =
+    analyticsAccountId !== null
+      ? accounts.find((account) => account.id === analyticsAccountId) ?? null
+      : null;
+  const editor = useAccountEditor({
+    accounts,
+    baseCurrencyCode,
+    isLoadingWorkspace: isWorkspacesLoading,
+    userId: user?.id,
+    workspaceId: activeWorkspace?.id,
+  });
+
   const createAccountMutation = useCreateAccountMutation(activeWorkspace?.id, user?.id);
   const updateAccountMutation = useUpdateAccountMutation(activeWorkspace?.id, user?.id);
   const archiveAccountMutation = useArchiveAccountMutation(activeWorkspace?.id, user?.id);
   const deleteAccountMutation = useDeleteAccountMutation(activeWorkspace?.id, user?.id);
+  const isSaving =
+    createAccountMutation.isPending ||
+    updateAccountMutation.isPending ||
+    archiveAccountMutation.isPending ||
+    deleteAccountMutation.isPending ||
+    isBulkArchiving;
+
+  const {
+    allSelected,
+    clearAll,
+    selectedCount,
+    selectedIds,
+    selectedItems,
+    selectAll,
+    someSelected,
+    toggle: toggleSelect,
+  } = useSelection(filteredAccounts);
+
   useSuccessToast(feedbackMessage, {
     clear: () => setFeedbackMessage(""),
     title: "Cambios aplicados",
   });
 
-  const selectedAccount =
-    selectedAccountId !== null
-      ? snapshot?.accounts.find((account) => account.id === selectedAccountId) ?? null
-      : null;
-  const archiveTarget =
-    archiveTargetId !== null
-      ? snapshot?.accounts.find((account) => account.id === archiveTargetId) ?? null
-      : null;
-  const visibleAccounts = showArchived
-    ? snapshot?.accounts ?? []
-    : (snapshot?.accounts.filter((account) => !account.isArchived) ?? []);
-  const availableAccountTypes = useMemo(
-    () =>
-      Array.from(new Set(visibleAccounts.map((account) => account.type).filter(Boolean))).sort(
-        (left, right) => getTypePreset(left).label.localeCompare(getTypePreset(right).label),
-      ),
-    [visibleAccounts],
-  );
-  const availableCurrencyCodes = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          visibleAccounts
-            .map((account) => account.currencyCode.trim().toUpperCase())
-            .filter(Boolean),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [visibleAccounts],
-  );
-  const hasTableFilters =
-    accountTableFilters.name.trim() !== "" ||
-    accountTableFilters.type.trim() !== "" ||
-    accountTableFilters.balance.trim() !== "" ||
-    accountTableFilters.currencyCode.trim() !== "" ||
-    accountTableFilters.status !== "all";
-  const hasActiveFilters =
-    searchQuery.trim() !== "" || typeFilter !== "all" || (viewMode === "table" && hasTableFilters);
-  const filteredAccounts = useMemo(() => {
-    let result = visibleAccounts.filter((a) => !hiddenIds.has(a.id));
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      result = result.filter(
-        (a) =>
-          a.name.toLowerCase().includes(q) ||
-          a.currencyCode.toLowerCase().includes(q) ||
-          getTypePreset(a.type).label.toLowerCase().includes(q),
-      );
+  useEffect(() => {
+    if (paginatedAccounts.page !== filters.page) {
+      writeFilters({ page: paginatedAccounts.page });
     }
-    if (typeFilter !== "all") {
-      result = result.filter((a) => a.type === typeFilter);
-    }
-    if (viewMode === "table") {
-      const normalizedAccountName = accountTableFilters.name.trim().toLowerCase();
-      const normalizedBalance = accountTableFilters.balance.trim().toLowerCase();
-
-      if (normalizedAccountName) {
-        result = result.filter((account) => account.name.toLowerCase().includes(normalizedAccountName));
-      }
-      if (accountTableFilters.type) {
-        result = result.filter((account) => account.type === accountTableFilters.type);
-      }
-      if (normalizedBalance) {
-        result = result.filter((account) => {
-          const formattedBalance = formatCurrency(account.currentBalance, account.currencyCode).toLowerCase();
-          return (
-            formattedBalance.includes(normalizedBalance) ||
-            String(account.currentBalance).toLowerCase().includes(normalizedBalance)
-          );
-        });
-      }
-      if (accountTableFilters.currencyCode) {
-        result = result.filter(
-          (account) => account.currencyCode.toUpperCase() === accountTableFilters.currencyCode,
-        );
-      }
-      if (accountTableFilters.status !== "all") {
-        result = result.filter((account) => {
-          switch (accountTableFilters.status) {
-            case "included":
-              return account.includeInNetWorth;
-            case "excluded":
-              return !account.includeInNetWorth;
-            case "archived":
-              return account.isArchived;
-            default:
-              return true;
-          }
-        });
-      }
-    }
-    return result;
-  }, [accountTableFilters, hiddenIds, searchQuery, typeFilter, viewMode, visibleAccounts]);
-  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredAccounts);
-  const activeAccounts = snapshot?.accounts.filter((account) => !account.isArchived) ?? [];
-  const archivedAccounts = snapshot?.accounts.filter((account) => account.isArchived) ?? [];
-  const netWorthAccounts = activeAccounts.filter((account) => account.includeInNetWorth);
-  const netWorthDisplay = resolveAggregateBalanceDisplay(
-    netWorthAccounts,
-    snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? profile?.baseCurrencyCode ?? "USD",
-  );
-  const excludedAccounts = activeAccounts.filter((account) => !account.includeInNetWorth).length;
-  const hasAnyAccounts = (snapshot?.accounts.length ?? 0) > 0;
-  const isSaving =
-    createAccountMutation.isPending ||
-    updateAccountMutation.isPending ||
-    archiveAccountMutation.isPending ||
-    deleteAccountMutation.isPending;
+  }, [filters.page, paginatedAccounts.page, writeFilters]);
 
   useEffect(() => {
-    if (!activeWorkspace) {
-      if (!isWorkspacesLoading) {
-        setIsEditorOpen(false);
-        setSelectedAccountId(null);
+    if (
+      editor.editorMode === "edit" &&
+      editor.selectedAccountId !== null &&
+      !editor.selectedAccount &&
+      !snapshotQuery.isFetching
+    ) {
+      editor.closeEditor();
+    }
+  }, [
+    editor,
+    editor.editorMode,
+    editor.selectedAccount,
+    editor.selectedAccountId,
+    snapshotQuery.isFetching,
+  ]);
+
+  function clearFormFieldError(field: AccountFormField) {
+    setFormErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
       }
-      return;
-    }
 
-    if (!isEditorOpen || editorMode !== "create") {
-      return;
-    }
-
-    setFormState((currentState) => ({
-      ...currentState,
-      currencyCode: currentState.currencyCode || activeWorkspace.baseCurrencyCode,
-    }));
-  }, [activeWorkspace, editorMode, isEditorOpen, isWorkspacesLoading]);
-
-  useEffect(() => {
-    if (viewMode !== "table" && openTableFilter !== null) {
-      setOpenTableFilter(null);
-    }
-  }, [openTableFilter, viewMode]);
-
-  useEffect(() => {
-    if (hasHydratedEditorDraft.current || !activeWorkspace || !user) {
-      return;
-    }
-
-    hasHydratedEditorDraft.current = true;
-    const persistedState = readPersistedAccountEditorState();
-
-    if (!persistedState) {
-      isEditorDraftReady.current = true;
-      return;
-    }
-
-    const isExpired = Date.now() - persistedState.savedAt > ACCOUNT_EDITOR_DRAFT_MAX_AGE_MS;
-    const isWrongScope =
-      persistedState.userId !== user.id || persistedState.workspaceId !== activeWorkspace.id;
-
-    if (isExpired || isWrongScope) {
-      clearPersistedAccountEditorState();
-      isEditorDraftReady.current = true;
-      return;
-    }
-
-    setFeedbackMessage("");
-    setErrorMessage("");
-    setEditorMode(persistedState.editorMode);
-    setSelectedAccountId(persistedState.selectedAccountId);
-    setFormState(persistedState.formState);
-    setIsEditorOpen(persistedState.isEditorOpen);
-    isEditorDraftReady.current = true;
-  }, [activeWorkspace, user]);
-
-  useEffect(() => {
-    if (!isEditorDraftReady.current || !activeWorkspace || !user) {
-      return;
-    }
-
-    if (!isEditorOpen) {
-      clearPersistedAccountEditorState();
-      return;
-    }
-
-    persistAccountEditorState({
-      editorMode,
-      formState,
-      isEditorOpen,
-      savedAt: Date.now(),
-      selectedAccountId,
-      userId: user.id,
-      workspaceId: activeWorkspace.id,
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+      return nextErrors;
     });
-  }, [activeWorkspace, editorMode, formState, isEditorOpen, selectedAccountId, user]);
+  }
 
-  useEffect(() => {
-    if (!isEditorOpen || editorMode !== "edit" || !selectedAccount) {
-      return;
-    }
+  function updateFormField<Field extends AccountFormField>(
+    field: Field,
+    value: AccountFormState[Field],
+  ) {
+    clearFormFieldError(field);
+    editor.updateFormState(field, value);
+  }
 
-    setFormState(buildFormStateFromAccount(selectedAccount));
-  }, [editorMode, isEditorOpen, selectedAccount]);
-
-  useEffect(() => {
-    if (editorMode === "edit" && selectedAccountId !== null && !selectedAccount && !snapshotQuery.isFetching) {
-      setIsEditorOpen(false);
-      setSelectedAccountId(null);
-    }
-  }, [editorMode, selectedAccount, selectedAccountId, snapshotQuery.isFetching]);
+  function handleTypeChange(type: string) {
+    clearFormFieldError("type");
+    clearFormFieldError("color");
+    clearFormFieldError("icon");
+    editor.handleAccountTypeChange(type);
+  }
 
   function openCreateEditor() {
-    if (!activeWorkspace) {
-      return;
-    }
-
-    setFeedbackMessage("");
     setErrorMessage("");
-    setInvalidFields(new Set());
-    setEditorMode("create");
-    setSelectedAccountId(null);
-    setFormState(createDefaultFormState(activeWorkspace.baseCurrencyCode));
-    setIsDirty(false);
-    setIsEditorOpen(true);
+    setFormErrors({});
+    editor.openCreateEditor();
   }
 
   function openEditEditor(account: AccountSummary) {
-    setFeedbackMessage("");
     setErrorMessage("");
-    setInvalidFields(new Set());
-    setEditorMode("edit");
-    setSelectedAccountId(account.id);
-    setFormState(buildFormStateFromAccount(account));
-    setIsDirty(false);
-    setIsEditorOpen(true);
+    setFormErrors({});
+    editor.openEditEditor(account);
   }
 
-  function updateAccountTableFilter<Field extends keyof AccountTableFilters>(
-    field: Field,
-    value: AccountTableFilters[Field],
-  ) {
-    setAccountTableFilters((currentValue) => ({ ...currentValue, [field]: value }));
-  }
-
-  function clearAccountTableFilters() {
-    setAccountTableFilters(defaultAccountTableFilters());
-    setOpenTableFilter(null);
-  }
-
-  function toggleTableFilterMenu(field: keyof AccountTableFilters) {
-    setOpenTableFilter((currentValue) => (currentValue === field ? null : field));
-  }
-
-  function closeTableFilterMenu() {
-    setOpenTableFilter(null);
-  }
-
-  function clearSingleTableFilter(field: keyof AccountTableFilters) {
-    updateAccountTableFilter(field, defaultAccountTableFilters()[field]);
-  }
-
-  function applyAccountTableFilterAndClose<Field extends keyof AccountTableFilters>(
-    field: Field,
-    value: AccountTableFilters[Field],
-  ) {
-    updateAccountTableFilter(field, value);
-    setOpenTableFilter(null);
-  }
-
-  function closeEditor() {
+  function requestCloseEditor() {
     if (isSaving) {
       return;
     }
 
-    clearPersistedAccountEditorState();
-    setIsEditorOpen(false);
-    setSelectedAccountId(null);
-    setErrorMessage("");
-    setIsDirty(false);
-  }
-
-  function requestCloseEditor() {
-    if (isSaving) return;
-    if (isDirty) {
-      setShowUnsavedDialog(true);
-    } else {
-      closeEditor();
-    }
-  }
-
-  function updateFormState<Field extends keyof AccountFormState>(
-    field: Field,
-    value: AccountFormState[Field],
-  ) {
-    setIsDirty(true);
-    setFormState((currentState) => ({
-      ...currentState,
-      [field]: value,
-    }));
-  }
-
-  function handleAccountTypeChange(nextType: string) {
-    const preset = getTypePreset(nextType);
-
-    setIsDirty(true);
-    setFormState((currentState) => ({
-      ...currentState,
-      type: nextType,
-      color: currentState.color === getTypePreset(currentState.type).color ? preset.color : currentState.color,
-      icon: currentState.icon === getTypePreset(currentState.type).icon ? preset.icon : currentState.icon,
-    }));
+    editor.requestCloseEditor();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2084,49 +311,55 @@ export function AccountsPage() {
     setFeedbackMessage("");
     setErrorMessage("");
 
-    const parsedOpeningBalance = Number(formState.openingBalance);
-    const accountErrors: string[] = [];
-    if (!formState.name.trim()) accountErrors.push("name");
-    if (Number.isNaN(parsedOpeningBalance)) accountErrors.push("openingBalance");
-    if (accountErrors.length > 0) {
-      setInvalidFields(new Set(accountErrors));
-      setErrorMessage(accountErrors.includes("name") ? "Ingresa un nombre para la cuenta." : "El saldo inicial debe ser un numero valido.");
+    const errors = validateAccountForm(editor.formState);
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setErrorMessage(getFirstAccountFormError(errors) || "Revisa los campos marcados.");
       return;
     }
 
     try {
-      if (editorMode === "create") {
+      if (editor.editorMode === "create") {
         await createAccountMutation.mutateAsync({
-          ...toAccountInput(formState),
+          ...toAccountInput(editor.formState),
           sortOrder: (snapshot?.accounts.length ?? 0) + 1,
           userId: user.id,
           workspaceId: activeWorkspace.id,
         });
 
-        clearPersistedAccountEditorState();
+        editor.closeEditor();
         setFeedbackMessage("Cuenta creada correctamente.");
-        setIsEditorOpen(false);
         return;
       }
 
-      if (!selectedAccount) {
+      if (!editor.selectedAccount) {
         setErrorMessage("No encontramos la cuenta que quieres editar.");
         return;
       }
 
       await updateAccountMutation.mutateAsync({
-        ...toAccountInput(formState),
-        accountId: selectedAccount.id,
+        ...toAccountInput(editor.formState),
+        accountId: editor.selectedAccount.id,
         userId: user.id,
         workspaceId: activeWorkspace.id,
       });
 
-      clearPersistedAccountEditorState();
+      editor.closeEditor();
       setFeedbackMessage("Cuenta actualizada correctamente.");
-      setIsEditorOpen(false);
     } catch (error) {
       setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar la cuenta."));
     }
+  }
+
+  function handleArchiveToggle(account: AccountSummary) {
+    if (!activeWorkspace || !user) {
+      return;
+    }
+
+    setFeedbackMessage("");
+    setErrorMessage("");
+    setArchiveTargetId(account.id);
   }
 
   async function handleConfirmArchiveToggle() {
@@ -2135,9 +368,6 @@ export function AccountsPage() {
     }
 
     const nextArchivedValue = !archiveTarget.isArchived;
-
-    setFeedbackMessage("");
-    setErrorMessage("");
 
     try {
       await archiveAccountMutation.mutateAsync({
@@ -2152,75 +382,73 @@ export function AccountsPage() {
         nextArchivedValue ? "Cuenta archivada correctamente." : "Cuenta reactivada correctamente.",
       );
     } catch (error) {
-      setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar el estado de la cuenta."));
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar la cuenta."));
     }
-  }
-
-  function handleArchiveToggle(account: AccountSummary) {
-    if (!activeWorkspace || !user) {
-      return;
-    }
-
-    setFeedbackMessage("");
-    setErrorMessage("");
-    setArchiveTargetId(account.id);
   }
 
   function handleDeleteAccount() {
-    if (!activeWorkspace || !selectedAccount) return;
+    if (!activeWorkspace || !editor.selectedAccount) {
+      return;
+    }
+
     setShowDeleteDialog(true);
   }
 
-  async function handleBulkDelete() {
-    if (selectedCount === 0) return;
-    setShowBulkDeleteConfirm(true);
-  }
-
-  async function confirmBulkDelete() {
-    setIsBulkDeleting(true);
-    try {
-      for (const id of Array.from(selectedIds)) {
-        await archiveAccountMutation.mutateAsync({ accountId: id, isArchived: true, userId: user!.id, workspaceId: activeWorkspace!.id });
-      }
-      clearAll();
-    } catch (err) {
-      setErrorMessage(getQueryErrorMessage(err));
-    } finally {
-      setIsBulkDeleting(false);
-      setShowBulkDeleteConfirm(false);
-    }
-  }
-
   function handleConfirmDeleteAccount() {
-    if (!activeWorkspace || !selectedAccount) return;
-    const targetId = selectedAccount.id;
+    if (!activeWorkspace || !editor.selectedAccount) {
+      return;
+    }
+
+    const targetId = editor.selectedAccount.id;
+    const workspaceId = activeWorkspace.id;
+
     setShowDeleteDialog(false);
-    setIsEditorOpen(false);
-    setSelectedAccountId(null);
-    clearPersistedAccountEditorState();
-    setHiddenIds((prev) => new Set([...prev, targetId]));
+    editor.closeEditor();
+    setHiddenIds((currentIds) => new Set([...currentIds, targetId]));
     schedule({
       label: "Cuenta eliminada permanentemente",
-      onCommit: () =>
-        deleteAccountMutation.mutateAsync({ accountId: targetId, workspaceId: activeWorkspace.id }),
+      onCommit: () => deleteAccountMutation.mutateAsync({ accountId: targetId, workspaceId }),
       onUndo: () => {
-        setHiddenIds((prev) => {
-          const next = new Set(prev);
-          next.delete(targetId);
-          return next;
+        setHiddenIds((currentIds) => {
+          const nextIds = new Set(currentIds);
+          nextIds.delete(targetId);
+          return nextIds;
         });
       },
     });
   }
 
+  async function confirmBulkArchive() {
+    if (!activeWorkspace || !user || selectedCount === 0) {
+      return;
+    }
+
+    setIsBulkArchiving(true);
+    setErrorMessage("");
+
+    try {
+      for (const accountId of selectedIds) {
+        await archiveAccountMutation.mutateAsync({
+          accountId,
+          isArchived: true,
+          userId: user.id,
+          workspaceId: activeWorkspace.id,
+        });
+      }
+      clearAll();
+      setShowBulkArchiveConfirm(false);
+      setFeedbackMessage("Cuentas archivadas correctamente.");
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos archivar las cuentas."));
+    } finally {
+      setIsBulkArchiving(false);
+    }
+  }
+
   if (workspaceError) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          description="Necesitamos permisos de lectura del workspace para mostrar y editar las cuentas."
-          eyebrow="accounts"
-          title="Cuentas no disponibles"
-        />
+        <AccountsModuleHeader onCreate={() => undefined} />
         <DataState
           description={getQueryErrorMessage(workspaceError, "No pudimos leer tus workspaces reales.")}
           title="No hay acceso al workspace"
@@ -2233,14 +461,10 @@ export function AccountsPage() {
   if (!activeWorkspace && !isWorkspacesLoading) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          description="Las cuentas viven dentro de un workspace real."
-          eyebrow="accounts"
-          title="Cuentas financieras"
-        />
+        <AccountsModuleHeader onCreate={() => undefined} />
         <DataState
           description="Cuando exista un workspace personal o compartido, aqui veras solo las cuentas reales de la base."
-          title="Sin cuentas para mostrar"
+          title="Sin workspace activo"
         />
       </div>
     );
@@ -2249,22 +473,7 @@ export function AccountsPage() {
   if (!snapshot && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          actions={
-            <>
-              <Button disabled variant="ghost">
-                Ver archivadas
-              </Button>
-              <Button disabled>
-                <Plus className="mr-2 h-4 w-4" />
-                Nueva cuenta
-              </Button>
-            </>
-          }
-          description="Inventario financiero del workspace con saldos, archivado y patrimonio."
-          eyebrow="accounts"
-          title="Cuentas financieras"
-        />
+        <AccountsModuleHeader onCreate={() => undefined} />
         <AccountsLoadingSkeleton />
       </div>
     );
@@ -2273,14 +482,10 @@ export function AccountsPage() {
   if (snapshotQuery.error || !snapshot) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader
-          description="Intentamos leer la tabla accounts y calcular los saldos actuales."
-          eyebrow="accounts"
-          title="No fue posible cargar las cuentas"
-        />
+        <AccountsModuleHeader onCreate={() => undefined} />
         <DataState
           description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer la informacion de cuentas.")}
-          title="Error al consultar cuentas reales"
+          title="Error al consultar cuentas"
           tone="error"
         />
       </div>
@@ -2290,532 +495,124 @@ export function AccountsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <section className="glass-panel-strong rounded-[32px] p-6">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] xl:items-start">
-            <div className="space-y-5">
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.28em] text-storm/90">accounts</p>
-                <h2 className="font-display text-4xl font-semibold text-ink">Cuentas financieras</h2>
-                <p className="max-w-3xl text-sm leading-7 text-storm">
-                  Ve tus cuentas primero en tabla, con saldo actual, moneda y estado. El resumen del modulo se mantiene
-                  corto para que no compita con la informacion que de verdad viniste a revisar.
-                </p>
-              </div>
+        <AccountsModuleHeader onCreate={openCreateEditor} />
 
-              <div className="flex flex-wrap gap-3">
-                <AccountsSummaryChip label="cuentas" value={String(activeAccounts.length)} />
-                <AccountsSummaryChip
-                  label="patrimonio"
-                  tone="info"
-                  value={formatCurrency(netWorthDisplay.amount, netWorthDisplay.currencyCode)}
-                />
-                {archivedAccounts.length > 0 ? (
-                  <AccountsSummaryChip label="archivadas" tone="warning" value={String(archivedAccounts.length)} />
-                ) : null}
-                {excludedAccounts > 0 ? (
-                  <AccountsSummaryChip label="fuera de patrimonio" tone="warning" value={String(excludedAccounts)} />
-                ) : null}
-                <AccountsSummaryChip label="workspace" tone="info" value={formatWorkspaceKindLabel(snapshot.workspace.kind)} />
-                {snapshotQuery.isFetching ? <AccountsSummaryChip label="estado" value="Actualizando" /> : null}
-              </div>
-            </div>
+        <AccountSummaryStrip
+          accounts={accounts}
+          baseCurrencyCode={baseCurrencyCode}
+          isFetching={snapshotQuery.isFetching}
+          workspaceKind={snapshot.workspace.kind}
+        />
 
-            <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
-                  <p className="text-sm leading-7 text-storm">
-                    Acciones, busqueda, vistas y exportacion en un solo bloque para abrir tus cuentas sin rodeos.
-                  </p>
-                </div>
-                <button
-                  className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                  disabled={snapshotQuery.isFetching}
-                  onClick={() => snapshotQuery.refetch()}
-                  title="Actualizar"
-                  type="button"
-                >
-                  <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-                </button>
-              </div>
+        <AccountsToolbar
+          availableCurrencyCodes={availableCurrencyCodes}
+          availableTypes={availableTypes}
+          canExport={filteredAccounts.length > 0}
+          columns={accountColumns}
+          filteredCount={filteredAccounts.length}
+          filters={filters}
+          isFetching={snapshotQuery.isFetching}
+          onCreate={openCreateEditor}
+          onExport={() =>
+            downloadAccountsCSV(
+              filteredAccounts,
+              `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
+            )
+          }
+          onRefresh={() => void snapshotQuery.refetch()}
+          onResetFilters={resetFilters}
+          onToggleColumn={toggleColumn}
+          onUpdateFilters={writeFilters}
+          totalCount={accounts.length}
+          visibleColumns={visibleColumns}
+        />
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button data-tour="create-account" onClick={openCreateEditor}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nueva cuenta
-                </Button>
-                <Button
-                  onClick={() => setShowArchived((currentValue) => !currentValue)}
-                  variant="ghost"
-                >
-                  {showArchived ? "Ocultar archivadas" : "Ver archivadas"}
-                </Button>
-                <Button
-                  disabled={!filteredAccounts.length}
-                  onClick={() =>
-                    downloadAccountsCSV(
-                      filteredAccounts,
-                      `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
-                    )
-                  }
-                  variant="ghost"
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Exportar CSV
-                </Button>
-              </div>
-
-              {hasAnyAccounts ? (
-                <div className="mt-4 space-y-3">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-                    <input
-                      className="w-full rounded-[18px] border border-white/10 bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Buscar cuenta..."
-                      type="text"
-                      value={searchQuery}
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-                    {viewMode === "table" ? (
-                      <ColumnPicker columns={accountColumns} visible={colVis} onToggle={toggleCol} />
-                    ) : null}
-                    <StatusBadge status={`${filteredAccounts.length} visibles`} tone="neutral" />
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm leading-7 text-storm">
-                  Crea tu primera cuenta y desde aqui se activaran la busqueda, las vistas y la exportacion.
-                </p>
-              )}
-            </aside>
-          </div>
-
-          {hasAnyAccounts ? (
-            <div className="mt-6 border-t border-white/8 pt-6">
-              <div className="flex flex-wrap gap-2">
-                {accountTypeFilters.map(({ value, label }) => (
-                  <button
-                    className={`rounded-full border px-3 py-2 text-xs font-medium transition ${
-                      typeFilter === value
-                        ? "border-pine/30 bg-pine/15 text-pine"
-                        : "border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
-                    }`}
-                    key={value}
-                    onClick={() => setTypeFilter(value)}
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                ))}
-                {hasActiveFilters ? (
-                  <button
-                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setTypeFilter("all");
-                      clearAccountTableFilters();
-                    }}
-                    type="button"
-                  >
-                    <X className="mr-1 inline-block h-3 w-3" />
-                    Limpiar
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        {errorMessage && !isEditorOpen ? (
-          <DataState
+        {errorMessage && !editor.isEditorOpen ? (
+          <FormFeedbackBanner
             description={errorMessage}
+            onDismiss={() => setErrorMessage("")}
             title="No pudimos completar la accion"
             tone="error"
           />
         ) : null}
 
-        {visibleAccounts.length === 0 ? (
-          <DataState
-            action={<Button onClick={openCreateEditor}>Crear primera cuenta</Button>}
-            description={
-              showArchived
-                ? "No hay cuentas archivadas en este workspace."
-                : "Todavia no se registraron cuentas en este workspace. Cuando exista la primera, aqui la veras en tabla con saldo, moneda y estado actual."
-            }
-            title={showArchived ? "No hay cuentas archivadas" : "No hay cuentas reales todavia"}
-          />
+        {accounts.length === 0 ? (
+          <EmptyAccountsState onCreate={openCreateEditor} />
         ) : filteredAccounts.length === 0 ? (
-          <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
-        ) : viewMode === "list" ? (
-          <div className="space-y-3">
-            {filteredAccounts.map((account) => {
-              const AccountIcon = getAccountIcon(account.icon, account.type);
-              const typeLabel = getTypePreset(account.type).label;
-
-              return (
-                <article
-                  className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16"
-                  key={account.id}
-                >
-                  <SelectionCheckbox
-                    checked={selectedIds.has(account.id)}
-                    onChange={() => toggleSelect(account.id)}
-                  />
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white"
-                    style={{ backgroundColor: account.color }}
-                  >
-                    <AccountIcon className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-ink">{account.name}</p>
-                    <p className="text-xs text-storm">
-                      {typeLabel} · {account.currencyCode}
-                      {account.isArchived ? " · archivada" : ""}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-sm font-semibold text-ink">
-                    {formatCurrency(account.currentBalance, account.currencyCode)}
-                  </p>
-                  <Button
-                    className="shrink-0 py-1.5 text-xs"
-                    onClick={() => setAnalyticsAccountId(account.id)}
-                    variant="ghost"
-                  >
-                    <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                    Análisis
-                  </Button>
-                  <Button
-                    className="shrink-0 py-1.5 text-xs"
-                    onClick={() => openEditEditor(account)}
-                    variant="ghost"
-                  >
-                    Editar
-                  </Button>
-                </article>
-              );
-            })}
-          </div>
-        ) : viewMode === "table" ? (
-          <div className="overflow-x-auto rounded-[22px] border border-white/10 bg-white/[0.03]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="w-10 px-4 py-3.5">
-                    <SelectionCheckbox
-                      ariaLabel="Seleccionar todas"
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      onChange={() => (allSelected ? clearAll() : selectAll())}
-                    />
-                  </th>
-                  <th className="relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm">
-                    <TableColumnFilterMenu
-                      active={isAccountTableFilterActive(accountTableFilters, "name")}
-                      isOpen={openTableFilter === "name"}
-                      label="Cuenta"
-                      onClear={() => clearSingleTableFilter("name")}
-                      onClose={closeTableFilterMenu}
-                      onToggle={() => toggleTableFilterMenu("name")}
-                    >
-                      <div className="space-y-3">
-                        <input
-                          className={tableColumnFilterInputClassName}
-                          onChange={(event) => updateAccountTableFilter("name", event.target.value)}
-                          placeholder="Buscar cuenta..."
-                          type="text"
-                          value={accountTableFilters.name}
-                        />
-                      </div>
-                    </TableColumnFilterMenu>
-                  </th>
-                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("tipo")}`}>
-                    <TableColumnFilterMenu
-                      active={isAccountTableFilterActive(accountTableFilters, "type")}
-                      isOpen={openTableFilter === "type"}
-                      label="Tipo"
-                      onClear={() => clearSingleTableFilter("type")}
-                      onClose={closeTableFilterMenu}
-                      onToggle={() => toggleTableFilterMenu("type")}
-                    >
-                      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                        <TableFilterOptionButton
-                          onClick={() => applyAccountTableFilterAndClose("type", "")}
-                          selected={!accountTableFilters.type}
-                        >
-                          Todos
-                        </TableFilterOptionButton>
-                        {availableAccountTypes.map((accountType) => (
-                          <TableFilterOptionButton
-                            key={accountType}
-                            onClick={() => applyAccountTableFilterAndClose("type", accountType)}
-                            selected={accountTableFilters.type === accountType}
-                          >
-                            {getTypePreset(accountType).label}
-                          </TableFilterOptionButton>
-                        ))}
-                      </div>
-                    </TableColumnFilterMenu>
-                  </th>
-                  <th className={`relative px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("saldo")}`}>
-                    <TableColumnFilterMenu
-                      active={isAccountTableFilterActive(accountTableFilters, "balance")}
-                      align="right"
-                      isOpen={openTableFilter === "balance"}
-                      label="Saldo actual"
-                      onClear={() => clearSingleTableFilter("balance")}
-                      onClose={closeTableFilterMenu}
-                      onToggle={() => toggleTableFilterMenu("balance")}
-                      triggerClassName="justify-end text-right"
-                    >
-                      <div className="space-y-3">
-                        <input
-                          className={`${tableColumnFilterInputClassName} text-right`}
-                          onChange={(event) => updateAccountTableFilter("balance", event.target.value)}
-                          placeholder="Ej. 514 o 53.19"
-                          type="text"
-                          value={accountTableFilters.balance}
-                        />
-                      </div>
-                    </TableColumnFilterMenu>
-                  </th>
-                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("moneda")}`}>
-                    <TableColumnFilterMenu
-                      active={isAccountTableFilterActive(accountTableFilters, "currencyCode")}
-                      isOpen={openTableFilter === "currencyCode"}
-                      label="Moneda"
-                      onClear={() => clearSingleTableFilter("currencyCode")}
-                      onClose={closeTableFilterMenu}
-                      onToggle={() => toggleTableFilterMenu("currencyCode")}
-                    >
-                      <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                        <TableFilterOptionButton
-                          onClick={() => applyAccountTableFilterAndClose("currencyCode", "")}
-                          selected={!accountTableFilters.currencyCode}
-                        >
-                          Todas
-                        </TableFilterOptionButton>
-                        {availableCurrencyCodes.map((currencyCode) => (
-                          <TableFilterOptionButton
-                            key={currencyCode}
-                            onClick={() => applyAccountTableFilterAndClose("currencyCode", currencyCode)}
-                            selected={accountTableFilters.currencyCode === currencyCode}
-                          >
-                            {currencyCode}
-                          </TableFilterOptionButton>
-                        ))}
-                      </div>
-                    </TableColumnFilterMenu>
-                  </th>
-                  <th className={`relative px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.18em] text-storm ${cv("estado")}`}>
-                    <TableColumnFilterMenu
-                      active={isAccountTableFilterActive(accountTableFilters, "status")}
-                      isOpen={openTableFilter === "status"}
-                      label="Estado"
-                      onClear={() => clearSingleTableFilter("status")}
-                      onClose={closeTableFilterMenu}
-                      onToggle={() => toggleTableFilterMenu("status")}
-                    >
-                      <div className="space-y-1">
-                        {accountTableStatusOptions.map((option) => (
-                          <TableFilterOptionButton
-                            key={option.value}
-                            onClick={() => applyAccountTableFilterAndClose("status", option.value)}
-                            selected={accountTableFilters.status === option.value}
-                          >
-                            {option.label}
-                          </TableFilterOptionButton>
-                        ))}
-                      </div>
-                    </TableColumnFilterMenu>
-                  </th>
-                  <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.18em] text-storm">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAccounts.map((account) => {
-                  const AccountIcon = getAccountIcon(account.icon, account.type);
-                  const typeLabel = getTypePreset(account.type).label;
-
-                  return (
-                    <tr
-                      className="border-b border-white/[0.06] transition last:border-0 hover:bg-white/[0.02]"
-                      key={account.id}
-                    >
-                      <td className="w-10 px-4 py-4">
-                        <SelectionCheckbox
-                          ariaLabel={`Seleccionar ${account.name}`}
-                          checked={selectedIds.has(account.id)}
-                          onChange={() => toggleSelect(account.id)}
-                        />
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white"
-                            style={{ backgroundColor: account.color }}
-                          >
-                            <AccountIcon className="h-3.5 w-3.5" />
-                          </div>
-                          <span className="font-medium text-ink">{account.name}</span>
-                        </div>
-                      </td>
-                      <td className={`px-5 py-4 text-storm ${cv("tipo")}`}>{typeLabel}</td>
-                      <td className={`px-5 py-4 text-right font-semibold text-ink ${cv("saldo")}`}>
-                        {formatCurrency(account.currentBalance, account.currencyCode)}
-                      </td>
-                      <td className={`px-5 py-4 text-storm ${cv("moneda")}`}>{account.currencyCode}</td>
-                      <td className={`px-5 py-4 ${cv("estado")}`}>
-                        <div className="flex flex-wrap gap-1.5">
-                          <StatusBadge
-                            status={account.includeInNetWorth ? "incluida" : "fuera de patrimonio"}
-                            tone={account.includeInNetWorth ? "success" : "warning"}
-                          />
-                          {account.isArchived ? <StatusBadge status="archivada" tone="neutral" /> : null}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            className="py-1.5 text-xs"
-                            onClick={() => setAnalyticsAccountId(account.id)}
-                            variant="ghost"
-                          >
-                            <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                            Análisis
-                          </Button>
-                          <Button
-                            className="py-1.5 text-xs"
-                            onClick={() => openEditEditor(account)}
-                            variant="ghost"
-                          >
-                            Editar
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <NoFilteredAccountsState onReset={resetFilters} status={filters.status} />
         ) : (
-          <section className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-            {filteredAccounts.map((account) => {
-              const AccountIcon = getAccountIcon(account.icon, account.type);
-              const isSelected = selectedIds.has(account.id);
-              const longPressHandlers = createLongPressHandlers(() => toggleSelect(account.id));
+          <div className="space-y-4">
+            {filters.view === "table" ? (
+              <AccountsTable
+                accounts={paginatedAccounts.items}
+                allSelected={allSelected}
+                onArchive={handleArchiveToggle}
+                onEdit={openEditEditor}
+                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
+                onSelectAll={() => (allSelected ? clearAll() : selectAll())}
+                onToggleSelect={toggleSelect}
+                selectedIds={selectedIds}
+                someSelected={someSelected}
+                visibleColumns={visibleColumns}
+              />
+            ) : filters.view === "list" ? (
+              <AccountsList
+                accounts={paginatedAccounts.items}
+                onArchive={handleArchiveToggle}
+                onEdit={openEditEditor}
+                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
+                onToggleSelect={toggleSelect}
+                selectedCount={selectedCount}
+                selectedIds={selectedIds}
+              />
+            ) : (
+              <AccountsGrid
+                accounts={paginatedAccounts.items}
+                onArchive={handleArchiveToggle}
+                onEdit={openEditEditor}
+                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
+                onToggleSelect={toggleSelect}
+                selectedCount={selectedCount}
+                selectedIds={selectedIds}
+              />
+            )}
 
-              return (
-                <article
-                  className={`relative glass-panel animate-rise-in rounded-[30px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
-                  key={account.id}
-                  onClick={(e) => {
-                    if (wasRecentLongPress()) return;
-                    if (selectedCount === 0) return;
-                    if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
-                    toggleSelect(account.id);
-                  }}
-                  {...longPressHandlers}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <div
-                        className="flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-lg"
-                        style={{ backgroundColor: account.color }}
-                      >
-                        <AccountIcon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="font-display text-2xl font-semibold text-ink">{account.name}</p>
-                        <p className="mt-1 text-sm text-storm">
-                          {account.type} - {account.currencyCode}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <StatusBadge
-                        status={account.includeInNetWorth ? "incluida" : "fuera de patrimonio"}
-                        tone={account.includeInNetWorth ? "success" : "warning"}
-                      />
-                      {account.isArchived ? <StatusBadge status="archivada" tone="neutral" /> : null}
-                    </div>
-                  </div>
-
-                  <p className="mt-6 font-display text-4xl font-semibold text-ink">
-                    {formatCurrency(account.currentBalance, account.currencyCode)}
-                  </p>
-                  <p className="mt-2 text-sm text-storm">
-                    Saldo inicial {formatCurrency(account.openingBalance, account.currencyCode)}
-                  </p>
-
-                  <div className="mt-6 grid gap-3">
-                    <div className="glass-panel-soft rounded-2xl px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-storm">Ultima actividad</p>
-                      <p className="mt-2 text-sm font-medium text-ink">
-                        {formatDateTime(account.lastActivity)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        className="flex-1"
-                        onClick={() => openEditEditor(account)}
-                        variant="secondary"
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        className="flex-1"
-                        onClick={() => void handleArchiveToggle(account)}
-                        variant="ghost"
-                      >
-                        {account.isArchived ? "Activar" : "Archivar"}
-                      </Button>
-                    </div>
-                    <Button
-                      className="w-full justify-center gap-2"
-                      onClick={() => setAnalyticsAccountId(account.id)}
-                      variant="ghost"
-                    >
-                      <BarChart3 className="h-4 w-4" />
-                      Ver análisis
-                    </Button>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
+            <Pagination
+              className="rounded-[22px] border border-white/10 bg-[#090f18]/95 px-4 py-3"
+              onPageChange={(page) => writeFilters({ page })}
+              page={paginatedAccounts.page}
+              pageSize={ACCOUNT_PAGE_SIZE}
+              totalItems={filteredAccounts.length}
+            />
+          </div>
         )}
-
       </div>
 
-      {isEditorOpen ? (
+      {editor.isEditorOpen ? (
         <AccountEditorDialog
-          baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
-          clearFieldError={clearFieldError}
-          closeEditor={requestCloseEditor}
+          baseCurrencyCode={baseCurrencyCode}
           errorMessage={errorMessage}
-          formState={formState}
-          handleAccountTypeChange={handleAccountTypeChange}
-          handleArchiveToggle={handleArchiveToggle}
-          handleDeleteAccount={handleDeleteAccount}
-          handleSubmit={handleSubmit}
-          invalidFields={invalidFields}
-          isCreateMode={editorMode === "create"}
+          formErrors={formErrors}
+          formState={editor.formState}
+          isCreateMode={editor.editorMode === "create"}
           isSaving={isSaving}
-          selectedAccount={selectedAccount}
-          updateFormState={updateFormState}
+          onArchiveToggle={handleArchiveToggle}
+          onClose={requestCloseEditor}
+          onDelete={handleDeleteAccount}
+          onFieldChange={updateFormField}
+          onSubmit={handleSubmit}
+          onTypeChange={handleTypeChange}
+          selectedAccount={editor.selectedAccount}
         />
       ) : null}
 
-      {showUnsavedDialog ? (
+      {editor.showUnsavedDialog ? (
         <UnsavedChangesDialog
-          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
-          onKeepEditing={() => setShowUnsavedDialog(false)}
+          onDiscard={() => {
+            editor.setShowUnsavedDialog(false);
+            editor.closeEditor();
+          }}
+          onKeepEditing={() => editor.setShowUnsavedDialog(false)}
         />
       ) : null}
 
@@ -2828,13 +625,11 @@ export function AccountsPage() {
               setArchiveTargetId(null);
             }
           }}
-          onConfirm={() => {
-            void handleConfirmArchiveToggle();
-          }}
+          onConfirm={() => void handleConfirmArchiveToggle()}
         />
       ) : null}
 
-      {showDeleteDialog && selectedAccount ? (
+      {showDeleteDialog && editor.selectedAccount ? (
         <DeleteConfirmDialog
           badge="Eliminar cuenta"
           description="Esto elimina la cuenta permanentemente. Si tiene movimientos vinculados, primero tendras que resolverlos."
@@ -2844,71 +639,108 @@ export function AccountsPage() {
               setShowDeleteDialog(false);
             }
           }}
-          onConfirm={() => {
-            void handleConfirmDeleteAccount();
-          }}
+          onConfirm={handleConfirmDeleteAccount}
         >
           {(() => {
-            const AccountIcon = getAccountIcon(selectedAccount.icon, selectedAccount.type);
+            const account = editor.selectedAccount;
+            const AccountIcon = getAccountIcon(account.icon, account.type);
+
             return (
               <div>
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] text-white" style={{ backgroundColor: selectedAccount.color }}>
-                    <AccountIcon className="h-4 w-4" />
+                  <div
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] border border-white/10 text-white"
+                    style={{ backgroundColor: account.color }}
+                  >
+                    <AccountIcon className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">{selectedAccount.name}</p>
-                    <p className="text-sm text-storm">{getTypePreset(selectedAccount.type).label} · {selectedAccount.currencyCode}</p>
+                    <p className="break-words font-semibold text-ink">{account.name}</p>
+                    <p className="mt-0.5 text-sm text-storm">
+                      {getTypePreset(account.type).label} - {account.currencyCode}
+                    </p>
                   </div>
                 </div>
-                <p className="mt-4 font-display text-2xl font-semibold text-ink">{formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}</p>
+                <p className="mt-4 font-display text-2xl font-semibold text-ink">
+                  {formatCurrency(account.currentBalance, account.currencyCode)}
+                </p>
               </div>
             );
           })()}
         </DeleteConfirmDialog>
       ) : null}
 
-      {analyticsAccountId !== null && snapshot ? (() => {
-        const analyticsAccount = snapshot.accounts.find((a) => a.id === analyticsAccountId);
-        return analyticsAccount ? (
-          <AccountAnalyticsModal
-            account={analyticsAccount}
-            movements={snapshot.movements}
-            onClose={() => setAnalyticsAccountId(null)}
-          />
-        ) : null;
-      })() : null}
+      {analyticsAccount ? (
+        <AccountAnalyticsModal
+          account={analyticsAccount}
+          movements={snapshot.movements}
+          onClose={() => setAnalyticsAccountId(null)}
+        />
+      ) : null}
 
       <BulkActionBar
         deleteLabel="Archivar"
         deletingLabel="Archivando..."
-        isDeleting={isBulkDeleting}
+        isDeleting={isBulkArchiving}
         onClearAll={clearAll}
-        onDelete={handleBulkDelete}
-        onExport={() => downloadAccountsCSV(selectedItems, `cuentas-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onDelete={() => setShowBulkArchiveConfirm(true)}
+        onExport={() =>
+          downloadAccountsCSV(
+            selectedItems,
+            `cuentas-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`,
+          )
+        }
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredAccounts.length}
       />
-      {showBulkDeleteConfirm ? (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="acc-bulk-title">
-          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
-            <h2 className="font-display text-xl font-semibold text-ink" id="acc-bulk-title">
-              Archivar {selectedCount} cuenta{selectedCount !== 1 ? "s" : ""}?
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-storm">
-              Las cuentas seleccionadas seran archivadas y dejaran de aparecer en el flujo principal. Podras reactivarlas despues.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
-                {isBulkDeleting ? "Archivando..." : `Archivar ${selectedCount}`}
-              </Button>
-              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
-                Cancelar
-              </Button>
+
+      {showBulkArchiveConfirm ? (
+        <Modal
+          disableOutsideClose={isBulkArchiving}
+          labelledBy="accounts-bulk-archive-title"
+          onClose={() => {
+            if (!isBulkArchiving) {
+              setShowBulkArchiveConfirm(false);
+            }
+          }}
+          size="sm"
+        >
+          <ModalHeader
+            description="Las cuentas seleccionadas dejaran de aparecer en el flujo principal. Podras reactivarlas despues."
+            onClose={isBulkArchiving ? undefined : () => setShowBulkArchiveConfirm(false)}
+            title={`Archivar ${selectedCount} cuenta${selectedCount !== 1 ? "s" : ""}`}
+            titleId="accounts-bulk-archive-title"
+          />
+          <ModalBody>
+            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-gold/20 bg-gold/10 text-gold">
+                  <Archive className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-ink">Accion reversible</p>
+                  <p className="mt-1 text-sm leading-6 text-storm">
+                    Se archivaran solo las cuentas filtradas que seleccionaste.
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              disabled={isBulkArchiving}
+              onClick={() => setShowBulkArchiveConfirm(false)}
+              variant="ghost"
+            >
+              Cancelar
+            </Button>
+            <Button disabled={isBulkArchiving} onClick={() => void confirmBulkArchive()}>
+              <Archive className="h-4 w-4" />
+              {isBulkArchiving ? "Archivando..." : "Archivar"}
+            </Button>
+          </ModalFooter>
+        </Modal>
       ) : null}
     </>
   );
