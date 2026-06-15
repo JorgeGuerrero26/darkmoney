@@ -1,4 +1,4 @@
-import { Archive, Plus } from "lucide-react";
+import { Archive } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -15,7 +15,6 @@ import { InfoTip } from "../../../components/ui/info-tip";
 import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { Pagination } from "../../../components/ui/pagination";
-import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
@@ -77,33 +76,21 @@ function AccountsLoadingSkeleton() {
   );
 }
 
-function AccountsModuleHeader({
-  onCreate,
-}: {
-  onCreate: () => void;
-}) {
+function AccountsModuleHeader() {
   return (
-    <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status="Cuentas" tone="info" />
-          <InfoTip title="Objetivo del modulo">
-            Inventario operativo para saber donde esta tu dinero, que suma al patrimonio y que
-            requiere orden antes de tomar decisiones.
-          </InfoTip>
-        </div>
-        <h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.03em] text-ink sm:text-5xl">
+    <section className="min-w-0">
+      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Cuentas</p>
+      <div className="mt-1 flex items-center gap-2.5">
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
           Cuentas
         </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-7 text-storm">
-          Administra saldos, monedas, archivo e impacto patrimonial desde una vista pensada para
-          operar rapido y revisar con contexto.
-        </p>
+        <InfoTip title="Objetivo del modulo">
+          Inventario operativo para saber donde esta tu dinero, que suma al patrimonio y que
+          requiere orden antes de tomar decisiones. Administra saldos, monedas, archivo e impacto
+          patrimonial desde una vista pensada para operar rapido y revisar con contexto.
+        </InfoTip>
       </div>
-      <Button className="w-full sm:w-auto" data-tour="create-account" onClick={onCreate}>
-        <Plus className="h-4 w-4" />
-        Nueva cuenta
-      </Button>
+      <p className="mt-1 text-xs text-storm">Saldos, monedas, archivo e impacto patrimonial en un solo lugar.</p>
     </section>
   );
 }
@@ -448,7 +435,7 @@ export function AccountsPage() {
   if (workspaceError) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader onCreate={() => undefined} />
+        <AccountsModuleHeader />
         <DataState
           description={getQueryErrorMessage(workspaceError, "No pudimos leer tus workspaces reales.")}
           title="No hay acceso al workspace"
@@ -461,7 +448,7 @@ export function AccountsPage() {
   if (!activeWorkspace && !isWorkspacesLoading) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader onCreate={() => undefined} />
+        <AccountsModuleHeader />
         <DataState
           description="Cuando exista un workspace personal o compartido, aqui veras solo las cuentas reales de la base."
           title="Sin workspace activo"
@@ -473,7 +460,7 @@ export function AccountsPage() {
   if (!snapshot && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader onCreate={() => undefined} />
+        <AccountsModuleHeader />
         <AccountsLoadingSkeleton />
       </div>
     );
@@ -482,7 +469,7 @@ export function AccountsPage() {
   if (snapshotQuery.error || !snapshot) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader onCreate={() => undefined} />
+        <AccountsModuleHeader />
         <DataState
           description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer la informacion de cuentas.")}
           title="Error al consultar cuentas"
@@ -495,7 +482,7 @@ export function AccountsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader onCreate={openCreateEditor} />
+        <AccountsModuleHeader />
 
         <AccountSummaryStrip
           accounts={accounts}

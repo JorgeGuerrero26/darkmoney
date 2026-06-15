@@ -1,6 +1,5 @@
 import { Archive, BarChart3, Pencil } from "lucide-react";
 
-import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { formatDateTime } from "../../../lib/formatting/dates";
@@ -51,25 +50,25 @@ export function AccountsTable({
                   onChange={onSelectAll}
                 />
               </th>
-              <th className="px-5 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm">
+              <th className="px-5 py-4 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55">
                 Cuenta
               </th>
-              <th className={`px-5 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm ${columnClass(visibleColumns, "type")}`}>
+              <th className={`px-5 py-4 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55 ${columnClass(visibleColumns, "type")}`}>
                 Tipo
               </th>
-              <th className={`px-5 py-4 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm ${columnClass(visibleColumns, "balance")}`}>
+              <th className={`px-5 py-4 text-right text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55 ${columnClass(visibleColumns, "balance")}`}>
                 Saldo
               </th>
-              <th className={`px-5 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm ${columnClass(visibleColumns, "currency")}`}>
+              <th className={`px-5 py-4 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55 ${columnClass(visibleColumns, "currency")}`}>
                 Moneda
               </th>
-              <th className={`px-5 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm ${columnClass(visibleColumns, "status")}`}>
+              <th className={`px-5 py-4 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55 ${columnClass(visibleColumns, "status")}`}>
                 Estado
               </th>
-              <th className={`px-5 py-4 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm ${columnClass(visibleColumns, "activity")}`}>
+              <th className={`px-5 py-4 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55 ${columnClass(visibleColumns, "activity")}`}>
                 Ultima actividad
               </th>
-              <th className="px-5 py-4 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm">
+              <th className="px-5 py-4 text-right text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55">
                 Acciones
               </th>
             </tr>
@@ -81,7 +80,7 @@ export function AccountsTable({
 
               return (
                 <tr
-                  className="border-b border-white/[0.06] transition last:border-0 hover:bg-white/[0.025]"
+                  className="group border-b border-white/[0.06] transition last:border-0 hover:bg-white/[0.025]"
                   key={account.id}
                 >
                   <td className="w-12 px-4 py-4">
@@ -101,7 +100,7 @@ export function AccountsTable({
                       </div>
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-ink">{account.name}</p>
-                        <p className="mt-0.5 truncate text-xs text-storm">
+                        <p className="mt-0.5 truncate text-xs text-storm/55">
                           Saldo inicial {formatCurrency(account.openingBalance, account.currencyCode)}
                         </p>
                       </div>
@@ -129,31 +128,31 @@ export function AccountsTable({
                     {formatDateTime(account.lastActivity)}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
+                    <div className="flex items-center justify-end gap-1 opacity-60 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                      <button
                         aria-label={`Analizar ${account.name}`}
-                        className="min-h-10 px-3 py-2"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
                         onClick={() => onOpenAnalytics(account)}
-                        variant="ghost"
+                        type="button"
                       >
                         <BarChart3 className="h-4 w-4" />
-                      </Button>
-                      <Button
+                      </button>
+                      <button
                         aria-label={`Editar ${account.name}`}
-                        className="min-h-10 px-3 py-2"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
                         onClick={() => onEdit(account)}
-                        variant="ghost"
+                        type="button"
                       >
                         <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
+                      </button>
+                      <button
                         aria-label={account.isArchived ? `Reactivar ${account.name}` : `Archivar ${account.name}`}
-                        className="min-h-10 px-3 py-2"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
                         onClick={() => onArchive(account)}
-                        variant="ghost"
+                        type="button"
                       >
                         <Archive className="h-4 w-4" />
-                      </Button>
+                      </button>
                     </div>
                   </td>
                 </tr>
