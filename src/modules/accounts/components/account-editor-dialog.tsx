@@ -251,7 +251,7 @@ export function AccountEditorDialog({
                 </div>
               </FormField>
 
-              <label className="flex min-h-14 items-start gap-3 rounded-[22px] border border-white/10 bg-[#0d1420]/95 p-4">
+              <label className="flex min-h-14 items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
                 <input
                   checked={formState.includeInNetWorth}
                   className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded accent-pine"
@@ -285,8 +285,8 @@ export function AccountEditorDialog({
                       value={formState.notes}
                     />
                   </FormField>
-                  <div className="rounded-[20px] border border-white/10 bg-[#0b111b]/90 p-4">
-                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm">
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
                       Impacto
                     </p>
                     <p className="mt-2 text-sm leading-6 text-storm">
@@ -299,7 +299,7 @@ export function AccountEditorDialog({
             </div>
 
             <aside className="space-y-4">
-              <div className="rounded-[28px] border border-white/10 bg-[#0b111b]/96 p-5">
+              <div className="glass-panel-soft rounded-[24px] p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div
                     className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-white/10 text-white"

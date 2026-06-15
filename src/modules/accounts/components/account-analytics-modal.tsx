@@ -368,7 +368,7 @@ export function AccountAnalyticsModal({
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))]">
           {metricCards.map(({ icon: Icon, label, tone, value }) => (
             <article
-              className="rounded-[20px] border border-white/10 bg-[#0b111b]/96 px-4 py-4"
+              className="glass-panel-soft rounded-[20px] px-4 py-4"
               key={label}
             >
               <div className="mb-3 flex items-center gap-2">
