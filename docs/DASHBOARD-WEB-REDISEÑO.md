@@ -134,9 +134,23 @@ No se introducen pestañas en ningún breakpoint. El móvil mantiene su navegaci
 
 ## 7. Pendientes relacionados (fuera de esta fase)
 
-- **Paridad real de `liquidMoney` en móvil**: el móvil usa el balance visible total como
-  "dinero" para la cobertura de salud, mientras la web usa solo líquido (cash/bank/savings).
-  El score puede diferir en runtime para usuarios con cuentas no líquidas. Acordado
-  arreglarlo como fase aparte (exponer el tipo de cuenta en la query del móvil), **después**
-  de esta Fase C. Ver `tests/parity/` y `features/dashboard/components/advanced/AdvancedDashboard.tsx`
-  (call-site de `HealthScore`).
+- ✅ **Paridad real de `liquidMoney` en móvil** — RESUELTO. El móvil ahora suma solo dinero
+  líquido (cash/bank/savings, no archivado) igual que la web, y el smoke de paridad deriva
+  `liquidMoney` de los tipos de cuenta para probar la regla.
+
+- **Unificar `aggregations.ts` / `types.ts` del móvil con `@darkmoney/shared`** — deuda
+  consciente, NO unificada. Razón: a diferencia de `health.ts`/`currency.ts` (copias puras,
+  ya reemplazadas por re-exports del paquete), estos archivos del móvil **no son copias**:
+  - Tienen lógica propia que el paquete no expone: `pctChange`, `sortMovementsRecentFirst`,
+    `movementPreviewActionLabel`, `buildExchangeRateMap`, y los tipos `DashboardChartDay` /
+    `DashboardMovementRow`.
+  - Usan `date-fns` directamente (el paquete reimplementa las fechas en `date-utils`).
+  - Tienen firmas/nombres adaptados al móvil (`ConversionCtx` vs `ParityConversionCtx`,
+    `convertAmt`/`resolveRate` como wrappers).
+
+  Las funciones núcleo (`isIncome`, `isExpense`, `incomeAmt`, `inRange`...) sí coinciden en
+  lógica con el paquete y **ya producen los mismos números** (verificado por el smoke de
+  paridad). Unificarlas implicaría migrar el tipo `DashboardMovementRow` → `ParityMovement`
+  propagándolo por todo el dashboard móvil: refactor grande, alto riesgo (sin emulador para
+  probar el arranque), beneficio bajo. Se deja documentado para abordarlo solo si el
+  mantenimiento de la duplicación se vuelve un problema real.

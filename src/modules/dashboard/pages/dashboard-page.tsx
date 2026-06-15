@@ -165,6 +165,7 @@ export function DashboardPage() {
   const [hiddenWidgets, setHiddenWidgets] = useState<DashboardWidgetId[]>(readStoredHiddenWidgets);
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
+  const [isAdvancedOpsOpen, setIsAdvancedOpsOpen] = useState(false);
   const [proMonthlyGoal, setProMonthlyGoal] = useState<number | null>(null);
   const [proGoalDraft, setProGoalDraft] = useState("");
   const [proGoalSaveError, setProGoalSaveError] = useState<string | null>(null);
@@ -4168,17 +4169,31 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
-          09
-        </div>
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Análisis avanzado</p>
-          <p className="mt-1 text-xs leading-5 text-storm/50">Riesgo de cartera, flujo futuro, recurrentes, aprendizaje automático y contexto del equipo.</p>
-        </div>
-      </div>
       {showAdvancedOpsSection ? (
-        <>
+        <button
+          aria-controls="advanced-ops-section"
+          aria-expanded={isAdvancedOpsOpen}
+          className="mb-2 mt-4 flex w-full items-start gap-3 border-t border-white/8 pt-6 text-left transition hover:opacity-90"
+          onClick={() => setIsAdvancedOpsOpen((open) => !open)}
+          type="button"
+        >
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
+            09
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Análisis avanzado</p>
+            <p className="mt-1 text-xs leading-5 text-storm/50">Riesgo de cartera, flujo futuro, recurrentes, aprendizaje automático y contexto del equipo.</p>
+          </div>
+          <span className="mt-1 flex items-center gap-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-storm/70">
+            {isAdvancedOpsOpen ? "Ocultar" : "Ver"}
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${isAdvancedOpsOpen ? "rotate-90" : ""}`}
+            />
+          </span>
+        </button>
+      ) : null}
+      {showAdvancedOpsSection && isAdvancedOpsOpen ? (
+        <div id="advanced-ops-section">
           <div className="mb-1 flex items-center gap-2">
             <p className="text-[0.65rem] uppercase tracking-[0.22em] text-storm/60">Cartera y vencimientos</p>
             <div className="h-px flex-1 bg-white/6" />
@@ -4993,7 +5008,7 @@ export function DashboardPage() {
               ) : null}
             </section>
           ) : null}
-        </>
+        </div>
       ) : null}
     </div>
     </DashboardHelpProvider>
