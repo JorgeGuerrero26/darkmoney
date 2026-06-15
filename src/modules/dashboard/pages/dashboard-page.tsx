@@ -166,6 +166,7 @@ export function DashboardPage() {
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false);
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
   const [isAdvancedOpsOpen, setIsAdvancedOpsOpen] = useState(false);
+  const [isProFocusOpen, setIsProFocusOpen] = useState(false);
   const [proMonthlyGoal, setProMonthlyGoal] = useState<number | null>(null);
   const [proGoalDraft, setProGoalDraft] = useState("");
   const [proGoalSaveError, setProGoalSaveError] = useState<string | null>(null);
@@ -3845,16 +3846,30 @@ export function DashboardPage() {
       ) : null}
 
       {showProFocusSection ? (
-        <>
-        <div className="mb-2 mt-4 flex items-start gap-3 border-t border-white/8 pt-6">
+        <button
+          aria-controls="pro-focus-section"
+          aria-expanded={isProFocusOpen}
+          className="mb-2 mt-4 flex w-full items-start gap-3 border-t border-white/8 pt-6 text-left transition hover:opacity-90"
+          onClick={() => setIsProFocusOpen((open) => !open)}
+          type="button"
+        >
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[0.6rem] font-bold text-storm">
             08
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-ink/70">Centro de mando</p>
             <p className="mt-1 text-xs leading-5 text-storm/50">Acciones sugeridas, meta de ahorro del mes, presión de la semana y señales del período (Pro).</p>
           </div>
-        </div>
+          <span className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-ink/80">
+            {isProFocusOpen ? "Ocultar" : "Ver"}
+            <ChevronRight
+              className={`h-3.5 w-3.5 transition-transform ${isProFocusOpen ? "rotate-90" : ""}`}
+            />
+          </span>
+        </button>
+      ) : null}
+      {showProFocusSection && isProFocusOpen ? (
+        <div id="pro-focus-section">
         <section
           className={`grid gap-6 ${
             isWidgetVisible("pro_command_center") &&
@@ -4168,7 +4183,7 @@ export function DashboardPage() {
             </div>
           ) : null}
         </section>
-        </>
+        </div>
       ) : null}
 
       {showAdvancedOpsSection ? (
