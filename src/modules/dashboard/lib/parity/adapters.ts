@@ -7,6 +7,19 @@
  * que readiness/historyDays/duplicados coincidan exactamente.
  */
 
+import { subDays } from "@darkmoney/shared/date-utils";
+import {
+  buildAccountCurrencyMap,
+  buildParityExchangeRateMap,
+} from "@darkmoney/shared/exchange-map";
+import type {
+  ParityConversionCtx,
+  ParityMovement,
+  ParityObligation,
+  ParityRecurringIncome,
+  ParitySubscription,
+} from "@darkmoney/shared/types";
+
 import type {
   AccountSummary,
   ExchangeRateSummary,
@@ -15,30 +28,8 @@ import type {
   RecurringIncomeSummary,
   SubscriptionSummary,
 } from "../../../../types/domain";
-import { subDays } from "./date-utils";
-import type {
-  ParityConversionCtx,
-  ParityMovement,
-  ParityObligation,
-  ParityRecurringIncome,
-  ParitySubscription,
-} from "./types";
 
-/** Mapa "FROM:TO" → rate. Conserva la PRIMERA tasa por par (como el móvil). */
-export function buildParityExchangeRateMap(rates: ExchangeRateSummary[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const rate of rates) {
-    const key = `${rate.fromCurrencyCode.toUpperCase()}:${rate.toCurrencyCode.toUpperCase()}`;
-    if (!map.has(key) && rate.rate > 0) map.set(key, rate.rate);
-  }
-  return map;
-}
-
-export function buildAccountCurrencyMap(accounts: AccountSummary[]): Map<number, string> {
-  const map = new Map<number, string>();
-  for (const account of accounts) map.set(account.id, account.currencyCode);
-  return map;
-}
+export { buildAccountCurrencyMap, buildParityExchangeRateMap };
 
 function toParityMovement(movement: MovementRecord): ParityMovement {
   return {
