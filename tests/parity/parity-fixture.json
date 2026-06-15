@@ -3,6 +3,7 @@
   "now": "2026-06-15T14:30:00.000Z",
   "baseCurrency": "PEN",
   "displayCurrency": "USD",
+  "healthInputs": { "liquidMoney": 2000, "averageMonthlyExpense": 350, "totalPayable": 933.33 },
   "exchangeRates": [
     { "fromCurrencyCode": "USD", "toCurrencyCode": "PEN", "rate": 3.75, "effectiveAt": "2026-06-01T00:00:00.000Z" },
     { "fromCurrencyCode": "PEN", "toCurrencyCode": "EUR", "rate": 0.25, "effectiveAt": "2026-06-01T00:00:00.000Z" },

@@ -77,5 +77,18 @@
     "historyDays": 61,
     "usefulCount": 16,
     "categorizedRate": 1
+  },
+  "health": {
+    "score": 81,
+    "tone": "success",
+    "savingsRate": 0.753202,
+    "coverageMonths": 5.714286,
+    "debtToIncomeRatio": 0.723138,
+    "indicatorScores": [
+      100,
+      75,
+      75,
+      75
+    ]
   }
 }

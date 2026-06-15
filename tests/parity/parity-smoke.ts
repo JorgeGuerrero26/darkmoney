@@ -16,16 +16,17 @@ import {
   inRange,
   isExpense,
   isIncome,
-} from "../../src/modules/dashboard/lib/parity/aggregations";
+} from "@darkmoney/shared/aggregations";
 import {
   buildAccountCurrencyMap,
   buildParityExchangeRateMap,
-} from "../../src/modules/dashboard/lib/parity/adapters";
-import { buildFutureFlowWindows } from "../../src/modules/dashboard/lib/parity/future-flow";
-import { buildMonthProjection } from "../../src/modules/dashboard/lib/parity/month-projection";
-import { buildParityNetWorth } from "../../src/modules/dashboard/lib/parity/net-worth";
-import { buildReadiness } from "../../src/modules/dashboard/lib/parity/readiness";
-import { buildReviewInboxSnapshot } from "../../src/modules/dashboard/lib/parity/review-inbox";
+} from "@darkmoney/shared/exchange-map";
+import { buildFutureFlowWindows } from "@darkmoney/shared/future-flow";
+import { buildMonthProjection } from "@darkmoney/shared/month-projection";
+import { buildParityNetWorth } from "@darkmoney/shared/net-worth";
+import { buildReadiness } from "@darkmoney/shared/readiness";
+import { buildReviewInboxSnapshot } from "@darkmoney/shared/review-inbox";
+import { buildHealthScore } from "@darkmoney/shared/health";
 import type {
   ParityConversionCtx,
   ParityMovement,
@@ -33,7 +34,7 @@ import type {
   ParityRecurringIncome,
   ParitySubscription,
   Period,
-} from "../../src/modules/dashboard/lib/parity/types";
+} from "@darkmoney/shared/types";
 
 type Fixture = {
   now: string;
@@ -52,6 +53,7 @@ type Fixture = {
   obligations: ParityObligation[];
   subscriptions: ParitySubscription[];
   recurringIncome: ParityRecurringIncome[];
+  healthInputs: { liquidMoney: number; averageMonthlyExpense: number; totalPayable: number };
 };
 
 const DIR = join(process.cwd(), "tests", "parity");
@@ -129,6 +131,17 @@ const reviewInbox = buildReviewInboxSnapshot(
 
 const readiness = buildReadiness(fixture.movements, now);
 
+// Salud: usa el período "month" (mismo en web y móvil) + inputs explícitos del fixture.
+const monthTotals = periodTotals("month");
+const health = buildHealthScore({
+  liquidMoney: fixture.healthInputs.liquidMoney,
+  averageMonthlyExpense: fixture.healthInputs.averageMonthlyExpense,
+  periodIncome: monthTotals.income,
+  periodNet: monthTotals.net,
+  totalPayable: fixture.healthInputs.totalPayable,
+  overdueCount: reviewInbox.overdueObligationsCount,
+});
+
 const actual = {
   netWorth: round(netWorth.amount),
   periods: {
@@ -161,6 +174,14 @@ const actual = {
     historyDays: readiness.historyDays,
     usefulCount: readiness.usefulCount,
     categorizedRate: round(readiness.categorizedRate),
+  },
+  health: {
+    score: health.score,
+    tone: health.tone,
+    savingsRate: health.savingsRate === null ? null : round(health.savingsRate),
+    coverageMonths: health.coverageMonths === null ? null : round(health.coverageMonths),
+    debtToIncomeRatio: health.debtToIncomeRatio === null ? null : round(health.debtToIncomeRatio),
+    indicatorScores: health.indicators.map((indicator) => indicator.score),
   },
 };
 

@@ -34,7 +34,6 @@ import type {
   DailyFlowPoint,
   DailySavingsPoint,
   ExposureItem,
-  FinancialHealthSnapshot,
   LearningInsight,
   LearningPhaseStatus,
   LearningSnapshot,
@@ -593,71 +592,6 @@ export function buildCurrencyExposure(
     .sort((left, right) => right.amount - left.amount);
 }
 
-export function buildFinancialHealthSnapshot({
-  liquidMoney,
-  averageMonthlyExpense,
-  currentIncome,
-  currentNet,
-  monthlyRecurringCost,
-  upcomingOutflows,
-  overdueAmount,
-  totalPayable,
-}: {
-  liquidMoney: number;
-  averageMonthlyExpense: number;
-  currentIncome: number;
-  currentNet: number;
-  monthlyRecurringCost: number;
-  upcomingOutflows: number;
-  overdueAmount: number;
-  totalPayable: number;
-}): FinancialHealthSnapshot {
-  const realFreeMoney = liquidMoney - upcomingOutflows;
-  const savingsRate = currentIncome > 0 ? currentNet / currentIncome : null;
-  const coverageMonths = averageMonthlyExpense > 0 ? liquidMoney / averageMonthlyExpense : null;
-  const debtToIncomeRatio = currentIncome > 0 ? totalPayable / currentIncome : null;
-
-  if (overdueAmount > 0 || realFreeMoney < 0 || currentNet < 0) {
-    return {
-      tone: "danger",
-      title: "Necesita atención",
-      description: "Tienes compromisos vencidos o tu flujo actual está apretando la caja disponible.",
-      realFreeMoney,
-      savingsRate,
-      coverageMonths,
-      debtToIncomeRatio,
-      overdueAmount,
-    };
-  }
-
-  if (
-    (savingsRate !== null && savingsRate < 0.1) ||
-    (coverageMonths !== null && coverageMonths < 1) ||
-    (monthlyRecurringCost > currentIncome * 0.25 && currentIncome > 0)
-  ) {
-    return {
-      tone: "warning",
-      title: "Bajo observación",
-      description: "La liquidez o el ritmo de ahorro necesitan seguimiento para no perder margen.",
-      realFreeMoney,
-      savingsRate,
-      coverageMonths,
-      debtToIncomeRatio,
-      overdueAmount,
-    };
-  }
-
-  return {
-    tone: "success",
-    title: "Salud estable",
-    description: "Tu liquidez y tu capacidad de ahorro van en una dirección saludable para este corte.",
-    realFreeMoney,
-    savingsRate,
-    coverageMonths,
-    debtToIncomeRatio,
-    overdueAmount,
-  };
-}
 export function buildLearningSnapshot(movements: MovementRecord[], currencyCode: string): LearningSnapshot {
   if (movements.length === 0) {
     return {
