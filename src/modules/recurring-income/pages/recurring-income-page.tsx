@@ -7,7 +7,6 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
-  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -23,6 +22,7 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { InfoTip } from "../../../components/ui/info-tip";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
@@ -983,17 +983,19 @@ function RecurringIncomeSummaryChip({
   tone?: "neutral" | "info" | "warning";
   value: string;
 }) {
-  const toneClasses = {
-    neutral: "border-white/10 bg-white/[0.04] text-ink",
-    info: "border-electric/25 bg-electric/10 text-electric",
-    warning: "border-gold/30 bg-gold/10 text-gold",
+  const valueTone = {
+    neutral: "text-ink",
+    info: "text-ember",
+    warning: "text-gold",
   } as const;
 
   return (
-    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
-      <span className="text-sm font-semibold">{value}</span>
-    </div>
+    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
+      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
+      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
+        {value}
+      </p>
+    </article>
   );
 }
 
@@ -1307,7 +1309,6 @@ export function RecurringIncomePage() {
       ).sort((left, right) => left.localeCompare(right)),
     [recurringIncome],
   );
-  const showIncomeExplore = viewMode !== "table" && recurringIncome.length > 0;
 
   function updateIncomeFilter<Field extends keyof RecurringIncomeTableFilters>(
     field: Field,
@@ -1625,153 +1626,113 @@ export function RecurringIncomePage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <section className="glass-panel-strong rounded-[32px] p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">ingresos fijos</p>
-              <h2 className="font-display text-4xl font-semibold text-ink">Ingresos recurrentes</h2>
-              <p className="max-w-3xl text-sm leading-7 text-storm">
-                Entra directo a tu tabla de ingresos fijos. Cuando uses la vista tabla, los filtros viven
-                en cada columna; en lista o tarjetas vuelve el explorador compacto para recorrerlos mejor.
-              </p>
-            </div>
+      {/* Header compacto (estándar de cuentas) */}
+      <section className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Ingresos fijos</p>
+        <div className="mt-1 flex items-center gap-2.5">
+          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
+            Ingresos recurrentes
+          </h2>
+          <InfoTip ariaLabel="Sobre los ingresos recurrentes">
+            Registra tus ingresos fijos esperados (sueldo, rentas, cobros periódicos) para anticipar
+            cuándo y cuánto entra. Los filtros de la barra superior aplican a todas las vistas.
+          </InfoTip>
+        </div>
+        <p className="mt-1 text-xs text-storm">Ingresos esperados periódicos del workspace.</p>
+      </section>
 
-            <div className="flex flex-wrap gap-3">
-              <RecurringIncomeSummaryChip label="registrados" value={String(recurringIncome.length)} />
-              <RecurringIncomeSummaryChip label="llegan pronto" tone="warning" value={String(dueSoonCount)} />
-              <RecurringIncomeSummaryChip
-                label="activos"
-                tone="info"
-                value={String(recurringIncome.filter((r) => r.status === "active").length)}
-              />
-              <RecurringIncomeSummaryChip label="monto esperado" tone="info" value={totalAmountDisplay} />
-              {snapshotQuery.isFetching ? <RecurringIncomeSummaryChip label="estado" value="Actualizando" /> : null}
-            </div>
+      {/* Métricas compactas */}
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+        <RecurringIncomeSummaryChip label="registrados" value={String(recurringIncome.length)} />
+        <RecurringIncomeSummaryChip label="llegan pronto" tone="warning" value={String(dueSoonCount)} />
+        <RecurringIncomeSummaryChip
+          label="activos"
+          tone="info"
+          value={String(recurringIncome.filter((r) => r.status === "active").length)}
+        />
+        <RecurringIncomeSummaryChip label="monto esperado" tone="info" value={totalAmountDisplay} />
+        <RecurringIncomeSummaryChip label="siguiente" value={nextIncome ? formatDate(nextIncome.nextExpectedDate) : "—"} />
+      </div>
+
+      {/* Toolbar sticky (estándar de cuentas) */}
+      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          {viewMode === "table" ? (
+            <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
+          ) : null}
+          <StatusBadge status={`${filteredIncome.length} visibles`} tone="neutral" />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              disabled={snapshotQuery.isFetching}
+              onClick={() => snapshotQuery.refetch()}
+              title="Actualizar"
+              type="button"
+            >
+              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+            </button>
+            {hasActiveFilters ? (
+              <Button onClick={clearIncomeFilters} variant="ghost">
+                <X className="mr-2 h-4 w-4" />
+                Limpiar
+              </Button>
+            ) : null}
+            <Button
+              disabled={!filteredIncome.length}
+              onClick={() =>
+                downloadRecurringIncomeCSV(
+                  filteredIncome,
+                  `ingresos-recurrentes-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar
+            </Button>
+            <Button data-tour="create-recurring-income" onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo ingreso
+            </Button>
           </div>
+        </div>
 
-          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
-                <p className="text-sm leading-7 text-storm">
-                  Registra ingresos, cambia de vista y exporta. En tabla filtras por columna; en otras vistas
-                  reaparece el explorador con filtros rapidos.
-                </p>
-              </div>
-              <button
-                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching}
-                onClick={() => snapshotQuery.refetch()}
-                title="Actualizar"
-                type="button"
-              >
-                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo ingreso
-              </Button>
-              <Button
-                onClick={() =>
-                  downloadRecurringIncomeCSV(
-                    filteredIncome,
-                    `ingresos-recurrentes-${new Date().toISOString().slice(0, 10)}.csv`,
-                  )
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              {hasActiveFilters ? (
-                <Button onClick={clearIncomeFilters} variant="ghost">
-                  <X className="mr-2 h-4 w-4" />
-                  Limpiar filtros
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-              {viewMode === "table" ? (
-                <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
-              ) : null}
-              <StatusBadge status={`${filteredIncome.length} visibles`} tone="neutral" />
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Siguiente ingreso</p>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {nextIncome ? formatDate(nextIncome.nextExpectedDate) : "Sin fecha"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Moneda</p>
-                <p className="mt-2 text-sm font-semibold text-ink">{sharedCurrency ?? "Multimoneda"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
-                <p className="mt-2 text-sm font-semibold text-ink">{baseCurrencyCode}</p>
-              </div>
-            </div>
-          </aside>
+        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <input
+            className="field-dark"
+            onChange={(e) => updateIncomeFilter("name", e.target.value)}
+            placeholder="Buscar por nombre, categoria o cuenta..."
+            type="text"
+            value={incomeFilters.name}
+          />
+          <select
+            className="field-dark"
+            onChange={(event) => updateIncomeFilter("status", event.target.value as "all" | RecurringIncomeStatus)}
+            value={incomeFilters.status}
+          >
+            <option value="all">Todos los estados</option>
+            <option value="active">Activo</option>
+            <option value="paused">Pausado</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+          <select
+            className="field-dark"
+            onChange={(event) => updateIncomeFilter("frequency", event.target.value as "all" | RecurringIncomeFrequency)}
+            value={incomeFilters.frequency}
+          >
+            <option value="all">Todas las frecuencias</option>
+            {frequencyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
-      {showIncomeExplore ? (
-        <SurfaceCard
-          description="Busca por nombre y filtra por estado o frecuencia cuando prefieras recorrer la vista lista o tarjetas."
-          title="Explorar ingresos"
-        >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
-            <div className="relative min-w-[200px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-              <input
-                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(e) => updateIncomeFilter("name", e.target.value)}
-                placeholder="Buscar por nombre, categoria o cuenta..."
-                type="text"
-                value={incomeFilters.name}
-              />
-            </div>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => updateIncomeFilter("status", event.target.value as "all" | RecurringIncomeStatus)}
-              value={incomeFilters.status}
-            >
-              <option value="all">Todos los estados</option>
-              <option value="active">Activo</option>
-              <option value="paused">Pausado</option>
-              <option value="cancelled">Cancelado</option>
-            </select>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => updateIncomeFilter("frequency", event.target.value as "all" | RecurringIncomeFrequency)}
-              value={incomeFilters.frequency}
-            >
-              <option value="all">Todas las frecuencias</option>
-              {frequencyOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <Button
-              className="h-16 px-6"
-              onClick={clearIncomeFilters}
-              variant={hasActiveFilters ? "secondary" : "ghost"}
-            >
-              Limpiar filtros
-            </Button>
-          </div>
-        </SurfaceCard>
-      ) : null}
 
       {viewMode === "list" ? (
         <div className="space-y-3">
