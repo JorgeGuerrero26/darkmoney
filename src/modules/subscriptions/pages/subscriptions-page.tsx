@@ -1,13 +1,10 @@
-import {
-  BarChart3,
+﻿import {
   Download,
   LoaderCircle,
-  PencilLine,
   Plus,
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Trash2,
   X,
 } from "lucide-react";
 import type {
@@ -26,20 +23,14 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
-import {
-  TableColumnFilterMenu,
-  TableFilterOptionButton,
-  tableColumnFilterInputClassName,
-} from "../../../components/ui/table-column-filter-menu";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
+import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -62,8 +53,16 @@ import {
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import { Pagination } from "../../../components/ui/pagination";
+import { SubscriptionGrid } from "../components/subscription-grid";
+import { SubscriptionList } from "../components/subscription-list";
+import { SubscriptionTable } from "../components/subscription-table";
 import { useSubscriptionsFilters } from "../hooks/use-subscriptions-filters";
-import { isSubscriptionTableFilterActive } from "../lib/subscriptions-filters";
+import {
+  frequencyOptions,
+  getFrequencyOption,
+  getStatusOption,
+  statusOptions,
+} from "../lib/subscriptions-presenters";
 
 const SUBSCRIPTIONS_PAGE_SIZE = 50;
 
@@ -96,21 +95,6 @@ type FeedbackState = {
   description: string;
 };
 
-
-const frequencyOptions = [
-  { value: "daily" as const, label: "Diaria", description: "Se repite cada dia.", leadingLabel: "D", leadingColor: "#1b6a58" },
-  { value: "weekly" as const, label: "Semanal", description: "Se repite por semanas.", leadingLabel: "S", leadingColor: "#4566d6" },
-  { value: "monthly" as const, label: "Mensual", description: "Se repite cada mes.", leadingLabel: "M", leadingColor: "#8366f2" },
-  { value: "quarterly" as const, label: "Trimestral", description: "Se repite cada trimestre.", leadingLabel: "T", leadingColor: "#b48b34" },
-  { value: "yearly" as const, label: "Anual", description: "Se repite una vez por ano.", leadingLabel: "A", leadingColor: "#c46a31" },
-  { value: "custom" as const, label: "Personalizada", description: "Tienes una frecuencia especial.", leadingLabel: "P", leadingColor: "#64748b" },
-] as const;
-
-const statusOptions = [
-  { value: "active" as const, label: "Activa", description: "Sigue generando recordatorios y vencimientos.", leadingLabel: "AC", leadingColor: "#1b6a58" },
-  { value: "paused" as const, label: "Pausada", description: "Se conserva, pero temporalmente detenida.", leadingLabel: "PA", leadingColor: "#b48b34" },
-  { value: "cancelled" as const, label: "Cancelada", description: "Ya no forma parte de tu control activo.", leadingLabel: "CA", leadingColor: "#8f3e3e" },
-] as const;
 
 const currencyOptions = [
   { code: "PEN", label: "Sol peruano", region: "Peru", symbol: "S/" },
@@ -171,25 +155,6 @@ function getCurrencyLabel(currencyCode: string) {
       symbol: currencyCode.toUpperCase(),
     }
   );
-}
-
-function getFrequencyOption(frequency: SubscriptionFrequency) {
-  return frequencyOptions.find((option) => option.value === frequency) ?? frequencyOptions[0];
-}
-
-function getStatusOption(status: SubscriptionStatus) {
-  return statusOptions.find((option) => option.value === status) ?? statusOptions[0];
-}
-
-function getStatusTone(status: SubscriptionStatus) {
-  switch (status) {
-    case "active":
-      return "success" as const;
-    case "paused":
-      return "warning" as const;
-    default:
-      return "danger" as const;
-  }
 }
 
 function createDefaultFormState(baseCurrencyCode: string): SubscriptionFormState {
@@ -760,7 +725,7 @@ export function SubscriptionsPage() {
     { key: "frecuencia", label: "Frecuencia" },
     { key: "categoria", label: "Categoria" },
     { key: "cuenta", label: "Cuenta" },
-    { key: "proximo_cobro", label: "Próximo cobro" },
+    { key: "proximo_cobro", label: "PrÃ³ximo cobro" },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-subscriptions", subscriptionColumns);
   const [viewMode, setViewMode] = useViewMode("subscriptions", "table");
@@ -1184,7 +1149,7 @@ export function SubscriptionsPage() {
     setDeleteTargetId(null);
     setHiddenIds((prev) => new Set([...prev, targetId]));
     schedule({
-      label: "Suscripción eliminada",
+      label: "SuscripciÃ³n eliminada",
       onCommit: () =>
         deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id }),
       onUndo: () => {
@@ -1264,7 +1229,7 @@ export function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      {/* Header compacto (estándar) */}
+      {/* Header compacto (estÃ¡ndar) */}
       <section className="min-w-0">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Suscripciones</p>
         <div className="mt-1 flex items-center gap-2.5">
@@ -1272,14 +1237,14 @@ export function SubscriptionsPage() {
             Pagos recurrentes
           </h2>
           <InfoTip ariaLabel="Sobre las suscripciones">
-            Controla tus cobros recurrentes (servicios, membresías) para anticipar cuándo y cuánto sale.
+            Controla tus cobros recurrentes (servicios, membresÃ­as) para anticipar cuÃ¡ndo y cuÃ¡nto sale.
             Los filtros de la barra superior aplican a todas las vistas.
           </InfoTip>
         </div>
         <p className="mt-1 text-xs text-storm">Pagos recurrentes esperados del workspace.</p>
       </section>
 
-      {/* Métricas compactas */}
+      {/* MÃ©tricas compactas */}
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
         <SubscriptionSummaryChip label="registradas" value={String(subscriptions.length)} />
         <SubscriptionSummaryChip label="vencen pronto" tone="warning" value={String(dueSoonCount)} />
@@ -1288,7 +1253,7 @@ export function SubscriptionsPage() {
         <SubscriptionSummaryChip label="monto configurado" tone="info" value={totalAmountDisplay} />
       </div>
 
-      {/* Toolbar sticky (estándar) */}
+      {/* Toolbar sticky (estÃ¡ndar) */}
       <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
           <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
@@ -1371,407 +1336,50 @@ export function SubscriptionsPage() {
       ) : null}
 
       {viewMode === "list" ? (
-        <div className="space-y-3">
-          {subscriptions.length === 0 ? (
-            <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
-          ) : filteredSubscriptions.length === 0 ? (
-            <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
-          ) : paginatedSubscriptions.map((subscription) => {
-            const statusOption = getStatusOption(subscription.status);
-            return (
-              <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={subscription.id}>
-                <SelectionCheckbox
-                  checked={selectedIds.has(subscription.id)}
-                  onChange={() => toggleSelect(subscription.id)}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-ink">{subscription.name}</p>
-                  <p className="text-xs text-storm">{subscription.vendor}{subscription.categoryName ? ` · ${subscription.categoryName}` : ""} · {subscription.frequencyLabel}</p>
-                </div>
-                <div className="hidden sm:flex flex-col text-right shrink-0">
-                  <p className="text-sm font-semibold text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
-                  <p className="text-xs text-storm">{formatDate(subscription.nextDueDate)}</p>
-                </div>
-                <StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} />
-                <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost">Análisis</Button>
-                <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
-              </article>
-            );
-          })}
-        </div>
+        subscriptions.length === 0 ? (
+          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
+        ) : filteredSubscriptions.length === 0 ? (
+          <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
+        ) : (
+          <SubscriptionList
+            onAnalytics={setAnalyticsSubscriptionId}
+            onEdit={openEditEditor}
+            onToggleSelect={toggleSelect}
+            selectedIds={selectedIds}
+            subscriptions={paginatedSubscriptions}
+          />
+        )
       ) : viewMode === "table" ? (
-        <div className="overflow-x-auto rounded-[24px] border border-white/10">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/10 bg-white/[0.02]">
-                <th className="w-10 px-4 py-3.5">
-                  <SelectionCheckbox
-                    ariaLabel="Seleccionar todas"
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    onChange={() => (allSelected ? clearAll() : selectAll())}
-                  />
-                </th>
-                <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "name")}
-                    isOpen={openTableFilter === "name"}
-                    label="Nombre"
-                    onClear={() => clearSingleTableFilter("name")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("name")}
-                  >
-                    <div className="space-y-3">
-                      <input
-                        className={tableColumnFilterInputClassName}
-                        onChange={(event) => updateSubscriptionFilter("name", event.target.value)}
-                        placeholder="Buscar por nombre"
-                        type="text"
-                        value={subscriptionFilters.name}
-                      />
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("proveedor", "hidden sm:table-cell")}`}>
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "vendor")}
-                    isOpen={openTableFilter === "vendor"}
-                    label="Proveedor"
-                    onClear={() => clearSingleTableFilter("vendor")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("vendor")}
-                  >
-                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                      <TableFilterOptionButton
-                        onClick={() => applySubscriptionFilterAndClose("vendor", "")}
-                        selected={!subscriptionFilters.vendor}
-                      >
-                        Todos
-                      </TableFilterOptionButton>
-                      {subscriptionVendors.map((vendor) => (
-                        <TableFilterOptionButton
-                          key={vendor}
-                          onClick={() => applySubscriptionFilterAndClose("vendor", vendor)}
-                          selected={subscriptionFilters.vendor === vendor}
-                        >
-                          {vendor}
-                        </TableFilterOptionButton>
-                      ))}
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("frecuencia", "hidden md:table-cell")}`}>
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "frequency")}
-                    isOpen={openTableFilter === "frequency"}
-                    label="Frecuencia"
-                    onClear={() => clearSingleTableFilter("frequency")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("frequency")}
-                  >
-                    <div className="space-y-1">
-                      <TableFilterOptionButton
-                        onClick={() => applySubscriptionFilterAndClose("frequency", "all")}
-                        selected={subscriptionFilters.frequency === "all"}
-                      >
-                        Todas
-                      </TableFilterOptionButton>
-                      {frequencyOptions.map((option) => (
-                        <TableFilterOptionButton
-                          key={option.value}
-                          onClick={() => applySubscriptionFilterAndClose("frequency", option.value)}
-                          selected={subscriptionFilters.frequency === option.value}
-                        >
-                          {option.label}
-                        </TableFilterOptionButton>
-                      ))}
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("categoria", "hidden lg:table-cell")}`}>
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "category")}
-                    isOpen={openTableFilter === "category"}
-                    label="Categoria"
-                    onClear={() => clearSingleTableFilter("category")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("category")}
-                  >
-                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                      <TableFilterOptionButton
-                        onClick={() => applySubscriptionFilterAndClose("category", "")}
-                        selected={!subscriptionFilters.category}
-                      >
-                        Todas
-                      </TableFilterOptionButton>
-                      {subscriptionCategories.map((category) => (
-                        <TableFilterOptionButton
-                          key={category}
-                          onClick={() => applySubscriptionFilterAndClose("category", category)}
-                          selected={subscriptionFilters.category === category}
-                        >
-                          {category}
-                        </TableFilterOptionButton>
-                      ))}
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className={`relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("cuenta", "hidden xl:table-cell")}`}>
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "account")}
-                    isOpen={openTableFilter === "account"}
-                    label="Cuenta"
-                    onClear={() => clearSingleTableFilter("account")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("account")}
-                  >
-                    <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                      <TableFilterOptionButton
-                        onClick={() => applySubscriptionFilterAndClose("account", "")}
-                        selected={!subscriptionFilters.account}
-                      >
-                        Todas
-                      </TableFilterOptionButton>
-                      {subscriptionAccounts.map((accountName) => (
-                        <TableFilterOptionButton
-                          key={accountName}
-                          onClick={() => applySubscriptionFilterAndClose("account", accountName)}
-                          selected={subscriptionFilters.account === accountName}
-                        >
-                          {accountName}
-                        </TableFilterOptionButton>
-                      ))}
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className="relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "amount")}
-                    align="right"
-                    isOpen={openTableFilter === "amount"}
-                    label="Monto"
-                    onClear={() => clearSingleTableFilter("amount")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("amount")}
-                    triggerClassName="justify-end text-right"
-                  >
-                    <div className="space-y-3">
-                      <input
-                        className={`${tableColumnFilterInputClassName} text-right`}
-                        onChange={(event) => updateSubscriptionFilter("amount", event.target.value)}
-                        placeholder="Ej. 19.9"
-                        type="text"
-                        value={subscriptionFilters.amount}
-                      />
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className={`relative px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] ${cv("proximo_cobro", "hidden md:table-cell")}`}>
-                  <TableColumnFilterMenu
-                    active={
-                      isSubscriptionTableFilterActive(subscriptionFilters, "nextDueDateFrom") ||
-                      isSubscriptionTableFilterActive(subscriptionFilters, "nextDueDateTo")
-                    }
-                    align="right"
-                    isOpen={
-                      openTableFilter === "nextDueDateFrom" ||
-                      openTableFilter === "nextDueDateTo"
-                    }
-                    label="Próximo cobro"
-                    minWidthClassName="min-w-[320px]"
-                    onClear={() => {
-                      clearSingleTableFilter("nextDueDateFrom");
-                      clearSingleTableFilter("nextDueDateTo");
-                    }}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("nextDueDateFrom")}
-                    triggerClassName="justify-end text-right"
-                  >
-                    <div className="space-y-3">
-                      <InlineDateRangePicker
-                        endDate={subscriptionFilters.nextDueDateTo}
-                        onEndDateChange={(value) => updateSubscriptionFilter("nextDueDateTo", value)}
-                        onStartDateChange={(value) => updateSubscriptionFilter("nextDueDateFrom", value)}
-                        startDate={subscriptionFilters.nextDueDateFrom}
-                      />
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className="relative px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">
-                  <TableColumnFilterMenu
-                    active={isSubscriptionTableFilterActive(subscriptionFilters, "status")}
-                    isOpen={openTableFilter === "status"}
-                    label="Estado"
-                    onClear={() => clearSingleTableFilter("status")}
-                    onClose={closeTableFilterMenu}
-                    onToggle={() => toggleTableFilterMenu("status")}
-                  >
-                    <div className="space-y-1">
-                      <TableFilterOptionButton
-                        onClick={() => applySubscriptionFilterAndClose("status", "all")}
-                        selected={subscriptionFilters.status === "all"}
-                      >
-                        Todos
-                      </TableFilterOptionButton>
-                      {statusOptions.map((option) => (
-                        <TableFilterOptionButton
-                          key={option.value}
-                          onClick={() => applySubscriptionFilterAndClose("status", option.value)}
-                          selected={subscriptionFilters.status === option.value}
-                        >
-                          {option.label}
-                        </TableFilterOptionButton>
-                      ))}
-                    </div>
-                  </TableColumnFilterMenu>
-                </th>
-                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
-              </tr>
-              <tr className="hidden border-b border-white/10 bg-[#0c1522]">
-                <th className="px-4 py-3" />
-                <th className="px-5 py-3">
-                  <input
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) => updateSubscriptionFilter("name", event.target.value)}
-                    placeholder="Filtrar nombre"
-                    type="text"
-                    value={subscriptionFilters.name}
-                  />
-                </th>
-                <th className={`px-5 py-3 ${cv("proveedor", "hidden sm:table-cell")}`}>
-                  <input
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) => updateSubscriptionFilter("vendor", event.target.value)}
-                    placeholder="Filtrar proveedor"
-                    type="text"
-                    value={subscriptionFilters.vendor}
-                  />
-                </th>
-                <th className={`px-5 py-3 ${cv("frecuencia", "hidden md:table-cell")}`}>
-                  <select
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) =>
-                      updateSubscriptionFilter("frequency", event.target.value as "all" | SubscriptionFrequency)
-                    }
-                    value={subscriptionFilters.frequency}
-                  >
-                    <option value="all">Todas</option>
-                    {frequencyOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </th>
-                <th className={`px-5 py-3 ${cv("categoria", "hidden lg:table-cell")}`}>
-                  <input
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) => updateSubscriptionFilter("category", event.target.value)}
-                    placeholder="Filtrar categoria"
-                    type="text"
-                    value={subscriptionFilters.category}
-                  />
-                </th>
-                <th className={`px-5 py-3 ${cv("cuenta", "hidden xl:table-cell")}`}>
-                  <input
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) => updateSubscriptionFilter("account", event.target.value)}
-                    placeholder="Filtrar cuenta"
-                    type="text"
-                    value={subscriptionFilters.account}
-                  />
-                </th>
-                <th className="px-5 py-3">
-                  <input
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) => updateSubscriptionFilter("amount", event.target.value)}
-                    placeholder="Monto"
-                    type="text"
-                    value={subscriptionFilters.amount}
-                  />
-                </th>
-                <th className={`px-5 py-3 ${cv("proximo_cobro", "hidden md:table-cell")}`}>
-                  <div className="grid gap-2">
-                    <input
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateSubscriptionFilter("nextDueDateFrom", event.target.value)}
-                      placeholder="Desde"
-                      type="date"
-                      value={subscriptionFilters.nextDueDateFrom}
-                    />
-                    <input
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateSubscriptionFilter("nextDueDateTo", event.target.value)}
-                      placeholder="Hasta"
-                      type="date"
-                      value={subscriptionFilters.nextDueDateTo}
-                    />
-                  </div>
-                </th>
-                <th className="px-5 py-3">
-                  <select
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a]"
-                    onChange={(event) =>
-                      updateSubscriptionFilter("status", event.target.value as "all" | SubscriptionStatus)
-                    }
-                    value={subscriptionFilters.status}
-                  >
-                    <option value="all">Todos</option>
-                    <option value="active">Activa</option>
-                    <option value="paused">Pausada</option>
-                    <option value="cancelled">Cancelada</option>
-                  </select>
-                </th>
-                <th className="px-5 py-3 text-right">
-                  {hasActiveFilters ? (
-                    <button
-                      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
-                      onClick={clearSubscriptionFilters}
-                      type="button"
-                    >
-                      Limpiar
-                    </button>
-                  ) : null}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {subscriptions.length === 0 ? (
-                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" /></td></tr>
-              ) : filteredSubscriptions.length === 0 ? (
-                <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" /></td></tr>
-              ) : paginatedSubscriptions.map((subscription, index) => {
-                const statusOption = getStatusOption(subscription.status);
-                return (
-                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === paginatedSubscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
-                    <td className="w-10 px-4 py-4">
-                      <SelectionCheckbox
-                        ariaLabel={`Seleccionar ${subscription.name}`}
-                        checked={selectedIds.has(subscription.id)}
-                        onChange={() => toggleSelect(subscription.id)}
-                      />
-                    </td>
-                    <td className="px-5 py-3.5 font-medium text-ink">{subscription.name}</td>
-                    <td className={`px-5 py-3.5 text-storm ${cv("proveedor", "hidden sm:table-cell")}`}>{subscription.vendor}</td>
-                    <td className={`px-5 py-3.5 text-storm ${cv("frecuencia", "hidden md:table-cell")}`}>{subscription.frequencyLabel}</td>
-                    <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{subscription.categoryName ?? "-"}</td>
-                    <td className={`px-5 py-3.5 text-storm ${cv("cuenta", "hidden xl:table-cell")}`}>{subscription.accountName ?? "-"}</td>
-                    <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</td>
-                    <td className={`px-5 py-3.5 text-right text-storm ${cv("proximo_cobro", "hidden md:table-cell")}`}>{formatDate(subscription.nextDueDate)}</td>
-                    <td className="px-5 py-3.5"><StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} /></td>
-                    <td className="px-5 py-3.5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button className="py-1.5 text-xs" onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost">Análisis</Button>
-                        <Button className="py-1.5 text-xs" onClick={() => openEditEditor(subscription)} variant="ghost">Editar</Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
+        subscriptions.length === 0 ? (
+          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
+        ) : filteredSubscriptions.length === 0 ? (
+          <DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" />
+        ) : (
+          <SubscriptionTable
+            accounts={subscriptionAccounts}
+            allSelected={allSelected}
+            categories={subscriptionCategories}
+            cv={cv}
+            filters={subscriptionFilters}
+            onAnalytics={setAnalyticsSubscriptionId}
+            onApplyFilterAndClose={applySubscriptionFilterAndClose}
+            onClearAll={clearAll}
+            onClearSingleFilter={clearSingleTableFilter}
+            onCloseFilterMenu={closeTableFilterMenu}
+            onEdit={openEditEditor}
+            onSelectAll={selectAll}
+            onToggleFilterMenu={toggleTableFilterMenu}
+            onToggleSelect={toggleSelect}
+            onUpdateFilter={updateSubscriptionFilter}
+            openFilter={openTableFilter}
+            someSelected={someSelected}
+            selectedIds={selectedIds}
+            subscriptions={paginatedSubscriptions}
+            vendors={subscriptionVendors}
+          />
+        )
+      ) : null}
+      {viewMode === "grid" ? (
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <SurfaceCard action={<StatusBadge status={`${filteredSubscriptions.length} de ${subscriptions.length} registradas`} tone="success" />} description="Cada tarjeta representa una suscripcion real con sus datos principales y sus acciones." title="Pagos recurrentes">
           {subscriptions.length === 0 ? (
@@ -1779,52 +1387,15 @@ export function SubscriptionsPage() {
           ) : filteredSubscriptions.length === 0 ? (
             <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
           ) : (
-            <div className="space-y-4">
-              {paginatedSubscriptions.map((subscription) => {
-                const statusOption = getStatusOption(subscription.status);
-                const isSelected = selectedIds.has(subscription.id);
-                const longPressHandlers = createLongPressHandlers(() => toggleSelect(subscription.id));
-                return (
-                  <article
-                    className={`relative glass-panel-soft rounded-[30px] p-5 transition duration-200 hover:border-white/16 ${isSelected ? "ring-2 ring-pine/30 border-pine/25" : ""}`}
-                    key={subscription.id}
-                    onClick={(e) => {
-                      if (wasRecentLongPress()) return;
-                      if (selectedCount === 0) return;
-                      if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
-                      toggleSelect(subscription.id);
-                    }}
-                    {...longPressHandlers}
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">{subscription.frequencyLabel}</span>
-                          <StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} />
-                        </div>
-                        <p className="mt-4 font-display text-2xl font-semibold text-ink">{subscription.name}</p>
-                        <p className="mt-2 text-sm text-storm">{subscription.vendor}{subscription.accountName ? ` - ${subscription.accountName}` : ""}{subscription.categoryName ? ` - ${subscription.categoryName}` : ""}</p>
-                        {subscription.description ? <p className="mt-3 text-sm leading-7 text-storm">{subscription.description}</p> : null}
-                      </div>
-                      <div className="rounded-[24px] border border-white/10 bg-black/15 px-4 py-4 text-right">
-                        <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Monto</p>
-                        <p className="mt-2 font-display text-2xl font-semibold text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
-                      </div>
-                    </div>
-                    <div className="mt-5 grid gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className="text-xs uppercase tracking-[0.18em] text-storm">Proximo cobro</p><p className="mt-2 text-sm font-medium text-ink">{formatDate(subscription.nextDueDate)}</p></div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className="text-xs uppercase tracking-[0.18em] text-storm">Recordatorio</p><p className="mt-2 text-sm font-medium text-ink">{subscription.remindDaysBefore} dias antes</p></div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3"><p className="text-xs uppercase tracking-[0.18em] text-storm">Auto movimiento</p><p className="mt-2 text-sm font-medium text-ink">{subscription.autoCreateMovement ? "Activo" : "Desactivado"}</p></div>
-                    </div>
-                    <div className="mt-5 flex flex-wrap gap-3 border-t border-white/10 pt-4">
-                      <Button onClick={() => setAnalyticsSubscriptionId(subscription.id)} variant="ghost"><BarChart3 className="mr-2 h-4 w-4" />Ver análisis</Button>
-                      <Button onClick={() => openEditEditor(subscription)} variant="secondary"><PencilLine className="mr-2 h-4 w-4" />Editar</Button>
-                      <Button className="text-[#ffb4bc] hover:text-white" onClick={() => setDeleteTargetId(subscription.id)} variant="ghost"><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+            <SubscriptionGrid
+              onAnalytics={setAnalyticsSubscriptionId}
+              onDelete={setDeleteTargetId}
+              onEdit={openEditEditor}
+              onToggleSelect={toggleSelect}
+              selectedCount={selectedCount}
+              selectedIds={selectedIds}
+              subscriptions={paginatedSubscriptions}
+            />
           )}
         </SurfaceCard>
 
@@ -1861,7 +1432,7 @@ export function SubscriptionsPage() {
           )}
         </SurfaceCard>
       </section>
-      )}
+      ) : null}
 
       {filteredSubscriptions.length > 0 ? (
         <Pagination
@@ -1899,7 +1470,7 @@ export function SubscriptionsPage() {
 
       {deleteTarget ? (
         <DeleteConfirmDialog
-          badge="Eliminar suscripción"
+          badge="Eliminar suscripciÃ³n"
           description="Esto elimina la suscripcion y su calendario asociado. Si ya tiene movimientos vinculados, primero tendras que resolverlos."
           isDeleting={isDeleting}
           onCancel={() => {
