@@ -5,7 +5,6 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
-  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -21,6 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { InfoTip } from "../../../components/ui/info-tip";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
@@ -727,17 +727,19 @@ function SubscriptionSummaryChip({
   tone?: "neutral" | "info" | "warning";
   value: string;
 }) {
-  const toneClasses = {
-    neutral: "border-white/10 bg-white/[0.04] text-ink",
-    info: "border-electric/25 bg-electric/10 text-electric",
-    warning: "border-gold/30 bg-gold/10 text-gold",
+  const valueTone = {
+    neutral: "text-ink",
+    info: "text-ember",
+    warning: "text-gold",
   } as const;
 
   return (
-    <div className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 ${toneClasses[tone]}`}>
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/90">{label}</span>
-      <span className="text-sm font-semibold">{value}</span>
-    </div>
+    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
+      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
+      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
+        {value}
+      </p>
+    </article>
   );
 }
 
@@ -932,7 +934,6 @@ export function SubscriptionsPage() {
     }
   }, [baseCurrencyCode, isEditorOpen]);
 
-  const showSubscriptionExplore = viewMode !== "table" && subscriptions.length > 0;
 
   function updateSubscriptionFilter<Field extends keyof SubscriptionTableFilters>(
     field: Field,
@@ -1022,7 +1023,6 @@ export function SubscriptionsPage() {
   }).length;
   const activeCount = subscriptions.filter((subscription) => subscription.status === "active").length;
   const autoCreatedCount = subscriptions.filter((subscription) => subscription.autoCreateMovement).length;
-  const nextSubscription = subscriptions[0] ?? null;
   const nextVisibleSubscription = filteredSubscriptions[0] ?? null;
   const allAmountsConvertible =
     subscriptions.length > 0 &&
@@ -1352,157 +1352,110 @@ export function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <section className="glass-panel-strong rounded-[32px] p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">suscripciones</p>
-              <h2 className="font-display text-4xl font-semibold text-ink">Pagos recurrentes</h2>
-              <p className="max-w-3xl text-sm leading-7 text-storm">
-                Entra directo a tu tabla de suscripciones. Cuando uses la vista tabla, los filtros viven
-                dentro de cada columna; en lista o tarjetas reaparece el explorador compacto para revisar
-                tu calendario con mas contexto.
-              </p>
-            </div>
+      {/* Header compacto (estándar) */}
+      <section className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Suscripciones</p>
+        <div className="mt-1 flex items-center gap-2.5">
+          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
+            Pagos recurrentes
+          </h2>
+          <InfoTip ariaLabel="Sobre las suscripciones">
+            Controla tus cobros recurrentes (servicios, membresías) para anticipar cuándo y cuánto sale.
+            Los filtros de la barra superior aplican a todas las vistas.
+          </InfoTip>
+        </div>
+        <p className="mt-1 text-xs text-storm">Pagos recurrentes esperados del workspace.</p>
+      </section>
 
-            <div className="flex flex-wrap gap-3">
-              <SubscriptionSummaryChip label="registradas" value={String(subscriptions.length)} />
-              <SubscriptionSummaryChip label="vencen pronto" tone="warning" value={String(dueSoonCount)} />
-              <SubscriptionSummaryChip label="activas" tone="info" value={String(activeCount)} />
-              <SubscriptionSummaryChip label="auto movimiento" tone="info" value={String(autoCreatedCount)} />
-              <SubscriptionSummaryChip label="monto configurado" tone="info" value={totalAmountDisplay} />
-              {snapshotQuery.isFetching ? <SubscriptionSummaryChip label="estado" value="Actualizando" /> : null}
-            </div>
+      {/* Métricas compactas */}
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+        <SubscriptionSummaryChip label="registradas" value={String(subscriptions.length)} />
+        <SubscriptionSummaryChip label="vencen pronto" tone="warning" value={String(dueSoonCount)} />
+        <SubscriptionSummaryChip label="activas" tone="info" value={String(activeCount)} />
+        <SubscriptionSummaryChip label="auto movimiento" tone="info" value={String(autoCreatedCount)} />
+        <SubscriptionSummaryChip label="monto configurado" tone="info" value={totalAmountDisplay} />
+      </div>
+
+      {/* Toolbar sticky (estándar) */}
+      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          {viewMode === "table" ? (
+            <ColumnPicker columns={subscriptionColumns} visible={colVis} onToggle={toggleCol} />
+          ) : null}
+          <StatusBadge status={`${filteredSubscriptions.length} visibles`} tone="neutral" />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              disabled={snapshotQuery.isFetching}
+              onClick={() => snapshotQuery.refetch()}
+              title="Actualizar"
+              type="button"
+            >
+              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
+            </button>
+            {hasActiveFilters ? (
+              <Button onClick={clearSubscriptionFilters} variant="ghost">
+                <X className="mr-2 h-4 w-4" />
+                Limpiar
+              </Button>
+            ) : null}
+            <Button
+              disabled={!filteredSubscriptions.length}
+              onClick={() =>
+                downloadSubscriptionsCSV(
+                  filteredSubscriptions,
+                  `suscripciones-${new Date().toISOString().slice(0, 10)}.csv`,
+                )
+              }
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar
+            </Button>
+            <Button data-tour="create-subscription" onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva suscripcion
+            </Button>
           </div>
+        </div>
 
-          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
-                <p className="text-sm leading-7 text-storm">
-                  Registra suscripciones, cambia de vista y exporta. En tabla filtras por columna; en
-                  otras vistas vuelve el explorador con filtros rapidos.
-                </p>
-              </div>
-              <button
-                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching}
-                onClick={() => snapshotQuery.refetch()}
-                title="Actualizar"
-                type="button"
-              >
-                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nueva suscripcion
-              </Button>
-              <Button
-                onClick={() =>
-                  downloadSubscriptionsCSV(
-                    filteredSubscriptions,
-                    `suscripciones-${new Date().toISOString().slice(0, 10)}.csv`,
-                  )
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              {hasActiveFilters ? (
-                <Button onClick={clearSubscriptionFilters} variant="ghost">
-                  <X className="mr-2 h-4 w-4" />
-                  Limpiar filtros
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-              {viewMode === "table" ? (
-                <ColumnPicker columns={subscriptionColumns} visible={colVis} onToggle={toggleCol} />
-              ) : null}
-              <StatusBadge status={`${filteredSubscriptions.length} visibles`} tone="neutral" />
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Siguiente cobro</p>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {nextSubscription ? formatDate(nextSubscription.nextDueDate) : "Sin fecha"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Moneda</p>
-                <p className="mt-2 text-sm font-semibold text-ink">{sharedCurrency ?? "Multimoneda"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
-                <p className="mt-2 text-sm font-semibold text-ink">{baseCurrencyCode}</p>
-              </div>
-            </div>
-          </aside>
+        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <input
+            className="field-dark"
+            onChange={(event) => updateSubscriptionFilter("name", event.target.value)}
+            placeholder="Buscar por nombre, proveedor o categoria..."
+            type="text"
+            value={subscriptionFilters.name}
+          />
+          <select
+            className="field-dark"
+            onChange={(event) => updateSubscriptionFilter("status", event.target.value as "all" | SubscriptionStatus)}
+            value={subscriptionFilters.status}
+          >
+            <option value="all">Todos los estados</option>
+            <option value="active">Activa</option>
+            <option value="paused">Pausada</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+          <select
+            className="field-dark"
+            onChange={(event) => updateSubscriptionFilter("frequency", event.target.value as "all" | SubscriptionFrequency)}
+            value={subscriptionFilters.frequency}
+          >
+            <option value="all">Todas las frecuencias</option>
+            {frequencyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? (
         <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} />
-      ) : null}
-
-      {showSubscriptionExplore ? (
-        <SurfaceCard
-          description="Busca por nombre y filtra por estado o frecuencia cuando prefieras recorrer la vista lista o tarjetas."
-          title="Explorar suscripciones"
-        >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
-            <div className="relative min-w-[200px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-              <input
-                className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-                onChange={(event) => updateSubscriptionFilter("name", event.target.value)}
-                placeholder="Buscar por nombre, proveedor o categoria..."
-                type="text"
-                value={subscriptionFilters.name}
-              />
-            </div>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) =>
-                updateSubscriptionFilter("status", event.target.value as "all" | SubscriptionStatus)
-              }
-              value={subscriptionFilters.status}
-            >
-              <option value="all">Todos los estados</option>
-              <option value="active">Activa</option>
-              <option value="paused">Pausada</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
-            <select
-              className="h-16 w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink outline-none transition focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) =>
-                updateSubscriptionFilter("frequency", event.target.value as "all" | SubscriptionFrequency)
-              }
-              value={subscriptionFilters.frequency}
-            >
-              <option value="all">Todas las frecuencias</option>
-              {frequencyOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <Button
-              className="h-16 px-6"
-              onClick={clearSubscriptionFilters}
-              variant={hasActiveFilters ? "secondary" : "ghost"}
-            >
-              Limpiar filtros
-            </Button>
-          </div>
-        </SurfaceCard>
       ) : null}
 
       {viewMode === "list" ? (
