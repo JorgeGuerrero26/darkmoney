@@ -72,6 +72,30 @@ import {
 
 const RECURRING_INCOME_PAGE_SIZE = 50;
 
+const statusFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
+  ...statusOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.leadingLabel,
+    leadingColor: option.leadingColor,
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
+
+const frequencyFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todas las frecuencias", description: "No filtra por frecuencia.", leadingLabel: "TO", searchText: "todas frecuencias" },
+  ...frequencyOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.leadingLabel,
+    leadingColor: option.leadingColor,
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
+
 type EditorMode = "create" | "edit";
 
 type RecurringIncomeFormState = {
@@ -1597,28 +1621,24 @@ export function RecurringIncomePage() {
             type="text"
             value={incomeFilters.name}
           />
-          <select
-            className="field-dark"
-            onChange={(event) => updateIncomeFilter("status", event.target.value as "all" | RecurringIncomeStatus)}
+          <SearchablePicker
+            emptyMessage="No hay estados para mostrar."
+            onChange={(value) => updateIncomeFilter("status", value as "all" | RecurringIncomeStatus)}
+            options={statusFilterPickerOptions}
+            placeholderDescription="Filtra por estado."
+            placeholderLabel="Estado"
+            queryPlaceholder="Buscar estado..."
             value={incomeFilters.status}
-          >
-            <option value="all">Todos los estados</option>
-            <option value="active">Activo</option>
-            <option value="paused">Pausado</option>
-            <option value="cancelled">Cancelado</option>
-          </select>
-          <select
-            className="field-dark"
-            onChange={(event) => updateIncomeFilter("frequency", event.target.value as "all" | RecurringIncomeFrequency)}
+          />
+          <SearchablePicker
+            emptyMessage="No hay frecuencias para mostrar."
+            onChange={(value) => updateIncomeFilter("frequency", value as "all" | RecurringIncomeFrequency)}
+            options={frequencyFilterPickerOptions}
+            placeholderDescription="Filtra por frecuencia."
+            placeholderLabel="Frecuencia"
+            queryPlaceholder="Buscar frecuencia..."
             value={incomeFilters.frequency}
-          >
-            <option value="all">Todas las frecuencias</option>
-            {frequencyOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       </section>
 

@@ -66,6 +66,30 @@ import {
 
 const SUBSCRIPTIONS_PAGE_SIZE = 50;
 
+const statusFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
+  ...statusOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.leadingLabel,
+    leadingColor: option.leadingColor,
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
+
+const frequencyFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todas las frecuencias", description: "No filtra por frecuencia.", leadingLabel: "TO", searchText: "todas frecuencias" },
+  ...frequencyOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.leadingLabel,
+    leadingColor: option.leadingColor,
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
+
 type EditorMode = "create" | "edit";
 
 type SubscriptionFormState = {
@@ -1317,28 +1341,24 @@ export function SubscriptionsPage() {
             type="text"
             value={subscriptionFilters.name}
           />
-          <select
-            className="field-dark"
-            onChange={(event) => updateSubscriptionFilter("status", event.target.value as "all" | SubscriptionStatus)}
+          <SearchablePicker
+            emptyMessage="No hay estados para mostrar."
+            onChange={(value) => updateSubscriptionFilter("status", value as "all" | SubscriptionStatus)}
+            options={statusFilterPickerOptions}
+            placeholderDescription="Filtra por estado."
+            placeholderLabel="Estado"
+            queryPlaceholder="Buscar estado..."
             value={subscriptionFilters.status}
-          >
-            <option value="all">Todos los estados</option>
-            <option value="active">Activa</option>
-            <option value="paused">Pausada</option>
-            <option value="cancelled">Cancelada</option>
-          </select>
-          <select
-            className="field-dark"
-            onChange={(event) => updateSubscriptionFilter("frequency", event.target.value as "all" | SubscriptionFrequency)}
+          />
+          <SearchablePicker
+            emptyMessage="No hay frecuencias para mostrar."
+            onChange={(value) => updateSubscriptionFilter("frequency", value as "all" | SubscriptionFrequency)}
+            options={frequencyFilterPickerOptions}
+            placeholderDescription="Filtra por frecuencia."
+            placeholderLabel="Frecuencia"
+            queryPlaceholder="Buscar frecuencia..."
             value={subscriptionFilters.frequency}
-          >
-            <option value="all">Todas las frecuencias</option>
-            {frequencyOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       </section>
 

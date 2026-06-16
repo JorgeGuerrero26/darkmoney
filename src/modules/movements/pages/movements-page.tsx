@@ -52,6 +52,7 @@ import { MovementEditorDialog } from "../components/movement-editor-dialog";
 import { MovementsList } from "../components/movements-list";
 import { MovementsGrid } from "../components/movements-grid";
 import { MovementsTable } from "../components/movements-table";
+import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import {
   buildFormStateFromMovement,
   createDefaultMovementFormState,
@@ -70,6 +71,28 @@ import type {
   MovementFormState,
 } from "../lib/movement-form";
 import { useMovementTableFilters } from "../hooks/use-movement-table-filters";
+
+const statusFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
+  ...movementStatusOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.label.slice(0, 2).toUpperCase(),
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
+
+const typeFilterPickerOptions: PickerOption[] = [
+  { value: "all", label: "Todos los tipos", description: "No filtra por tipo.", leadingLabel: "TO", searchText: "todos tipos" },
+  ...movementTypeOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description: option.description,
+    leadingLabel: option.label.slice(0, 2).toUpperCase(),
+    searchText: `${option.value} ${option.label}`,
+  })),
+];
 
 function MovementsLoadingSkeleton() {
   return (
@@ -809,30 +832,24 @@ export function MovementsPage() {
               type="text"
               value={tableFilters.description}
             />
-            <select
-              className="field-dark"
-              onChange={(event) => updateTableFilter("status", event.target.value as MovementStatus | "all")}
+            <SearchablePicker
+              emptyMessage="No hay estados para mostrar."
+              onChange={(value) => updateTableFilter("status", value as MovementStatus | "all")}
+              options={statusFilterPickerOptions}
+              placeholderDescription="Filtra por estado del movimiento."
+              placeholderLabel="Estado"
+              queryPlaceholder="Buscar estado..."
               value={tableFilters.status}
-            >
-              <option value="all">Todos los estados</option>
-              {movementStatusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="field-dark"
-              onChange={(event) => updateTableFilter("type", event.target.value as MovementType | "all")}
+            />
+            <SearchablePicker
+              emptyMessage="No hay tipos para mostrar."
+              onChange={(value) => updateTableFilter("type", value as MovementType | "all")}
+              options={typeFilterPickerOptions}
+              placeholderDescription="Filtra por tipo de movimiento."
+              placeholderLabel="Tipo"
+              queryPlaceholder="Buscar tipo..."
               value={tableFilters.type}
-            >
-              <option value="all">Todos los tipos</option>
-              {movementTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </section>
 
