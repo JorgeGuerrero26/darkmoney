@@ -61,6 +61,11 @@ import {
   useUpdateSubscriptionMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
+import { Pagination } from "../../../components/ui/pagination";
+import { useSubscriptionsFilters } from "../hooks/use-subscriptions-filters";
+import { isSubscriptionTableFilterActive } from "../lib/subscriptions-filters";
+
+const SUBSCRIPTIONS_PAGE_SIZE = 50;
 
 type EditorMode = "create" | "edit";
 
@@ -91,17 +96,6 @@ type FeedbackState = {
   description: string;
 };
 
-type SubscriptionTableFilters = {
-  name: string;
-  vendor: string;
-  frequency: "all" | SubscriptionFrequency;
-  status: "all" | SubscriptionStatus;
-  category: string;
-  account: string;
-  amount: string;
-  nextDueDateFrom: string;
-  nextDueDateTo: string;
-};
 
 const frequencyOptions = [
   { value: "daily" as const, label: "Diaria", description: "Se repite cada dia.", leadingLabel: "D", leadingColor: "#1b6a58" },
@@ -684,39 +678,6 @@ function SubscriptionsLoadingSkeleton() {
   );
 }
 
-const defaultSubscriptionTableFilters = (): SubscriptionTableFilters => ({
-  name: "",
-  vendor: "",
-  frequency: "all",
-  status: "all",
-  category: "",
-  account: "",
-  amount: "",
-  nextDueDateFrom: "",
-  nextDueDateTo: "",
-});
-
-function isSubscriptionTableFilterActive(
-  filters: SubscriptionTableFilters,
-  field: keyof SubscriptionTableFilters,
-) {
-  switch (field) {
-    case "name":
-    case "vendor":
-    case "category":
-    case "account":
-    case "amount":
-      return Boolean(filters[field].trim());
-    case "nextDueDateFrom":
-    case "nextDueDateTo":
-      return Boolean(filters[field]);
-    case "frequency":
-    case "status":
-      return filters[field] !== "all";
-    default:
-      return false;
-  }
-}
 
 function SubscriptionSummaryChip({
   label,
@@ -822,11 +783,18 @@ export function SubscriptionsPage() {
   const [analyticsSubscriptionId, setAnalyticsSubscriptionId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
-  const [subscriptionFilters, setSubscriptionFilters] = useState<SubscriptionTableFilters>(() =>
-    defaultSubscriptionTableFilters(),
-  );
-  const [openTableFilter, setOpenTableFilter] =
-    useState<keyof SubscriptionTableFilters | null>(null);
+  const {
+    filters: subscriptionFilters,
+    currentPage,
+    setCurrentPage,
+    openTableFilter,
+    updateFilter: updateSubscriptionFilter,
+    clearFilters: clearSubscriptionFilters,
+    toggleTableFilterMenu,
+    closeTableFilterMenu,
+    clearSingleTableFilter,
+    applyFilterAndClose: applySubscriptionFilterAndClose,
+  } = useSubscriptionsFilters(viewMode);
   const [formState, setFormState] = useState<SubscriptionFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -897,75 +865,19 @@ export function SubscriptionsPage() {
     }
     return result;
   }, [hiddenIds, subscriptionFilters, subscriptions]);
+  const totalPages = Math.max(1, Math.ceil(filteredSubscriptions.length / SUBSCRIPTIONS_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedSubscriptions = useMemo(
+    () => filteredSubscriptions.slice((safePage - 1) * SUBSCRIPTIONS_PAGE_SIZE, safePage * SUBSCRIPTIONS_PAGE_SIZE),
+    [filteredSubscriptions, safePage],
+  );
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredSubscriptions);
-
-  useEffect(() => {
-    if (viewMode === "table") {
-      return;
-    }
-
-    setSubscriptionFilters((currentValue) => {
-      if (
-        !currentValue.vendor &&
-        !currentValue.category &&
-        !currentValue.account &&
-        !currentValue.amount &&
-        !currentValue.nextDueDateFrom &&
-        !currentValue.nextDueDateTo
-      ) {
-        return currentValue;
-      }
-
-      return {
-        ...currentValue,
-        vendor: "",
-        category: "",
-        account: "",
-        amount: "",
-        nextDueDateFrom: "",
-        nextDueDateTo: "",
-      };
-    });
-  }, [viewMode]);
 
   useEffect(() => {
     if (!isEditorOpen) {
       setFormState(createDefaultFormState(baseCurrencyCode));
     }
   }, [baseCurrencyCode, isEditorOpen]);
-
-
-  function updateSubscriptionFilter<Field extends keyof SubscriptionTableFilters>(
-    field: Field,
-    value: SubscriptionTableFilters[Field],
-  ) {
-    setSubscriptionFilters((currentValue) => ({ ...currentValue, [field]: value }));
-  }
-
-  function clearSubscriptionFilters() {
-    setSubscriptionFilters(defaultSubscriptionTableFilters());
-    setOpenTableFilter(null);
-  }
-
-  function toggleTableFilterMenu(field: keyof SubscriptionTableFilters) {
-    setOpenTableFilter((currentValue) => (currentValue === field ? null : field));
-  }
-
-  function closeTableFilterMenu() {
-    setOpenTableFilter(null);
-  }
-
-  function clearSingleTableFilter(field: keyof SubscriptionTableFilters) {
-    updateSubscriptionFilter(field, defaultSubscriptionTableFilters()[field]);
-  }
-
-  function applySubscriptionFilterAndClose<Field extends keyof SubscriptionTableFilters>(
-    field: Field,
-    value: SubscriptionTableFilters[Field],
-  ) {
-    updateSubscriptionFilter(field, value);
-    setOpenTableFilter(null);
-  }
 
   function updateFormState<Field extends keyof SubscriptionFormState>(
     field: Field,
@@ -1464,7 +1376,7 @@ export function SubscriptionsPage() {
             <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
           ) : filteredSubscriptions.length === 0 ? (
             <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
-          ) : filteredSubscriptions.map((subscription) => {
+          ) : paginatedSubscriptions.map((subscription) => {
             const statusOption = getStatusOption(subscription.status);
             return (
               <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={subscription.id}>
@@ -1828,10 +1740,10 @@ export function SubscriptionsPage() {
                 <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" /></td></tr>
               ) : filteredSubscriptions.length === 0 ? (
                 <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" /></td></tr>
-              ) : filteredSubscriptions.map((subscription, index) => {
+              ) : paginatedSubscriptions.map((subscription, index) => {
                 const statusOption = getStatusOption(subscription.status);
                 return (
-                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredSubscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
+                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === paginatedSubscriptions.length - 1 ? "border-b-0" : ""}`} key={subscription.id}>
                     <td className="w-10 px-4 py-4">
                       <SelectionCheckbox
                         ariaLabel={`Seleccionar ${subscription.name}`}
@@ -1868,7 +1780,7 @@ export function SubscriptionsPage() {
             <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
           ) : (
             <div className="space-y-4">
-              {filteredSubscriptions.map((subscription) => {
+              {paginatedSubscriptions.map((subscription) => {
                 const statusOption = getStatusOption(subscription.status);
                 const isSelected = selectedIds.has(subscription.id);
                 const longPressHandlers = createLongPressHandlers(() => toggleSelect(subscription.id));
@@ -1950,6 +1862,15 @@ export function SubscriptionsPage() {
         </SurfaceCard>
       </section>
       )}
+
+      {filteredSubscriptions.length > 0 ? (
+        <Pagination
+          onPageChange={setCurrentPage}
+          page={safePage}
+          pageSize={SUBSCRIPTIONS_PAGE_SIZE}
+          totalItems={filteredSubscriptions.length}
+        />
+      ) : null}
 
       {isEditorOpen ? (
         <EditorDialog
