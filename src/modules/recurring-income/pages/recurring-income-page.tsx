@@ -121,14 +121,12 @@ const weekdayOptions = [
   { value: "6", label: "Sabado", description: "Repeticion semanal en sabado.", leadingLabel: "SA" },
 ] as const;
 
-const fieldClassName =
-  "w-full rounded-[18px] sm:rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-3 sm:px-4 text-xs sm:text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const inputClassName = `${fieldClassName} h-10 sm:h-16`;
-const textareaClassName = `${fieldClassName} min-h-[100px] sm:min-h-[140px] py-3 sm:py-4 leading-7`;
+const inputClassName = "field-dark";
+const textareaClassName = "field-dark min-h-[100px] resize-y py-3 leading-7";
 const panelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6";
+  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
 const labelClassName =
-  "text-[0.6rem] sm:text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
+  "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
 
 function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
@@ -316,6 +314,9 @@ function EditorDialog({
   ) => void;
 }) {
   const title = formState.name.trim() || "Nuevo ingreso recurrente";
+  // Divulgación progresiva: al crear, lo avanzado (estado, recordatorio, notas)
+  // arranca plegado; al editar se muestra todo para revisar de un vistazo.
+  const [showAdvanced, setShowAdvanced] = useState(!isCreateMode);
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -415,15 +416,15 @@ function EditorDialog({
     formState.frequency === "yearly";
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="max-w-3xl">
                   <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
                       {isCreateMode ? "Nuevo ingreso recurrente" : "Editar ingreso recurrente"}
                     </span>
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
@@ -456,23 +457,23 @@ function EditorDialog({
                 />
               ) : null}
 
-              <div className="mt-7 rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,36,0.96),rgba(8,12,20,0.92))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
+              <div className="glass-panel-soft mt-7 rounded-[24px] p-5 sm:p-6">
                 <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
-                  <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                     <div className="flex items-start gap-4">
                       <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-white/10 bg-[linear-gradient(160deg,#1b6a58,rgba(8,13,20,0.72))] text-white">
                         <TrendingUp className="h-7 w-7" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Vista previa</p>
+                        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Vista previa</p>
                         <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">{title}</h3>
                         <p className="mt-3 text-base leading-8 text-storm">
                           {selectedPayer?.name ?? "Selecciona un pagador"}
                         </p>
                         <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">{frequencyOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">{statusOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">{currencyLabel.code}</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{frequencyOption.label}</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{statusOption.label}</span>
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{currencyLabel.code}</span>
                         </div>
                       </div>
                     </div>
@@ -480,13 +481,13 @@ function EditorDialog({
 
                   <div className="grid gap-4">
                     <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Monto esperado</p>
+                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Monto esperado</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formatCurrency(amount, currencyLabel.code)}
                       </p>
                     </div>
                     <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Proxima llegada</p>
+                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Proxima llegada</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formState.nextExpectedDate ? formatDate(formState.nextExpectedDate) : "Sin fecha"}
                       </p>
@@ -570,7 +571,17 @@ function EditorDialog({
                   </div>
                 </div>
 
-                <div className={panelClassName}>
+                {!showAdvanced ? (
+                  <button
+                    className="flex w-full items-center justify-center gap-2 rounded-[24px] border border-dashed border-white/15 bg-white/[0.02] px-4 py-3.5 text-sm font-medium text-storm transition hover:border-white/25 hover:text-ink lg:col-span-2"
+                    onClick={() => setShowAdvanced(true)}
+                    type="button"
+                  >
+                    Más opciones (estado, recordatorio, notas)
+                  </button>
+                ) : null}
+
+                <div className={`${panelClassName} ${showAdvanced ? "" : "hidden"}`}>
                   <p className={labelClassName}>Seguimiento</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Estado y recordatorios</h3>
                   <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5">
@@ -583,7 +594,7 @@ function EditorDialog({
                   </div>
                 </div>
 
-                <div className={`${panelClassName} lg:col-span-2`}>
+                <div className={`${panelClassName} lg:col-span-2 ${showAdvanced ? "" : "hidden"}`}>
                   <p className={labelClassName}>Contexto</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Descripcion y notas</h3>
                   <div className="mt-6 grid gap-5 lg:grid-cols-2">
@@ -598,7 +609,7 @@ function EditorDialog({
               </div>
             </div>
 
-            <div className="relative z-[60] border-t border-white/10 bg-[#060b12]/95 px-4 py-4 sm:px-6 backdrop-blur-md">
+            <div className="relative z-[60] border-t border-white/10 bg-shell/95 px-4 py-4 sm:px-6 backdrop-blur-md">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm leading-7 text-storm">
                   {isCreateMode
@@ -695,20 +706,20 @@ function ConfirmArrivalDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-[#02060d]/82 p-4 backdrop-blur-xl"
+      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-void/70 p-4 backdrop-blur-sm"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0 && !isSaving) onClose(); }}
     >
       <div className="flex min-h-full items-center justify-center">
         <div
-          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
         >
           <form className="flex flex-col gap-5 p-6" noValidate onSubmit={handleSubmit}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <span className="rounded-full border border-pine/20 bg-pine/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-pine/80">
+                <span className="rounded-full border border-pine/20 bg-pine/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-pine/80">
                   Confirmar llegada
                 </span>
                 <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
@@ -813,20 +824,20 @@ function HistoryDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-[#02060d]/82 p-4 backdrop-blur-xl"
+      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-void/70 p-4 backdrop-blur-sm"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) onClose(); }}
     >
       <div className="flex min-h-full items-center justify-center">
         <div
-          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]"
+          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col gap-5 p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
                   Historial de llegadas
                 </span>
                 <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
@@ -857,7 +868,7 @@ function HistoryDialog({
               <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
                 {occurrences.map((occ) => (
                   <div
-                    className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-[#0d1623] px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3"
                     key={occ.id}
                   >
                     <div className="min-w-0">
@@ -1808,7 +1819,7 @@ export function RecurringIncomePage() {
 
       {showBulkDeleteConfirm ? (
         <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ri-bulk-title">
-          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+          <div className="glass-panel-strong w-full max-w-md rounded-[28px] p-6">
             <h2 id="ri-bulk-title" className="font-display text-xl font-semibold text-ink">
               Eliminar {selectedCount} ingreso{selectedCount !== 1 ? "s" : ""}?
             </h2>
