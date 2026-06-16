@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { InfoTip } from "../../../components/ui/info-tip";
+import { Pagination } from "../../../components/ui/pagination";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
@@ -67,6 +68,10 @@ import {
   useUpdateRecurringIncomeMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
+import { useRecurringIncomeFilters } from "../hooks/use-recurring-income-filters";
+import { isRecurringIncomeTableFilterActive } from "../lib/recurring-income-filters";
+
+const RECURRING_INCOME_PAGE_SIZE = 50;
 
 type EditorMode = "create" | "edit";
 
@@ -96,19 +101,6 @@ type FeedbackState = {
   description: string;
 };
 
-type RecurringIncomeTableFilters = {
-  name: string;
-  payer: string;
-  frequency: "all" | RecurringIncomeFrequency;
-  status: "all" | RecurringIncomeStatus;
-  category: string;
-  account: string;
-  amount: string;
-  nextExpectedDateFrom: string;
-  nextExpectedDateTo: string;
-};
-
-type RecurringIncomeTableFilterField = keyof RecurringIncomeTableFilters;
 
 const frequencyOptions = [
   { value: "daily" as const, label: "Diaria", description: "Se repite cada dia.", leadingLabel: "D", leadingColor: "#1b6a58" },
@@ -940,39 +932,6 @@ function RecurringIncomeLoadingSkeleton() {
   );
 }
 
-const defaultRecurringIncomeTableFilters = (): RecurringIncomeTableFilters => ({
-  name: "",
-  payer: "",
-  frequency: "all",
-  status: "all",
-  category: "",
-  account: "",
-  amount: "",
-  nextExpectedDateFrom: "",
-  nextExpectedDateTo: "",
-});
-
-function isRecurringIncomeTableFilterActive(
-  filters: RecurringIncomeTableFilters,
-  field: RecurringIncomeTableFilterField,
-) {
-  switch (field) {
-    case "name":
-    case "payer":
-    case "category":
-    case "account":
-    case "amount":
-      return Boolean(filters[field].trim());
-    case "nextExpectedDateFrom":
-    case "nextExpectedDateTo":
-      return Boolean(filters[field]);
-    case "frequency":
-    case "status":
-      return filters[field] !== "all";
-    default:
-      return false;
-  }
-}
 
 function RecurringIncomeSummaryChip({
   label,
@@ -1079,11 +1038,18 @@ export function RecurringIncomePage() {
   const [historyIncomeId, setHistoryIncomeId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
-  const [incomeFilters, setIncomeFilters] = useState<RecurringIncomeTableFilters>(() =>
-    defaultRecurringIncomeTableFilters(),
-  );
-  const [openTableFilter, setOpenTableFilter] =
-    useState<RecurringIncomeTableFilterField | null>(null);
+  const {
+    filters: incomeFilters,
+    currentPage,
+    setCurrentPage,
+    openTableFilter,
+    updateFilter: updateIncomeFilter,
+    clearFilters: clearIncomeFilters,
+    toggleTableFilterMenu,
+    closeTableFilterMenu,
+    clearSingleTableFilter,
+    applyFilterAndClose: applyIncomeFilterAndClose,
+  } = useRecurringIncomeFilters(viewMode);
   const [formState, setFormState] = useState<RecurringIncomeFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -1162,36 +1128,13 @@ export function RecurringIncomePage() {
     }
     return result;
   }, [hiddenIds, incomeFilters, recurringIncome]);
+  const totalPages = Math.max(1, Math.ceil(filteredIncome.length / RECURRING_INCOME_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedIncome = useMemo(
+    () => filteredIncome.slice((safePage - 1) * RECURRING_INCOME_PAGE_SIZE, safePage * RECURRING_INCOME_PAGE_SIZE),
+    [filteredIncome, safePage],
+  );
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredIncome);
-
-  useEffect(() => {
-    if (viewMode === "table") {
-      return;
-    }
-
-    setIncomeFilters((currentValue) => {
-      if (
-        !currentValue.payer &&
-        !currentValue.category &&
-        !currentValue.account &&
-        !currentValue.amount &&
-        !currentValue.nextExpectedDateFrom &&
-        !currentValue.nextExpectedDateTo
-      ) {
-        return currentValue;
-      }
-
-      return {
-        ...currentValue,
-        payer: "",
-        category: "",
-        account: "",
-        amount: "",
-        nextExpectedDateFrom: "",
-        nextExpectedDateTo: "",
-      };
-    });
-  }, [viewMode]);
 
   useEffect(() => {
     if (!isEditorOpen) {
@@ -1310,37 +1253,6 @@ export function RecurringIncomePage() {
     [recurringIncome],
   );
 
-  function updateIncomeFilter<Field extends keyof RecurringIncomeTableFilters>(
-    field: Field,
-    value: RecurringIncomeTableFilters[Field],
-  ) {
-    setIncomeFilters((currentValue) => ({ ...currentValue, [field]: value }));
-  }
-
-  function clearIncomeFilters() {
-    setIncomeFilters(defaultRecurringIncomeTableFilters());
-    setOpenTableFilter(null);
-  }
-
-  function toggleTableFilterMenu(field: RecurringIncomeTableFilterField) {
-    setOpenTableFilter((currentValue) => (currentValue === field ? null : field));
-  }
-
-  function closeTableFilterMenu() {
-    setOpenTableFilter(null);
-  }
-
-  function clearSingleTableFilter(field: RecurringIncomeTableFilterField) {
-    updateIncomeFilter(field, defaultRecurringIncomeTableFilters()[field]);
-  }
-
-  function applyIncomeFilterAndClose<Field extends RecurringIncomeTableFilterField>(
-    field: Field,
-    value: RecurringIncomeTableFilters[Field],
-  ) {
-    updateIncomeFilter(field, value);
-    setOpenTableFilter(null);
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1740,7 +1652,7 @@ export function RecurringIncomePage() {
             <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" />
           ) : filteredIncome.length === 0 ? (
             <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
-          ) : filteredIncome.map((income) => {
+          ) : paginatedIncome.map((income) => {
             const statusOption = getStatusOption(income.status);
             return (
               <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={income.id}>
@@ -2097,10 +2009,10 @@ export function RecurringIncomePage() {
                 <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" /></td></tr>
               ) : filteredIncome.length === 0 ? (
                 <tr><td className="px-5 py-6 text-sm text-storm" colSpan={10}><DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" /></td></tr>
-              ) : filteredIncome.map((income, index) => {
+              ) : paginatedIncome.map((income, index) => {
                 const statusOption = getStatusOption(income.status);
                 return (
-                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredIncome.length - 1 ? "border-b-0" : ""}`} key={income.id}>
+                  <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === paginatedIncome.length - 1 ? "border-b-0" : ""}`} key={income.id}>
                     <td className="w-10 px-4 py-4">
                       <SelectionCheckbox
                         ariaLabel={`Seleccionar ${income.name}`}
@@ -2144,7 +2056,7 @@ export function RecurringIncomePage() {
             <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
           ) : (
             <div className="space-y-4">
-              {filteredIncome.map((income) => {
+              {paginatedIncome.map((income) => {
                 const statusOption = getStatusOption(income.status);
                 const isSelected = selectedIds.has(income.id);
                 const longPressHandlers = createLongPressHandlers(() => toggleSelect(income.id));
@@ -2228,6 +2140,15 @@ export function RecurringIncomePage() {
         </SurfaceCard>
       </section>
       )}
+
+      {filteredIncome.length > 0 ? (
+        <Pagination
+          onPageChange={setCurrentPage}
+          page={safePage}
+          pageSize={RECURRING_INCOME_PAGE_SIZE}
+          totalItems={filteredIncome.length}
+        />
+      ) : null}
 
       {isEditorOpen ? (
         <EditorDialog
