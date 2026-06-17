@@ -1,42 +1,41 @@
-import {
-  BarChart3,
-  Building2,
-  Download,
-  Fingerprint,
-  Landmark,
-  LoaderCircle,
-  Mail,
-  PencilLine,
-  Phone,
-  Plus,
-  RefreshCw,
-  ShieldCheck,
-  Trash2,
-  UserRound,
-  Users,
-  X,
-} from "lucide-react";
+import { Download, LoaderCircle, Plus, RefreshCw, ShieldCheck, X } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
-import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
+import { Pagination } from "../../../components/ui/pagination";
+import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
-import { BulkActionBar, SelectionCheckbox, useSelection, createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
-import { formatDate } from "../../../lib/formatting/dates";
+import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
-import type { CounterpartyOverview, CounterpartyRoleType, CounterpartySummary } from "../../../types/domain";
+import type { CounterpartyOverview, CounterpartyRoleType } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { ContactAnalyticsModal } from "../components/contact-analytics-modal";
+import { ContactGrid } from "../components/contact-grid";
+import { ContactList } from "../components/contact-list";
+import { ContactTable } from "../components/contact-table";
+import { useContactsFilters } from "../hooks/use-contacts-filters";
+import type { ContactStatusFilter, RoleFilter } from "../lib/contacts-filters";
+import {
+  buildInitials,
+  getRoleDefinition,
+  getTypeDefinition,
+  roleFilterPickerOptions,
+  roleOptions,
+  statusFilterPickerOptions,
+  typeOptions,
+  type ContactWithExposure,
+} from "../lib/contacts-presenters";
 import {
   getQueryErrorMessage,
   type CounterpartyFormInput,
@@ -48,21 +47,13 @@ import {
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 
+const CONTACTS_PAGE_SIZE = 50;
+
 type EditorMode = "create" | "edit";
-type RoleFilter = "all" | CounterpartyRoleType;
-type ContactStatusFilter = "all" | "active" | "archived";
-type ContactTableFilters = {
-  name: string;
-  type: "all" | CounterpartySummary["type"];
-  role: RoleFilter;
-  status: ContactStatusFilter;
-  receivable: string;
-  payable: string;
-};
 
 type ContactFormState = {
   name: string;
-  type: CounterpartySummary["type"];
+  type: CounterpartyOverview["type"];
   phone: string;
   email: string;
   documentNumber: string;
@@ -76,45 +67,13 @@ type FeedbackState = {
   description: string;
 };
 
-type ContactPickerOption = PickerOption;
-
-const fieldClassName =
-  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] disabled:cursor-not-allowed disabled:opacity-60";
-const inputClassName = `${fieldClassName} h-14`;
-const textareaClassName = `${fieldClassName} min-h-[140px] py-4 leading-7`;
-
-const typeOptions = [
-  { value: "person" as const, label: "Persona", description: "Amigos, familiares o personas individuales.", icon: UserRound, color: "#1b6a58" },
-  { value: "company" as const, label: "Empresa", description: "Clientes, empleadores o companias formales.", icon: Building2, color: "#4566d6" },
-  { value: "merchant" as const, label: "Comercio", description: "Tiendas o vendedores frecuentes.", icon: Building2, color: "#c46a31" },
-  { value: "service" as const, label: "Servicio", description: "Servicios digitales, recurrentes o profesionales.", icon: ShieldCheck, color: "#8366f2" },
-  { value: "bank" as const, label: "Banco", description: "Bancos, financieras o cajas.", icon: Landmark, color: "#0f766e" },
-  { value: "other" as const, label: "Otro", description: "Cualquier caso que no encaje en las categorias anteriores.", icon: Users, color: "#64748b" },
-] as const;
-
-const roleOptions = [
-  { value: "client" as const, label: "Cliente", description: "Te compra, te paga o le facturas.", tone: "success" as const },
-  { value: "supplier" as const, label: "Proveedor", description: "Le compras o te abastece.", tone: "info" as const },
-  { value: "lender" as const, label: "Prestamista", description: "Te presta dinero o financia una deuda.", tone: "warning" as const },
-  { value: "borrower" as const, label: "Deudor", description: "Te debe dinero o le financiaste algo.", tone: "danger" as const },
-  { value: "bank" as const, label: "Banco", description: "Entidad financiera o cuenta institucional.", tone: "info" as const },
-  { value: "service_provider" as const, label: "Servicio", description: "Proveedor recurrente o empresa de suscripcion.", tone: "neutral" as const },
-  { value: "other" as const, label: "Otro", description: "Rol adicional o libre.", tone: "neutral" as const },
-] as const;
+const inputClassName = "field-dark";
+const textareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
+const panelClassName = "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
+const labelClassName = "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
 
 function createDefaultFormState(): ContactFormState {
   return { name: "", type: "person", phone: "", email: "", documentNumber: "", notes: "", roles: [] };
-}
-
-function defaultContactTableFilters(): ContactTableFilters {
-  return {
-    name: "",
-    type: "all",
-    role: "all",
-    status: "active",
-    receivable: "",
-    payable: "",
-  };
 }
 
 function buildFormStateFromContact(contact: CounterpartyOverview): ContactFormState {
@@ -135,39 +94,6 @@ function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElemen
 
 function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`${textareaClassName} ${className}`} {...props} />;
-}
-
-function getTypeDefinition(type: CounterpartySummary["type"]) {
-  return typeOptions.find((option) => option.value === type) ?? typeOptions[typeOptions.length - 1];
-}
-
-function getRoleDefinition(role: CounterpartyRoleType) {
-  return roleOptions.find((option) => option.value === role) ?? roleOptions[roleOptions.length - 1];
-}
-
-function buildInitials(name: string) {
-  const value = name.trim().split(/\s+/).slice(0, 2).map((chunk) => chunk.slice(0, 1).toUpperCase()).join("");
-  return value || "CT";
-}
-
-function getPickerToneColor(tone: (typeof roleOptions)[number]["tone"]) {
-  switch (tone) {
-    case "success":
-      return "#1B6A58";
-    case "info":
-      return "#4566D6";
-    case "warning":
-      return "#B48B34";
-    case "danger":
-      return "#8F3E3E";
-    case "neutral":
-    default:
-      return "#64748B";
-  }
-}
-
-function getLastActivityLabel(value?: string | null) {
-  return value ? formatDate(value) : "Sin actividad aun";
 }
 
 function getModuleErrorMessage(error: unknown) {
@@ -205,6 +131,9 @@ function ContactEditorDialog({
   const title = formState.name.trim() || "Nuevo contacto";
   const selectedType = getTypeDefinition(formState.type);
   const TypeIcon = selectedType.icon;
+  // Divulgación progresiva: al crear, datos de contacto y notas arrancan plegados;
+  // al editar se muestran todos para revisar de un vistazo.
+  const [showAdvanced, setShowAdvanced] = useState(!isCreateMode);
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -231,15 +160,30 @@ function ContactEditorDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
+    <div
+      className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6"
+      onMouseDown={(e) => {
+        (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now());
+      }}
+      onMouseUp={(e) => {
+        const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0");
+        delete (e.currentTarget as HTMLDivElement).dataset.pressStart;
+        if (t0) closeEditor();
+      }}
+    >
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        <div
+          className="animate-rise-in relative w-full max-w-[1100px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onMouseUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
           <form className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="max-w-3xl">
                   <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
                       {isCreateMode ? "Nuevo contacto" : "Editar contacto"}
                     </span>
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
@@ -264,16 +208,12 @@ function ContactEditorDialog({
               </div>
 
               {feedback?.tone === "error" ? (
-                <FormFeedbackBanner
-                  className="mt-6"
-                  description={feedback.description}
-                  title={feedback.title}
-                />
+                <FormFeedbackBanner className="mt-6" description={feedback.description} title={feedback.title} />
               ) : null}
 
-              <div className="mt-7 rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,36,0.96),rgba(8,12,20,0.92))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
+              <div className="glass-panel-soft mt-7 rounded-[24px] p-5 sm:p-6">
                 <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                     <div className="flex items-start gap-4">
                       <div
                         className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-white/10 text-white"
@@ -282,11 +222,11 @@ function ContactEditorDialog({
                         <TypeIcon className="h-7 w-7" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Vista previa</p>
+                        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Vista previa</p>
                         <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">{title}</h3>
                         <p className="mt-3 text-base leading-8 text-storm">{selectedType.description}</p>
                         <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
+                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">
                             {selectedType.label}
                           </span>
                           {formState.roles.length > 0 ? (
@@ -302,37 +242,41 @@ function ContactEditorDialog({
                   </div>
                   <div className="grid gap-4">
                     <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Roles</p>
+                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Roles</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
                         {formState.roles.length > 0 ? `${formState.roles.length} activos` : "Pendientes"}
                       </p>
-                      <p className="mt-2 text-sm text-storm">Puedes marcar cliente, proveedor, prestamista, deudor y mas.</p>
                     </div>
                     <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Identidad</p>
+                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Identidad</p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">{buildInitials(title)}</p>
-                      <p className="mt-2 text-sm text-storm">Ideal para dashboards, filtros y cruces con otros modulos.</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-7 grid gap-5 lg:grid-cols-2">
-                <div className="glass-panel-soft rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Identidad</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Datos principales</h3>
-                  <div className="mt-6 space-y-5">
+              <div className="mt-4 grid gap-3 sm:mt-7 sm:gap-5 lg:grid-cols-2">
+                <div className={panelClassName}>
+                  <p className={labelClassName}>Identidad</p>
+                  <h3 className="mt-1 font-display text-lg font-semibold text-ink sm:mt-2 sm:text-2xl">Datos principales</h3>
+                  <div className="mt-3 space-y-5 sm:mt-6">
                     <label className="block">
-                      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Nombre</span>
-                      <div
-                        className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`}
-                        data-field="name"
-                      >
-                        <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Cliente Premium SAC" type="text" value={formState.name} />
+                      <span className={labelClassName}>Nombre</span>
+                      <div className={`mt-3${invalidFields.has("name") ? " field-error-ring" : ""}`} data-field="name">
+                        <Input
+                          maxLength={120}
+                          onChange={(event) => {
+                            clearFieldError("name");
+                            updateFormState("name", event.target.value);
+                          }}
+                          placeholder="Ej. Cliente Premium SAC"
+                          type="text"
+                          value={formState.name}
+                        />
                       </div>
                     </label>
                     <div>
-                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Tipo</p>
+                      <p className={labelClassName}>Tipo</p>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         {typeOptions.map((option) => {
                           const isSelected = formState.type === option.value;
@@ -340,13 +284,16 @@ function ContactEditorDialog({
 
                           return (
                             <button
-                              className={`rounded-[24px] border p-4 text-left transition duration-200 ${isSelected ? "border-white/20 bg-white/[0.07] shadow-[0_0_0_3px_rgba(107,228,197,0.08)]" : "border-white/8 bg-[#0d1623] hover:border-white/12"}`}
+                              className={`rounded-[24px] border p-4 text-left transition duration-200 ${isSelected ? "border-white/20 bg-white/[0.07] shadow-[0_0_0_3px_rgba(107,228,197,0.08)]" : "border-white/8 bg-white/[0.03] hover:border-white/12"}`}
                               key={option.value}
                               onClick={() => updateFormState("type", option.value)}
                               type="button"
                             >
                               <div className="flex items-start gap-3">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 text-white" style={{ backgroundColor: `${option.color}24`, borderColor: `${option.color}55` }}>
+                                <div
+                                  className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 text-white"
+                                  style={{ backgroundColor: `${option.color}24`, borderColor: `${option.color}55` }}
+                                >
                                   <Icon className="h-5 w-5" />
                                 </div>
                                 <div>
@@ -362,16 +309,16 @@ function ContactEditorDialog({
                   </div>
                 </div>
 
-                <div className="glass-panel-soft rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Roles</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Relacion contigo</h3>
-                  <div className="mt-6 grid gap-3">
+                <div className={panelClassName}>
+                  <p className={labelClassName}>Roles</p>
+                  <h3 className="mt-1 font-display text-lg font-semibold text-ink sm:mt-2 sm:text-2xl">Relacion contigo</h3>
+                  <div className="mt-3 grid gap-3 sm:mt-6">
                     {roleOptions.map((option) => {
                       const isSelected = formState.roles.includes(option.value);
 
                       return (
                         <button
-                          className={`rounded-[24px] border p-4 text-left transition duration-200 ${isSelected ? "border-white/20 bg-white/[0.07]" : "border-white/8 bg-[#0d1623] hover:border-white/12"}`}
+                          className={`rounded-[24px] border p-4 text-left transition duration-200 ${isSelected ? "border-white/20 bg-white/[0.07]" : "border-white/8 bg-white/[0.03] hover:border-white/12"}`}
                           key={option.value}
                           onClick={() => toggleRole(option.value)}
                           type="button"
@@ -389,24 +336,34 @@ function ContactEditorDialog({
                   </div>
                 </div>
 
-                <div className="glass-panel-soft rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Contacto</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Datos opcionales</h3>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                {!showAdvanced ? (
+                  <button
+                    className="flex w-full items-center justify-center gap-2 rounded-[24px] border border-dashed border-white/15 bg-white/[0.02] px-4 py-3.5 text-sm font-medium text-storm transition hover:border-white/25 hover:text-ink lg:col-span-2"
+                    onClick={() => setShowAdvanced(true)}
+                    type="button"
+                  >
+                    Más opciones (telefono, email, documento, notas)
+                  </button>
+                ) : null}
+
+                <div className={`${panelClassName} ${showAdvanced ? "" : "hidden"}`}>
+                  <p className={labelClassName}>Contacto</p>
+                  <h3 className="mt-1 font-display text-lg font-semibold text-ink sm:mt-2 sm:text-2xl">Datos opcionales</h3>
+                  <div className="mt-3 grid gap-5 sm:mt-6 lg:grid-cols-2">
                     <label className="block">
-                      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Telefono</span>
+                      <span className={labelClassName}>Telefono</span>
                       <div className="mt-3">
                         <Input onChange={(event) => updateFormState("phone", event.target.value)} placeholder="Ej. +51 999 111 222" type="text" value={formState.phone} />
                       </div>
                     </label>
                     <label className="block">
-                      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Email</span>
+                      <span className={labelClassName}>Email</span>
                       <div className="mt-3">
                         <Input onChange={(event) => updateFormState("email", event.target.value)} placeholder="contacto@empresa.com" type="email" value={formState.email} />
                       </div>
                     </label>
                     <label className="block lg:col-span-2">
-                      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Documento o referencia</span>
+                      <span className={labelClassName}>Documento o referencia</span>
                       <div className="mt-3">
                         <Input onChange={(event) => updateFormState("documentNumber", event.target.value)} placeholder="Ej. RUC, DNI o codigo interno" type="text" value={formState.documentNumber} />
                       </div>
@@ -414,23 +371,31 @@ function ContactEditorDialog({
                   </div>
                 </div>
 
-                <div className="glass-panel-soft rounded-[32px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Contexto</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">Notas internas</h3>
-                  <div className="mt-6">
-                    <Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Ej. Cliente corporativo, suele pagar los primeros dias del mes." value={formState.notes} />
+                <div className={`${panelClassName} ${showAdvanced ? "" : "hidden"}`}>
+                  <p className={labelClassName}>Contexto</p>
+                  <h3 className="mt-1 font-display text-lg font-semibold text-ink sm:mt-2 sm:text-2xl">Notas internas</h3>
+                  <div className="mt-3 sm:mt-6">
+                    <Textarea
+                      onChange={(event) => updateFormState("notes", event.target.value)}
+                      placeholder="Ej. Cliente corporativo, suele pagar los primeros dias del mes."
+                      value={formState.notes}
+                    />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
+            <div className="relative z-[60] border-t border-white/10 bg-shell/95 px-4 py-4 backdrop-blur-md sm:px-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm leading-7 text-storm">
-                  {isCreateMode ? "Este contacto quedara disponible para movimientos, creditos, deudas y dashboards." : "Los cambios se reflejaran de inmediato en los modulos donde este contacto ya se usa."}
+                  {isCreateMode
+                    ? "Este contacto quedara disponible para movimientos, creditos, deudas y dashboards."
+                    : "Los cambios se reflejaran de inmediato en los modulos donde este contacto ya se usa."}
                 </p>
                 <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                  <Button disabled={isSaving} onClick={closeEditor} type="button" variant="ghost">Cancelar</Button>
+                  <Button disabled={isSaving} onClick={closeEditor} type="button" variant="ghost">
+                    Cancelar
+                  </Button>
                   <Button disabled={isSaving} type="submit">
                     {isSaving ? (
                       <>
@@ -459,92 +424,40 @@ function ContactEditorDialog({
   );
 }
 
-function DeleteDialog({
-  contact,
-  isDeleting,
-  onCancel,
-  onConfirm,
-}: {
-  contact: CounterpartyOverview;
-  isDeleting: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel(); }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  return (
-    <div role="dialog" aria-modal="true" aria-labelledby="contact-delete-title" className="fixed inset-0 z-[90] isolate flex items-center justify-center bg-[#01050b]/84 p-4 backdrop-blur-lg before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#01050b]/70 before:backdrop-blur-2xl before:content-[''] sm:p-6">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-[#f27a86]/22 bg-[linear-gradient(160deg,rgba(11,17,26,0.995),rgba(8,12,19,0.985))] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.68)] sm:p-7">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(242,122,134,0.12),transparent_28%),radial-gradient(circle_at_88%_14%,rgba(69,102,214,0.10),transparent_22%)]" />
-        <div className="absolute -left-8 top-6 h-28 w-28 rounded-full bg-[#f27a86]/16 blur-3xl" />
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4566d6]/10 blur-3xl" />
-        <div className="relative">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-[#f27a86]/24 bg-[#3a1820]/88 text-[#ffb4bc] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <Trash2 className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center rounded-full border border-[#f27a86]/22 bg-[#34161d]/82 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#ffb4bc]">
-                Eliminar contacto
-              </div>
-              <h3 id="contact-delete-title" className="mt-4 font-display text-[2rem] font-semibold leading-tight text-ink">Confirma antes de borrarlo</h3>
-              <p className="mt-3 text-sm leading-7 text-storm">
-                Si este contacto ya se usa en movimientos, creditos, deudas o suscripciones, lo mas sano suele ser archivarlo.
-              </p>
-            </div>
-          </div>
-          <div className="mt-7 rounded-[28px] border border-white/10 bg-[#0d151f]/92 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-5">
-            <p className="text-lg font-semibold text-ink">{contact.name}</p>
-            <p className="mt-2 text-sm text-storm">{getTypeDefinition(contact.type).label}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {contact.roles.length > 0 ? (
-                contact.roles.map((role) => <StatusBadge key={role} status={getRoleDefinition(role).label} tone={getRoleDefinition(role).tone} />)
-              ) : (
-                <StatusBadge status="Sin roles" tone="neutral" />
-              )}
-            </div>
-          </div>
-          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button disabled={isDeleting} onClick={onCancel} type="button" variant="ghost">Cancelar</Button>
-            <Button className="!bg-[#f27a86] !text-white hover:!bg-[#ff8e98] focus-visible:outline-[#f27a86]" disabled={isDeleting} onClick={onConfirm} type="button">
-              {isDeleting ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar definitivamente
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ContactsLoadingSkeleton() {
   return (
     <>
-      <div className="shimmer-surface h-[200px] rounded-[32px]" />
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div className="shimmer-surface h-[72px] rounded-[22px]" key={i} />
-        ))}
-      </div>
+      <div className="shimmer-surface h-[180px] rounded-[32px]" />
+      <div className="shimmer-surface h-[520px] rounded-[32px]" />
     </>
   );
 }
 
+function ContactsSummaryChip({
+  label,
+  tone = "neutral",
+  value,
+}: {
+  label: string;
+  tone?: "neutral" | "info" | "warning";
+  value: string;
+}) {
+  const valueTone = {
+    neutral: "text-ink",
+    info: "text-ember",
+    warning: "text-gold",
+  } as const;
+
+  return (
+    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
+      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
+      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>{value}</p>
+    </article>
+  );
+}
+
 function downloadCSV(csv: string, filename: string) {
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -556,9 +469,7 @@ function downloadCSV(csv: string, filename: string) {
 function escapeCSV(v: string | number | boolean | null | undefined): string {
   if (v === null || v === undefined) return "";
   const s = String(v);
-  return s.includes(",") || s.includes('"') || s.includes("\n")
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
+  return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 function downloadContactsCSV(contacts: CounterpartyOverview[], filename: string) {
@@ -601,9 +512,18 @@ export function ContactsPage() {
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-contacts", contactColumns);
   const [viewMode, setViewMode] = useViewMode("contacts", "table");
-  const [contactFilters, setContactFilters] = useState<ContactTableFilters>(() =>
-    defaultContactTableFilters(),
-  );
+  const {
+    filters: contactFilters,
+    currentPage,
+    setCurrentPage,
+    openTableFilter,
+    updateFilter: updateContactFilter,
+    clearFilters: clearContactFilters,
+    toggleTableFilterMenu,
+    closeTableFilterMenu,
+    clearSingleTableFilter,
+    applyFilterAndClose: applyContactFilterAndClose,
+  } = useContactsFilters(viewMode);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -633,7 +553,7 @@ export function ContactsPage() {
   const isDeleting = deleteMutation.isPending;
   const isArchiving = archiveMutation.isPending;
 
-  const contactsWithExposure = useMemo(() => {
+  const contactsWithExposure = useMemo<ContactWithExposure[]>(() => {
     const summaryMap = new Map<number, { receivablePending: number; payablePending: number }>();
 
     for (const obligation of obligations) {
@@ -658,80 +578,6 @@ export function ContactsPage() {
       return { ...contact, receivablePendingInBase: exposure.receivablePending, payablePendingInBase: exposure.payablePending };
     });
   }, [contacts, obligations]);
-
-  const contactTypeFilterOptions = useMemo<ContactPickerOption[]>(
-    () => [
-      {
-        value: "all",
-        label: "Todos los tipos",
-        description: "Incluye personas, empresas, comercios y bancos.",
-        leadingLabel: "TT",
-        leadingColor: "#64748B",
-        searchText: "todos tipos contactos",
-      },
-      ...typeOptions.map((option) => ({
-        value: option.value,
-        label: option.label,
-        description: option.description,
-        leadingLabel: buildInitials(option.label),
-        leadingColor: option.color,
-        searchText: `${option.label} ${option.value}`,
-      })),
-    ],
-    [],
-  );
-
-  const contactRoleFilterOptions = useMemo<ContactPickerOption[]>(
-    () => [
-      {
-        value: "all",
-        label: "Todos los roles",
-        description: "Incluye cualquier rol asignado.",
-        leadingLabel: "TR",
-        leadingColor: "#64748B",
-        searchText: "todos roles contactos",
-      },
-      ...roleOptions.map((option) => ({
-        value: option.value,
-        label: option.label,
-        description: option.description,
-        leadingLabel: buildInitials(option.label),
-        leadingColor: getPickerToneColor(option.tone),
-        searchText: `${option.label} ${option.value}`,
-      })),
-    ],
-    [],
-  );
-
-  const contactStatusFilterOptions = useMemo<ContactPickerOption[]>(
-    () => [
-      {
-        value: "active",
-        label: "Activos",
-        description: "Contactos disponibles para nuevos registros.",
-        leadingLabel: "AC",
-        leadingColor: "#1B6A58",
-        searchText: "activos active",
-      },
-      {
-        value: "all",
-        label: "Todos los estados",
-        description: "Incluye activos y archivados.",
-        leadingLabel: "TE",
-        leadingColor: "#64748B",
-        searchText: "todos estados",
-      },
-      {
-        value: "archived",
-        label: "Archivados",
-        description: "Contactos conservados para historial.",
-        leadingLabel: "AR",
-        leadingColor: "#B48B34",
-        searchText: "archivados archived",
-      },
-    ],
-    [],
-  );
 
   const hasActiveFilters =
     contactFilters.name.trim() !== "" ||
@@ -768,9 +614,7 @@ export function ContactsPage() {
         !(
           contact.name.toLowerCase().includes(normalizedSearch) ||
           contact.type.toLowerCase().includes(normalizedSearch) ||
-          contact.roles.some((role) =>
-            getRoleDefinition(role).label.toLowerCase().includes(normalizedSearch),
-          ) ||
+          contact.roles.some((role) => getRoleDefinition(role).label.toLowerCase().includes(normalizedSearch)) ||
           contact.email?.toLowerCase().includes(normalizedSearch) ||
           contact.phone?.toLowerCase().includes(normalizedSearch) ||
           contact.documentNumber?.toLowerCase().includes(normalizedSearch)
@@ -779,10 +623,7 @@ export function ContactsPage() {
         return false;
       }
 
-      if (
-        normalizedReceivable &&
-        !String(contact.receivablePendingInBase).includes(normalizedReceivable)
-      ) {
+      if (normalizedReceivable && !String(contact.receivablePendingInBase).includes(normalizedReceivable)) {
         return false;
       }
 
@@ -794,41 +635,23 @@ export function ContactsPage() {
     });
   }, [contactFilters, contactsWithExposure]);
 
-  useEffect(() => {
-    if (viewMode === "table") {
-      return;
-    }
+  const totalPages = Math.max(1, Math.ceil(filteredContacts.length / CONTACTS_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedContacts = useMemo(
+    () => filteredContacts.slice((safePage - 1) * CONTACTS_PAGE_SIZE, safePage * CONTACTS_PAGE_SIZE),
+    [filteredContacts, safePage],
+  );
 
-    setContactFilters((currentValue) => {
-      if (
-        currentValue.type === "all" &&
-        currentValue.receivable === "" &&
-        currentValue.payable === ""
-      ) {
-        return currentValue;
-      }
-
-      return {
-        ...currentValue,
-        type: "all",
-        receivable: "",
-        payable: "",
-      };
-    });
-  }, [viewMode]);
-
-  function updateContactFilter<Field extends keyof ContactTableFilters>(
-    field: Field,
-    value: ContactTableFilters[Field],
-  ) {
-    setContactFilters((currentValue) => ({ ...currentValue, [field]: value }));
-  }
-
-  function clearContactFilters() {
-    setContactFilters(defaultContactTableFilters());
-  }
-
-  const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredContacts);
+  const {
+    selectedIds,
+    toggle: toggleSelect,
+    selectAll,
+    clearAll,
+    selectedCount,
+    allSelected,
+    someSelected,
+    selectedItems,
+  } = useSelection(filteredContacts);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
@@ -857,7 +680,6 @@ export function ContactsPage() {
   const totalClients = contacts.filter((contact) => contact.roles.includes("client")).length;
   const totalReceivable = contactsWithExposure.reduce((total, contact) => total + contact.receivablePendingInBase, 0);
   const totalPayable = contactsWithExposure.reduce((total, contact) => total + contact.payablePendingInBase, 0);
-  const showContactExplore = viewMode !== "table" && contacts.length > 0;
 
   function updateFormState<Field extends keyof ContactFormState>(field: Field, value: ContactFormState[Field]) {
     setIsDirty(true);
@@ -1029,44 +851,37 @@ export function ContactsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      {/*
-      <PageHeader
-        actions={<><ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />{viewMode === "table" ? <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} /> : null}<Button onClick={() => downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)} variant="ghost"><Download className="mr-2 h-4 w-4" />Exportar CSV</Button><Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo contacto</Button></>}
-        description="Gestiona clientes, proveedores, bancos y relaciones clave del workspace para entender mejor quien te debe, a quien le debes y con quien se mueve tu dinero."
-        eyebrow="contactos"
-        title="Contactos"
-      />
-      {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
-
-      <SurfaceCard action={<Users className="h-5 w-5 text-gold" />} description="Vista general de tu red financiera dentro del workspace." title="Red de contactos">
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Activos</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{totalActiveContacts}</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Clientes</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{totalClients}</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Te deben</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{formatCurrency(totalReceivable, baseCurrencyCode)}</p></div>
-          <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Debes</p><p className="mt-3 font-display text-3xl font-semibold text-ink">{formatCurrency(totalPayable, baseCurrencyCode)}</p></div>
+      {/* Header compacto (estándar) */}
+      <section className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Contactos</p>
+        <div className="mt-1 flex items-center gap-2.5">
+          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Relaciones del workspace</h2>
+          <InfoTip ariaLabel="Sobre los contactos">
+            Clientes, proveedores, bancos y personas clave para entender quien te debe y a quien le debes. Los filtros
+            de la barra superior aplican a todas las vistas.
+          </InfoTip>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink"><ArrowUpCircle className="h-4 w-4 text-pine" />Quienes mas te deben</div>
-            <div className="mt-4 space-y-3">
-              {topDebtors.length > 0 ? topDebtors.map((contact) => <div className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/15 px-4 py-3" key={contact.id}><div className="min-w-0"><p className="truncate font-medium text-ink">{contact.name}</p><p className="mt-1 text-xs text-storm">{getTypeDefinition(contact.type).label}</p></div><p className="text-sm font-semibold text-ink">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</p></div>) : <p className="text-sm text-storm">Aun no tienes saldos por cobrar asociados a contactos.</p>}
-            </div>
-          </div>
-          <div className="rounded-[26px] border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink"><ArrowDownCircle className="h-4 w-4 text-rosewood" />A quienes mas debes</div>
-            <div className="mt-4 space-y-3">
-              {topCreditors.length > 0 ? topCreditors.map((contact) => <div className="flex items-center justify-between gap-3 rounded-[20px] border border-white/8 bg-black/15 px-4 py-3" key={contact.id}><div className="min-w-0"><p className="truncate font-medium text-ink">{contact.name}</p><p className="mt-1 text-xs text-storm">{getTypeDefinition(contact.type).label}</p></div><p className="text-sm font-semibold text-ink">{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</p></div>) : <p className="text-sm text-storm">Aun no tienes saldos por pagar asociados a contactos.</p>}
-            </div>
-          </div>
-        </div>
-      </SurfaceCard>
+        <p className="mt-1 text-xs text-storm">Personas, empresas y bancos conectados a tus movimientos y obligaciones.</p>
+      </section>
 
-      {contacts.length > 0 ? (
-      <SurfaceCard description="Filtra por nombre, rol o estado para encontrar rapido a cada contacto." title="Explorar contactos">
-        <div className="grid gap-4 lg:grid-cols-[1.5fr_0.9fr_0.6fr]">
-          <div className="flex items-center gap-2">
+      {/* Métricas compactas */}
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
+        <ContactsSummaryChip label="activos" value={String(totalActiveContacts)} />
+        <ContactsSummaryChip label="clientes" tone="info" value={String(totalClients)} />
+        <ContactsSummaryChip label="te deben" tone="info" value={formatCurrency(totalReceivable, baseCurrencyCode)} />
+        <ContactsSummaryChip label="debes" tone="warning" value={formatCurrency(totalPayable, baseCurrencyCode)} />
+        <ContactsSummaryChip label="archivados" value={String(totalArchivedContacts)} />
+      </div>
+
+      {/* Toolbar sticky (estándar) */}
+      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          {viewMode === "table" ? <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} /> : null}
+          <StatusBadge status={`${filteredContacts.length} visibles`} tone="neutral" />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
-              className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
               disabled={snapshotQuery.isFetching}
               onClick={() => snapshotQuery.refetch()}
               title="Actualizar"
@@ -1074,120 +889,54 @@ export function ContactsPage() {
             >
               <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
             </button>
-            <div className="flex-1">
-              <Input onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, email, rol o documento..." type="text" value={search} />
-            </div>
+            {hasActiveFilters ? (
+              <Button onClick={clearContactFilters} variant="ghost">
+                <X className="mr-2 h-4 w-4" />
+                Limpiar
+              </Button>
+            ) : null}
+            <Button
+              disabled={!filteredContacts.length}
+              onClick={() => downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)}
+              variant="ghost"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar
+            </Button>
+            <Button data-tour="create-contact" onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo contacto
+            </Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setRoleFilter("all")} variant={roleFilter === "all" ? "primary" : "ghost"}>Todos</Button>
-            {roleOptions.map((option) => <Button key={option.value} onClick={() => setRoleFilter(option.value)} variant={roleFilter === option.value ? "primary" : "ghost"}>{option.label}</Button>)}
-          </div>
-          <Button onClick={() => setShowArchived((currentValue) => !currentValue)} variant={showArchived ? "secondary" : "ghost"}>
-            {showArchived ? `Ocultar archivados (${totalArchivedContacts})` : `Ver archivados (${totalArchivedContacts})`}
-          </Button>
         </div>
-      </SurfaceCard>
-      ) : null}
-      */}
 
-      <section className="glass-panel-strong rounded-[32px] p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,430px)] xl:items-start">
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.28em] text-storm/90">contactos</p>
-              <h2 className="font-display text-4xl font-semibold text-ink">Relaciones del workspace</h2>
-              <p className="max-w-3xl text-sm leading-7 text-storm">
-                Entra directo a tu tabla de contactos. Cuando uses la vista tabla, los filtros viven
-                dentro de cada columna; en lista o tarjetas reaparece el explorador compacto para revisar
-                personas, empresas y bancos con mas contexto.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <StatusBadge status={`${totalActiveContacts} activos`} tone="neutral" />
-              <StatusBadge status={`${totalClients} clientes`} tone="info" />
-              <StatusBadge status={`Te deben ${formatCurrency(totalReceivable, baseCurrencyCode)}`} tone="success" />
-              <StatusBadge status={`Debes ${formatCurrency(totalPayable, baseCurrencyCode)}`} tone="warning" />
-              <StatusBadge status={`${totalArchivedContacts} archivados`} tone="neutral" />
-              {snapshotQuery.isFetching ? <StatusBadge status="Actualizando" tone="neutral" /> : null}
-            </div>
-          </div>
-
-          <aside className="glass-panel-soft rounded-[28px] border border-white/10 p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-[0.22em] text-storm">Control del modulo</p>
-                <p className="text-sm leading-7 text-storm">
-                  Registra contactos, cambia de vista y exporta. En tabla filtras por columna; en otras
-                  vistas vuelve el explorador con filtros rapidos.
-                </p>
-              </div>
-              <button
-                className="flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] p-2.5 text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching}
-                onClick={() => snapshotQuery.refetch()}
-                title="Actualizar"
-                type="button"
-              >
-                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button data-tour="create-contact" onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo contacto
-              </Button>
-              <Button
-                onClick={() =>
-                  downloadContactsCSV(filteredContacts, `contactos-${new Date().toISOString().slice(0, 10)}.csv`)
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-              {hasActiveFilters ? (
-                <Button onClick={clearContactFilters} variant="ghost">
-                  <X className="mr-2 h-4 w-4" />
-                  Limpiar filtros
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
-              {viewMode === "table" ? (
-                <ColumnPicker columns={contactColumns} visible={colVis} onToggle={toggleCol} />
-              ) : null}
-              <StatusBadge status={`${filteredContacts.length} visibles`} tone="neutral" />
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Estado</p>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {contactFilters.status === "active"
-                    ? "Solo activos"
-                    : contactFilters.status === "archived"
-                      ? "Solo archivados"
-                      : "Todos"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Rol</p>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {contactFilters.role === "all"
-                    ? "Todos los roles"
-                    : getRoleDefinition(contactFilters.role).label}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Base</p>
-                <p className="mt-2 text-sm font-semibold text-ink">{baseCurrencyCode}</p>
-              </div>
-            </div>
-          </aside>
+        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <input
+            className="field-dark"
+            onChange={(event) => updateContactFilter("name", event.target.value)}
+            placeholder="Buscar por nombre, email, rol o documento..."
+            type="text"
+            value={contactFilters.name}
+          />
+          <SearchablePicker
+            emptyMessage="No hay roles para mostrar."
+            onChange={(value) => updateContactFilter("role", value as RoleFilter)}
+            options={roleFilterPickerOptions}
+            placeholderDescription="Filtra por rol."
+            placeholderLabel="Rol"
+            queryPlaceholder="Buscar rol..."
+            value={contactFilters.role}
+          />
+          <SearchablePicker
+            emptyMessage="No hay estados para mostrar."
+            onChange={(value) => updateContactFilter("status", value as ContactStatusFilter)}
+            options={statusFilterPickerOptions}
+            placeholderDescription="Filtra por estado."
+            placeholderLabel="Estado"
+            queryPlaceholder="Buscar estado..."
+            value={contactFilters.status}
+          />
         </div>
       </section>
 
@@ -1195,316 +944,91 @@ export function ContactsPage() {
         <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} />
       ) : null}
 
-      {showContactExplore ? (
-        <SurfaceCard
-          description="Busca por nombre y filtra por rol o estado cuando prefieras recorrer la vista lista o tarjetas."
-          title="Explorar contactos"
-        >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(230px,0.75fr)_minmax(230px,0.75fr)_auto]">
-            <Input
-              onChange={(event) => updateContactFilter("name", event.target.value)}
-              placeholder="Buscar por nombre, email, rol o documento..."
-              type="text"
-              value={contactFilters.name}
-            />
-            <SearchablePicker
-              emptyMessage="No encontramos roles con ese filtro."
-              onChange={(value) => updateContactFilter("role", value as RoleFilter)}
-              options={contactRoleFilterOptions}
-              placeholderDescription="Incluye cualquier rol asignado."
-              placeholderLabel="Todos los roles"
-              queryPlaceholder="Buscar rol..."
-              value={contactFilters.role}
-            />
-            <SearchablePicker
-              emptyMessage="No encontramos estados con ese filtro."
-              onChange={(value) => updateContactFilter("status", value as ContactStatusFilter)}
-              options={contactStatusFilterOptions}
-              placeholderDescription="Incluye activos y archivados."
-              placeholderLabel="Todos los estados"
-              queryPlaceholder="Buscar estado..."
-              value={contactFilters.status}
-            />
-            <Button
-              className="h-14 px-6"
-              onClick={clearContactFilters}
-              variant={hasActiveFilters ? "secondary" : "ghost"}
-            >
-              Limpiar filtros
-            </Button>
-          </div>
-        </SurfaceCard>
-      ) : null}
-
-      {filteredContacts.length === 0 ? (
+      {contacts.length === 0 ? (
         <DataState
           action={
-            contacts.length === 0 ? (
-              <Button onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Crear primer contacto
-              </Button>
-            ) : (
-              <Button onClick={clearContactFilters} variant="ghost">
-                Limpiar filtros
-              </Button>
-            )
+            <Button onClick={openCreateEditor}>
+              <Plus className="mr-2 h-4 w-4" />
+              Crear primer contacto
+            </Button>
           }
-          description={
-            contacts.length === 0
-              ? "Registra clientes, proveedores, bancos o personas clave para conectar mejor tus movimientos y obligaciones."
-              : "Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna."
+          description="Registra clientes, proveedores, bancos o personas clave para conectar mejor tus movimientos y obligaciones."
+          title="Aun no has creado contactos"
+        />
+      ) : filteredContacts.length === 0 ? (
+        <DataState
+          action={
+            <Button onClick={clearContactFilters} variant="ghost">
+              Limpiar filtros
+            </Button>
           }
-          title={contacts.length === 0 ? "Aun no has creado contactos" : "Sin resultados"}
+          description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna."
+          title="Sin resultados"
+        />
+      ) : viewMode === "list" ? (
+        <ContactList
+          baseCurrencyCode={baseCurrencyCode}
+          contacts={paginatedContacts}
+          onAnalytics={setAnalyticsContactId}
+          onEdit={openEditEditor}
+          onToggleSelect={toggleSelect}
+          selectedIds={selectedIds}
+        />
+      ) : viewMode === "table" ? (
+        <ContactTable
+          allSelected={allSelected}
+          baseCurrencyCode={baseCurrencyCode}
+          contacts={paginatedContacts}
+          cv={cv}
+          filters={contactFilters}
+          isArchiving={isArchiving}
+          onAnalytics={setAnalyticsContactId}
+          onApplyFilterAndClose={applyContactFilterAndClose}
+          onArchive={(contact, nextArchived) => void handleArchive(contact, nextArchived)}
+          onClearAll={clearAll}
+          onClearSingleFilter={clearSingleTableFilter}
+          onCloseFilterMenu={closeTableFilterMenu}
+          onEdit={openEditEditor}
+          onSelectAll={selectAll}
+          onToggleFilterMenu={toggleTableFilterMenu}
+          onToggleSelect={toggleSelect}
+          onUpdateFilter={updateContactFilter}
+          openFilter={openTableFilter}
+          selectedIds={selectedIds}
+          someSelected={someSelected}
         />
       ) : (
-        viewMode === "list" ? (
-          <div className="space-y-3">
-            {filteredContacts.map((contact) => {
-              const typeDefinition = getTypeDefinition(contact.type);
-              const TypeIcon = typeDefinition.icon;
-              return (
-                <article className="flex items-center gap-4 rounded-[22px] border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-white/16" key={contact.id}>
-                  <SelectionCheckbox ariaLabel={`Seleccionar ${contact.name}`} checked={selectedIds.has(contact.id)} onChange={() => toggleSelect(contact.id)} />
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
-                    <TypeIcon className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-ink">{contact.name}</p>
-                    <p className="text-xs text-storm">{typeDefinition.label}{contact.roles.length > 0 ? ` · ${contact.roles.map((role) => getRoleDefinition(role).label).join(", ")}` : ""}</p>
-                  </div>
-                  <div className="hidden sm:flex flex-col text-right shrink-0">
-                    <p className="text-sm font-medium text-pine">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</p>
-                    <p className="text-xs text-storm">por cobrar</p>
-                  </div>
-                  {contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}
-                  <Button className="py-1.5 text-xs shrink-0" onClick={() => setAnalyticsContactId(contact.id)} variant="ghost">Análisis</Button>
-                  <Button className="py-1.5 text-xs shrink-0" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
-                </article>
-              );
-            })}
-          </div>
-        ) : viewMode === "table" ? (
-          <div className="overflow-x-auto rounded-[24px] border border-white/10">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.02]">
-                  <th className="w-10 px-4 py-3.5">
-                    <SelectionCheckbox
-                      ariaLabel="Seleccionar todos"
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      onChange={allSelected ? clearAll : selectAll}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Contacto</th>
-                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("tipo", "hidden sm:table-cell")}`}>Tipo</th>
-                  <th className={`px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("roles", "hidden lg:table-cell")}`}>Roles</th>
-                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_cobrar", "hidden md:table-cell")}`}>Por cobrar</th>
-                  <th className={`px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 ${cv("por_pagar", "hidden md:table-cell")}`}>Por pagar</th>
-                  <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
-                  <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
-                </tr>
-                <tr className="border-b border-white/10 bg-[#0c1522]">
-                  <th className="px-4 py-3" />
-                  <th className="px-5 py-3">
-                    <input
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateContactFilter("name", event.target.value)}
-                      placeholder="Filtrar contacto"
-                      type="text"
-                      value={contactFilters.name}
-                    />
-                  </th>
-                  <th className={`px-5 py-3 ${cv("tipo", "hidden sm:table-cell")}`}>
-                    <SearchablePicker
-                      emptyMessage="No encontramos tipos con ese filtro."
-                      onChange={(value) =>
-                        updateContactFilter("type", value as ContactTableFilters["type"])
-                      }
-                      options={contactTypeFilterOptions}
-                      placeholderDescription="Incluye personas, empresas, comercios y bancos."
-                      placeholderLabel="Todos los tipos"
-                      queryPlaceholder="Buscar tipo..."
-                      value={contactFilters.type}
-                    />
-                  </th>
-                  <th className={`px-5 py-3 ${cv("roles", "hidden lg:table-cell")}`}>
-                    <SearchablePicker
-                      emptyMessage="No encontramos roles con ese filtro."
-                      onChange={(value) => updateContactFilter("role", value as RoleFilter)}
-                      options={contactRoleFilterOptions}
-                      placeholderDescription="Incluye cualquier rol asignado."
-                      placeholderLabel="Todos los roles"
-                      queryPlaceholder="Buscar rol..."
-                      value={contactFilters.role}
-                    />
-                  </th>
-                  <th className={`px-5 py-3 ${cv("por_cobrar", "hidden md:table-cell")}`}>
-                    <input
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateContactFilter("receivable", event.target.value)}
-                      placeholder="Por cobrar"
-                      type="text"
-                      value={contactFilters.receivable}
-                    />
-                  </th>
-                  <th className={`px-5 py-3 ${cv("por_pagar", "hidden md:table-cell")}`}>
-                    <input
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-right text-xs text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a]"
-                      onChange={(event) => updateContactFilter("payable", event.target.value)}
-                      placeholder="Por pagar"
-                      type="text"
-                      value={contactFilters.payable}
-                    />
-                  </th>
-                  <th className="px-5 py-3">
-                    <SearchablePicker
-                      emptyMessage="No encontramos estados con ese filtro."
-                      onChange={(value) => updateContactFilter("status", value as ContactStatusFilter)}
-                      options={contactStatusFilterOptions}
-                      placeholderDescription="Contactos disponibles para nuevos registros."
-                      placeholderLabel="Activos"
-                      queryPlaceholder="Buscar estado..."
-                      value={contactFilters.status}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-right">
-                    {hasActiveFilters ? (
-                      <button
-                        className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-storm transition hover:border-white/16 hover:text-ink"
-                        onClick={clearContactFilters}
-                        type="button"
-                      >
-                        Limpiar
-                      </button>
-                    ) : null}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredContacts.map((contact, index) => {
-                  const typeDefinition = getTypeDefinition(contact.type);
-                  const TypeIcon = typeDefinition.icon;
-                  return (
-                    <tr className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === filteredContacts.length - 1 ? "border-b-0" : ""}`} key={contact.id}>
-                      <td className="w-10 px-4 py-3.5">
-                        <SelectionCheckbox
-                          ariaLabel={`Seleccionar ${contact.name}`}
-                          checked={selectedIds.has(contact.id)}
-                          onChange={() => toggleSelect(contact.id)}
-                        />
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}>
-                            <TypeIcon className="h-3.5 w-3.5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-ink">{contact.name}</p>
-                            <p className="truncate text-xs text-storm">
-                              {contact.email ?? contact.phone ?? contact.documentNumber ?? "Sin contacto rapido"}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}><StatusBadge status={typeDefinition.label} tone="neutral" /></td>
-                      <td className={`px-5 py-3.5 ${cv("roles", "hidden lg:table-cell")}`}>
-                        <p className="text-xs text-storm">
-                          {contact.roles.length > 0
-                            ? contact.roles.map((role) => getRoleDefinition(role).label).join(", ")
-                            : "Sin roles"}
-                        </p>
-                      </td>
-                      <td className={`px-5 py-3.5 text-right text-storm ${cv("por_cobrar", "hidden md:table-cell")}`}>{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</td>
-                      <td className={`px-5 py-3.5 text-right text-storm ${cv("por_pagar", "hidden md:table-cell")}`}>{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</td>
-                      <td className="px-5 py-3.5">{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}</td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button className="py-1.5 text-xs" onClick={() => setAnalyticsContactId(contact.id)} variant="ghost">Análisis</Button>
-                          <Button className="py-1.5 text-xs" onClick={() => openEditEditor(contact)} variant="ghost">Editar</Button>
-                          <Button className="py-1.5 text-xs" disabled={isArchiving} onClick={() => { void handleArchive(contact, !contact.isArchived); }} variant="ghost">{contact.isArchived ? "Reactivar" : "Archivar"}</Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-        <section className="grid gap-6 xl:grid-cols-2">
-          {filteredContacts.map((contact) => {
-            const typeDefinition = getTypeDefinition(contact.type);
-            const TypeIcon = typeDefinition.icon;
-            const hasNetPositive = contact.receivablePendingInBase >= contact.payablePendingInBase;
-            const isSelected = selectedIds.has(contact.id);
-            const longPressHandlers = createLongPressHandlers(() => toggleSelect(contact.id));
-
-            return (
-              <div
-                className={`relative ${isSelected ? "ring-2 ring-pine/30 rounded-[32px]" : ""}`}
-                key={contact.id}
-                onClick={(e) => {
-                  if (wasRecentLongPress()) return;
-                  if (selectedCount === 0) return;
-                  if (e.target instanceof HTMLElement && e.target.closest('button, a, input, label, [role="button"]')) return;
-                  toggleSelect(contact.id);
-                }}
-                {...longPressHandlers}
-              >
-              <SurfaceCard action={<div className="flex flex-wrap gap-2"><StatusBadge status={typeDefinition.label} tone="neutral" />{contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : null}</div>} className="glass-panel animate-rise-in rounded-[32px] p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/20" description={contact.roles.length > 0 ? contact.roles.map((role) => getRoleDefinition(role).label).join(" · ") : "Sin roles definidos aun"} title={contact.name}>
-                <div className="space-y-5">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-white/10 text-white" style={{ background: `linear-gradient(160deg, ${typeDefinition.color}, rgba(8,13,20,0.72))` }}><TypeIcon className="h-6 w-6" /></div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap gap-2">{contact.roles.length > 0 ? contact.roles.map((role) => <StatusBadge key={role} status={getRoleDefinition(role).label} tone={getRoleDefinition(role).tone} />) : <StatusBadge status="Sin roles" tone="neutral" />}</div>
-                      <div className="mt-4 grid gap-2 text-sm text-storm">
-                        {contact.phone ? <div className="flex items-center gap-2"><Phone className="h-4 w-4" /><span>{contact.phone}</span></div> : null}
-                        {contact.email ? <div className="flex items-center gap-2"><Mail className="h-4 w-4" /><span className="truncate">{contact.email}</span></div> : null}
-                        {contact.documentNumber ? <div className="flex items-center gap-2"><Fingerprint className="h-4 w-4" /><span>{contact.documentNumber}</span></div> : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Por cobrar</p><p className="mt-2 font-display text-3xl font-semibold text-ink">{formatCurrency(contact.receivablePendingInBase, baseCurrencyCode)}</p></div>
-                    <div className="glass-panel-soft rounded-[26px] p-4"><p className="text-xs uppercase tracking-[0.18em] text-storm">Por pagar</p><p className="mt-2 font-display text-3xl font-semibold text-ink">{formatCurrency(contact.payablePendingInBase, baseCurrencyCode)}</p></div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"><p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Balance neto</p><p className="mt-3 text-sm font-medium text-ink">{hasNetPositive ? "Mas a tu favor" : "Mas a tu cargo"}</p></div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"><p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Registros</p><p className="mt-3 text-sm font-medium text-ink">{contact.receivableCount + contact.payableCount} creditos/deudas</p></div>
-                    <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"><p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Ultima actividad</p><p className="mt-3 text-sm font-medium text-ink">{getLastActivityLabel(contact.lastActivityAt)}</p></div>
-                  </div>
-
-                  {contact.notes ? <div className="rounded-[24px] border border-white/10 bg-black/15 p-4"><p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">Notas</p><p className="mt-2 text-sm leading-7 text-storm">{contact.notes}</p></div> : null}
-                  <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
-                    <Button onClick={() => setAnalyticsContactId(contact.id)} variant="ghost"><BarChart3 className="mr-2 h-4 w-4" />Ver análisis</Button>
-                    <Button onClick={() => openEditEditor(contact)} variant="secondary"><PencilLine className="mr-2 h-4 w-4" />Editar</Button>
-                    <Button disabled={isArchiving} onClick={() => { void handleArchive(contact, !contact.isArchived); }} variant="ghost">{contact.isArchived ? "Reactivar" : "Archivar"}</Button>
-                    <Button className="text-[#ffb4bc] hover:text-white" onClick={() => setDeleteTargetId(contact.id)} variant="ghost"><Trash2 className="mr-2 h-4 w-4" />Eliminar</Button>
-                  </div>
-                </div>
-              </SurfaceCard>
-              </div>
-            );
-          })}
-        </section>
-        )
+        <ContactGrid
+          baseCurrencyCode={baseCurrencyCode}
+          contacts={paginatedContacts}
+          isArchiving={isArchiving}
+          onAnalytics={setAnalyticsContactId}
+          onArchive={(contact, nextArchived) => void handleArchive(contact, nextArchived)}
+          onDelete={setDeleteTargetId}
+          onEdit={openEditEditor}
+          onToggleSelect={toggleSelect}
+          selectedCount={selectedCount}
+          selectedIds={selectedIds}
+        />
       )}
 
-      {analyticsContactId !== null ? (() => {
-        const analyticsContact = contactsWithExposure.find((c) => c.id === analyticsContactId);
-        return analyticsContact ? (
-          <ContactAnalyticsModal
-            baseCurrencyCode={baseCurrencyCode}
-            contact={analyticsContact}
-            movements={snapshot?.movements ?? []}
-            onClose={() => setAnalyticsContactId(null)}
-          />
-        ) : null;
-      })() : null}
+      {filteredContacts.length > 0 ? (
+        <Pagination onPageChange={setCurrentPage} page={safePage} pageSize={CONTACTS_PAGE_SIZE} totalItems={filteredContacts.length} />
+      ) : null}
+
+      {analyticsContactId !== null
+        ? (() => {
+            const analyticsContact = contactsWithExposure.find((c) => c.id === analyticsContactId);
+            return analyticsContact ? (
+              <ContactAnalyticsModal
+                baseCurrencyCode={baseCurrencyCode}
+                contact={analyticsContact}
+                movements={snapshot?.movements ?? []}
+                onClose={() => setAnalyticsContactId(null)}
+              />
+            ) : null;
+          })()
+        : null}
 
       <BulkActionBar
         deleteLabel="Archivar"
@@ -1519,7 +1043,7 @@ export function ContactsPage() {
       />
       {showBulkDeleteConfirm ? (
         <div role="dialog" aria-modal="true" aria-labelledby="contact-bulk-title" className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d1520] p-6">
+          <div className="glass-panel-strong w-full max-w-md rounded-[28px] p-6">
             <h2 id="contact-bulk-title" className="font-display text-xl font-semibold text-ink">
               Archivar {selectedCount} contacto{selectedCount !== 1 ? "s" : ""}?
             </h2>
@@ -1538,15 +1062,57 @@ export function ContactsPage() {
         </div>
       ) : null}
 
-      {isEditorOpen ? <ContactEditorDialog clearFieldError={clearFieldError} closeEditor={requestCloseEditor} feedback={feedback} formState={formState} invalidFields={invalidFields} isCreateMode={editorMode === "create"} isSaving={isSavingEditor} onSubmit={handleSubmitEditor} updateFormState={updateFormState} /> : null}
+      {isEditorOpen ? (
+        <ContactEditorDialog
+          clearFieldError={clearFieldError}
+          closeEditor={requestCloseEditor}
+          feedback={feedback}
+          formState={formState}
+          invalidFields={invalidFields}
+          isCreateMode={editorMode === "create"}
+          isSaving={isSavingEditor}
+          onSubmit={handleSubmitEditor}
+          updateFormState={updateFormState}
+        />
+      ) : null}
 
       {showUnsavedDialog ? (
         <UnsavedChangesDialog
-          onDiscard={() => { setShowUnsavedDialog(false); closeEditor(); }}
+          onDiscard={() => {
+            setShowUnsavedDialog(false);
+            closeEditor();
+          }}
           onKeepEditing={() => setShowUnsavedDialog(false)}
         />
       ) : null}
-      {deleteTarget ? <DeleteDialog contact={deleteTarget} isDeleting={isDeleting} onCancel={() => { if (!isDeleting) { setDeleteTargetId(null); } }} onConfirm={() => { void handleDelete(); }} /> : null}
+
+      {deleteTarget ? (
+        <DeleteConfirmDialog
+          badge="Eliminar contacto"
+          description="Si este contacto ya se usa en movimientos, creditos, deudas o suscripciones, lo mas sano suele ser archivarlo."
+          isDeleting={isDeleting}
+          onCancel={() => {
+            if (!isDeleting) {
+              setDeleteTargetId(null);
+            }
+          }}
+          onConfirm={() => {
+            void handleDelete();
+          }}
+        >
+          <div>
+            <p className="text-lg font-semibold text-ink">{deleteTarget.name}</p>
+            <p className="mt-2 text-sm text-storm">{getTypeDefinition(deleteTarget.type).label}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {deleteTarget.roles.length > 0 ? (
+                deleteTarget.roles.map((role) => <StatusBadge key={role} status={getRoleDefinition(role).label} tone={getRoleDefinition(role).tone} />)
+              ) : (
+                <StatusBadge status="Sin roles" tone="neutral" />
+              )}
+            </div>
+          </div>
+        </DeleteConfirmDialog>
+      ) : null}
     </div>
   );
 }
