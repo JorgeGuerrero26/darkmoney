@@ -485,12 +485,7 @@ export function AccountsPage() {
       <div className="flex flex-col gap-6 pb-8">
         <AccountsModuleHeader />
 
-        <AccountSummaryStrip
-          accounts={accounts}
-          baseCurrencyCode={baseCurrencyCode}
-          isFetching={snapshotQuery.isFetching}
-          workspaceKind={snapshot.workspace.kind}
-        />
+        <AccountSummaryStrip accounts={accounts} baseCurrencyCode={baseCurrencyCode} />
 
         <AccountsToolbar
           availableCurrencyCodes={availableCurrencyCodes}
