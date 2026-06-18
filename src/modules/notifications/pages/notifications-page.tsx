@@ -31,7 +31,7 @@ import { NotificationCard } from "../components/notification-card";
 import { NotificationTable } from "../components/notification-table";
 import { useNotificationsFilters } from "../hooks/use-notifications-filters";
 import type { NotificationSourceFilter, NotificationStatusFilter } from "../lib/notifications-filters";
-import { sourceFilterPickerOptions, statusFilterPickerOptions } from "../lib/notifications-presenters";
+import { groupNotificationsByDate, sourceFilterPickerOptions, statusFilterPickerOptions } from "../lib/notifications-presenters";
 
 const NOTIFICATIONS_PAGE_SIZE = 50;
 
@@ -521,20 +521,27 @@ export function NotificationsPage() {
           someSelected={someSelected}
         />
       ) : (
-        <section className={viewMode === "grid" ? "grid gap-4 xl:grid-cols-2" : "grid gap-3"}>
-          {paginatedNotifications.map((notification) => (
-            <NotificationCard
-              acceptingId={acceptingId}
-              isUpdatingReadState={isUpdatingReadState}
-              key={notification.id}
-              notification={notification}
-              onAccept={(item) => void handleAcceptInvite(item)}
-              onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
-              onToggleSelect={toggleSelect}
-              selected={selectedIds.has(notification.id)}
-            />
+        <div className="space-y-6">
+          {groupNotificationsByDate(paginatedNotifications).map((group) => (
+            <section key={group.key}>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-storm/70">{group.label}</p>
+              <div className={viewMode === "grid" ? "grid gap-4 xl:grid-cols-2" : "grid gap-3"}>
+                {group.items.map((notification) => (
+                  <NotificationCard
+                    acceptingId={acceptingId}
+                    isUpdatingReadState={isUpdatingReadState}
+                    key={notification.id}
+                    notification={notification}
+                    onAccept={(item) => void handleAcceptInvite(item)}
+                    onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
+                    onToggleSelect={toggleSelect}
+                    selected={selectedIds.has(notification.id)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
-        </section>
+        </div>
       )}
 
       {filteredNotifications.length > 0 ? (

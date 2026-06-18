@@ -17,6 +17,60 @@ import {
 import type { ComponentType } from "react";
 
 import type { PickerOption } from "../../../components/ui/searchable-picker";
+import type { InboxNotification } from "../use-notification-inbox";
+
+const DAY_MS = 86_400_000;
+
+function startOfDayMs(value: string | number | Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+type NotificationDateGroup = {
+  key: "upcoming" | "today" | "yesterday" | "week" | "older";
+  label: string;
+  items: InboxNotification[];
+};
+
+const groupOrder: NotificationDateGroup["key"][] = ["upcoming", "today", "yesterday", "week", "older"];
+const groupLabels: Record<NotificationDateGroup["key"], string> = {
+  upcoming: "Próximas",
+  today: "Hoy",
+  yesterday: "Ayer",
+  week: "Esta semana",
+  older: "Antes",
+};
+
+/** Agrupa por fecha programada en cubetas legibles, preservando el orden de entrada. */
+export function groupNotificationsByDate(notifications: InboxNotification[]): NotificationDateGroup[] {
+  const today = startOfDayMs(new Date());
+  const buckets = new Map<NotificationDateGroup["key"], InboxNotification[]>();
+
+  for (const notification of notifications) {
+    const day = startOfDayMs(notification.scheduledFor);
+    let key: NotificationDateGroup["key"];
+    if (day > today) {
+      key = "upcoming";
+    } else if (day === today) {
+      key = "today";
+    } else if (day === today - DAY_MS) {
+      key = "yesterday";
+    } else if (day > today - 7 * DAY_MS) {
+      key = "week";
+    } else {
+      key = "older";
+    }
+
+    const list = buckets.get(key) ?? [];
+    list.push(notification);
+    buckets.set(key, list);
+  }
+
+  return groupOrder
+    .filter((key) => (buckets.get(key)?.length ?? 0) > 0)
+    .map((key) => ({ key, label: groupLabels[key], items: buckets.get(key) as InboxNotification[] }));
+}
 
 export function getNotificationKindIcon(kind: string): ComponentType<{ className?: string }> {
   switch (kind) {
