@@ -16,6 +16,8 @@ import { isActionRequiredNotificationKind, useNotificationInbox, type InboxNotif
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
+  useAcceptObligationShareMutation,
+  useAcceptWorkspaceInvitationMutation,
   useCurrentUserEntitlementQuery,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -23,6 +25,8 @@ import {
   usePendingNotificationInvitesQuery,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
+import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { NotificationCard } from "../components/notification-card";
 import { NotificationTable } from "../components/notification-table";
 import { useNotificationsFilters } from "../hooks/use-notifications-filters";
@@ -72,6 +76,8 @@ export function NotificationsPage() {
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllReadMutation = useMarkAllNotificationsReadMutation(user?.id);
   const markSingleReadMutation = useMarkNotificationReadMutation(user?.id);
+  const acceptObligationShareMutation = useAcceptObligationShareMutation(user?.id);
+  const acceptWorkspaceInvitationMutation = useAcceptWorkspaceInvitationMutation(user?.id);
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
   const {
     filters,
@@ -199,6 +205,47 @@ export function NotificationsPage() {
   }, [inbox.notifications]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; title: string; description: string } | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  useSuccessToast(feedback, { clear: () => setFeedback(null) });
+
+  async function handleAcceptInvite(notification: InboxNotification) {
+    const token = notification.href.split("/").filter(Boolean).pop() ?? "";
+    if (!token) {
+      return;
+    }
+
+    const isWorkspaceInvite =
+      notification.kind === "workspace_invite" || notification.href.includes("/share/workspaces/");
+
+    setAcceptingId(notification.id);
+    setFeedback(null);
+    try {
+      if (isWorkspaceInvite) {
+        await acceptWorkspaceInvitationMutation.mutateAsync(token);
+        setFeedback({
+          tone: "success",
+          title: "Invitacion aceptada",
+          description: "Ya tienes acceso al workspace compartido.",
+        });
+      } else {
+        const result = await acceptObligationShareMutation.mutateAsync(token);
+        setFeedback({
+          tone: "success",
+          title: result.alreadyAccepted ? "Acceso ya confirmado" : "Invitacion aceptada",
+          description: "El credito o deuda compartido ya esta disponible en tu cartera.",
+        });
+      }
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: "No pudimos aceptar la invitacion",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    } finally {
+      setAcceptingId(null);
+    }
+  }
 
   // Limpia de la selección los ids que ya no existen (p. ej. tras marcar leídas).
   useEffect(() => {
@@ -376,6 +423,10 @@ export function NotificationsPage() {
         </div>
       </section>
 
+      {feedback?.tone === "error" ? (
+        <FormFeedbackBanner description={feedback.description} title={feedback.title} />
+      ) : null}
+
       {notificationsQuery.isLoading && !notificationsQuery.data && snapshotQuery.isLoading ? (
         <DataState
           description="Estamos reuniendo tu bandeja guardada y los recordatorios del workspace activo."
@@ -407,11 +458,13 @@ export function NotificationsPage() {
         <NotificationTable
           availableChannels={availableChannels}
           availableKinds={availableKinds}
+          acceptingId={acceptingId}
           allSelected={allSelected}
           cv={cv}
           filters={filters}
           isUpdatingReadState={isUpdatingReadState}
           notifications={paginatedNotifications}
+          onAccept={(notification) => void handleAcceptInvite(notification)}
           onApplyFilterAndClose={applyFilterAndClose}
           onClearSingleFilter={clearSingleTableFilter}
           onCloseFilterMenu={closeTableFilterMenu}
@@ -428,9 +481,11 @@ export function NotificationsPage() {
         <section className={viewMode === "grid" ? "grid gap-4 xl:grid-cols-2" : "grid gap-3"}>
           {paginatedNotifications.map((notification) => (
             <NotificationCard
+              acceptingId={acceptingId}
               isUpdatingReadState={isUpdatingReadState}
               key={notification.id}
               notification={notification}
+              onAccept={(item) => void handleAcceptInvite(item)}
               onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
               onToggleSelect={toggleSelect}
               selected={selectedIds.has(notification.id)}

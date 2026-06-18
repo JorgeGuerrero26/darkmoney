@@ -16,11 +16,21 @@ type NotificationCardProps = {
   notification: InboxNotification;
   isUpdatingReadState: boolean;
   selected: boolean;
+  acceptingId: string | null;
   onToggleSelect: (id: string) => void;
+  onAccept: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
 };
 
-export function NotificationCard({ notification, isUpdatingReadState, selected, onToggleSelect, onMarkRead }: NotificationCardProps) {
+export function NotificationCard({
+  notification,
+  isUpdatingReadState,
+  selected,
+  acceptingId,
+  onToggleSelect,
+  onAccept,
+  onMarkRead,
+}: NotificationCardProps) {
   const canMarkRead =
     notification.status !== "read" &&
     !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
@@ -66,11 +76,16 @@ export function NotificationCard({ notification, isUpdatingReadState, selected, 
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {hasInviteAction ? (
+              <Button disabled={acceptingId === notification.id} onClick={() => onAccept(notification)}>
+                {acceptingId === notification.id ? "Aceptando..." : "Aceptar"}
+              </Button>
+            ) : null}
             <Link
               className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
               to={notification.href}
             >
-              {hasInviteAction ? "Abrir invitacion" : "Ir al modulo"}
+              {hasInviteAction ? "Ver detalle" : "Ir al modulo"}
             </Link>
             {canMarkRead ? (
               <Button disabled={isUpdatingReadState} onClick={() => onMarkRead(notification.id, notification.databaseId)} variant="ghost">

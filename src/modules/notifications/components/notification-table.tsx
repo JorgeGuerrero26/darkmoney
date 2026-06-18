@@ -51,8 +51,10 @@ type NotificationTableProps = {
   selectedIds: Set<string>;
   allSelected: boolean;
   someSelected: boolean;
+  acceptingId: string | null;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
+  onAccept: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
   cv: ColumnVisibilityFn;
   filters: NotificationTableFilters;
@@ -72,8 +74,10 @@ export function NotificationTable({
   selectedIds,
   allSelected,
   someSelected,
+  acceptingId,
   onToggleSelect,
   onToggleSelectAll,
+  onAccept,
   onMarkRead,
   cv,
   filters,
@@ -277,11 +281,16 @@ export function NotificationTable({
                 </td>
                 <td className="px-5 py-4 align-top">
                   <div className="flex justify-end gap-2">
+                    {hasInviteAction ? (
+                      <Button className="py-1.5 text-xs" disabled={acceptingId === notification.id} onClick={() => onAccept(notification)}>
+                        {acceptingId === notification.id ? "Aceptando..." : "Aceptar"}
+                      </Button>
+                    ) : null}
                     <Link
                       className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
                       to={notification.href}
                     >
-                      {hasInviteAction ? "Abrir" : "Ir"}
+                      {hasInviteAction ? "Ver" : "Ir"}
                     </Link>
                     {canMarkRead ? (
                       <Button disabled={isUpdatingReadState} onClick={() => onMarkRead(notification.id, notification.databaseId)} variant="ghost">
