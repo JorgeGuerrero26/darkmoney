@@ -1,7 +1,7 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, PencilLine, Power } from "lucide-react";
 
-import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import type { CategoryOverview } from "../../../types/domain";
@@ -250,18 +250,16 @@ export function CategoryTable({
                 <td className={`px-5 py-3.5 text-right text-storm ${cv("movimientos", "hidden md:table-cell")}`}>{category.movementCount}</td>
                 <td className={`px-5 py-3.5 text-right text-storm ${cv("suscripciones", "hidden xl:table-cell")}`}>{category.subscriptionCount}</td>
                 <td className="px-5 py-3.5 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button className="py-1.5 text-xs" onClick={() => onAnalytics(category.id)} variant="ghost">
-                      <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                      Análisis
-                    </Button>
-                    <Button className="py-1.5 text-xs" onClick={() => onEdit(category)} variant="ghost">
-                      Editar
-                    </Button>
-                    <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => onToggleCategory(category)} variant="ghost">
-                      {category.isActive ? "Desactivar" : "Reactivar"}
-                    </Button>
-                  </div>
+                  <RowActions>
+                    <RowActionButton icon={BarChart3} label="Análisis" onClick={() => onAnalytics(category.id)} />
+                    <RowActionButton icon={PencilLine} label="Editar" onClick={() => onEdit(category)} />
+                    <RowActionButton
+                      disabled={isToggling}
+                      icon={Power}
+                      label={category.isActive ? "Desactivar" : "Reactivar"}
+                      onClick={() => onToggleCategory(category)}
+                    />
+                  </RowActions>
                 </td>
               </tr>
             );

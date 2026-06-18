@@ -1,5 +1,7 @@
-import { Button } from "../../../components/ui/button";
+import { Archive, BarChart3, PencilLine } from "lucide-react";
+
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -266,17 +268,16 @@ export function ContactTable({
                   {contact.isArchived ? <StatusBadge status="Archivado" tone="warning" /> : <StatusBadge status="Activo" tone="success" />}
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button className="py-1.5 text-xs" onClick={() => onAnalytics(contact.id)} variant="ghost">
-                      Análisis
-                    </Button>
-                    <Button className="py-1.5 text-xs" onClick={() => onEdit(contact)} variant="ghost">
-                      Editar
-                    </Button>
-                    <Button className="py-1.5 text-xs" disabled={isArchiving} onClick={() => onArchive(contact, !contact.isArchived)} variant="ghost">
-                      {contact.isArchived ? "Reactivar" : "Archivar"}
-                    </Button>
-                  </div>
+                  <RowActions>
+                    <RowActionButton icon={BarChart3} label="Análisis" onClick={() => onAnalytics(contact.id)} />
+                    <RowActionButton icon={PencilLine} label="Editar" onClick={() => onEdit(contact)} />
+                    <RowActionButton
+                      disabled={isArchiving}
+                      icon={Archive}
+                      label={contact.isArchived ? "Reactivar" : "Archivar"}
+                      onClick={() => onArchive(contact, !contact.isArchived)}
+                    />
+                  </RowActions>
                 </td>
               </tr>
             );

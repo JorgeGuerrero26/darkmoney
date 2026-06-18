@@ -1,5 +1,7 @@
-import { Button } from "../../../components/ui/button";
+import { BarChart3, Eye } from "lucide-react";
+
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -251,14 +253,10 @@ export function ObligationTable({
                   <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button className="py-1.5 text-xs" onClick={() => onAnalytics(obligation.id)} variant="ghost">
-                      Análisis
-                    </Button>
-                    <Button className="py-1.5 text-xs" onClick={() => onEdit(obligation)} variant="ghost">
-                      Ver
-                    </Button>
-                  </div>
+                  <RowActions>
+                    <RowActionButton icon={BarChart3} label="Análisis" onClick={() => onAnalytics(obligation.id)} />
+                    <RowActionButton icon={Eye} label="Ver" onClick={() => onEdit(obligation)} />
+                  </RowActions>
                 </td>
               </tr>
             );

@@ -1,6 +1,7 @@
 import { Archive, BarChart3, Pencil } from "lucide-react";
 
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import {
   TableColumnFilterMenu,
@@ -227,32 +228,15 @@ export function AccountsTable({
                     {formatDateTime(account.lastActivity)}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-60 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
-                      <button
-                        aria-label={`Analizar ${account.name}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
-                        onClick={() => onOpenAnalytics(account)}
-                        type="button"
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        aria-label={`Editar ${account.name}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
-                        onClick={() => onEdit(account)}
-                        type="button"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        aria-label={account.isArchived ? `Reactivar ${account.name}` : `Archivar ${account.name}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl text-storm transition hover:bg-white/[0.06] hover:text-ink focus-visible:bg-white/[0.06] focus-visible:text-ink focus-visible:outline-none"
+                    <RowActions>
+                      <RowActionButton icon={BarChart3} label={`Analizar ${account.name}`} onClick={() => onOpenAnalytics(account)} />
+                      <RowActionButton icon={Pencil} label={`Editar ${account.name}`} onClick={() => onEdit(account)} />
+                      <RowActionButton
+                        icon={Archive}
+                        label={account.isArchived ? `Reactivar ${account.name}` : `Archivar ${account.name}`}
                         onClick={() => onArchive(account)}
-                        type="button"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </button>
-                    </div>
+                      />
+                    </RowActions>
                   </td>
                 </tr>
               );

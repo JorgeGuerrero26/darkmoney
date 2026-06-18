@@ -1,7 +1,7 @@
-import { CheckCircle2, History } from "lucide-react";
+import { CheckCircle2, History, PencilLine } from "lucide-react";
 
-import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
@@ -293,20 +293,13 @@ export function RecurringIncomeTable({
                   <StatusBadge status={statusOption.label} tone={getStatusTone(item.status)} />
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <div className="flex justify-end gap-2">
+                  <RowActions>
                     {item.status === "active" ? (
-                      <Button className="py-1.5 text-xs" onClick={() => onConfirm(item.id)} variant="ghost">
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                        Confirmar
-                      </Button>
+                      <RowActionButton icon={CheckCircle2} label="Confirmar" onClick={() => onConfirm(item.id)} />
                     ) : null}
-                    <Button className="py-1.5 text-xs" onClick={() => onHistory(item.id)} variant="ghost">
-                      <History className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button className="py-1.5 text-xs" onClick={() => onEdit(item)} variant="ghost">
-                      Editar
-                    </Button>
-                  </div>
+                    <RowActionButton icon={History} label="Historial" onClick={() => onHistory(item.id)} />
+                    <RowActionButton icon={PencilLine} label="Editar" onClick={() => onEdit(item)} />
+                  </RowActions>
                 </td>
               </tr>
             );

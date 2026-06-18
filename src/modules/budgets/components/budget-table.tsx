@@ -1,5 +1,7 @@
-import { Button } from "../../../components/ui/button";
+import { BarChart3, PencilLine, Power } from "lucide-react";
+
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { formatDate } from "../../../lib/formatting/dates";
@@ -260,17 +262,16 @@ export function BudgetTable({
                 <StatusBadge status={getBudgetStatusLabel(budget)} tone={getBudgetTone(budget)} />
               </td>
               <td className="px-5 py-3.5 text-right">
-                <div className="flex justify-end gap-2">
-                  <Button className="py-1.5 text-xs" onClick={() => onAnalytics(budget.id)} variant="ghost">
-                    Análisis
-                  </Button>
-                  <Button className="py-1.5 text-xs" onClick={() => onEdit(budget)} variant="ghost">
-                    Editar
-                  </Button>
-                  <Button className="py-1.5 text-xs" disabled={isToggling} onClick={() => onToggleBudget(budget)} variant="ghost">
-                    {budget.isActive ? "Desactivar" : "Activar"}
-                  </Button>
-                </div>
+                <RowActions>
+                  <RowActionButton icon={BarChart3} label="Análisis" onClick={() => onAnalytics(budget.id)} />
+                  <RowActionButton icon={PencilLine} label="Editar" onClick={() => onEdit(budget)} />
+                  <RowActionButton
+                    disabled={isToggling}
+                    icon={Power}
+                    label={budget.isActive ? "Desactivar" : "Activar"}
+                    onClick={() => onToggleBudget(budget)}
+                  />
+                </RowActions>
               </td>
             </tr>
           ))}

@@ -1,5 +1,7 @@
-import { Button } from "../../../components/ui/button";
+import { Eye } from "lucide-react";
+
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
 import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
@@ -340,9 +342,9 @@ export function MovementsTable({
                   {formatDateTime(movement.occurredAt)}
                 </td>
                 <td className="px-5 py-3.5 text-right">
-                  <Button className="py-1.5 text-xs" onClick={() => onOpen(movement)} variant="ghost">
-                    Ver
-                  </Button>
+                  <RowActions>
+                    <RowActionButton icon={Eye} label="Ver" onClick={() => onOpen(movement)} />
+                  </RowActions>
                 </td>
               </tr>
             );
