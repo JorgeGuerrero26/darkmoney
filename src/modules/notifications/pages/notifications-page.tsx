@@ -428,10 +428,11 @@ export function NotificationsPage() {
       ) : null}
 
       {notificationsQuery.isLoading && !notificationsQuery.data && snapshotQuery.isLoading ? (
-        <DataState
-          description="Estamos reuniendo tu bandeja guardada y los recordatorios del workspace activo."
-          title="Preparando notificaciones"
-        />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div className="shimmer-surface h-[96px] rounded-[24px]" key={index} />
+          ))}
+        </div>
       ) : notificationsQuery.error ? (
         <DataState
           description={getQueryErrorMessage(notificationsQuery.error, "No pudimos leer las notificaciones guardadas.")}
@@ -449,10 +450,10 @@ export function NotificationsPage() {
           }
           description={
             inbox.notifications.length === 0
-              ? "Aun no hay alertas guardadas ni recordatorios inteligentes activos."
+              ? "Sin alertas pendientes ni recordatorios activos. Te avisamos cuando algo necesite tu atencion."
               : "No hubo coincidencias con el filtro o la busqueda actual."
           }
-          title={inbox.notifications.length === 0 ? "Tu bandeja esta vacia" : "No encontramos coincidencias"}
+          title={inbox.notifications.length === 0 ? "Estas al dia 🎉" : "No encontramos coincidencias"}
         />
       ) : viewMode === "table" ? (
         <NotificationTable
