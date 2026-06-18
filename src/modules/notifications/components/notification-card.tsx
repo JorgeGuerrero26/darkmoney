@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import type { MouseEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
@@ -51,9 +52,23 @@ export function NotificationCard({
     notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
   const KindIcon = getNotificationKindIcon(notification.kind);
   const ChannelIcon = getNotificationChannelIcon(notification.channel);
+  const navigate = useNavigate();
+
+  function handleCardClick(event: MouseEvent<HTMLElement>) {
+    if (event.target instanceof HTMLElement && event.target.closest('button, a, input, label, [role="button"]')) {
+      return;
+    }
+    if (canMarkRead) {
+      onMarkRead(notification.id, notification.databaseId);
+    }
+    navigate(notification.href);
+  }
 
   return (
-    <article className={`rounded-[24px] border p-5 transition ${getToneClasses(notification.tone)} ${selected ? "ring-2 ring-pine/30" : ""}`}>
+    <article
+      className={`cursor-pointer rounded-[24px] border p-5 transition hover:border-white/20 ${getToneClasses(notification.tone)} ${selected ? "ring-2 ring-pine/30" : ""}`}
+      onClick={handleCardClick}
+    >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex gap-3">
           <SelectionCheckbox
