@@ -80,6 +80,11 @@ export function NotificationsPage() {
   const acceptWorkspaceInvitationMutation = useAcceptWorkspaceInvitationMutation(user?.id);
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
   const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read">("all");
+  const [liveMessage, setLiveMessage] = useState("");
+
+  function announce(count: number) {
+    setLiveMessage(count === 1 ? "1 notificacion marcada como leida." : `${count} notificaciones marcadas como leidas.`);
+  }
   const {
     filters,
     currentPage,
@@ -216,6 +221,7 @@ export function NotificationsPage() {
     if (smartIds.length > 0) {
       inbox.markSmartNotificationsAsRead(smartIds);
     }
+    announce(databaseIds.length + smartIds.length);
   }
 
   const isUpdatingReadState = markAllReadMutation.isPending || markSingleReadMutation.isPending;
@@ -229,6 +235,7 @@ export function NotificationsPage() {
     if (inbox.unreadSmartCount > 0) {
       inbox.markSmartNotificationsAsRead();
     }
+    announce(inbox.unreadCount);
   }
 
   async function handleMarkOneRead(notificationId: string, databaseId?: number) {
@@ -373,11 +380,16 @@ export function NotificationsPage() {
       inbox.markSmartNotificationsAsRead(smartIds);
     }
 
+    announce(databaseIds.length + smartIds.length);
     clearSelection();
   }
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      <p aria-live="polite" className="sr-only">
+        {liveMessage}
+      </p>
+
       {/* Header compacto (estándar) */}
       <section className="min-w-0">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Notificaciones</p>
