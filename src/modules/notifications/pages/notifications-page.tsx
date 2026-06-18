@@ -384,6 +384,35 @@ export function NotificationsPage() {
     clearSelection();
   }
 
+  // Atajos: Esc limpia la selección, R marca leídas las seleccionadas.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        (target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable))
+      ) {
+        return;
+      }
+
+      if (event.key === "Escape" && selectedCount > 0) {
+        clearSelection();
+      } else if (event.key.toLowerCase() === "r" && selectedMarkableCount > 0) {
+        event.preventDefault();
+        void handleMarkSelectedRead();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedCount, selectedMarkableCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       <p aria-live="polite" className="sr-only">
