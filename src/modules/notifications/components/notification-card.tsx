@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import {
@@ -14,10 +15,12 @@ import { getNotificationSourceLabel, getToneClasses } from "../lib/notifications
 type NotificationCardProps = {
   notification: InboxNotification;
   isUpdatingReadState: boolean;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
 };
 
-export function NotificationCard({ notification, isUpdatingReadState, onMarkRead }: NotificationCardProps) {
+export function NotificationCard({ notification, isUpdatingReadState, selected, onToggleSelect, onMarkRead }: NotificationCardProps) {
   const canMarkRead =
     notification.status !== "read" &&
     !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
@@ -25,8 +28,14 @@ export function NotificationCard({ notification, isUpdatingReadState, onMarkRead
     notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
 
   return (
-    <article className={`rounded-[24px] border p-5 ${getToneClasses(notification.tone)}`}>
+    <article className={`rounded-[24px] border p-5 transition ${getToneClasses(notification.tone)} ${selected ? "ring-2 ring-pine/30" : ""}`}>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex gap-3">
+          <SelectionCheckbox
+            ariaLabel={`Seleccionar ${notification.title}`}
+            checked={selected}
+            onChange={() => onToggleSelect(notification.id)}
+          />
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge
@@ -44,6 +53,7 @@ export function NotificationCard({ notification, isUpdatingReadState, onMarkRead
             <p className="mt-3 max-w-3xl text-sm leading-7 text-storm">{notification.body}</p>
           </div>
           <p className="text-xs uppercase tracking-[0.18em] text-storm">{formatDateTime(notification.scheduledFor)}</p>
+        </div>
         </div>
 
         <div className="flex min-w-[220px] flex-col gap-3">

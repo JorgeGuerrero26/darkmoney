@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
@@ -47,6 +48,11 @@ type NotificationTableProps = {
   availableKinds: string[];
   availableChannels: string[];
   isUpdatingReadState: boolean;
+  selectedIds: Set<string>;
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: () => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
   cv: ColumnVisibilityFn;
   filters: NotificationTableFilters;
@@ -63,6 +69,11 @@ export function NotificationTable({
   availableKinds,
   availableChannels,
   isUpdatingReadState,
+  selectedIds,
+  allSelected,
+  someSelected,
+  onToggleSelect,
+  onToggleSelectAll,
   onMarkRead,
   cv,
   filters,
@@ -78,6 +89,14 @@ export function NotificationTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 bg-white/[0.02]">
+            <th className="w-10 px-4 py-3.5">
+              <SelectionCheckbox
+                ariaLabel="Seleccionar todas las notificaciones visibles"
+                checked={allSelected}
+                indeterminate={someSelected}
+                onChange={onToggleSelectAll}
+              />
+            </th>
             <th className={headerCellClassName}>
               <TableColumnFilterMenu
                 active={isNotificationTableFilterActive(filters, "title")}
@@ -218,6 +237,13 @@ export function NotificationTable({
                 className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === notifications.length - 1 ? "border-b-0" : ""} ${notification.status !== "read" ? "bg-white/[0.02]" : ""}`}
                 key={notification.id}
               >
+                <td className="w-10 px-4 py-4 align-top">
+                  <SelectionCheckbox
+                    ariaLabel={`Seleccionar ${notification.title}`}
+                    checked={selectedIds.has(notification.id)}
+                    onChange={() => onToggleSelect(notification.id)}
+                  />
+                </td>
                 <td className="px-5 py-4 align-top">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">

@@ -1,5 +1,5 @@
-import { CheckCheck, RefreshCw, X } from "lucide-react";
-import { useMemo } from "react";
+import { CheckCheck, CheckCircle2, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
@@ -12,7 +12,7 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { formatNotificationKindLabel } from "../../../lib/formatting/labels";
 import { useAuth } from "../../auth/auth-context";
-import { useNotificationInbox } from "../use-notification-inbox";
+import { isActionRequiredNotificationKind, useNotificationInbox, type InboxNotification } from "../use-notification-inbox";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
@@ -189,6 +189,101 @@ export function NotificationsPage() {
     inbox.markSmartNotificationsAsRead([notificationId]);
   }
 
+  // --- Selección múltiple + acciones masivas (web) ---
+  const notificationById = useMemo(() => {
+    const map = new Map<string, InboxNotification>();
+    for (const notification of inbox.notifications) {
+      map.set(notification.id, notification);
+    }
+    return map;
+  }, [inbox.notifications]);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Limpia de la selección los ids que ya no existen (p. ej. tras marcar leídas).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (notificationById.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [notificationById]);
+
+  const pageIds = paginatedNotifications.map((notification) => notification.id);
+  const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const someSelected = !allSelected && pageIds.some((id) => selectedIds.has(id));
+  const selectedCount = selectedIds.size;
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (pageIds.every((id) => next.has(id))) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  const selectedMarkableCount = Array.from(selectedIds).filter((id) => {
+    const notification = notificationById.get(id);
+    if (!notification || notification.status === "read") {
+      return false;
+    }
+    return !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
+  }).length;
+
+  async function handleMarkSelectedRead() {
+    const selected = Array.from(selectedIds)
+      .map((id) => notificationById.get(id))
+      .filter((notification): notification is InboxNotification => Boolean(notification));
+
+    const databaseIds = selected
+      .filter((notification) => notification.source === "database" && notification.status !== "read" && notification.databaseId)
+      .map((notification) => notification.databaseId as number);
+    const smartIds = selected
+      .filter(
+        (notification) =>
+          notification.source === "smart" &&
+          notification.status !== "read" &&
+          !isActionRequiredNotificationKind(notification.kind),
+      )
+      .map((notification) => notification.id);
+
+    for (const databaseId of databaseIds) {
+      await markSingleReadMutation.mutateAsync(databaseId);
+    }
+    if (smartIds.length > 0) {
+      inbox.markSmartNotificationsAsRead(smartIds);
+    }
+
+    clearSelection();
+  }
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       {/* Header compacto (estándar) */}
@@ -312,6 +407,7 @@ export function NotificationsPage() {
         <NotificationTable
           availableChannels={availableChannels}
           availableKinds={availableKinds}
+          allSelected={allSelected}
           cv={cv}
           filters={filters}
           isUpdatingReadState={isUpdatingReadState}
@@ -321,8 +417,12 @@ export function NotificationsPage() {
           onCloseFilterMenu={closeTableFilterMenu}
           onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
           onToggleFilterMenu={toggleTableFilterMenu}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
           onUpdateFilter={updateFilter}
           openFilter={openTableFilter}
+          selectedIds={selectedIds}
+          someSelected={someSelected}
         />
       ) : (
         <section className={viewMode === "grid" ? "grid gap-4 xl:grid-cols-2" : "grid gap-3"}>
@@ -332,6 +432,8 @@ export function NotificationsPage() {
               key={notification.id}
               notification={notification}
               onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
+              onToggleSelect={toggleSelect}
+              selected={selectedIds.has(notification.id)}
             />
           ))}
         </section>
@@ -344,6 +446,33 @@ export function NotificationsPage() {
           pageSize={NOTIFICATIONS_PAGE_SIZE}
           totalItems={filteredNotifications.length}
         />
+      ) : null}
+
+      {selectedCount > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="glass-panel-strong pointer-events-auto flex flex-wrap items-center gap-3 rounded-full border border-white/10 px-4 py-2.5 shadow-haze">
+            <span className="text-sm font-medium text-ink">
+              {selectedCount} seleccionada{selectedCount !== 1 ? "s" : ""}
+            </span>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-pine/25 bg-pine/10 px-3.5 py-1.5 text-sm font-semibold text-pine transition hover:bg-pine/15 disabled:opacity-40"
+              disabled={selectedMarkableCount === 0 || isUpdatingReadState}
+              onClick={() => void handleMarkSelectedRead()}
+              type="button"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Marcar leídas{selectedMarkableCount > 0 ? ` (${selectedMarkableCount})` : ""}
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-storm transition hover:border-white/16 hover:text-ink"
+              onClick={clearSelection}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+              Limpiar
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   );
