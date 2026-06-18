@@ -19,7 +19,7 @@ import {
   type NotificationTableFilterField,
   type NotificationTableFilters,
 } from "../lib/notifications-filters";
-import { getNotificationSourceLabel } from "../lib/notifications-presenters";
+import { getNotificationKindIcon, getNotificationSourceLabel } from "../lib/notifications-presenters";
 
 const filterInputClassName =
   "w-full rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
@@ -235,6 +235,7 @@ export function NotificationTable({
               !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
             const hasInviteAction =
               notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
+            const KindIcon = getNotificationKindIcon(notification.kind);
 
             return (
               <tr
@@ -249,7 +250,11 @@ export function NotificationTable({
                   />
                 </td>
                 <td className="px-5 py-4 align-top">
-                  <div className="space-y-2">
+                  <div className="flex gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.04] text-storm">
+                      <KindIcon className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-ink">{notification.title}</p>
                       {notification.status !== "read" ? (
@@ -259,6 +264,7 @@ export function NotificationTable({
                       ) : null}
                     </div>
                     <p className="max-w-[520px] text-sm leading-6 text-storm">{notification.body}</p>
+                  </div>
                   </div>
                 </td>
                 <td className={`px-5 py-4 align-top ${cv("tipo", "hidden md:table-cell")}`}>

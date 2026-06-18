@@ -1,4 +1,63 @@
+import {
+  ArrowLeftRight,
+  Banknote,
+  Bell,
+  BellRing,
+  CreditCard,
+  Crown,
+  Landmark,
+  Mail,
+  PiggyBank,
+  RefreshCw,
+  Scale,
+  ShieldCheck,
+  Sparkles,
+  UserPlus,
+} from "lucide-react";
+import type { ComponentType } from "react";
+
 import type { PickerOption } from "../../../components/ui/searchable-picker";
+
+export function getNotificationKindIcon(kind: string): ComponentType<{ className?: string }> {
+  switch (kind) {
+    case "budget":
+      return PiggyBank;
+    case "subscription":
+      return RefreshCw;
+    case "recurring_income":
+      return Banknote;
+    case "obligation":
+      return Scale;
+    case "obligation_share_invite":
+      return Mail;
+    case "workspace_invite":
+    case "invite":
+      return UserPlus;
+    case "quality":
+      return ShieldCheck;
+    case "account":
+      return Landmark;
+    case "movement":
+      return ArrowLeftRight;
+    case "billing":
+      return CreditCard;
+    case "plan":
+      return Crown;
+    default:
+      return Sparkles;
+  }
+}
+
+export function getNotificationChannelIcon(channel?: string | null): ComponentType<{ className?: string }> {
+  switch ((channel ?? "").trim()) {
+    case "email":
+      return Mail;
+    case "push":
+      return BellRing;
+    default:
+      return Bell;
+  }
+}
 
 export function buildFilterInitials(label: string) {
   return (

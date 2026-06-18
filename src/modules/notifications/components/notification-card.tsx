@@ -10,7 +10,20 @@ import {
   formatNotificationStatusLabel,
 } from "../../../lib/formatting/labels";
 import { isActionRequiredNotificationKind, type InboxNotification } from "../use-notification-inbox";
-import { getNotificationSourceLabel, getToneClasses } from "../lib/notifications-presenters";
+import {
+  getNotificationChannelIcon,
+  getNotificationKindIcon,
+  getNotificationSourceLabel,
+  getToneClasses,
+} from "../lib/notifications-presenters";
+
+const iconChipTone: Record<string, string> = {
+  success: "border-pine/20 bg-pine/10 text-pine",
+  warning: "border-gold/20 bg-gold/10 text-gold",
+  danger: "border-ember/20 bg-ember/10 text-ember",
+  info: "border-white/10 bg-white/[0.04] text-storm",
+  neutral: "border-white/10 bg-white/[0.04] text-storm",
+};
 
 type NotificationCardProps = {
   notification: InboxNotification;
@@ -36,6 +49,8 @@ export function NotificationCard({
     !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
   const hasInviteAction =
     notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
+  const KindIcon = getNotificationKindIcon(notification.kind);
+  const ChannelIcon = getNotificationChannelIcon(notification.channel);
 
   return (
     <article className={`rounded-[24px] border p-5 transition ${getToneClasses(notification.tone)} ${selected ? "ring-2 ring-pine/30" : ""}`}>
@@ -58,9 +73,14 @@ export function NotificationCard({
               tone={notification.source === "smart" ? "success" : "neutral"}
             />
           </div>
-          <div>
-            <p className="font-display text-2xl font-semibold text-ink">{notification.title}</p>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-storm">{notification.body}</p>
+          <div className="flex items-start gap-3">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] border ${iconChipTone[notification.tone] ?? iconChipTone.neutral}`}>
+              <KindIcon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-display text-2xl font-semibold text-ink">{notification.title}</p>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-storm">{notification.body}</p>
+            </div>
           </div>
           <p className="text-xs uppercase tracking-[0.18em] text-storm" title={formatDateTime(notification.scheduledFor)}>
             {formatRelativeTime(notification.scheduledFor)}
@@ -71,7 +91,10 @@ export function NotificationCard({
         <div className="flex min-w-[220px] flex-col gap-3">
           <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Canal</p>
-            <p className="mt-2 text-sm font-medium text-ink">{formatNotificationChannelLabel(notification.channel)}</p>
+            <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-ink">
+              <ChannelIcon className="h-3.5 w-3.5 text-storm" />
+              {formatNotificationChannelLabel(notification.channel)}
+            </p>
             <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm">
               {notification.readAt ? `Leida ${formatDateTime(notification.readAt)}` : "Pendiente"}
             </p>
