@@ -190,6 +190,34 @@ export function NotificationsPage() {
     setQuickFilter("all");
   }
 
+  const visibleUnreadCount = filteredNotifications.filter((notification) => {
+    if (notification.status === "read") {
+      return false;
+    }
+    return !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
+  }).length;
+
+  async function handleMarkVisibleRead() {
+    const databaseIds = filteredNotifications
+      .filter((notification) => notification.source === "database" && notification.status !== "read" && notification.databaseId)
+      .map((notification) => notification.databaseId as number);
+    const smartIds = filteredNotifications
+      .filter(
+        (notification) =>
+          notification.source === "smart" &&
+          notification.status !== "read" &&
+          !isActionRequiredNotificationKind(notification.kind),
+      )
+      .map((notification) => notification.id);
+
+    for (const databaseId of databaseIds) {
+      await markSingleReadMutation.mutateAsync(databaseId);
+    }
+    if (smartIds.length > 0) {
+      inbox.markSmartNotificationsAsRead(smartIds);
+    }
+  }
+
   const isUpdatingReadState = markAllReadMutation.isPending || markSingleReadMutation.isPending;
   const isFetching = snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching;
 
@@ -397,10 +425,21 @@ export function NotificationsPage() {
                 Limpiar
               </Button>
             ) : null}
-            <Button disabled={inbox.unreadCount === 0 || isUpdatingReadState} onClick={() => void handleMarkAllRead()} variant="ghost">
-              <CheckCheck className="mr-2 h-4 w-4" />
-              {isUpdatingReadState ? "Actualizando..." : "Marcar pendientes"}
-            </Button>
+            {hasActiveFilters ? (
+              <Button
+                disabled={visibleUnreadCount === 0 || isUpdatingReadState}
+                onClick={() => void handleMarkVisibleRead()}
+                variant="ghost"
+              >
+                <CheckCheck className="mr-2 h-4 w-4" />
+                {isUpdatingReadState ? "Actualizando..." : `Marcar visibles${visibleUnreadCount > 0 ? ` (${visibleUnreadCount})` : ""}`}
+              </Button>
+            ) : (
+              <Button disabled={inbox.unreadCount === 0 || isUpdatingReadState} onClick={() => void handleMarkAllRead()} variant="ghost">
+                <CheckCheck className="mr-2 h-4 w-4" />
+                {isUpdatingReadState ? "Actualizando..." : "Marcar pendientes"}
+              </Button>
+            )}
             <Link
               className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-storm transition hover:border-white/18 hover:bg-white/[0.07] hover:text-ink"
               to="/app/settings"
