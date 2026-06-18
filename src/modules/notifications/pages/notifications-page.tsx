@@ -79,6 +79,7 @@ export function NotificationsPage() {
   const acceptObligationShareMutation = useAcceptObligationShareMutation(user?.id);
   const acceptWorkspaceInvitationMutation = useAcceptWorkspaceInvitationMutation(user?.id);
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
+  const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read">("all");
   const {
     filters,
     currentPage,
@@ -122,6 +123,16 @@ export function NotificationsPage() {
     const normalizedSearch = filters.title.trim().toLowerCase();
 
     return inbox.notifications.filter((notification) => {
+      if (quickFilter === "unread" && notification.status === "read") {
+        return false;
+      }
+      if (quickFilter === "read" && notification.status !== "read") {
+        return false;
+      }
+      if (quickFilter === "action" && !isActionRequiredNotificationKind(notification.kind)) {
+        return false;
+      }
+
       if (filters.source !== "all" && notification.source !== filters.source) {
         return false;
       }
@@ -155,7 +166,7 @@ export function NotificationsPage() {
 
       return true;
     });
-  }, [filters, inbox.notifications]);
+  }, [filters, inbox.notifications, quickFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / NOTIFICATIONS_PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -165,6 +176,7 @@ export function NotificationsPage() {
   );
 
   const hasActiveFilters =
+    quickFilter !== "all" ||
     filters.title.trim() !== "" ||
     filters.source !== "all" ||
     filters.status !== "all" ||
@@ -172,6 +184,11 @@ export function NotificationsPage() {
     filters.channel.trim() !== "" ||
     filters.scheduledFrom !== "" ||
     filters.scheduledTo !== "";
+
+  function clearAllFilters() {
+    clearFilters();
+    setQuickFilter("all");
+  }
 
   const isUpdatingReadState = markAllReadMutation.isPending || markSingleReadMutation.isPending;
   const isFetching = snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching;
@@ -375,7 +392,7 @@ export function NotificationsPage() {
               <RefreshCw className={`h-4 w-4${isFetching ? " animate-spin" : ""}`} />
             </button>
             {hasActiveFilters ? (
-              <Button onClick={clearFilters} variant="ghost">
+              <Button onClick={clearAllFilters} variant="ghost">
                 <X className="mr-2 h-4 w-4" />
                 Limpiar
               </Button>
@@ -391,6 +408,31 @@ export function NotificationsPage() {
               Ajustes
             </Link>
           </div>
+        </div>
+
+        {/* Triage rápido */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              { value: "all", label: "Todo" },
+              { value: "unread", label: "No leídas" },
+              { value: "action", label: "Acción requerida" },
+              { value: "read", label: "Leídas" },
+            ] as const
+          ).map((option) => (
+            <button
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+                quickFilter === option.value
+                  ? "border-pine/30 bg-pine/10 text-pine"
+                  : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:text-ink"
+              }`}
+              key={option.value}
+              onClick={() => setQuickFilter(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
 
         {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
@@ -443,7 +485,7 @@ export function NotificationsPage() {
         <DataState
           action={
             hasActiveFilters ? (
-              <Button onClick={clearFilters} variant="secondary">
+              <Button onClick={clearAllFilters} variant="secondary">
                 Quitar filtros
               </Button>
             ) : undefined
