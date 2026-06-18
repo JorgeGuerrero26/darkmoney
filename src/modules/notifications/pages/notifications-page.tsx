@@ -1,12 +1,11 @@
 import { CheckCheck, CheckCircle2, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { DataState } from "../../../components/ui/data-state";
 import { InfoTip } from "../../../components/ui/info-tip";
-import { Pagination } from "../../../components/ui/pagination";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
@@ -87,8 +86,6 @@ export function NotificationsPage() {
   }
   const {
     filters,
-    currentPage,
-    setCurrentPage,
     openTableFilter,
     updateFilter,
     clearFilters,
@@ -173,12 +170,36 @@ export function NotificationsPage() {
     });
   }, [filters, inbox.notifications, quickFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / NOTIFICATIONS_PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedNotifications = useMemo(
-    () => filteredNotifications.slice((safePage - 1) * NOTIFICATIONS_PAGE_SIZE, safePage * NOTIFICATIONS_PAGE_SIZE),
-    [filteredNotifications, safePage],
+  // Scroll infinito: mostramos un lote y vamos cargando más al llegar al final.
+  const [visibleCount, setVisibleCount] = useState(NOTIFICATIONS_PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(NOTIFICATIONS_PAGE_SIZE);
+  }, [filters, quickFilter, viewMode]);
+  const visibleNotifications = useMemo(
+    () => filteredNotifications.slice(0, visibleCount),
+    [filteredNotifications, visibleCount],
   );
+  const canLoadMore = visibleCount < filteredNotifications.length;
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!canLoadMore) {
+      return;
+    }
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((current) => current + NOTIFICATIONS_PAGE_SIZE);
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [canLoadMore, filteredNotifications.length]);
 
   const hasActiveFilters =
     quickFilter !== "all" ||
@@ -315,7 +336,7 @@ export function NotificationsPage() {
     });
   }, [notificationById]);
 
-  const pageIds = paginatedNotifications.map((notification) => notification.id);
+  const pageIds = visibleNotifications.map((notification) => notification.id);
   const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
   const someSelected = !allSelected && pageIds.some((id) => selectedIds.has(id));
   const selectedCount = selectedIds.size;
@@ -586,7 +607,7 @@ export function NotificationsPage() {
           cv={cv}
           filters={filters}
           isUpdatingReadState={isUpdatingReadState}
-          notifications={paginatedNotifications}
+          notifications={visibleNotifications}
           onAccept={(notification) => void handleAcceptInvite(notification)}
           onApplyFilterAndClose={applyFilterAndClose}
           onClearSingleFilter={clearSingleTableFilter}
@@ -602,7 +623,7 @@ export function NotificationsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {groupNotificationsByDate(paginatedNotifications).map((group) => (
+          {groupNotificationsByDate(visibleNotifications).map((group) => (
             <section key={group.key}>
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-storm/70">{group.label}</p>
               <div className={viewMode === "grid" ? "grid gap-4 xl:grid-cols-2" : "grid gap-3"}>
@@ -624,13 +645,17 @@ export function NotificationsPage() {
         </div>
       )}
 
-      {filteredNotifications.length > 0 ? (
-        <Pagination
-          onPageChange={setCurrentPage}
-          page={safePage}
-          pageSize={NOTIFICATIONS_PAGE_SIZE}
-          totalItems={filteredNotifications.length}
-        />
+      {canLoadMore ? (
+        <div className="flex flex-col items-center gap-2" ref={loadMoreRef}>
+          <Button onClick={() => setVisibleCount((current) => current + NOTIFICATIONS_PAGE_SIZE)} variant="ghost">
+            Cargar más
+          </Button>
+          <p className="text-xs text-storm/70">
+            Mostrando {visibleNotifications.length} de {filteredNotifications.length}
+          </p>
+        </div>
+      ) : filteredNotifications.length > NOTIFICATIONS_PAGE_SIZE ? (
+        <p className="text-center text-xs text-storm/60">{filteredNotifications.length} notificaciones</p>
       ) : null}
 
       {selectedCount > 0 ? (
