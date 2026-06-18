@@ -156,6 +156,7 @@ export function AccountsPage() {
   const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+  const [openTableFilter, setOpenTableFilter] = useState<"q" | "type" | "currency" | "status" | null>(null);
   const { schedule } = useUndoQueue();
 
   const accounts = useMemo(
@@ -533,11 +534,18 @@ export function AccountsPage() {
               <AccountsTable
                 accounts={paginatedAccounts.items}
                 allSelected={allSelected}
+                availableCurrencyCodes={availableCurrencyCodes}
+                availableTypes={availableTypes}
+                filters={filters}
                 onArchive={handleArchiveToggle}
+                onCloseFilterMenu={() => setOpenTableFilter(null)}
                 onEdit={openEditEditor}
                 onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
                 onSelectAll={() => (allSelected ? clearAll() : selectAll())}
+                onToggleFilterMenu={(field) => setOpenTableFilter((current) => (current === field ? null : field))}
                 onToggleSelect={toggleSelect}
+                onUpdateFilters={writeFilters}
+                openFilter={openTableFilter}
                 selectedIds={selectedIds}
                 someSelected={someSelected}
                 visibleColumns={visibleColumns}
