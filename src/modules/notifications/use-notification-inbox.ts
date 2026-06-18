@@ -33,6 +33,7 @@ export type InboxNotification = {
   readAt?: string | null;
   tone: SmartNotificationTone;
   href: string;
+  isArchived?: boolean;
 };
 
 function startOfDay(date: Date) {
@@ -191,6 +192,7 @@ function buildDatabaseNotifications(notifications: NotificationItem[]): InboxNot
     readAt: notification.readAt,
     tone: getDatabaseNotificationTone(notification),
     href: "/app/notifications",
+    isArchived: Boolean(notification.archivedAt),
   }));
 }
 

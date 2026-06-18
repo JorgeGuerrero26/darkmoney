@@ -1,4 +1,4 @@
-import { CheckCheck, CheckCircle2, RefreshCw, X } from "lucide-react";
+import { Archive, CheckCheck, CheckCircle2, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -17,7 +17,9 @@ import {
   getQueryErrorMessage,
   useAcceptObligationShareMutation,
   useAcceptWorkspaceInvitationMutation,
+  useArchiveNotificationsMutation,
   useCurrentUserEntitlementQuery,
+  useDeleteNotificationsMutation,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
   useNotificationsQuery,
@@ -77,8 +79,10 @@ export function NotificationsPage() {
   const markSingleReadMutation = useMarkNotificationReadMutation(user?.id);
   const acceptObligationShareMutation = useAcceptObligationShareMutation(user?.id);
   const acceptWorkspaceInvitationMutation = useAcceptWorkspaceInvitationMutation(user?.id);
+  const archiveNotificationsMutation = useArchiveNotificationsMutation(user?.id);
+  const deleteNotificationsMutation = useDeleteNotificationsMutation(user?.id);
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
-  const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read">("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read" | "archived">("all");
   const [liveMessage, setLiveMessage] = useState("");
 
   function announce(count: number) {
@@ -125,6 +129,15 @@ export function NotificationsPage() {
     const normalizedSearch = filters.title.trim().toLowerCase();
 
     return inbox.notifications.filter((notification) => {
+      // Las archivadas solo se ven en su propia vista; el resto las oculta.
+      if (quickFilter === "archived") {
+        if (!notification.isArchived) {
+          return false;
+        }
+      } else if (notification.isArchived) {
+        return false;
+      }
+
       if (quickFilter === "unread" && notification.status === "read") {
         return false;
       }
@@ -405,6 +418,59 @@ export function NotificationsPage() {
     clearSelection();
   }
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const selectedDbIds = Array.from(selectedIds)
+    .map((id) => notificationById.get(id))
+    .filter((notification): notification is InboxNotification => Boolean(notification) && notification!.source === "database" && Boolean(notification!.databaseId))
+    .map((notification) => notification.databaseId as number);
+  const isArchiving = archiveNotificationsMutation.isPending;
+  const isDeleting = deleteNotificationsMutation.isPending;
+
+  async function handleArchiveSelected(archived: boolean) {
+    if (selectedDbIds.length === 0) {
+      return;
+    }
+    try {
+      await archiveNotificationsMutation.mutateAsync({ notificationIds: selectedDbIds, archived });
+      setFeedback({
+        tone: "success",
+        title: archived ? "Notificaciones archivadas" : "Notificaciones restauradas",
+        description: `${selectedDbIds.length} ${archived ? "archivada(s)" : "restaurada(s)"}. Las inteligentes no se archivan.`,
+      });
+      clearSelection();
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: "No pudimos archivar",
+        description: getQueryErrorMessage(error, "Aplica la migracion sql/add_notifications_archived_at.sql en la base."),
+      });
+    }
+  }
+
+  async function handleDeleteSelected() {
+    if (selectedDbIds.length === 0) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+    try {
+      await deleteNotificationsMutation.mutateAsync(selectedDbIds);
+      setFeedback({
+        tone: "success",
+        title: "Notificaciones eliminadas",
+        description: `${selectedDbIds.length} eliminada(s). Las inteligentes no se eliminan (se recalculan).`,
+      });
+      clearSelection();
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: "No pudimos eliminar",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    } finally {
+      setShowDeleteConfirm(false);
+    }
+  }
+
   // Atajos: Esc limpia la selección, R marca leídas las seleccionadas.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -519,6 +585,7 @@ export function NotificationsPage() {
               { value: "unread", label: "No leídas" },
               { value: "action", label: "Acción requerida" },
               { value: "read", label: "Leídas" },
+              { value: "archived", label: "Archivadas" },
             ] as const
           ).map((option) => (
             <button
@@ -673,6 +740,28 @@ export function NotificationsPage() {
               <CheckCircle2 className="h-4 w-4" />
               Marcar leídas{selectedMarkableCount > 0 ? ` (${selectedMarkableCount})` : ""}
             </button>
+            {selectedDbIds.length > 0 ? (
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-40"
+                disabled={isArchiving}
+                onClick={() => void handleArchiveSelected(quickFilter !== "archived")}
+                type="button"
+              >
+                <Archive className="h-4 w-4" />
+                {quickFilter === "archived" ? "Restaurar" : "Archivar"} ({selectedDbIds.length})
+              </button>
+            ) : null}
+            {selectedDbIds.length > 0 ? (
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-rosewood/25 bg-rosewood/10 px-3.5 py-1.5 text-sm font-semibold text-rosewood transition hover:bg-rosewood/15 disabled:opacity-40"
+                disabled={isDeleting}
+                onClick={() => setShowDeleteConfirm(true)}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+                Eliminar ({selectedDbIds.length})
+              </button>
+            ) : null}
             <button
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-storm transition hover:border-white/16 hover:text-ink"
               onClick={clearSelection}
@@ -681,6 +770,33 @@ export function NotificationsPage() {
               <X className="h-4 w-4" />
               Limpiar
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {showDeleteConfirm ? (
+        <div
+          aria-labelledby="notif-delete-title"
+          aria-modal="true"
+          className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="glass-panel-strong w-full max-w-md rounded-[28px] p-6">
+            <h2 className="font-display text-xl font-semibold text-ink" id="notif-delete-title">
+              Eliminar {selectedDbIds.length} notificación{selectedDbIds.length !== 1 ? "es" : ""}?
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-storm">
+              Se eliminan permanentemente las guardadas seleccionadas. Las inteligentes no se eliminan (se recalculan).
+              No se puede deshacer.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={isDeleting} onClick={() => void handleDeleteSelected()}>
+                {isDeleting ? "Eliminando..." : `Eliminar ${selectedDbIds.length}`}
+              </Button>
+              <Button disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)} variant="ghost">
+                Cancelar
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

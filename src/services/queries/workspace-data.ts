@@ -341,6 +341,7 @@ type NotificationRow = {
   kind?: string | null;
   related_entity_type: string | null;
   read_at: string | null;
+  archived_at?: string | null;
 };
 
 type AttachmentRow = {
@@ -2116,6 +2117,8 @@ async function upsertWorkspaceFinancialGoal(input: {
   }
 }
 
+const notificationsSelectWithArchived =
+  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, read_at, archived_at";
 const notificationsSelectWithKind =
   "id, channel, status, title, body, scheduled_for, kind, related_entity_type, read_at";
 const notificationsSelectLegacy =
@@ -2132,6 +2135,7 @@ function mapNotificationRow(row: NotificationRow) {
     kind: row.kind ?? row.related_entity_type ?? row.channel,
     channel: row.channel,
     readAt: row.read_at,
+    archivedAt: row.archived_at ?? null,
   } satisfies NotificationItem;
 }
 
@@ -2170,6 +2174,14 @@ async function fetchNotificationsWithSelect(userId: string, selectColumns: strin
 }
 
 async function fetchNotifications(userId: string) {
+  try {
+    return await fetchNotificationsWithSelect(userId, notificationsSelectWithArchived);
+  } catch (archivedError) {
+    if (!isMissingRelationError(archivedError, "archived_at")) {
+      throw archivedError;
+    }
+  }
+
   try {
     return await fetchNotificationsWithSelect(userId, notificationsSelectWithKind);
   } catch (error) {
@@ -5144,6 +5156,64 @@ export function useMarkNotificationReadMutation(userId?: string) {
         })
         .eq("user_id", userId)
         .eq("id", notificationId);
+
+      if (error) {
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notifications", userId] });
+    },
+  });
+}
+
+export function useDeleteNotificationsMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (notificationIds: number[]) => {
+      if (!userId) {
+        throw new Error("No hay sesion activa.");
+      }
+      if (notificationIds.length === 0) {
+        return;
+      }
+
+      const client = getClient();
+      const { error } = await client
+        .from("notifications")
+        .delete()
+        .eq("user_id", userId)
+        .in("id", notificationIds);
+
+      if (error) {
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notifications", userId] });
+    },
+  });
+}
+
+export function useArchiveNotificationsMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ notificationIds, archived }: { notificationIds: number[]; archived: boolean }) => {
+      if (!userId) {
+        throw new Error("No hay sesion activa.");
+      }
+      if (notificationIds.length === 0) {
+        return;
+      }
+
+      const client = getClient();
+      const { error } = await client
+        .from("notifications")
+        .update({ archived_at: archived ? new Date().toISOString() : null })
+        .eq("user_id", userId)
+        .in("id", notificationIds);
 
       if (error) {
         throw error;

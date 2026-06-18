@@ -430,6 +430,7 @@ export type NotificationItem = {
   kind: string;
   channel?: string;
   readAt?: string | null;
+  archivedAt?: string | null;
 };
 
 export type AttachmentSummary = {
