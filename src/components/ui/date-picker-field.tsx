@@ -272,7 +272,7 @@ export function DatePickerField({
       <button
         ref={triggerRef}
         aria-expanded={isOpen}
-        className={`flex h-14 w-full items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-left text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 hover:border-white/14 hover:bg-[#101928] focus-visible:border-pine/25 focus-visible:bg-[#111b2a] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] ${
+        className={`flex h-14 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-left text-sm text-ink outline-none transition duration-200 hover:border-white/14 hover:bg-white/[0.06] focus-visible:border-pine/25 focus-visible:bg-white/[0.07] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] ${
           disabled ? "cursor-not-allowed opacity-60" : ""
         }`}
         disabled={disabled}
@@ -293,7 +293,7 @@ export function DatePickerField({
       {isOpen ? createPortal(
         <div
           ref={panelRef}
-          className="animate-rise-in overflow-y-auto rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(10,15,24,0.98),rgba(8,12,20,0.98))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className="animate-rise-in overflow-y-auto rounded-[24px] border border-white/10 bg-shell/95 p-3 shadow-haze backdrop-blur-2xl"
           style={dropdownStyle}
         >
           <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] px-3 py-2">
