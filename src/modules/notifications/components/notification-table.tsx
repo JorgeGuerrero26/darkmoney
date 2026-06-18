@@ -5,7 +5,7 @@ import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
-import { formatDateTime } from "../../../lib/formatting/dates";
+import { formatDateTime, formatRelativeTime } from "../../../lib/formatting/dates";
 import {
   formatNotificationChannelLabel,
   formatNotificationKindLabel,
@@ -270,8 +270,8 @@ export function NotificationTable({
                 <td className={`px-5 py-4 align-top text-storm ${cv("canal", "hidden lg:table-cell")}`}>
                   {formatNotificationChannelLabel(notification.channel)}
                 </td>
-                <td className={`px-5 py-4 align-top text-storm ${cv("programada", "hidden xl:table-cell")}`}>
-                  {formatDateTime(notification.scheduledFor)}
+                <td className={`px-5 py-4 align-top text-storm ${cv("programada", "hidden xl:table-cell")}`} title={formatDateTime(notification.scheduledFor)}>
+                  {formatRelativeTime(notification.scheduledFor)}
                 </td>
                 <td className={`px-5 py-4 align-top ${cv("estado", "hidden sm:table-cell")}`}>
                   <StatusBadge

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { StatusBadge } from "../../../components/ui/status-badge";
-import { formatDateTime } from "../../../lib/formatting/dates";
+import { formatDateTime, formatRelativeTime } from "../../../lib/formatting/dates";
 import {
   formatNotificationChannelLabel,
   formatNotificationKindLabel,
@@ -62,7 +62,9 @@ export function NotificationCard({
             <p className="font-display text-2xl font-semibold text-ink">{notification.title}</p>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-storm">{notification.body}</p>
           </div>
-          <p className="text-xs uppercase tracking-[0.18em] text-storm">{formatDateTime(notification.scheduledFor)}</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-storm" title={formatDateTime(notification.scheduledFor)}>
+            {formatRelativeTime(notification.scheduledFor)}
+          </p>
         </div>
         </div>
 
