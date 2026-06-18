@@ -1,4 +1,4 @@
-import { Archive, BarChart3, Pencil } from "lucide-react";
+import { Archive, BarChart3, PencilLine } from "lucide-react";
 
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
@@ -230,7 +230,7 @@ export function AccountsTable({
                   <td className="px-5 py-4 text-right">
                     <RowActions>
                       <RowActionButton icon={BarChart3} label={`Analizar ${account.name}`} onClick={() => onOpenAnalytics(account)} />
-                      <RowActionButton icon={Pencil} label={`Editar ${account.name}`} onClick={() => onEdit(account)} />
+                      <RowActionButton icon={PencilLine} label={`Editar ${account.name}`} onClick={() => onEdit(account)} />
                       <RowActionButton
                         icon={Archive}
                         label={account.isArchived ? `Reactivar ${account.name}` : `Archivar ${account.name}`}

@@ -1,4 +1,4 @@
-import { Archive, BarChart3, Pencil } from "lucide-react";
+import { Archive, BarChart3, PencilLine } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -121,7 +121,7 @@ export function AccountsGrid({
                 onClick={() => onEdit(account)}
                 variant="secondary"
               >
-                <Pencil className="h-4 w-4" />
+                <PencilLine className="h-4 w-4" />
               </Button>
               <Button
                 aria-label={account.isArchived ? `Reactivar ${account.name}` : `Archivar ${account.name}`}
