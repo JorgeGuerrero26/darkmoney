@@ -31,8 +31,10 @@ type NotificationCardProps = {
   isUpdatingReadState: boolean;
   selected: boolean;
   acceptingId: string | null;
+  decliningId: string | null;
   onToggleSelect: (id: string) => void;
   onAccept: (notification: InboxNotification) => void;
+  onDecline: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
 };
 
@@ -41,8 +43,10 @@ export function NotificationCard({
   isUpdatingReadState,
   selected,
   acceptingId,
+  decliningId,
   onToggleSelect,
   onAccept,
+  onDecline,
   onMarkRead,
 }: NotificationCardProps) {
   const canMarkRead =
@@ -50,6 +54,10 @@ export function NotificationCard({
     !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
   const hasInviteAction =
     notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
+  const canDecline =
+    hasInviteAction &&
+    (notification.kind === "obligation_share_invite" ||
+      (notification.kind === "invite" && notification.href.includes("/share/obligations/")));
   const KindIcon = getNotificationKindIcon(notification.kind);
   const ChannelIcon = getNotificationChannelIcon(notification.channel);
   const navigate = useNavigate();
@@ -119,6 +127,16 @@ export function NotificationCard({
             {hasInviteAction ? (
               <Button disabled={acceptingId === notification.id} onClick={() => onAccept(notification)}>
                 {acceptingId === notification.id ? "Aceptando..." : "Aceptar"}
+              </Button>
+            ) : null}
+            {canDecline ? (
+              <Button
+                className="text-[#ffb4bc] hover:text-white"
+                disabled={decliningId === notification.id}
+                onClick={() => onDecline(notification)}
+                variant="ghost"
+              >
+                {decliningId === notification.id ? "Rechazando..." : "Rechazar"}
               </Button>
             ) : null}
             <Link

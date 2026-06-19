@@ -1,4 +1,4 @@
-import { Archive, CheckCheck, CheckCircle2, RefreshCw, Trash2, X } from "lucide-react";
+import { Archive, CheckCheck, CheckCircle2, Circle, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -19,9 +19,11 @@ import {
   useAcceptWorkspaceInvitationMutation,
   useArchiveNotificationsMutation,
   useCurrentUserEntitlementQuery,
+  useDeclineObligationShareMutation,
   useDeleteNotificationsMutation,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
+  useMarkNotificationsUnreadMutation,
   useNotificationsQuery,
   usePendingNotificationInvitesQuery,
   useWorkspaceSnapshotQuery,
@@ -81,6 +83,8 @@ export function NotificationsPage() {
   const acceptWorkspaceInvitationMutation = useAcceptWorkspaceInvitationMutation(user?.id);
   const archiveNotificationsMutation = useArchiveNotificationsMutation(user?.id);
   const deleteNotificationsMutation = useDeleteNotificationsMutation(user?.id);
+  const declineObligationShareMutation = useDeclineObligationShareMutation(user?.id);
+  const markNotificationsUnreadMutation = useMarkNotificationsUnreadMutation(user?.id);
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
   const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read" | "archived">("all");
   const [liveMessage, setLiveMessage] = useState("");
@@ -293,7 +297,41 @@ export function NotificationsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; title: string; description: string } | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
   useSuccessToast(feedback, { clear: () => setFeedback(null) });
+
+  function isObligationShareInvite(notification: InboxNotification) {
+    return (
+      notification.kind === "obligation_share_invite" ||
+      (notification.kind === "invite" && notification.href.includes("/share/obligations/"))
+    );
+  }
+
+  async function handleDeclineInvite(notification: InboxNotification) {
+    const token = notification.href.split("/").filter(Boolean).pop() ?? "";
+    if (!token || !isObligationShareInvite(notification)) {
+      return;
+    }
+
+    setDecliningId(notification.id);
+    setFeedback(null);
+    try {
+      const result = await declineObligationShareMutation.mutateAsync(token);
+      setFeedback({
+        tone: "success",
+        title: result.alreadyDeclined ? "La invitacion ya estaba rechazada" : "Invitacion rechazada",
+        description: "Se rechazo la invitacion al credito o deuda compartido.",
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: "No pudimos rechazar la invitacion",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    } finally {
+      setDecliningId(null);
+    }
+  }
 
   async function handleAcceptInvite(notification: InboxNotification) {
     const token = notification.href.split("/").filter(Boolean).pop() ?? "";
@@ -425,6 +463,19 @@ export function NotificationsPage() {
     .map((notification) => notification.databaseId as number);
   const isArchiving = archiveNotificationsMutation.isPending;
   const isDeleting = deleteNotificationsMutation.isPending;
+  const selectedDbReadIds = Array.from(selectedIds)
+    .map((id) => notificationById.get(id))
+    .filter((notification): notification is InboxNotification => Boolean(notification) && notification!.source === "database" && notification!.status === "read" && Boolean(notification!.databaseId))
+    .map((notification) => notification.databaseId as number);
+
+  async function handleMarkSelectedUnread() {
+    if (selectedDbReadIds.length === 0) {
+      return;
+    }
+    await markNotificationsUnreadMutation.mutateAsync(selectedDbReadIds);
+    setLiveMessage(`${selectedDbReadIds.length} marcadas como no leidas.`);
+    clearSelection();
+  }
 
   async function handleArchiveSelected(archived: boolean) {
     if (selectedDbIds.length === 0) {
@@ -672,10 +723,12 @@ export function NotificationsPage() {
           acceptingId={acceptingId}
           allSelected={allSelected}
           cv={cv}
+          decliningId={decliningId}
           filters={filters}
           isUpdatingReadState={isUpdatingReadState}
           notifications={visibleNotifications}
           onAccept={(notification) => void handleAcceptInvite(notification)}
+          onDecline={(notification) => void handleDeclineInvite(notification)}
           onApplyFilterAndClose={applyFilterAndClose}
           onClearSingleFilter={clearSingleTableFilter}
           onCloseFilterMenu={closeTableFilterMenu}
@@ -697,10 +750,12 @@ export function NotificationsPage() {
                 {group.items.map((notification) => (
                   <NotificationCard
                     acceptingId={acceptingId}
+                    decliningId={decliningId}
                     isUpdatingReadState={isUpdatingReadState}
                     key={notification.id}
                     notification={notification}
                     onAccept={(item) => void handleAcceptInvite(item)}
+                    onDecline={(item) => void handleDeclineInvite(item)}
                     onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
                     onToggleSelect={toggleSelect}
                     selected={selectedIds.has(notification.id)}
@@ -740,6 +795,17 @@ export function NotificationsPage() {
               <CheckCircle2 className="h-4 w-4" />
               Marcar leídas{selectedMarkableCount > 0 ? ` (${selectedMarkableCount})` : ""}
             </button>
+            {selectedDbReadIds.length > 0 ? (
+              <button
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-40"
+                disabled={markNotificationsUnreadMutation.isPending}
+                onClick={() => void handleMarkSelectedUnread()}
+                type="button"
+              >
+                <Circle className="h-4 w-4" />
+                Marcar no leídas ({selectedDbReadIds.length})
+              </button>
+            ) : null}
             {selectedDbIds.length > 0 ? (
               <button
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm font-medium text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-40"

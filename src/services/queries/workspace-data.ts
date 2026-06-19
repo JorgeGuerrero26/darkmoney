@@ -3355,6 +3355,72 @@ export function useAcceptObligationShareMutation(userId?: string) {
   });
 }
 
+type DeclineObligationShareFunctionResponse = {
+  ok?: boolean;
+  status?: string;
+  alreadyAccepted?: boolean;
+  alreadyDeclined?: boolean;
+  error?: string;
+};
+
+export function useDeclineObligationShareMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const response = (await invokeAuthenticatedFunction<DeclineObligationShareFunctionResponse>(
+        "decline-obligation-share",
+        { token },
+      )) as DeclineObligationShareFunctionResponse;
+
+      if (response.alreadyAccepted) {
+        throw new Error("Esta invitacion ya fue aceptada.");
+      }
+      if (!response.ok && !response.alreadyDeclined) {
+        throw new Error(response.error ?? "No pudimos rechazar la invitacion.");
+      }
+
+      return { declined: true, alreadyDeclined: Boolean(response.alreadyDeclined) };
+    },
+    onSuccess: async (_result, token) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["shared-obligations", userId ?? null] }),
+        queryClient.invalidateQueries({ queryKey: ["obligation-share-invite", token] }),
+        queryClient.invalidateQueries({ queryKey: ["pending-notification-invites", userId ?? null] }),
+      ]);
+    },
+  });
+}
+
+export function useMarkNotificationsUnreadMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (notificationIds: number[]) => {
+      if (!userId) {
+        throw new Error("No hay sesion activa.");
+      }
+      if (notificationIds.length === 0) {
+        return;
+      }
+
+      const client = getClient();
+      const { error } = await client
+        .from("notifications")
+        .update({ status: "sent" as NotificationItem["status"], read_at: null })
+        .eq("user_id", userId)
+        .in("id", notificationIds);
+
+      if (error) {
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notifications", userId] });
+    },
+  });
+}
+
 export function useCreateAttachmentRecordMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 

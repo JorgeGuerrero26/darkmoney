@@ -52,9 +52,11 @@ type NotificationTableProps = {
   allSelected: boolean;
   someSelected: boolean;
   acceptingId: string | null;
+  decliningId: string | null;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onAccept: (notification: InboxNotification) => void;
+  onDecline: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
   cv: ColumnVisibilityFn;
   filters: NotificationTableFilters;
@@ -75,9 +77,11 @@ export function NotificationTable({
   allSelected,
   someSelected,
   acceptingId,
+  decliningId,
   onToggleSelect,
   onToggleSelectAll,
   onAccept,
+  onDecline,
   onMarkRead,
   cv,
   filters,
@@ -235,6 +239,10 @@ export function NotificationTable({
               !(notification.source === "smart" && isActionRequiredNotificationKind(notification.kind));
             const hasInviteAction =
               notification.source === "smart" && isActionRequiredNotificationKind(notification.kind);
+            const canDecline =
+              hasInviteAction &&
+              (notification.kind === "obligation_share_invite" ||
+                (notification.kind === "invite" && notification.href.includes("/share/obligations/")));
             const KindIcon = getNotificationKindIcon(notification.kind);
 
             return (
@@ -290,6 +298,16 @@ export function NotificationTable({
                     {hasInviteAction ? (
                       <Button className="py-1.5 text-xs" disabled={acceptingId === notification.id} onClick={() => onAccept(notification)}>
                         {acceptingId === notification.id ? "Aceptando..." : "Aceptar"}
+                      </Button>
+                    ) : null}
+                    {canDecline ? (
+                      <Button
+                        className="py-1.5 text-xs text-[#ffb4bc] hover:text-white"
+                        disabled={decliningId === notification.id}
+                        onClick={() => onDecline(notification)}
+                        variant="ghost"
+                      >
+                        {decliningId === notification.id ? "..." : "Rechazar"}
                       </Button>
                     ) : null}
                     <Link
