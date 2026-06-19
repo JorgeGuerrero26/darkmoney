@@ -36,6 +36,7 @@ type NotificationCardProps = {
   onAccept: (notification: InboxNotification) => void;
   onDecline: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
+  onMarkUnread: (databaseId: number) => void;
 };
 
 export function NotificationCard({
@@ -48,6 +49,7 @@ export function NotificationCard({
   onAccept,
   onDecline,
   onMarkRead,
+  onMarkUnread,
 }: NotificationCardProps) {
   const canMarkRead =
     notification.status !== "read" &&
@@ -148,6 +150,11 @@ export function NotificationCard({
             {canMarkRead ? (
               <Button disabled={isUpdatingReadState} onClick={() => onMarkRead(notification.id, notification.databaseId)} variant="ghost">
                 Marcar leida
+              </Button>
+            ) : null}
+            {notification.source === "database" && notification.status === "read" && notification.databaseId ? (
+              <Button disabled={isUpdatingReadState} onClick={() => onMarkUnread(notification.databaseId as number)} variant="ghost">
+                Marcar no leída
               </Button>
             ) : null}
           </div>

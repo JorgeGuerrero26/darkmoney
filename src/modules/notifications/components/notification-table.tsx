@@ -58,6 +58,7 @@ type NotificationTableProps = {
   onAccept: (notification: InboxNotification) => void;
   onDecline: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
+  onMarkUnread: (databaseId: number) => void;
   cv: ColumnVisibilityFn;
   filters: NotificationTableFilters;
   openFilter: NotificationTableFilterField | null;
@@ -83,6 +84,7 @@ export function NotificationTable({
   onAccept,
   onDecline,
   onMarkRead,
+  onMarkUnread,
   cv,
   filters,
   openFilter,
@@ -319,6 +321,11 @@ export function NotificationTable({
                     {canMarkRead ? (
                       <Button disabled={isUpdatingReadState} onClick={() => onMarkRead(notification.id, notification.databaseId)} variant="ghost">
                         Leida
+                      </Button>
+                    ) : null}
+                    {notification.source === "database" && notification.status === "read" && notification.databaseId ? (
+                      <Button disabled={isUpdatingReadState} onClick={() => onMarkUnread(notification.databaseId as number)} variant="ghost">
+                        No leída
                       </Button>
                     ) : null}
                   </div>

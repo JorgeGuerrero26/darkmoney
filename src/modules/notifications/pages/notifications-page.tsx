@@ -92,6 +92,20 @@ export function NotificationsPage() {
   function announce(count: number) {
     setLiveMessage(count === 1 ? "1 notificacion marcada como leida." : `${count} notificaciones marcadas como leidas.`);
   }
+
+  // Undo efímero tras marcar leídas (solo restaura las guardadas; las inteligentes no se desmarcan).
+  const [undoReadIds, setUndoReadIds] = useState<number[]>([]);
+  const undoTimerRef = useRef<number | null>(null);
+  function offerUndo(databaseIds: number[]) {
+    if (databaseIds.length === 0) {
+      return;
+    }
+    setUndoReadIds(databaseIds);
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    undoTimerRef.current = window.setTimeout(() => setUndoReadIds([]), 7000);
+  }
   const {
     filters,
     openTableFilter,
@@ -260,12 +274,17 @@ export function NotificationsPage() {
       inbox.markSmartNotificationsAsRead(smartIds);
     }
     announce(databaseIds.length + smartIds.length);
+    offerUndo(databaseIds);
   }
 
   const isUpdatingReadState = markAllReadMutation.isPending || markSingleReadMutation.isPending;
   const isFetching = snapshotQuery.isFetching || notificationsQuery.isFetching || pendingInvitesQuery.isFetching;
 
   async function handleMarkAllRead() {
+    const dbUnreadIds = inbox.notifications
+      .filter((notification) => notification.source === "database" && notification.status !== "read" && notification.databaseId)
+      .map((notification) => notification.databaseId as number);
+
     if (inbox.unreadDatabaseCount > 0) {
       await markAllReadMutation.mutateAsync();
     }
@@ -274,11 +293,13 @@ export function NotificationsPage() {
       inbox.markSmartNotificationsAsRead();
     }
     announce(inbox.unreadCount);
+    offerUndo(dbUnreadIds);
   }
 
   async function handleMarkOneRead(notificationId: string, databaseId?: number) {
     if (notificationId.startsWith("db:") && databaseId) {
       await markSingleReadMutation.mutateAsync(databaseId);
+      offerUndo([databaseId]);
       return;
     }
 
@@ -453,6 +474,7 @@ export function NotificationsPage() {
     }
 
     announce(databaseIds.length + smartIds.length);
+    offerUndo(databaseIds);
     clearSelection();
   }
 
@@ -475,6 +497,22 @@ export function NotificationsPage() {
     await markNotificationsUnreadMutation.mutateAsync(selectedDbReadIds);
     setLiveMessage(`${selectedDbReadIds.length} marcadas como no leidas.`);
     clearSelection();
+  }
+
+  async function handleMarkOneUnread(databaseId: number) {
+    await markNotificationsUnreadMutation.mutateAsync([databaseId]);
+    setLiveMessage("1 notificacion marcada como no leida.");
+  }
+
+  async function handleUndoRead() {
+    const ids = undoReadIds;
+    setUndoReadIds([]);
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    if (ids.length > 0) {
+      await markNotificationsUnreadMutation.mutateAsync(ids);
+    }
   }
 
   async function handleArchiveSelected(archived: boolean) {
@@ -733,6 +771,7 @@ export function NotificationsPage() {
           onClearSingleFilter={clearSingleTableFilter}
           onCloseFilterMenu={closeTableFilterMenu}
           onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
+          onMarkUnread={(dbId) => void handleMarkOneUnread(dbId)}
           onToggleFilterMenu={toggleTableFilterMenu}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
@@ -757,6 +796,7 @@ export function NotificationsPage() {
                     onAccept={(item) => void handleAcceptInvite(item)}
                     onDecline={(item) => void handleDeclineInvite(item)}
                     onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
+                    onMarkUnread={(dbId) => void handleMarkOneUnread(dbId)}
                     onToggleSelect={toggleSelect}
                     selected={selectedIds.has(notification.id)}
                   />
@@ -778,6 +818,24 @@ export function NotificationsPage() {
         </div>
       ) : filteredNotifications.length > NOTIFICATIONS_PAGE_SIZE ? (
         <p className="text-center text-xs text-storm/60">{filteredNotifications.length} notificaciones</p>
+      ) : null}
+
+      {undoReadIds.length > 0 && selectedCount === 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="glass-panel-strong pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 px-4 py-2.5 shadow-haze">
+            <span className="text-sm font-medium text-ink">
+              {undoReadIds.length} marcada{undoReadIds.length !== 1 ? "s" : ""} como leída{undoReadIds.length !== 1 ? "s" : ""}
+            </span>
+            <button
+              className="inline-flex items-center gap-2 rounded-full border border-pine/25 bg-pine/10 px-3.5 py-1.5 text-sm font-semibold text-pine transition hover:bg-pine/15 disabled:opacity-40"
+              disabled={markNotificationsUnreadMutation.isPending}
+              onClick={() => void handleUndoRead()}
+              type="button"
+            >
+              Deshacer
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {selectedCount > 0 ? (
