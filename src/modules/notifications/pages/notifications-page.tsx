@@ -24,8 +24,10 @@ import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
   useMarkNotificationsUnreadMutation,
+  useNotificationPreferencesQuery,
   useNotificationsQuery,
   usePendingNotificationInvitesQuery,
+  useSaveMutedNotificationKindsMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
@@ -85,6 +87,9 @@ export function NotificationsPage() {
   const deleteNotificationsMutation = useDeleteNotificationsMutation(user?.id);
   const declineObligationShareMutation = useDeclineObligationShareMutation(user?.id);
   const markNotificationsUnreadMutation = useMarkNotificationsUnreadMutation(user?.id);
+  const preferencesQuery = useNotificationPreferencesQuery(user?.id);
+  const saveMutedKindsMutation = useSaveMutedNotificationKindsMutation(user?.id);
+  const mutedKinds = preferencesQuery.data?.mutedKinds ?? [];
   const [viewMode, setViewMode] = useViewMode("notifications", "table");
   const [quickFilter, setQuickFilter] = useState<"all" | "unread" | "action" | "read" | "archived">("all");
   const [liveMessage, setLiveMessage] = useState("");
@@ -147,6 +152,11 @@ export function NotificationsPage() {
     const normalizedSearch = filters.title.trim().toLowerCase();
 
     return inbox.notifications.filter((notification) => {
+      // Tipos silenciados: ocultos de todas las vistas (se reactivan desde los chips).
+      if (mutedKinds.includes(notification.kind)) {
+        return false;
+      }
+
       // Las archivadas solo se ven en su propia vista; el resto las oculta.
       if (quickFilter === "archived") {
         if (!notification.isArchived) {
@@ -199,7 +209,7 @@ export function NotificationsPage() {
 
       return true;
     });
-  }, [filters, inbox.notifications, quickFilter]);
+  }, [filters, inbox.notifications, quickFilter, mutedKinds]);
 
   // Scroll infinito: mostramos un lote y vamos cargando más al llegar al final.
   const [visibleCount, setVisibleCount] = useState(NOTIFICATIONS_PAGE_SIZE);
@@ -504,6 +514,32 @@ export function NotificationsPage() {
     setLiveMessage("1 notificacion marcada como no leida.");
   }
 
+  function handleMuteKind(kind: string) {
+    if (!kind || mutedKinds.includes(kind)) {
+      return;
+    }
+    void saveMutedKindsMutation
+      .mutateAsync([...mutedKinds, kind])
+      .then(() =>
+        setFeedback({
+          tone: "success",
+          title: "Tipo silenciado",
+          description: "Ya no veras notificaciones de este tipo. Puedes reactivarlo desde los chips de silenciados.",
+        }),
+      )
+      .catch((error) =>
+        setFeedback({
+          tone: "error",
+          title: "No pudimos silenciar el tipo",
+          description: getQueryErrorMessage(error, "Aplica la migracion sql/add_notification_muted_kinds.sql en la base."),
+        }),
+      );
+  }
+
+  function handleUnmuteKind(kind: string) {
+    void saveMutedKindsMutation.mutateAsync(mutedKinds.filter((muted) => muted !== kind));
+  }
+
   async function handleUndoRead() {
     const ids = undoReadIds;
     setUndoReadIds([]);
@@ -692,6 +728,25 @@ export function NotificationsPage() {
           ))}
         </div>
 
+        {mutedKinds.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-storm/70">Silenciados</span>
+            {mutedKinds.map((kind) => (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-40"
+                disabled={saveMutedKindsMutation.isPending}
+                key={kind}
+                onClick={() => handleUnmuteKind(kind)}
+                title="Reactivar este tipo"
+                type="button"
+              >
+                {formatNotificationKindLabel(kind)}
+                <X className="h-3 w-3" />
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <input
@@ -797,6 +852,7 @@ export function NotificationsPage() {
                     onDecline={(item) => void handleDeclineInvite(item)}
                     onMarkRead={(id, dbId) => void handleMarkOneRead(id, dbId)}
                     onMarkUnread={(dbId) => void handleMarkOneUnread(dbId)}
+                    onMuteKind={handleMuteKind}
                     onToggleSelect={toggleSelect}
                     selected={selectedIds.has(notification.id)}
                   />

@@ -464,6 +464,7 @@ type NotificationPreferencesRow = {
   email_enabled: boolean;
   smart_reads: Record<string, string> | null;
   ui_prefs: UiPrefsRow | null;
+  muted_kinds?: string[] | null;
 };
 
 type CategoryMovementUsageRow = {
@@ -493,6 +494,7 @@ export type NotificationPreferences = {
   emailEnabled: boolean;
   smartReads: Record<string, string>;
   uiPrefs: UiPrefs | null;
+  mutedKinds: string[];
 };
 
 export type PendingNotificationInvites = {
@@ -2518,11 +2520,17 @@ type PaddlePortalSessionResult = {
 async function fetchNotificationPreferences(userId: string) {
   const client = getClient();
 
-  const { data, error } = await client
-    .from("notification_preferences")
-    .select("in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs")
-    .eq("user_id", userId)
-    .maybeSingle();
+  async function querySelect(columns: string) {
+    return client.from("notification_preferences").select(columns).eq("user_id", userId).maybeSingle();
+  }
+
+  let { data, error } = await querySelect(
+    "in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs, muted_kinds",
+  );
+
+  if (error && isMissingRelationError(error, "muted_kinds")) {
+    ({ data, error } = await querySelect("in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs"));
+  }
 
   if (error) {
     throw error;
@@ -2532,7 +2540,7 @@ async function fetchNotificationPreferences(userId: string) {
     return null;
   }
 
-  const row = data as NotificationPreferencesRow;
+  const row = data as unknown as NotificationPreferencesRow;
 
   return {
     inAppEnabled: row.in_app_enabled,
@@ -2545,6 +2553,7 @@ async function fetchNotificationPreferences(userId: string) {
           column_visibility: row.ui_prefs.column_visibility ?? {},
         }
       : null,
+    mutedKinds: Array.isArray(row.muted_kinds) ? row.muted_kinds : [],
   };
 }
 
@@ -3541,6 +3550,33 @@ export function useSaveNotificationPreferencesMutation(userId?: string) {
       }
 
       return input;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notification-preferences", userId] });
+    },
+  });
+}
+
+export function useSaveMutedNotificationKindsMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (mutedKinds: string[]) => {
+      if (!userId) {
+        throw new Error("No hay sesion activa.");
+      }
+
+      const client = getClient();
+      const { error } = await client.from("notification_preferences").upsert({
+        user_id: userId,
+        muted_kinds: mutedKinds,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return mutedKinds;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["notification-preferences", userId] });

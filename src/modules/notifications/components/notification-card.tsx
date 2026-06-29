@@ -1,3 +1,4 @@
+import { BellOff } from "lucide-react";
 import type { MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -37,6 +38,7 @@ type NotificationCardProps = {
   onDecline: (notification: InboxNotification) => void;
   onMarkRead: (notificationId: string, databaseId?: number) => void;
   onMarkUnread: (databaseId: number) => void;
+  onMuteKind: (kind: string) => void;
 };
 
 export function NotificationCard({
@@ -50,6 +52,7 @@ export function NotificationCard({
   onDecline,
   onMarkRead,
   onMarkUnread,
+  onMuteKind,
 }: NotificationCardProps) {
   const canMarkRead =
     notification.status !== "read" &&
@@ -155,6 +158,12 @@ export function NotificationCard({
             {notification.source === "database" && notification.status === "read" && notification.databaseId ? (
               <Button disabled={isUpdatingReadState} onClick={() => onMarkUnread(notification.databaseId as number)} variant="ghost">
                 Marcar no leída
+              </Button>
+            ) : null}
+            {!hasInviteAction ? (
+              <Button onClick={() => onMuteKind(notification.kind)} variant="ghost">
+                <BellOff className="mr-2 h-4 w-4" />
+                Silenciar tipo
               </Button>
             ) : null}
           </div>
