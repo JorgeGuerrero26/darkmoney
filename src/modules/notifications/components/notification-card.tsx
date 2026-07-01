@@ -62,7 +62,8 @@ export function NotificationCard({
   const canDecline =
     hasInviteAction &&
     (notification.kind === "obligation_share_invite" ||
-      (notification.kind === "invite" && notification.href.includes("/share/obligations/")));
+      notification.kind === "workspace_invite" ||
+      notification.kind === "invite");
   const KindIcon = getNotificationKindIcon(notification.kind);
   const ChannelIcon = getNotificationChannelIcon(notification.channel);
   const navigate = useNavigate();

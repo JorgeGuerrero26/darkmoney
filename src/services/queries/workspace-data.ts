@@ -2926,6 +2926,43 @@ export function useAcceptWorkspaceInvitationMutation(userId?: string) {
   });
 }
 
+type DeclineWorkspaceInvitationFunctionResponse = {
+  ok?: boolean;
+  status?: string;
+  alreadyAccepted?: boolean;
+  alreadyDeclined?: boolean;
+  error?: string;
+};
+
+export function useDeclineWorkspaceInvitationMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const response = (await invokeAuthenticatedFunction<DeclineWorkspaceInvitationFunctionResponse>(
+        "decline-workspace-invite",
+        { token },
+      )) as DeclineWorkspaceInvitationFunctionResponse;
+
+      if (response.alreadyAccepted) {
+        throw new Error("Esta invitacion ya fue aceptada.");
+      }
+      if (!response.ok && !response.alreadyDeclined) {
+        throw new Error(response.error ?? "No pudimos rechazar la invitacion.");
+      }
+
+      return { declined: true, alreadyDeclined: Boolean(response.alreadyDeclined) };
+    },
+    onSuccess: async (_result, token) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workspace-invitation", token] }),
+        queryClient.invalidateQueries({ queryKey: ["workspace-collaboration"], exact: false }),
+        queryClient.invalidateQueries({ queryKey: ["pending-notification-invites", userId ?? null] }),
+      ]);
+    },
+  });
+}
+
 export function useWorkspaceSnapshotQuery(
   workspace: Workspace | null,
   userId?: string,

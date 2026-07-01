@@ -20,6 +20,7 @@ import {
   useArchiveNotificationsMutation,
   useCurrentUserEntitlementQuery,
   useDeclineObligationShareMutation,
+  useDeclineWorkspaceInvitationMutation,
   useDeleteNotificationsMutation,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -86,6 +87,7 @@ export function NotificationsPage() {
   const archiveNotificationsMutation = useArchiveNotificationsMutation(user?.id);
   const deleteNotificationsMutation = useDeleteNotificationsMutation(user?.id);
   const declineObligationShareMutation = useDeclineObligationShareMutation(user?.id);
+  const declineWorkspaceInvitationMutation = useDeclineWorkspaceInvitationMutation(user?.id);
   const markNotificationsUnreadMutation = useMarkNotificationsUnreadMutation(user?.id);
   const preferencesQuery = useNotificationPreferencesQuery(user?.id);
   const saveMutedKindsMutation = useSaveMutedNotificationKindsMutation(user?.id);
@@ -338,20 +340,33 @@ export function NotificationsPage() {
     );
   }
 
+  function isWorkspaceInvite(notification: InboxNotification) {
+    return (
+      notification.kind === "workspace_invite" ||
+      (notification.kind === "invite" && notification.href.includes("/share/workspaces/"))
+    );
+  }
+
   async function handleDeclineInvite(notification: InboxNotification) {
     const token = notification.href.split("/").filter(Boolean).pop() ?? "";
-    if (!token || !isObligationShareInvite(notification)) {
+    const isObligationShare = isObligationShareInvite(notification);
+    const isWorkspace = isWorkspaceInvite(notification);
+    if (!token || (!isObligationShare && !isWorkspace)) {
       return;
     }
 
     setDecliningId(notification.id);
     setFeedback(null);
     try {
-      const result = await declineObligationShareMutation.mutateAsync(token);
+      const result = isObligationShare
+        ? await declineObligationShareMutation.mutateAsync(token)
+        : await declineWorkspaceInvitationMutation.mutateAsync(token);
       setFeedback({
         tone: "success",
         title: result.alreadyDeclined ? "La invitacion ya estaba rechazada" : "Invitacion rechazada",
-        description: "Se rechazo la invitacion al credito o deuda compartido.",
+        description: isObligationShare
+          ? "Se rechazo la invitacion al credito o deuda compartido."
+          : "Se rechazo la invitacion al workspace compartido.",
       });
     } catch (error) {
       setFeedback({
