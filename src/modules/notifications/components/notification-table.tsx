@@ -107,7 +107,7 @@ export function NotificationTable({
                 onChange={onToggleSelectAll}
               />
             </th>
-            <th className={headerCellClassName}>
+            <th className={`${headerCellClassName} w-[42%] min-w-[240px]`}>
               <TableColumnFilterMenu
                 active={isNotificationTableFilterActive(filters, "title")}
                 isOpen={openFilter === "title"}
@@ -265,16 +265,16 @@ export function NotificationTable({
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.04] text-storm">
                       <KindIcon className="h-4 w-4" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-ink">{notification.title}</p>
+                      <p className="line-clamp-2 font-semibold text-ink">{notification.title}</p>
                       {notification.status !== "read" ? (
                         <span className="rounded-full border border-pine/20 bg-pine/10 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-pine">
                           Nuevo
                         </span>
                       ) : null}
                     </div>
-                    <p className="max-w-[520px] text-sm leading-6 text-storm">{notification.body}</p>
+                    <p className="line-clamp-2 max-w-[520px] text-sm leading-6 text-storm">{notification.body}</p>
                   </div>
                   </div>
                 </td>
