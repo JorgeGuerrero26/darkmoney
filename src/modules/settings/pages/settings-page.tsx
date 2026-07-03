@@ -242,22 +242,32 @@ function NotificationPreferenceCard({
   title: string;
 }) {
   return (
-    <label className="glass-panel-soft flex items-start justify-between gap-4 rounded-[24px] px-4 py-4">
+    <label
+      className={`glass-panel-soft flex cursor-pointer items-start justify-between gap-4 rounded-[24px] px-5 py-4 transition duration-200 hover:border-white/16 ${
+        checked ? "border-pine/25" : ""
+      }`}
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-ink">{title}</span>
           <StatusBadge status={isLive ? "Disponible hoy" : "En preparación"} tone={isLive ? "success" : "warning"} />
-          <StatusBadge status={checked ? "Activado" : "Desactivado"} tone={checked ? "info" : "neutral"} />
         </div>
         <p className="mt-2 text-sm leading-7 text-storm">{description}</p>
         <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm/75">{detail}</p>
       </div>
-      <input
-        checked={checked}
-        className="mt-1 h-5 w-5 rounded border-ink/10 text-pine"
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
+      <input checked={checked} className="sr-only" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+      <span
+        aria-hidden="true"
+        className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 rounded-full border transition duration-200 ${
+          checked ? "border-pine/40 bg-pine/25" : "border-white/12 bg-white/[0.05]"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
+            checked ? "left-[1.375rem]" : "left-0.5"
+          }`}
+        />
+      </span>
     </label>
   );
 }
