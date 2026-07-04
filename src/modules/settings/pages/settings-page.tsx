@@ -362,13 +362,13 @@ function SettingsPicker({
       </button>
 
       {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#09111c]/98 p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]">
+        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[24px] border border-white/10 bg-shell/95 p-3 shadow-haze backdrop-blur-2xl">
           {queryPlaceholder ? (
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
               <input
                 autoFocus
-                className="w-full rounded-[22px] border border-white/10 bg-[#101928] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 hover:bg-white/[0.06] focus:border-pine/25 focus:bg-white/[0.07] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={queryPlaceholder}
                 type="text"
@@ -384,7 +384,7 @@ function SettingsPicker({
 
                 return (
                   <button
-                    className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-[#0d1623] px-4 py-3.5 text-left transition duration-200 hover:border-white/12"
+                    className="flex w-full items-start justify-between gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left transition duration-200 hover:border-white/16 hover:bg-white/[0.05]"
                     key={option.value}
                     onClick={() => {
                       onChange(option.value);
@@ -440,9 +440,9 @@ function WorkspaceDialogShell({
   title: string;
 }) {
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-[#02060d]/82 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/68 before:backdrop-blur-2xl before:content-[''] sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6">
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[920px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in relative w-full max-w-[920px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]">
           <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-3xl">
@@ -1462,8 +1462,7 @@ export function SettingsPage() {
             />
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
-              <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(76,109,255,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(107,228,197,0.12),transparent_28%),linear-gradient(160deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)_34%,rgba(5,9,16,0.78)_100%)] p-6">
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_32%,rgba(255,255,255,0.01)_100%)]" />
+              <div className="glass-panel-soft relative overflow-hidden rounded-[28px] p-6">
                 <div className="relative">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={proStatusLabel} tone={proStatusTone} />
