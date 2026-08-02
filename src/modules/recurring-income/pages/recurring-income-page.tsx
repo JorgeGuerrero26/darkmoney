@@ -232,9 +232,30 @@ function buildFormStateFromRecurringIncome(income: RecurringIncomeSummary): Recu
   };
 }
 
+/**
+ * Suma meses recortando al ultimo dia real del mes destino. `setUTCMonth` solo
+ * desborda: 31 de enero + 1 mes cae en el 3 de marzo. La app usa addMonths de
+ * date-fns, que recorta al 28 de febrero; esto replica ese comportamiento.
+ */
+function addMonthsClamped(date: Date, months: number) {
+  const dayOfMonth = date.getUTCDate();
+  const result = new Date(date.getTime());
+
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+
+  result.setUTCDate(Math.min(dayOfMonth, lastDayOfTargetMonth));
+
+  return result;
+}
+
 function advanceNextExpectedDate(income: RecurringIncomeSummary): string {
   const parts = income.nextExpectedDate.split("-");
-  const d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12));
+  let d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12));
   const { frequency, intervalCount } = income;
   switch (frequency) {
     case "daily":
@@ -244,7 +265,7 @@ function advanceNextExpectedDate(income: RecurringIncomeSummary): string {
       d.setUTCDate(d.getUTCDate() + 7 * intervalCount);
       break;
     case "monthly": {
-      d.setUTCMonth(d.getUTCMonth() + intervalCount);
+      d = addMonthsClamped(d, intervalCount);
       if (income.dayOfMonth) {
         const maxDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
         d.setUTCDate(Math.min(income.dayOfMonth, maxDay));
@@ -252,10 +273,10 @@ function advanceNextExpectedDate(income: RecurringIncomeSummary): string {
       break;
     }
     case "quarterly":
-      d.setUTCMonth(d.getUTCMonth() + 3 * intervalCount);
+      d = addMonthsClamped(d, 3 * intervalCount);
       break;
     case "yearly":
-      d.setUTCFullYear(d.getUTCFullYear() + intervalCount);
+      d = addMonthsClamped(d, 12 * intervalCount);
       break;
     default:
       d.setUTCDate(d.getUTCDate() + intervalCount);
