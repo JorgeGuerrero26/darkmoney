@@ -23,9 +23,15 @@ type SharedObligationsSectionProps = {
   obligations: SharedObligationSummary[];
   viewMode: string;
   onAnalytics: (id: number) => void;
+  onOpenDetail: (id: number) => void;
 };
 
-export function SharedObligationsSection({ obligations, viewMode, onAnalytics }: SharedObligationsSectionProps) {
+export function SharedObligationsSection({
+  obligations,
+  viewMode,
+  onAnalytics,
+  onOpenDetail,
+}: SharedObligationsSectionProps) {
   return (
     <SurfaceCard
       action={<StatusBadge status={`${obligations.length} visibles`} tone="neutral" />}
@@ -54,6 +60,9 @@ export function SharedObligationsSection({ obligations, viewMode, onAnalytics }:
                   <p className="text-xs text-storm">pendiente</p>
                 </div>
                 <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
+                <Button onClick={() => onOpenDetail(obligation.id)} variant="secondary">
+                  Abrir
+                </Button>
               </article>
             );
           })}
@@ -68,6 +77,7 @@ export function SharedObligationsSection({ obligations, viewMode, onAnalytics }:
                 <th className="hidden px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80 md:table-cell">Direccion</th>
                 <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Pendiente</th>
                 <th className="px-5 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Estado</th>
+                <th className="px-5 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-storm/80">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -92,6 +102,11 @@ export function SharedObligationsSection({ obligations, viewMode, onAnalytics }:
                     <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</td>
                     <td className="px-5 py-3.5">
                       <StatusBadge status={statusOption.label} tone={getStatusTone(obligation.status)} />
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <Button onClick={() => onOpenDetail(obligation.id)} variant="secondary">
+                        Abrir
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -228,17 +243,17 @@ export function SharedObligationsSection({ obligations, viewMode, onAnalytics }:
                   ) : null}
 
                   <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
+                    <Button onClick={() => onOpenDetail(obligation.id)}>
+                      <Eye className="mr-2 h-4 w-4" />
+                      Abrir seguimiento
+                    </Button>
                     <Button onClick={() => onAnalytics(obligation.id)} variant="secondary">
                       <BarChart3 className="mr-2 h-4 w-4" />
                       Ver análisis
                     </Button>
-                    <Button disabled variant="secondary">
-                      <Eye className="mr-2 h-4 w-4" />
-                      Solo seguimiento
-                    </Button>
                     <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-storm">
                       <Lock className="mr-2 h-4 w-4" />
-                      Solo lectura para ti
+                      No puedes editarlo
                     </div>
                   </div>
                 </div>

@@ -17,6 +17,7 @@ import type {
   MovementRecord,
   MovementType,
   NotificationItem,
+  ObligationEventViewerLink,
   ObligationPaymentRequest,
   ObligationShareInviteDetails,
   ObligationShareSummary,
@@ -5523,6 +5524,415 @@ export function usePendingPaymentRequestCountsQuery(workspaceId?: number) {
       }
 
       return counts;
+    },
+  });
+}
+
+/** Solicitudes que el invitado envio sobre un registro compartido con el. */
+export function useViewerPaymentRequestsQuery(obligationId?: number | null, userId?: string) {
+  return useQuery({
+    queryKey: ["viewer-payment-requests", obligationId ?? null, userId ?? null],
+    enabled: Boolean(obligationId && userId),
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_payment_requests")
+        .select(OBLIGATION_PAYMENT_REQUEST_COLUMNS)
+        .eq("obligation_id", obligationId as number)
+        .eq("requested_by_user_id", userId as string)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) => mapObligationPaymentRequestRow(row as Record<string, unknown>));
+    },
+  });
+}
+
+/**
+ * El invitado no puede tocar el saldo del propietario: solo pedir que se registre
+ * un abono. La solicitud queda pendiente hasta que el propietario responda.
+ */
+export function useCreatePaymentRequestMutation(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      obligation: SharedObligationSummary;
+      requestedByUserId: string;
+      requestedByDisplayName?: string | null;
+      amount: number;
+      paymentDate: string;
+      installmentNo?: number | null;
+      description?: string | null;
+      notes?: string | null;
+      viewerAccountId?: number | null;
+      viewerWorkspaceId?: number | null;
+    }) => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_payment_requests")
+        .insert({
+          obligation_id: input.obligation.id,
+          share_id: input.obligation.share.id,
+          workspace_id: input.obligation.workspaceId,
+          requested_by_user_id: input.requestedByUserId,
+          requested_by_display_name: normalizeOptionalText(input.requestedByDisplayName),
+          amount: input.amount,
+          payment_date: input.paymentDate,
+          installment_no: input.installmentNo ?? null,
+          description: normalizeOptionalText(input.description),
+          notes: normalizeOptionalText(input.notes),
+          status: "pending",
+          viewer_account_id: input.viewerAccountId ?? null,
+          viewer_workspace_id: input.viewerWorkspaceId ?? null,
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      const requestId = data.id as number;
+
+      await notifyOwnerOfPaymentRequest({
+        client,
+        ownerUserId: input.obligation.share.ownerUserId,
+        shareId: input.obligation.share.id,
+        obligationId: input.obligation.id,
+        obligationTitle: input.obligation.title,
+        requestId,
+        amount: input.amount,
+        currencyCode: input.obligation.currencyCode,
+        description: normalizeOptionalText(input.description),
+        senderName: normalizeOptionalText(input.requestedByDisplayName) ?? "Un usuario",
+      });
+
+      return { id: requestId };
+    },
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["viewer-payment-requests", variables.obligation.id, userId ?? null],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["shared-obligations", userId ?? null] }),
+      ]);
+    },
+  });
+}
+
+/**
+ * Avisa al propietario. Se hace upsert por (usuario, tipo, entidad) para no
+ * apilar avisos si se reenvia, y un fallo aqui no debe tumbar la solicitud.
+ */
+async function notifyOwnerOfPaymentRequest(input: {
+  client: WorkspaceDataClient;
+  ownerUserId: string;
+  shareId: number;
+  obligationId: number;
+  obligationTitle: string;
+  requestId: number;
+  amount: number;
+  currencyCode: string;
+  description?: string | null;
+  senderName: string;
+}) {
+  const { client, obligationTitle } = input;
+  const amountLabel = `${input.currencyCode} ${input.amount.toFixed(2)}`;
+  const row = {
+    user_id: input.ownerUserId,
+    channel: "in_app" as const,
+    status: "pending" as const,
+    kind: "obligation_payment_request",
+    title: `Solicitud pendiente en "${obligationTitle}"`,
+    body: input.description
+      ? `${input.senderName} solicito registrar ${amountLabel} · ${input.description}`
+      : `${input.senderName} solicito registrar ${amountLabel} en "${obligationTitle}".`,
+    scheduled_for: new Date().toISOString(),
+    related_entity_type: "obligation_payment_request",
+    related_entity_id: input.requestId,
+    payload: {
+      shareId: input.shareId,
+      requestId: input.requestId,
+      obligationId: input.obligationId,
+      obligationTitle,
+    },
+  };
+
+  try {
+    const { data: existing, error: findError } = await client
+      .from("notifications")
+      .select("id")
+      .eq("user_id", row.user_id)
+      .eq("kind", row.kind)
+      .eq("related_entity_type", row.related_entity_type)
+      .eq("related_entity_id", row.related_entity_id)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    if ((existing?.length ?? 0) > 0) {
+      const { error: updateError } = await client
+        .from("notifications")
+        .update({
+          channel: row.channel,
+          status: row.status,
+          title: row.title,
+          body: row.body,
+          scheduled_for: row.scheduled_for,
+          payload: row.payload,
+          read_at: null,
+        })
+        .eq("user_id", row.user_id)
+        .eq("kind", row.kind)
+        .eq("related_entity_type", row.related_entity_type)
+        .eq("related_entity_id", row.related_entity_id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      return;
+    }
+
+    const { error: insertError } = await client.from("notifications").insert(row);
+
+    if (insertError) {
+      throw insertError;
+    }
+  } catch (error) {
+    console.warn("[notifyOwnerOfPaymentRequest]", error);
+  }
+}
+
+/** Que eventos del registro compartido ya reflejo el invitado en sus propias cuentas. */
+export function useObligationEventViewerLinksQuery(
+  obligationId?: number | null,
+  shareId?: number | null,
+) {
+  return useQuery({
+    queryKey: ["obligation-event-viewer-links", obligationId ?? null, shareId ?? null],
+    enabled: Boolean(obligationId && shareId),
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_event_viewer_links")
+        .select(
+          "id, obligation_id, event_id, share_id, linked_by_user_id, viewer_workspace_id, account_id, movement_id, created_at",
+        )
+        .eq("obligation_id", obligationId as number)
+        .eq("share_id", shareId as number);
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) => {
+        const value = row as Record<string, unknown>;
+
+        return {
+          id: Number(value.id),
+          obligationId: Number(value.obligation_id),
+          eventId: Number(value.event_id),
+          shareId: Number(value.share_id),
+          linkedByUserId: String(value.linked_by_user_id ?? ""),
+          viewerWorkspaceId:
+            value.viewer_workspace_id != null ? Number(value.viewer_workspace_id) : null,
+          accountId: value.account_id != null ? Number(value.account_id) : null,
+          movementId: value.movement_id != null ? Number(value.movement_id) : null,
+          createdAt: String(value.created_at ?? ""),
+        } satisfies ObligationEventViewerLink;
+      });
+    },
+  });
+}
+
+/**
+ * Que movimiento le toca al invitado por un evento del propietario. El sentido se
+ * invierte: si el propietario tiene un receivable, el invitado es el deudor y
+ * el abono le sale de la cuenta. Espeja viewerLinkedEventMovementConfig.
+ */
+export function viewerLinkedEventMovementConfig(input: {
+  eventType: ObligationEventSummary["eventType"];
+  obligationDirection: ObligationSummary["direction"];
+  obligationTitle: string;
+}) {
+  const viewerIsDebtor = input.obligationDirection === "receivable";
+
+  if (input.eventType === "payment") {
+    return {
+      movementType: "obligation_payment" as MovementType,
+      isInflow: !viewerIsDebtor,
+      autoDescription: viewerIsDebtor
+        ? `Pago vinculado: ${input.obligationTitle}`
+        : `Cobro vinculado: ${input.obligationTitle}`,
+    };
+  }
+
+  if (input.eventType === "principal_increase") {
+    return {
+      movementType: "obligation_opening" as MovementType,
+      isInflow: viewerIsDebtor,
+      autoDescription: viewerIsDebtor
+        ? `Dinero recibido: ${input.obligationTitle}`
+        : `Prestamo adicional entregado: ${input.obligationTitle}`,
+    };
+  }
+
+  return {
+    movementType: "obligation_opening" as MovementType,
+    isInflow: !viewerIsDebtor,
+    autoDescription: viewerIsDebtor
+      ? `Devolucion de principal: ${input.obligationTitle}`
+      : `Pago de principal: ${input.obligationTitle}`,
+  };
+}
+
+type LinkEventToAccountInput = {
+  obligation: SharedObligationSummary;
+  event: ObligationEventSummary;
+  accountId: number;
+  linkedByUserId: string;
+  viewerWorkspaceId: number;
+};
+
+/**
+ * El invitado refleja un evento del propietario en su propia contabilidad. El
+ * movimiento se crea en el workspace del invitado y no lleva obligation_id: esa
+ * obligacion vive en el workspace ajeno, asi que la referencia va en metadata.
+ */
+export function useLinkEventToAccountMutation(viewerWorkspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: LinkEventToAccountInput) => {
+      const client = getClient();
+      const config = viewerLinkedEventMovementConfig({
+        eventType: input.event.eventType,
+        obligationDirection: input.obligation.direction,
+        obligationTitle: input.obligation.title,
+      });
+      const movement: MovementFormInput = {
+        movementType: config.movementType,
+        status: "posted",
+        occurredAt: buildMiddayTimestampFromDate(input.event.eventDate),
+        description: normalizeOptionalText(input.event.description) ?? config.autoDescription,
+        notes: null,
+        sourceAccountId: config.isInflow ? null : input.accountId,
+        sourceAmount: config.isInflow ? null : input.event.amount,
+        destinationAccountId: config.isInflow ? input.accountId : null,
+        destinationAmount: config.isInflow ? input.event.amount : null,
+        fxRate: null,
+        categoryId: null,
+        counterpartyId: null,
+        obligationId: null,
+        subscriptionId: null,
+        metadata: {
+          obligation_id: input.obligation.id,
+          obligation_event_id: input.event.id,
+        },
+      };
+
+      const { data: movementData, error: movementError } = await client
+        .from("movements")
+        .insert({
+          workspace_id: input.viewerWorkspaceId,
+          created_by_user_id: input.linkedByUserId,
+          ...buildMovementMutationPayload(movement, input.linkedByUserId),
+        })
+        .select("id")
+        .single();
+
+      if (movementError) {
+        throw movementError;
+      }
+
+      const createdMovementId = movementData.id as number;
+      const { error: linkError } = await client.from("obligation_event_viewer_links").insert({
+        obligation_id: input.obligation.id,
+        event_id: input.event.id,
+        share_id: input.obligation.share.id,
+        linked_by_user_id: input.linkedByUserId,
+        viewer_workspace_id: input.viewerWorkspaceId,
+        account_id: input.accountId,
+        movement_id: createdMovementId,
+      });
+
+      if (linkError) {
+        await client
+          .from("movements")
+          .delete()
+          .eq("id", createdMovementId)
+          .eq("workspace_id", input.viewerWorkspaceId);
+
+        throw linkError;
+      }
+
+      return { movementId: createdMovementId };
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: [
+          "obligation-event-viewer-links",
+          variables.obligation.id,
+          variables.obligation.share.id,
+        ],
+      });
+
+      if (viewerWorkspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, viewerWorkspaceId, userId);
+      }
+    },
+  });
+}
+
+/** Deshace el vinculo del invitado y borra el movimiento que habia creado. */
+export function useDeleteViewerEventLinkMutation(viewerWorkspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      link: ObligationEventViewerLink;
+      obligationId: number;
+      shareId: number;
+    }) => {
+      const client = getClient();
+      const { error: linkError } = await client
+        .from("obligation_event_viewer_links")
+        .delete()
+        .eq("id", input.link.id);
+
+      if (linkError) {
+        throw linkError;
+      }
+
+      if (input.link.movementId != null && input.link.viewerWorkspaceId != null) {
+        const { error: movementError } = await client
+          .from("movements")
+          .delete()
+          .eq("id", input.link.movementId)
+          .eq("workspace_id", input.link.viewerWorkspaceId);
+
+        if (movementError) {
+          throw movementError;
+        }
+      }
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["obligation-event-viewer-links", variables.obligationId, variables.shareId],
+      });
+
+      if (viewerWorkspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, viewerWorkspaceId, userId);
+      }
     },
   });
 }

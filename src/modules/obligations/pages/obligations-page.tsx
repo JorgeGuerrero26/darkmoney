@@ -45,6 +45,7 @@ import type {
   CounterpartySummary,
   ObligationDirection,
   ObligationEventSummary,
+  ObligationEventViewerLink,
   ObligationPaymentRequest,
   ObligationShareSummary,
   ObligationOriginType,
@@ -78,8 +79,13 @@ import {
   useEntityAttachmentsQuery,
   useObligationSharesQuery,
   useAcceptPaymentRequestMutation,
+  useCreatePaymentRequestMutation,
   useDeleteObligationEventMutation,
+  useDeleteViewerEventLinkMutation,
+  useLinkEventToAccountMutation,
+  useObligationEventViewerLinksQuery,
   usePendingPaymentRequestsQuery,
+  useViewerPaymentRequestsQuery,
   useRegisterObligationPaymentMutation,
   useRejectPaymentRequestMutation,
   useSharedObligationsQuery,
@@ -92,6 +98,10 @@ import { ObligationTable } from "../components/obligation-table";
 import { ObligationList } from "../components/obligation-list";
 import { ObligationGrid } from "../components/obligation-grid";
 import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
+import {
+  SharedObligationDetailDialog,
+  type SharedObligationRequestFormState,
+} from "../components/shared-obligation-detail-dialog";
 import { SharedObligationsSection } from "../components/shared-obligations-section";
 import { useObligationsFilters } from "../hooks/use-obligations-filters";
 import {
@@ -531,6 +541,18 @@ function suggestNextInstallmentNo(obligation: ObligationSummary): number {
   return obligation.installmentCount && obligation.installmentCount > 0
     ? Math.min(next, obligation.installmentCount)
     : next;
+}
+
+function createDefaultSharedRequestFormState(): SharedObligationRequestFormState {
+  return {
+    amount: "",
+    paymentDate: toDateInputValue(new Date().toISOString()),
+    installmentNo: "",
+    description: "",
+    notes: "",
+    linkToAccount: false,
+    accountId: "",
+  };
 }
 
 function createDefaultPaymentFormState(obligation: ObligationSummary): PaymentFormState {
@@ -2717,6 +2739,16 @@ export function ObligationsPage() {
   const eventUpdateMutation = useUpdateObligationEventMutation(activeWorkspace?.id, user?.id);
   const unlinkShareMutation = useUnlinkObligationShareMutation(activeWorkspace?.id, user?.id);
   const pendingPaymentRequestsQuery = usePendingPaymentRequestsQuery(activeWorkspace?.id);
+  const [sharedDetailId, setSharedDetailId] = useState<number | null>(null);
+  const [sharedDetailFeedback, setSharedDetailFeedback] = useState<FeedbackState | null>(null);
+  const [sharedRequestFormState, setSharedRequestFormState] =
+    useState<SharedObligationRequestFormState>(createDefaultSharedRequestFormState());
+  const createPaymentRequestMutation = useCreatePaymentRequestMutation(user?.id);
+  const linkEventToAccountMutation = useLinkEventToAccountMutation(activeWorkspace?.id, user?.id);
+  const deleteViewerEventLinkMutation = useDeleteViewerEventLinkMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
   const acceptPaymentRequestMutation = useAcceptPaymentRequestMutation(
     activeWorkspace?.id,
     user?.id,
@@ -2823,6 +2855,15 @@ export function ObligationsPage() {
   const accounts = snapshot?.accounts ?? [];
   const movements = snapshot?.movements ?? [];
   const pendingPaymentRequests = pendingPaymentRequestsQuery.data ?? [];
+  const sharedDetailObligation =
+    sharedDetailId === null
+      ? null
+      : sharedObligations.find((obligation) => obligation.id === sharedDetailId) ?? null;
+  const viewerPaymentRequestsQuery = useViewerPaymentRequestsQuery(sharedDetailId, user?.id);
+  const viewerEventLinksQuery = useObligationEventViewerLinksQuery(
+    sharedDetailId,
+    sharedDetailObligation?.share.id ?? null,
+  );
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedObligation =
     selectedObligationId === null
@@ -3112,6 +3153,154 @@ export function ObligationsPage() {
       registerAccountMovement: event.movementId != null,
       accountId: accountId != null ? String(accountId) : "",
     });
+  }
+
+  function openSharedDetail(obligationId: number) {
+    setSharedDetailId(obligationId);
+    setSharedDetailFeedback(null);
+    setSharedRequestFormState(createDefaultSharedRequestFormState());
+  }
+
+  function updateSharedRequestFormState<Field extends keyof SharedObligationRequestFormState>(
+    field: Field,
+    value: SharedObligationRequestFormState[Field],
+  ) {
+    setSharedRequestFormState((currentValue) => ({ ...currentValue, [field]: value }));
+  }
+
+  async function handleSubmitSharedRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSharedDetailFeedback(null);
+
+    if (!sharedDetailObligation || !user?.id) {
+      return;
+    }
+
+    const amount = parseOptionalNumber(sharedRequestFormState.amount);
+    const installmentNo = parseOptionalInteger(sharedRequestFormState.installmentNo);
+
+    if (amount === null || Number.isNaN(amount) || amount <= 0) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Monto invalido",
+        description: "Ingresa un monto mayor que cero.",
+      });
+      return;
+    }
+
+    if (!sharedRequestFormState.paymentDate) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Falta la fecha",
+        description: "Selecciona la fecha del abono que quieres reportar.",
+      });
+      return;
+    }
+
+    if (installmentNo !== null && (Number.isNaN(installmentNo) || installmentNo <= 0)) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Cuota invalida",
+        description: "Si la completas, debe ser un numero entero mayor que cero.",
+      });
+      return;
+    }
+
+    const viewerAccountId = parseOptionalInteger(sharedRequestFormState.accountId);
+
+    if (sharedRequestFormState.linkToAccount && !viewerAccountId) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Falta la cuenta",
+        description: "Selecciona la cuenta sugerida o desactiva esa opcion.",
+      });
+      return;
+    }
+
+    try {
+      await createPaymentRequestMutation.mutateAsync({
+        obligation: sharedDetailObligation,
+        requestedByUserId: user.id,
+        requestedByDisplayName: profile?.fullName ?? user.email ?? null,
+        amount,
+        paymentDate: sharedRequestFormState.paymentDate,
+        installmentNo,
+        description: sharedRequestFormState.description,
+        notes: sharedRequestFormState.notes,
+        viewerAccountId: sharedRequestFormState.linkToAccount ? viewerAccountId : null,
+        viewerWorkspaceId: sharedRequestFormState.linkToAccount ? activeWorkspace?.id ?? null : null,
+      });
+      setSharedRequestFormState(createDefaultSharedRequestFormState());
+      setSharedDetailFeedback({
+        tone: "success",
+        title: "Solicitud enviada",
+        description: `Avisamos a ${
+          sharedDetailObligation.share.ownerDisplayName ?? "el propietario"
+        }. El saldo no cambia hasta que la acepte.`,
+      });
+    } catch (error) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "No pudimos enviar la solicitud",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleLinkSharedEvent(event: ObligationEventSummary, accountId: number) {
+    setSharedDetailFeedback(null);
+
+    if (!sharedDetailObligation || !user?.id || !activeWorkspace) {
+      return;
+    }
+
+    try {
+      await linkEventToAccountMutation.mutateAsync({
+        obligation: sharedDetailObligation,
+        event,
+        accountId,
+        linkedByUserId: user.id,
+        viewerWorkspaceId: activeWorkspace.id,
+      });
+      setSharedDetailFeedback({
+        tone: "success",
+        title: "Evento reflejado",
+        description: "Creamos el movimiento en tu cuenta. El registro del propietario no cambio.",
+      });
+    } catch (error) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "No pudimos reflejar el evento",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleUnlinkSharedEvent(link: ObligationEventViewerLink) {
+    setSharedDetailFeedback(null);
+
+    if (!sharedDetailObligation) {
+      return;
+    }
+
+    try {
+      await deleteViewerEventLinkMutation.mutateAsync({
+        link,
+        obligationId: sharedDetailObligation.id,
+        shareId: sharedDetailObligation.share.id,
+      });
+      setSharedDetailFeedback({
+        tone: "success",
+        title: "Vinculo retirado",
+        description: "Borramos el movimiento que habiamos creado en tu cuenta.",
+      });
+    } catch (error) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "No pudimos quitar el vinculo",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
   }
 
   async function handleAcceptPaymentRequest(input: {
@@ -4397,7 +4586,28 @@ export function ObligationsPage() {
         <SharedObligationsSection
           obligations={filteredSharedObligations}
           onAnalytics={setAnalyticsSharedObligationId}
+          onOpenDetail={openSharedDetail}
           viewMode={viewMode}
+        />
+      ) : null}
+
+      {sharedDetailObligation ? (
+        <SharedObligationDetailDialog
+          accounts={accounts}
+          feedback={sharedDetailFeedback}
+          formState={sharedRequestFormState}
+          isLinking={
+            linkEventToAccountMutation.isPending || deleteViewerEventLinkMutation.isPending
+          }
+          isSendingRequest={createPaymentRequestMutation.isPending}
+          obligation={sharedDetailObligation}
+          onClose={() => setSharedDetailId(null)}
+          onLinkEvent={handleLinkSharedEvent}
+          onSubmitRequest={handleSubmitSharedRequest}
+          onUnlinkEvent={handleUnlinkSharedEvent}
+          requests={viewerPaymentRequestsQuery.data ?? []}
+          updateFormState={updateSharedRequestFormState}
+          viewerLinks={viewerEventLinksQuery.data ?? []}
         />
       ) : null}
 
