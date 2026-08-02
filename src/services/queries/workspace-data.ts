@@ -17,6 +17,7 @@ import type {
   MovementRecord,
   MovementType,
   NotificationItem,
+  ObligationPaymentRequest,
   ObligationShareInviteDetails,
   ObligationShareSummary,
   ObligationEventSummary,
@@ -5467,6 +5468,397 @@ async function applyObligationStatusAfterEventChange(input: {
 
   if (error) {
     throw error;
+  }
+}
+
+const OBLIGATION_PAYMENT_REQUEST_COLUMNS =
+  "id, obligation_id, workspace_id, share_id, requested_by_user_id, requested_by_display_name, amount, payment_date, installment_no, description, notes, status, rejection_reason, viewer_account_id, viewer_workspace_id, accepted_event_id, created_at, updated_at";
+
+function mapObligationPaymentRequestRow(row: Record<string, unknown>): ObligationPaymentRequest {
+  return {
+    id: Number(row.id),
+    obligationId: Number(row.obligation_id),
+    workspaceId: Number(row.workspace_id),
+    shareId: Number(row.share_id),
+    requestedByUserId: String(row.requested_by_user_id ?? ""),
+    requestedByDisplayName: (row.requested_by_display_name as string | null) ?? null,
+    amount: toNumber(row.amount as NumericLike),
+    paymentDate: String(row.payment_date ?? ""),
+    installmentNo: row.installment_no != null ? Number(row.installment_no) : null,
+    description: (row.description as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
+    status: (row.status as ObligationPaymentRequest["status"]) ?? "pending",
+    rejectionReason: (row.rejection_reason as string | null) ?? null,
+    viewerAccountId: row.viewer_account_id != null ? Number(row.viewer_account_id) : null,
+    viewerWorkspaceId: row.viewer_workspace_id != null ? Number(row.viewer_workspace_id) : null,
+    acceptedEventId: row.accepted_event_id != null ? Number(row.accepted_event_id) : null,
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+/** Cuantas solicitudes pendientes tiene cada registro, para marcarlos en la lista. */
+export function usePendingPaymentRequestCountsQuery(workspaceId?: number) {
+  return useQuery({
+    queryKey: ["obligation-payment-request-counts", workspaceId ?? null],
+    enabled: Boolean(workspaceId),
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_payment_requests")
+        .select("obligation_id")
+        .eq("workspace_id", workspaceId as number)
+        .eq("status", "pending");
+
+      if (error) {
+        throw error;
+      }
+
+      const counts = new Map<number, number>();
+
+      for (const row of (data ?? []) as { obligation_id: number }[]) {
+        const id = Number(row.obligation_id);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+
+      return counts;
+    },
+  });
+}
+
+/** Todas las solicitudes pendientes del workspace, para resolverlas sin abrir cada registro. */
+export function usePendingPaymentRequestsQuery(workspaceId?: number) {
+  return useQuery({
+    queryKey: ["obligation-payment-requests-pending", workspaceId ?? null],
+    enabled: Boolean(workspaceId),
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_payment_requests")
+        .select(OBLIGATION_PAYMENT_REQUEST_COLUMNS)
+        .eq("workspace_id", workspaceId as number)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) => mapObligationPaymentRequestRow(row as Record<string, unknown>));
+    },
+  });
+}
+
+/** Solicitudes que el invitado envio sobre un registro, vistas por el propietario. */
+export function useObligationPaymentRequestsQuery(obligationId?: number | null) {
+  return useQuery({
+    queryKey: ["obligation-payment-requests", obligationId ?? null],
+    enabled: Boolean(obligationId),
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const client = getClient();
+      const { data, error } = await client
+        .from("obligation_payment_requests")
+        .select(OBLIGATION_PAYMENT_REQUEST_COLUMNS)
+        .eq("obligation_id", obligationId as number)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ?? []).map((row) => mapObligationPaymentRequestRow(row as Record<string, unknown>));
+    },
+  });
+}
+
+async function invalidatePaymentRequestQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  obligationId: number,
+  workspaceId?: number,
+  userId?: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["obligation-payment-requests", obligationId] }),
+    queryClient.invalidateQueries({
+      queryKey: ["obligation-payment-requests-pending", workspaceId ?? null],
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ["obligation-payment-request-counts", workspaceId ?? null],
+    }),
+    queryClient.invalidateQueries({ queryKey: ["notifications", userId ?? null] }),
+  ]);
+
+  if (workspaceId) {
+    await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+  }
+}
+
+/**
+ * El propietario acepta la solicitud del invitado: se crea el abono real y, si
+ * eligio cuenta, su movimiento. El movimiento del invitado lo crea el invitado
+ * desde su propio workspace, porque RLS no deja escribir en el ajeno.
+ */
+export function useAcceptPaymentRequestMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      request: ObligationPaymentRequest;
+      obligationId: number;
+      workspaceId: number;
+      userId: string;
+      registerAccountMovement: boolean;
+      accountId?: number | null;
+      nextStatus?: ObligationStatus;
+    }) => {
+      const client = getClient();
+      const obligationRow = await loadObligationForEvent(
+        client,
+        input.obligationId,
+        input.workspaceId,
+      );
+      const shouldRegisterMovement = Boolean(input.registerAccountMovement);
+      let createdEventId: number | null = null;
+      let createdMovementId: number | null = null;
+
+      if (shouldRegisterMovement) {
+        if (!input.accountId) {
+          throw new Error("Necesitamos una cuenta para registrar el movimiento del abono.");
+        }
+
+        await assertAccountMatchesObligationCurrency(
+          client,
+          input.accountId,
+          input.workspaceId,
+          obligationRow.currency_code,
+        );
+      }
+
+      try {
+        const { data: eventData, error: eventError } = await client
+          .from("obligation_events")
+          .insert({
+            obligation_id: input.obligationId,
+            event_type: "payment",
+            event_date: input.request.paymentDate,
+            amount: input.request.amount,
+            installment_no: input.request.installmentNo ?? null,
+            reason: null,
+            description: normalizeOptionalText(input.request.description),
+            notes: normalizeOptionalText(input.request.notes),
+            created_by_user_id: input.userId,
+            metadata: { from_payment_request: input.request.id },
+          })
+          .select("id")
+          .single();
+
+        if (eventError) {
+          throw eventError;
+        }
+
+        createdEventId = eventData.id as number;
+
+        if (shouldRegisterMovement) {
+          const movementPayload = buildObligationPaymentMovement(
+            {
+              obligationId: input.obligationId,
+              eventDate: input.request.paymentDate,
+              amount: input.request.amount,
+              description: input.request.description,
+              notes: input.request.notes,
+              accountId: input.accountId,
+            },
+            obligationRow,
+            createdEventId,
+          );
+          const { data: movementData, error: movementError } = await client
+            .from("movements")
+            .insert({
+              workspace_id: input.workspaceId,
+              created_by_user_id: input.userId,
+              ...buildMovementMutationPayload(movementPayload, input.userId),
+            })
+            .select("id")
+            .single();
+
+          if (movementError) {
+            throw movementError;
+          }
+
+          createdMovementId = movementData.id as number;
+
+          const { error: linkError } = await client
+            .from("obligation_events")
+            .update({ movement_id: createdMovementId })
+            .eq("id", createdEventId);
+
+          if (linkError) {
+            throw linkError;
+          }
+        }
+
+        const { error: requestError } = await client
+          .from("obligation_payment_requests")
+          .update({
+            status: "accepted",
+            accepted_event_id: createdEventId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", input.request.id);
+
+        if (requestError) {
+          throw requestError;
+        }
+      } catch (error) {
+        if (createdMovementId !== null) {
+          await client
+            .from("movements")
+            .delete()
+            .eq("id", createdMovementId)
+            .eq("workspace_id", input.workspaceId);
+        }
+
+        if (createdEventId !== null) {
+          await client.from("obligation_events").delete().eq("id", createdEventId);
+        }
+
+        throw error;
+      }
+
+      await applyObligationStatusAfterEventChange(input);
+      await notifyPaymentRequestResolved({
+        client,
+        request: input.request,
+        ownerUserId: input.userId,
+        obligationTitle: obligationRow.title,
+        resolution: "accepted",
+      });
+    },
+    onSuccess: async (_data, variables) => {
+      await invalidatePaymentRequestQueries(
+        queryClient,
+        variables.obligationId,
+        workspaceId,
+        userId,
+      );
+    },
+  });
+}
+
+/** El propietario rechaza la solicitud y deja constancia del motivo. */
+export function useRejectPaymentRequestMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      request: ObligationPaymentRequest;
+      obligationId: number;
+      workspaceId: number;
+      userId: string;
+      obligationTitle: string;
+      rejectionReason?: string | null;
+    }) => {
+      const client = getClient();
+      const { error } = await client
+        .from("obligation_payment_requests")
+        .update({
+          status: "rejected",
+          rejection_reason: normalizeOptionalText(input.rejectionReason),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.request.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await notifyPaymentRequestResolved({
+        client,
+        request: input.request,
+        ownerUserId: input.userId,
+        obligationTitle: input.obligationTitle,
+        resolution: "rejected",
+        rejectionReason: normalizeOptionalText(input.rejectionReason),
+      });
+    },
+    onSuccess: async (_data, variables) => {
+      await invalidatePaymentRequestQueries(
+        queryClient,
+        variables.obligationId,
+        workspaceId,
+        userId,
+      );
+    },
+  });
+}
+
+/**
+ * Cierra la notificacion del propietario y avisa al invitado. Los avisos no deben
+ * tumbar la respuesta, asi que los errores solo se registran.
+ */
+async function notifyPaymentRequestResolved(input: {
+  client: WorkspaceDataClient;
+  request: ObligationPaymentRequest;
+  ownerUserId: string;
+  obligationTitle: string;
+  resolution: "accepted" | "rejected";
+  rejectionReason?: string | null;
+}) {
+  const { client, obligationTitle, ownerUserId, rejectionReason, request, resolution } = input;
+  const nowIso = new Date().toISOString();
+  const accepted = resolution === "accepted";
+
+  try {
+    await client
+      .from("notifications")
+      .update({
+        status: "read",
+        read_at: nowIso,
+        title: accepted ? "Solicitud aceptada" : "Solicitud rechazada",
+        body: accepted
+          ? `Ya aceptaste la solicitud en "${obligationTitle}".`
+          : `Ya rechazaste la solicitud en "${obligationTitle}".`,
+        payload: {
+          requestId: request.id,
+          obligationId: request.obligationId,
+          obligationTitle,
+          responseStatus: resolution,
+          rejectionReason: rejectionReason ?? null,
+          respondedAt: nowIso,
+        },
+      })
+      .eq("user_id", ownerUserId)
+      .eq("kind", "obligation_payment_request")
+      .eq("related_entity_type", "obligation_payment_request")
+      .eq("related_entity_id", request.id);
+
+    if (request.requestedByUserId) {
+      await client.from("notifications").insert({
+        user_id: request.requestedByUserId,
+        channel: "in_app",
+        status: "pending",
+        kind: accepted ? "obligation_request_accepted" : "obligation_request_rejected",
+        title: accepted ? "Solicitud aceptada" : "Solicitud rechazada",
+        body: accepted
+          ? `Tu solicitud fue aceptada para "${obligationTitle}".`
+          : `Tu solicitud fue rechazada para "${obligationTitle}"${
+              rejectionReason ? `. Motivo: ${rejectionReason}` : ""
+            }.`,
+        scheduled_for: nowIso,
+        related_entity_type: "obligation_payment_request",
+        related_entity_id: request.id,
+        payload: {
+          requestId: request.id,
+          obligationId: request.obligationId,
+          obligationTitle,
+        },
+      });
+    }
+  } catch (error) {
+    console.warn("[notifyPaymentRequestResolved]", error);
   }
 }
 

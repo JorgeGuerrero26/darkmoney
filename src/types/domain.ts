@@ -266,6 +266,29 @@ export type ObligationEventSummary = {
   metadata?: JsonValue | null;
 };
 
+export type ObligationPaymentRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
+
+export type ObligationPaymentRequest = {
+  id: number;
+  obligationId: number;
+  workspaceId: number;
+  shareId: number;
+  requestedByUserId: string;
+  requestedByDisplayName?: string | null;
+  amount: number;
+  paymentDate: string;
+  installmentNo?: number | null;
+  description?: string | null;
+  notes?: string | null;
+  status: ObligationPaymentRequestStatus;
+  rejectionReason?: string | null;
+  viewerAccountId?: number | null;
+  viewerWorkspaceId?: number | null;
+  acceptedEventId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ObligationShareSummary = {
   id: number;
   workspaceId: number;

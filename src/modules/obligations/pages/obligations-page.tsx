@@ -45,6 +45,7 @@ import type {
   CounterpartySummary,
   ObligationDirection,
   ObligationEventSummary,
+  ObligationPaymentRequest,
   ObligationShareSummary,
   ObligationOriginType,
   ObligationStatus,
@@ -76,8 +77,11 @@ import {
   useDeleteObligationMutation,
   useEntityAttachmentsQuery,
   useObligationSharesQuery,
+  useAcceptPaymentRequestMutation,
   useDeleteObligationEventMutation,
+  usePendingPaymentRequestsQuery,
   useRegisterObligationPaymentMutation,
+  useRejectPaymentRequestMutation,
   useSharedObligationsQuery,
   useUnlinkObligationShareMutation,
   useUpdateObligationEventMutation,
@@ -87,6 +91,7 @@ import {
 import { ObligationTable } from "../components/obligation-table";
 import { ObligationList } from "../components/obligation-list";
 import { ObligationGrid } from "../components/obligation-grid";
+import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
 import { SharedObligationsSection } from "../components/shared-obligations-section";
 import { useObligationsFilters } from "../hooks/use-obligations-filters";
 import {
@@ -2711,6 +2716,15 @@ export function ObligationsPage() {
   const paymentMutation = useRegisterObligationPaymentMutation(activeWorkspace?.id, user?.id);
   const eventUpdateMutation = useUpdateObligationEventMutation(activeWorkspace?.id, user?.id);
   const unlinkShareMutation = useUnlinkObligationShareMutation(activeWorkspace?.id, user?.id);
+  const pendingPaymentRequestsQuery = usePendingPaymentRequestsQuery(activeWorkspace?.id);
+  const acceptPaymentRequestMutation = useAcceptPaymentRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
+  const rejectPaymentRequestMutation = useRejectPaymentRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
   const eventDeleteMutation = useDeleteObligationEventMutation(activeWorkspace?.id, user?.id);
   const principalAdjustmentMutation = useAdjustObligationPrincipalMutation(activeWorkspace?.id, user?.id);
   const shareInviteMutation = useCreateObligationShareInviteMutation(activeWorkspace?.id, user?.id);
@@ -2808,6 +2822,7 @@ export function ObligationsPage() {
   const counterparties = snapshot?.catalogs.counterparties ?? [];
   const accounts = snapshot?.accounts ?? [];
   const movements = snapshot?.movements ?? [];
+  const pendingPaymentRequests = pendingPaymentRequestsQuery.data ?? [];
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedObligation =
     selectedObligationId === null
@@ -3097,6 +3112,85 @@ export function ObligationsPage() {
       registerAccountMovement: event.movementId != null,
       accountId: accountId != null ? String(accountId) : "",
     });
+  }
+
+  async function handleAcceptPaymentRequest(input: {
+    request: ObligationPaymentRequest;
+    obligation: ObligationSummary;
+    registerAccountMovement: boolean;
+    accountId: number | null;
+  }) {
+    if (!activeWorkspace || !user?.id) {
+      return;
+    }
+
+    const remainingAfterPayment = Math.max(
+      0,
+      input.obligation.pendingAmount - input.request.amount,
+    );
+    const nextStatus: ObligationStatus =
+      remainingAfterPayment <= 0
+        ? "paid"
+        : input.obligation.status === "draft"
+          ? "active"
+          : input.obligation.status;
+
+    try {
+      await acceptPaymentRequestMutation.mutateAsync({
+        request: input.request,
+        obligationId: input.obligation.id,
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+        registerAccountMovement: input.registerAccountMovement,
+        accountId: input.accountId,
+        nextStatus,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Solicitud aceptada",
+        description: input.registerAccountMovement
+          ? "Registramos el abono y su movimiento en la cuenta que elegiste."
+          : "Registramos el abono. No creamos movimiento en cuenta.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos aceptar la solicitud",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleRejectPaymentRequest(input: {
+    request: ObligationPaymentRequest;
+    obligation: ObligationSummary;
+    rejectionReason: string;
+  }) {
+    if (!activeWorkspace || !user?.id) {
+      return;
+    }
+
+    try {
+      await rejectPaymentRequestMutation.mutateAsync({
+        request: input.request,
+        obligationId: input.obligation.id,
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+        obligationTitle: input.obligation.title,
+        rejectionReason: input.rejectionReason,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Solicitud rechazada",
+        description: "Avisamos a quien la envio. El saldo pendiente no cambio.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos rechazar la solicitud",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
   }
 
   async function handleUnlinkShare(obligationId: number) {
@@ -4068,6 +4162,15 @@ export function ObligationsPage() {
         </div>
         <p className="mt-1 text-xs text-storm">Cartera de creditos por cobrar y deudas por pagar del workspace.</p>
       </section>
+
+      <PendingPaymentRequestsSection
+        accounts={accounts}
+        isResolving={acceptPaymentRequestMutation.isPending || rejectPaymentRequestMutation.isPending}
+        obligations={obligations}
+        onAccept={handleAcceptPaymentRequest}
+        onReject={handleRejectPaymentRequest}
+        requests={pendingPaymentRequests}
+      />
 
       {/* Métricas compactas */}
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
