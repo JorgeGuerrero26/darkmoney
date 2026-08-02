@@ -10,7 +10,7 @@ import { Button } from "../../../components/ui/button";
 import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { formatDate } from "../../../lib/formatting/dates";
-import type { ObligationSummary } from "../../../types/domain";
+import type { ObligationEventSummary, ObligationSummary } from "../../../types/domain";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -116,12 +116,17 @@ type ObligationAnalyticsModalProps = {
   obligation: ObligationSummary;
   baseCurrencyCode: string;
   onClose: () => void;
+  /** Ausentes en el modal de un registro compartido: ahi solo se mira. */
+  onEditEvent?: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
+  onDeleteEvent?: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
 };
 
 export function ObligationAnalyticsModal({
   obligation,
   baseCurrencyCode,
   onClose,
+  onEditEvent,
+  onDeleteEvent,
 }: ObligationAnalyticsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef);
@@ -301,23 +306,52 @@ export function ObligationAnalyticsModal({
               <div className="mt-3 space-y-2">
                 {recentEvents.map((e) => (
                   <div
-                    className="flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+                    className="rounded-[14px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
                     key={e.id}
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">
-                        {getEventLabel(e.eventType)}{e.description ? ` · ${e.description}` : ""}
-                      </p>
-                      <p className="text-[0.65rem] text-storm">
-                        {formatDate(e.eventDate)}
-                        {e.installmentNo ? ` · Cuota ${e.installmentNo}` : ""}
-                      </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink">
+                          {getEventLabel(e.eventType)}{e.description ? ` · ${e.description}` : ""}
+                        </p>
+                        <p className="text-[0.65rem] text-storm">
+                          {formatDate(e.eventDate)}
+                          {e.installmentNo ? ` · Cuota ${e.installmentNo}` : ""}
+                        </p>
+                      </div>
+                      {e.amount > 0 && (
+                        <p className="shrink-0 font-semibold" style={{ color }}>
+                          {formatCurrency(e.amount, currencyCode)}
+                        </p>
+                      )}
                     </div>
-                    {e.amount > 0 && (
-                      <p className="shrink-0 font-semibold" style={{ color }}>
-                        {formatCurrency(e.amount, currencyCode)}
-                      </p>
-                    )}
+                    {/* Solo los abonos: los ajustes de principal llevan motivo
+                        obligatorio y su propio historial. */}
+                    {e.eventType === "payment" && (onEditEvent || onDeleteEvent) ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {onEditEvent ? (
+                          <button
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-white/20 hover:text-ink"
+                            onClick={() => onEditEvent(obligation, e)}
+                            type="button"
+                          >
+                            Editar
+                          </button>
+                        ) : null}
+                        {onDeleteEvent ? (
+                          <button
+                            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-rose-400/40 hover:text-rose-200"
+                            onClick={() => onDeleteEvent(obligation, e)}
+                            type="button"
+                          >
+                            Eliminar
+                          </button>
+                        ) : null}
+                        <span className="text-[0.62rem] uppercase tracking-[0.18em] text-storm/60">
+                          {e.movementId ? "Con movimiento" : "Sin movimiento"}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>

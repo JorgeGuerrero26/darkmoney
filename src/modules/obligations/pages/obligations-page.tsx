@@ -4812,6 +4812,14 @@ export function ObligationsPage() {
             baseCurrencyCode={baseCurrencyCode}
             obligation={analyticsObligation}
             onClose={() => setAnalyticsObligationId(null)}
+            onDeleteEvent={(obligation, event) => {
+              setAnalyticsObligationId(null);
+              setEventDeleteTarget({ obligationId: obligation.id, event });
+            }}
+            onEditEvent={(obligation, event) => {
+              setAnalyticsObligationId(null);
+              openPaymentEditDialog(obligation, event);
+            }}
           />
         ) : null;
       })() : null}
