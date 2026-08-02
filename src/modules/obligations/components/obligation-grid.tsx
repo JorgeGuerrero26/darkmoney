@@ -6,7 +6,11 @@ import { StatusBadge } from "../../../components/ui/status-badge";
 import { createLongPressHandlers, wasRecentLongPress } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
-import type { ObligationShareSummary, ObligationSummary } from "../../../types/domain";
+import type {
+  ObligationEventSummary,
+  ObligationShareSummary,
+  ObligationSummary,
+} from "../../../types/domain";
 import type { PrincipalAdjustmentMode } from "../lib/obligations-types";
 import {
   getDirectionLabel,
@@ -36,6 +40,8 @@ type ObligationGridProps = {
   onAnalytics: (id: number) => void;
   onEdit: (obligation: ObligationSummary) => void;
   onDelete: (id: number) => void;
+  onEditEvent: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
+  onDeleteEvent: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
 };
 
 export function ObligationGrid({
@@ -53,6 +59,8 @@ export function ObligationGrid({
   onAnalytics,
   onEdit,
   onDelete,
+  onEditEvent,
+  onDeleteEvent,
 }: ObligationGridProps) {
   return (
     <div className="grid gap-6 xl:grid-cols-2">
@@ -204,6 +212,29 @@ export function ObligationGrid({
                             <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.reason}</p>
                           ) : eventItem.description ? (
                             <p className="mt-1.5 text-xs leading-5 text-storm">{eventItem.description}</p>
+                          ) : null}
+                          {/* Solo los abonos se editan aqui; los ajustes de principal
+                              tienen su propio flujo con motivo obligatorio. */}
+                          {eventItem.eventType === "payment" ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <button
+                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-white/20 hover:text-ink"
+                                onClick={() => onEditEvent(obligation, eventItem)}
+                                type="button"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-rose-400/40 hover:text-rose-200"
+                                onClick={() => onDeleteEvent(obligation, eventItem)}
+                                type="button"
+                              >
+                                Eliminar
+                              </button>
+                              <span className="text-[0.68rem] uppercase tracking-[0.18em] text-storm/60">
+                                {eventItem.movementId ? "Con movimiento" : "Sin movimiento"}
+                              </span>
+                            </div>
                           ) : null}
                         </div>
                       </div>

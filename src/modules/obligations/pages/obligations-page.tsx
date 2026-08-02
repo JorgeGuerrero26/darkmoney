@@ -2529,7 +2529,6 @@ function EditorDialog({
                   </div>
                 </div>
               </div>
-            </div>
 
             {/* ── Historial de cambios (solo en modo edición) ── */}
             {!isCreateMode && selectedObligation && selectedObligation.events.length > 0 ? (
@@ -2605,6 +2604,7 @@ function EditorDialog({
                 </ol>
               </div>
             ) : null}
+            </div>
 
             <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -4781,7 +4781,11 @@ export function ObligationsPage() {
           onAdjustPrincipal={openPrincipalAdjustmentDialog}
           onAnalytics={setAnalyticsObligationId}
           onDelete={setDeleteTargetId}
+          onDeleteEvent={(obligation, event) =>
+            setEventDeleteTarget({ obligationId: obligation.id, event })
+          }
           onEdit={openEditEditor}
+          onEditEvent={openPaymentEditDialog}
           onPayment={openPaymentDialog}
           onShare={openShareDialog}
           onToggleHistory={(id) => setExpandedHistoryId(expandedHistoryId === id ? null : id)}
