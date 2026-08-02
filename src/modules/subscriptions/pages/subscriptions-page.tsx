@@ -61,6 +61,7 @@ import {
   frequencyOptions,
   getFrequencyOption,
   getStatusOption,
+  rollDueDateForward,
   statusOptions,
 } from "../lib/subscriptions-presenters";
 
@@ -1120,6 +1121,23 @@ export function SubscriptionsPage() {
       return;
     }
 
+    // Reactivar una suscripcion pausada deja su proximo cobro en el pasado, asi
+    // que se rueda a la primera ocurrencia futura. Espeja rollDueDateForward
+    // de la app.
+    const isReactivating =
+      editorMode === "edit" &&
+      formState.status === "active" &&
+      selectedSubscription != null &&
+      selectedSubscription.status !== "active";
+    const nextDueDate = isReactivating
+      ? rollDueDateForward(
+          formState.nextDueDate,
+          formState.frequency,
+          intervalCount,
+          toDateInputValue(new Date().toISOString()),
+        )
+      : formState.nextDueDate;
+
     const payload: SubscriptionFormInput = {
       name,
       vendorPartyId: vendorPartyId === null ? null : vendorPartyId,
@@ -1132,7 +1150,7 @@ export function SubscriptionsPage() {
       dayOfMonth: dayOfMonth === null ? null : dayOfMonth,
       dayOfWeek: dayOfWeek === null ? null : dayOfWeek,
       startDate: formState.startDate,
-      nextDueDate: formState.nextDueDate,
+      nextDueDate,
       endDate: formState.endDate || null,
       status: formState.status,
       autoCreateMovement: formState.autoCreateMovement,
