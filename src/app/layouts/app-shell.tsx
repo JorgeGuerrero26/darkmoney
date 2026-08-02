@@ -799,7 +799,7 @@ function AppShellContent() {
       {sidebarOpen ? (
         <button
           aria-label="Cerrar menú"
-          className="fixed inset-0 z-20 bg-void/55 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-void/55 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
           type="button"
         />
@@ -808,7 +808,7 @@ function AppShellContent() {
       <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:h-full lg:min-h-0 lg:gap-5 lg:px-4 lg:py-4">
         <aside
           aria-label="Menú principal"
-          className={`fixed inset-y-3 left-3 z-30 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/[0.08] bg-canvas/80 px-5 py-5 text-ink backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
+          className={`fixed inset-y-3 left-3 z-50 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/[0.08] bg-canvas/80 px-5 py-5 text-ink backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
             isSidebarCollapsed ? "lg:w-[132px] lg:px-4" : "lg:w-[296px] lg:px-5"
