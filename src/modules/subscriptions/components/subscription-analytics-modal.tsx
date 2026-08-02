@@ -33,11 +33,13 @@ function getAnnualCost(subscription: SubscriptionSummary): number {
   const { amount, frequency, intervalCount } = subscription;
   const count = intervalCount || 1;
   switch (frequency) {
-    case "daily":   return (amount / count) * 365;
-    case "weekly":  return (amount / count) * 52;
-    case "monthly": return (amount / count) * 12;
-    case "yearly":  return amount / count;
-    default:        return amount * 12;
+    case "daily":     return (amount / count) * 365;
+    case "weekly":    return (amount / count) * 52;
+    case "monthly":   return (amount / count) * 12;
+    case "quarterly": return (amount / count) * 4;
+    case "yearly":    return amount / count;
+    // custom cae aqui y se trata como mensual, igual que en la app.
+    default:          return amount * 12;
   }
 }
 
