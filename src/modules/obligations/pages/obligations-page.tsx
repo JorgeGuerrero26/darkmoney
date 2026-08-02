@@ -44,6 +44,7 @@ import type {
   AttachmentSummary,
   CounterpartySummary,
   ObligationDirection,
+  ObligationEventSummary,
   ObligationShareSummary,
   ObligationOriginType,
   ObligationStatus,
@@ -75,8 +76,10 @@ import {
   useDeleteObligationMutation,
   useEntityAttachmentsQuery,
   useObligationSharesQuery,
+  useDeleteObligationEventMutation,
   useRegisterObligationPaymentMutation,
   useSharedObligationsQuery,
+  useUpdateObligationEventMutation,
   useUpdateObligationMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
@@ -909,8 +912,10 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
 
 function PaymentDialog({
   accounts,
+  editEventAmount,
   feedback,
   formState,
+  isEditMode,
   isSaving,
   obligation,
   onCancel,
@@ -918,8 +923,10 @@ function PaymentDialog({
   updateFormState,
 }: {
   accounts: AccountSummary[];
+  editEventAmount: number | null;
   feedback: FeedbackState | null;
   formState: PaymentFormState;
+  isEditMode: boolean;
   isSaving: boolean;
   obligation: ObligationSummary;
   onCancel: () => void;
@@ -930,7 +937,9 @@ function PaymentDialog({
   ) => void;
 }) {
   const paymentAmount = parseOptionalNumber(formState.amount) ?? 0;
-  const projectedPending = Math.max(0, obligation.pendingAmount - paymentAmount);
+  // Al editar, el pendiente actual ya tiene descontado el monto viejo del abono.
+  const pendingBeforePayment = obligation.pendingAmount + (editEventAmount ?? 0);
+  const projectedPending = Math.max(0, pendingBeforePayment - paymentAmount);
   const directionOption = getDirectionOption(obligation.direction);
   // receivable = te deben, el abono entra a la cuenta; payable = debes, el abono sale.
   const isReceivable = obligation.direction === "receivable";
@@ -970,18 +979,19 @@ function PaymentDialog({
                 <div className="max-w-3xl">
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                      Registrar abono
+                      {isEditMode ? "Editar abono" : "Registrar abono"}
                     </span>
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
                       {directionOption.label}
                     </span>
                   </div>
                   <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]">
-                    Actualiza el avance del registro
+                    {isEditMode ? "Corrige este abono" : "Actualiza el avance del registro"}
                   </h2>
                   <p className="mt-4 max-w-2xl text-base leading-9 text-storm">
-                    Registra un abono puntual para actualizar el saldo pendiente y el historial de
-                    esta relacion financiera.
+                    {isEditMode
+                      ? "El saldo pendiente y el movimiento vinculado se recalculan con los nuevos datos."
+                      : "Registra un abono puntual para actualizar el saldo pendiente y el historial de esta relacion financiera."}
                   </p>
                 </div>
 
@@ -1016,10 +1026,10 @@ function PaymentDialog({
                   <div className="mt-6 grid gap-4 sm:grid-cols-2">
                     <div className="rounded-[24px] border border-white/10 bg-black/15 p-4">
                       <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                        Pendiente actual
+                        {isEditMode ? "Pendiente sin este abono" : "Pendiente actual"}
                       </p>
                       <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(obligation.pendingAmount, obligation.currencyCode)}
+                        {formatCurrency(pendingBeforePayment, obligation.currencyCode)}
                       </p>
                     </div>
                     <div className="rounded-[24px] border border-white/10 bg-black/15 p-4">
@@ -1218,7 +1228,7 @@ function PaymentDialog({
                     ) : (
                       <>
                         <CircleDollarSign className="mr-2 h-4 w-4" />
-                        Registrar abono
+                        {isEditMode ? "Guardar abono" : "Registrar abono"}
                       </>
                     )}
                   </Button>
@@ -1756,6 +1766,8 @@ function EditorDialog({
   isCreateMode,
   isSaving,
   isUploadingReceipt,
+  onDeleteEvent,
+  onEditEvent,
   onSubmit,
   pendingReceiptFile,
   shareAccessMessage,
@@ -1781,6 +1793,8 @@ function EditorDialog({
   isCreateMode: boolean;
   isSaving: boolean;
   isUploadingReceipt: boolean;
+  onDeleteEvent: (event: ObligationEventSummary) => void;
+  onEditEvent: (event: ObligationEventSummary) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   invalidFields: Set<string>;
   clearFieldError: (field: string) => void;
@@ -2475,6 +2489,35 @@ function EditorDialog({
                         {ev.reason ?? ev.description ? (
                           <p className="mt-2 text-xs leading-5 text-storm">{ev.reason ?? ev.description}</p>
                         ) : null}
+                        {/* Solo los abonos se editan aqui; los ajustes de principal tienen
+                            su propio flujo con motivo obligatorio e historial aparte. */}
+                        {ev.eventType === "payment" ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-white/20 hover:text-ink"
+                              onClick={() => onEditEvent(ev)}
+                              type="button"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-rose-400/40 hover:text-rose-200"
+                              onClick={() => onDeleteEvent(ev)}
+                              type="button"
+                            >
+                              Eliminar
+                            </button>
+                            {ev.movementId ? (
+                              <span className="text-[0.68rem] uppercase tracking-[0.18em] text-storm/60">
+                                Con movimiento
+                              </span>
+                            ) : (
+                              <span className="text-[0.68rem] uppercase tracking-[0.18em] text-storm/60">
+                                Sin movimiento
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -2624,6 +2667,8 @@ export function ObligationsPage() {
   const updateMutation = useUpdateObligationMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteObligationMutation(activeWorkspace?.id, user?.id);
   const paymentMutation = useRegisterObligationPaymentMutation(activeWorkspace?.id, user?.id);
+  const eventUpdateMutation = useUpdateObligationEventMutation(activeWorkspace?.id, user?.id);
+  const eventDeleteMutation = useDeleteObligationEventMutation(activeWorkspace?.id, user?.id);
   const principalAdjustmentMutation = useAdjustObligationPrincipalMutation(activeWorkspace?.id, user?.id);
   const shareInviteMutation = useCreateObligationShareInviteMutation(activeWorkspace?.id, user?.id);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(activeWorkspace?.id, user?.id);
@@ -2670,6 +2715,11 @@ export function ObligationsPage() {
     });
   }
   const [paymentTargetId, setPaymentTargetId] = useState<number | null>(null);
+  const [paymentEditEventId, setPaymentEditEventId] = useState<number | null>(null);
+  const [eventDeleteTarget, setEventDeleteTarget] = useState<{
+    obligationId: number;
+    event: ObligationEventSummary;
+  } | null>(null);
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -2714,6 +2764,7 @@ export function ObligationsPage() {
   const obligationShares = obligationSharesQuery.data ?? [];
   const counterparties = snapshot?.catalogs.counterparties ?? [];
   const accounts = snapshot?.accounts ?? [];
+  const movements = snapshot?.movements ?? [];
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedObligation =
     selectedObligationId === null
@@ -2972,8 +3023,80 @@ export function ObligationsPage() {
   function openPaymentDialog(obligation: ObligationSummary) {
     setPageFeedback(null);
     setPaymentFeedback(null);
+    setPaymentEditEventId(null);
     setPaymentTargetId(obligation.id);
     setPaymentFormState(createDefaultPaymentFormState(obligation));
+  }
+
+  /** La cuenta del abono se lee del movimiento vinculado, que es la fuente real. */
+  function resolveEventAccountId(event: ObligationEventSummary): number | null {
+    if (event.movementId == null) {
+      return null;
+    }
+
+    const movement = movements.find((item) => item.id === event.movementId);
+
+    return movement?.destinationAccountId ?? movement?.sourceAccountId ?? null;
+  }
+
+  function openPaymentEditDialog(obligation: ObligationSummary, event: ObligationEventSummary) {
+    const accountId = resolveEventAccountId(event);
+    setPageFeedback(null);
+    setPaymentFeedback(null);
+    setPaymentEditEventId(event.id);
+    setPaymentTargetId(obligation.id);
+    setPaymentFormState({
+      amount: String(event.amount),
+      eventDate: event.eventDate,
+      installmentNo: event.installmentNo != null ? String(event.installmentNo) : "",
+      description: event.description ?? "",
+      notes: event.notes ?? "",
+      registerAccountMovement: event.movementId != null,
+      accountId: accountId != null ? String(accountId) : "",
+    });
+  }
+
+  async function handleConfirmDeleteEvent() {
+    if (!activeWorkspace || !user?.id || !eventDeleteTarget) {
+      return;
+    }
+
+    const obligation = obligations.find((item) => item.id === eventDeleteTarget.obligationId);
+
+    if (!obligation) {
+      return;
+    }
+
+    // Al borrar el abono su monto vuelve al pendiente, asi que puede dejar de estar liquidado.
+    const pendingAfterDelete = obligation.pendingAmount + eventDeleteTarget.event.amount;
+    const nextStatus: ObligationStatus =
+      pendingAfterDelete > 0 && obligation.status === "paid" ? "active" : obligation.status;
+
+    try {
+      await eventDeleteMutation.mutateAsync({
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+        eventId: eventDeleteTarget.event.id,
+        obligationId: eventDeleteTarget.obligationId,
+        movementId: eventDeleteTarget.event.movementId ?? null,
+        nextStatus,
+      });
+      setEventDeleteTarget(null);
+      setPageFeedback({
+        tone: "success",
+        title: "Abono eliminado",
+        description: eventDeleteTarget.event.movementId
+          ? "Tambien borramos el movimiento que lo acompanaba."
+          : "El saldo pendiente ya se actualizo.",
+      });
+    } catch (error) {
+      setEventDeleteTarget(null);
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos eliminar el abono",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
   }
 
   function openPrincipalAdjustmentDialog(
@@ -3022,7 +3145,7 @@ export function ObligationsPage() {
     createAttachmentRecordMutation.isPending ||
     shareInviteMutation.isPending;
   const isDeleting = deleteMutation.isPending;
-  const isRegisteringPayment = paymentMutation.isPending;
+  const isRegisteringPayment = paymentMutation.isPending || eventUpdateMutation.isPending;
   const isAdjustingPrincipal = principalAdjustmentMutation.isPending;
   const isSendingShareInvite = shareInviteMutation.isPending;
   const receivableObligations = obligations.filter((obligation) => obligation.direction === "receivable");
@@ -3540,13 +3663,57 @@ export function ObligationsPage() {
       return;
     }
 
-    const remainingAfterPayment = Math.max(0, paymentTarget.pendingAmount - amount);
+    const editingEvent =
+      paymentEditEventId === null
+        ? null
+        : paymentTarget.events.find((event) => event.id === paymentEditEventId) ?? null;
+    // Al editar hay que devolver el monto anterior antes de descontar el nuevo.
+    const pendingBeforePayment = editingEvent
+      ? paymentTarget.pendingAmount + editingEvent.amount
+      : paymentTarget.pendingAmount;
+    const remainingAfterPayment = Math.max(0, pendingBeforePayment - amount);
     const nextStatus: ObligationStatus =
       remainingAfterPayment <= 0
         ? "paid"
-        : paymentTarget.status === "draft"
+        : paymentTarget.status === "draft" || paymentTarget.status === "paid"
           ? "active"
           : paymentTarget.status;
+
+    if (editingEvent) {
+      try {
+        await eventUpdateMutation.mutateAsync({
+          workspaceId: activeWorkspace.id,
+          userId: user.id,
+          eventId: editingEvent.id,
+          obligationId: paymentTarget.id,
+          eventDate: paymentFormState.eventDate,
+          amount,
+          installmentNo,
+          description: paymentFormState.description,
+          notes: paymentFormState.notes,
+          movementId: editingEvent.movementId ?? null,
+          registerAccountMovement: shouldRegisterMovement,
+          accountId: shouldRegisterMovement ? accountId : null,
+          nextStatus,
+        });
+        setPageFeedback({
+          tone: "success",
+          title: "Abono actualizado",
+          description:
+            "El saldo pendiente y el movimiento vinculado quedaron alineados con los nuevos datos.",
+        });
+        setPaymentTargetId(null);
+        setPaymentEditEventId(null);
+      } catch (error) {
+        setPaymentFeedback({
+          tone: "error",
+          title: "No pudimos actualizar el abono",
+          description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        });
+      }
+
+      return;
+    }
 
     try {
       await paymentMutation.mutateAsync({
@@ -4083,6 +4250,17 @@ export function ObligationsPage() {
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
           isUploadingReceipt={isUploadingReceipt}
+          onDeleteEvent={(event) => {
+            if (selectedObligation) {
+              setEventDeleteTarget({ obligationId: selectedObligation.id, event });
+            }
+          }}
+          onEditEvent={(event) => {
+            if (selectedObligation) {
+              closeEditorDialog();
+              openPaymentEditDialog(selectedObligation, event);
+            }
+          }}
           onSubmit={handleSubmitObligation}
           pendingReceiptFile={pendingReceiptFile}
           shareAccessMessage={genericAccessMessage}
@@ -4104,13 +4282,20 @@ export function ObligationsPage() {
       {paymentTarget ? (
         <PaymentDialog
           accounts={accounts}
+          editEventAmount={
+            paymentEditEventId === null
+              ? null
+              : paymentTarget.events.find((event) => event.id === paymentEditEventId)?.amount ?? null
+          }
           feedback={paymentFeedback}
           formState={paymentFormState}
+          isEditMode={paymentEditEventId !== null}
           isSaving={isRegisteringPayment}
           obligation={paymentTarget}
           onCancel={() => {
             if (!isRegisteringPayment) {
               setPaymentTargetId(null);
+              setPaymentEditEventId(null);
             }
           }}
           onSubmit={handleSubmitPayment}
@@ -4179,6 +4364,50 @@ export function ObligationsPage() {
               </div>
             );
           })()}
+        </DeleteConfirmDialog>
+      ) : null}
+
+      {eventDeleteTarget ? (
+        <DeleteConfirmDialog
+          badge="Eliminar abono"
+          description={
+            eventDeleteTarget.event.movementId
+              ? "El abono vuelve al saldo pendiente y tambien se borra el movimiento que creo en tu cuenta."
+              : "El abono vuelve al saldo pendiente del registro."
+          }
+          isDeleting={eventDeleteMutation.isPending}
+          onCancel={() => {
+            if (!eventDeleteMutation.isPending) {
+              setEventDeleteTarget(null);
+            }
+          }}
+          onConfirm={() => {
+            void handleConfirmDeleteEvent();
+          }}
+        >
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.05] text-lg">
+              {getEventIcon(eventDeleteTarget.event.eventType)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-semibold text-ink">
+                {formatCurrency(
+                  eventDeleteTarget.event.amount,
+                  obligations.find((item) => item.id === eventDeleteTarget.obligationId)
+                    ?.currencyCode ?? baseCurrencyCode,
+                )}
+              </p>
+              <p className="mt-1 text-sm text-storm">
+                {formatDate(eventDeleteTarget.event.eventDate)}
+                {eventDeleteTarget.event.installmentNo
+                  ? ` · cuota #${eventDeleteTarget.event.installmentNo}`
+                  : ""}
+              </p>
+              {eventDeleteTarget.event.description ? (
+                <p className="mt-3 text-sm text-storm">{eventDeleteTarget.event.description}</p>
+              ) : null}
+            </div>
+          </div>
         </DeleteConfirmDialog>
       ) : null}
 

@@ -591,6 +591,27 @@ export type ObligationPaymentFormInput = {
   nextStatus?: ObligationStatus;
 };
 
+export type ObligationEventUpdateFormInput = {
+  eventId: number;
+  obligationId: number;
+  eventDate: string;
+  amount: number;
+  installmentNo?: number | null;
+  description?: string | null;
+  notes?: string | null;
+  movementId?: number | null;
+  registerAccountMovement?: boolean;
+  accountId?: number | null;
+  nextStatus?: ObligationStatus;
+};
+
+export type ObligationEventDeleteFormInput = {
+  eventId: number;
+  obligationId: number;
+  movementId?: number | null;
+  nextStatus?: ObligationStatus;
+};
+
 export type ObligationPrincipalAdjustmentFormInput = {
   obligationId: number;
   eventType: "principal_increase" | "principal_decrease";
@@ -769,6 +790,16 @@ type ObligationDeleteInput = {
 };
 
 type ObligationPaymentMutationInput = ObligationPaymentFormInput & {
+  workspaceId: number;
+  userId: string;
+};
+
+type ObligationEventUpdateMutationInput = ObligationEventUpdateFormInput & {
+  workspaceId: number;
+  userId: string;
+};
+
+type ObligationEventDeleteMutationInput = ObligationEventDeleteFormInput & {
   workspaceId: number;
   userId: string;
 };
@@ -5136,6 +5167,265 @@ export function useRegisterObligationPaymentMutation(workspaceId?: number, userI
       }
     },
   });
+}
+
+async function loadObligationForEvent(
+  client: WorkspaceDataClient,
+  obligationId: number,
+  workspaceId: number,
+) {
+  const { data, error } = await client
+    .from("obligations")
+    .select("id, workspace_id, direction, title, counterparty_id, currency_code, status")
+    .eq("id", obligationId)
+    .eq("workspace_id", workspaceId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data as ObligationRow;
+}
+
+async function assertAccountMatchesObligationCurrency(
+  client: WorkspaceDataClient,
+  accountId: number,
+  workspaceId: number,
+  currencyCode: string,
+) {
+  const { data, error } = await client
+    .from("accounts")
+    .select("id, workspace_id, currency_code")
+    .eq("id", accountId)
+    .eq("workspace_id", workspaceId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  if ((data?.currency_code ?? "").trim().toUpperCase() !== currencyCode) {
+    throw new Error(
+      `La cuenta elegida debe estar en ${currencyCode} para registrar este abono sin conversion.`,
+    );
+  }
+}
+
+/**
+ * Edita un abono y deja su movimiento vinculado en el mismo estado, igual que
+ * updateObligationEventAndSyncMovements en la app movil: lo crea si ahora se pide,
+ * lo actualiza si ya existia y lo borra si se desactivo el movimiento en cuenta.
+ */
+export function useUpdateObligationEventMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: ObligationEventUpdateMutationInput) => {
+      const client = getClient();
+      const obligationRow = await loadObligationForEvent(
+        client,
+        input.obligationId,
+        input.workspaceId,
+      );
+      const shouldRegisterMovement = Boolean(input.registerAccountMovement);
+      const currentMovementId = input.movementId ?? null;
+
+      if (shouldRegisterMovement) {
+        if (!input.accountId) {
+          throw new Error("Necesitamos una cuenta para registrar el movimiento del abono.");
+        }
+
+        await assertAccountMatchesObligationCurrency(
+          client,
+          input.accountId,
+          input.workspaceId,
+          obligationRow.currency_code,
+        );
+      }
+
+      const { error: updateError } = await client
+        .from("obligation_events")
+        .update({
+          event_date: input.eventDate,
+          amount: input.amount,
+          installment_no: input.installmentNo ?? null,
+          description: normalizeOptionalText(input.description),
+          notes: normalizeOptionalText(input.notes),
+          metadata: {
+            registerAccountMovement: shouldRegisterMovement,
+            accountId: input.accountId ?? null,
+          },
+        })
+        .eq("id", input.eventId)
+        .eq("obligation_id", input.obligationId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      const movementPayload = buildObligationPaymentMovement(
+        {
+          obligationId: input.obligationId,
+          eventDate: input.eventDate,
+          amount: input.amount,
+          description: input.description,
+          notes: input.notes,
+          accountId: input.accountId,
+        },
+        obligationRow,
+        input.eventId,
+      );
+
+      if (shouldRegisterMovement && currentMovementId) {
+        const { error: movementUpdateError } = await client
+          .from("movements")
+          .update(buildMovementMutationPayload(movementPayload, input.userId))
+          .eq("id", currentMovementId)
+          .eq("workspace_id", input.workspaceId);
+
+        if (movementUpdateError) {
+          throw movementUpdateError;
+        }
+
+        return;
+      }
+
+      if (shouldRegisterMovement) {
+        const { data: movementData, error: movementInsertError } = await client
+          .from("movements")
+          .insert({
+            workspace_id: input.workspaceId,
+            created_by_user_id: input.userId,
+            ...buildMovementMutationPayload(movementPayload, input.userId),
+          })
+          .select("id")
+          .single();
+
+        if (movementInsertError) {
+          throw movementInsertError;
+        }
+
+        const { error: linkError } = await client
+          .from("obligation_events")
+          .update({ movement_id: movementData.id as number })
+          .eq("id", input.eventId);
+
+        if (linkError) {
+          throw linkError;
+        }
+
+        return;
+      }
+
+      if (currentMovementId) {
+        const { error: unlinkError } = await client
+          .from("obligation_events")
+          .update({ movement_id: null })
+          .eq("id", input.eventId);
+
+        if (unlinkError) {
+          throw unlinkError;
+        }
+
+        const { error: movementDeleteError } = await client
+          .from("movements")
+          .delete()
+          .eq("id", currentMovementId)
+          .eq("workspace_id", input.workspaceId);
+
+        if (movementDeleteError) {
+          throw movementDeleteError;
+        }
+      }
+    },
+    onSuccess: async (_data, variables) => {
+      await applyObligationStatusAfterEventChange(variables);
+
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+      }
+    },
+  });
+}
+
+/** Borra un abono y el movimiento que lo acompanaba, para que no quede huerfano. */
+export function useDeleteObligationEventMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: ObligationEventDeleteMutationInput) => {
+      const client = getClient();
+      let linkedMovementId = input.movementId ?? null;
+
+      if (linkedMovementId === null) {
+        const { data, error } = await client
+          .from("obligation_events")
+          .select("movement_id")
+          .eq("id", input.eventId)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        const resolved = toNumber((data as { movement_id: NumericLike } | null)?.movement_id ?? null);
+        linkedMovementId = resolved > 0 ? resolved : null;
+      }
+
+      const { error: deleteEventError } = await client
+        .from("obligation_events")
+        .delete()
+        .eq("id", input.eventId)
+        .eq("obligation_id", input.obligationId);
+
+      if (deleteEventError) {
+        throw deleteEventError;
+      }
+
+      if (linkedMovementId !== null) {
+        const { error: deleteMovementError } = await client
+          .from("movements")
+          .delete()
+          .eq("id", linkedMovementId)
+          .eq("workspace_id", input.workspaceId);
+
+        if (deleteMovementError) {
+          throw deleteMovementError;
+        }
+      }
+    },
+    onSuccess: async (_data, variables) => {
+      await applyObligationStatusAfterEventChange(variables);
+
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+      }
+    },
+  });
+}
+
+/** Reabre o liquida el registro cuando editar o borrar un abono mueve el pendiente. */
+async function applyObligationStatusAfterEventChange(input: {
+  obligationId: number;
+  workspaceId: number;
+  userId: string;
+  nextStatus?: ObligationStatus;
+}) {
+  if (!input.nextStatus) {
+    return;
+  }
+
+  const client = getClient();
+  const { error } = await client
+    .from("obligations")
+    .update({ updated_by_user_id: input.userId, status: input.nextStatus })
+    .eq("id", input.obligationId)
+    .eq("workspace_id", input.workspaceId);
+
+  if (error) {
+    throw error;
+  }
 }
 
 export function useAdjustObligationPrincipalMutation(workspaceId?: number, userId?: string) {
