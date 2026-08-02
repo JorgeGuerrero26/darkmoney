@@ -123,6 +123,8 @@ type PaymentFormState = {
   installmentNo: string;
   description: string;
   notes: string;
+  registerAccountMovement: boolean;
+  accountId: string;
 };
 
 type PrincipalAdjustmentMode = "increase" | "decrease";
@@ -516,6 +518,8 @@ function createDefaultPaymentFormState(obligation: ObligationSummary): PaymentFo
         : "",
     description: "",
     notes: "",
+    registerAccountMovement: true,
+    accountId: obligation.settlementAccountId ? String(obligation.settlementAccountId) : "",
   };
 }
 
@@ -904,6 +908,7 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
 
 
 function PaymentDialog({
+  accounts,
   feedback,
   formState,
   isSaving,
@@ -912,6 +917,7 @@ function PaymentDialog({
   onSubmit,
   updateFormState,
 }: {
+  accounts: AccountSummary[];
   feedback: FeedbackState | null;
   formState: PaymentFormState;
   isSaving: boolean;
@@ -923,8 +929,32 @@ function PaymentDialog({
     value: PaymentFormState[Field],
   ) => void;
 }) {
-  const projectedPending = Math.max(0, obligation.pendingAmount - (parseOptionalNumber(formState.amount) ?? 0));
+  const paymentAmount = parseOptionalNumber(formState.amount) ?? 0;
+  const projectedPending = Math.max(0, obligation.pendingAmount - paymentAmount);
   const directionOption = getDirectionOption(obligation.direction);
+  // receivable = te deben, el abono entra a la cuenta; payable = debes, el abono sale.
+  const isReceivable = obligation.direction === "receivable";
+  const accountOptions = accounts
+    .filter(
+      (account) =>
+        (!account.isArchived || String(account.id) === formState.accountId) &&
+        account.currencyCode === obligation.currencyCode,
+    )
+    .map<PickerOption>((account) => ({
+      value: String(account.id),
+      label: account.name,
+      description: `${account.type} - ${account.currencyCode}`,
+      leadingLabel: account.currencyCode,
+      leadingColor: account.color,
+      searchText: `${account.name} ${account.type} ${account.currencyCode}`,
+    }));
+  const selectedAccount =
+    accounts.find((account) => String(account.id) === formState.accountId) ?? null;
+  const accountDelta = isReceivable ? paymentAmount : paymentAmount * -1;
+  const projectedAccountBalance =
+    selectedAccount && formState.registerAccountMovement
+      ? selectedAccount.currentBalance + accountDelta
+      : null;
 
   return (
     <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6">
@@ -1043,6 +1073,90 @@ function PaymentDialog({
                       />
                     </Field>
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className={`${panelClassName} z-30`}>
+                  <div className="flex items-start justify-between gap-4 rounded-[24px] border border-white/10 bg-black/15 p-4">
+                    <div className="min-w-0">
+                      <p className={labelClassName}>Movimiento en cuenta</p>
+                      <p className="mt-2 text-sm leading-7 text-storm">
+                        {isReceivable
+                          ? "Registra tambien el ingreso del cobro y suma el saldo a la cuenta."
+                          : "Registra tambien el egreso del pago y descuenta el saldo de la cuenta."}
+                      </p>
+                    </div>
+                    <button
+                      aria-pressed={formState.registerAccountMovement}
+                      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition ${
+                        formState.registerAccountMovement
+                          ? "border-pine/35 bg-pine/18"
+                          : "border-white/12 bg-white/[0.05]"
+                      }`}
+                      onClick={() =>
+                        updateFormState("registerAccountMovement", !formState.registerAccountMovement)
+                      }
+                      type="button"
+                    >
+                      <span
+                        className={`absolute h-6 w-6 rounded-full bg-white shadow-[0_8px_20px_rgba(0,0,0,0.28)] transition ${
+                          formState.registerAccountMovement ? "left-7" : "left-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {formState.registerAccountMovement ? (
+                    <div className="mt-5">
+                      <Field
+                        hint={`Solo veras cuentas en ${obligation.currencyCode}.`}
+                        label={isReceivable ? "Cuenta de abono" : "Cuenta de debito"}
+                      >
+                        <Picker
+                          disabled={accountOptions.length === 0}
+                          emptyMessage={`No hay cuentas en ${obligation.currencyCode} disponibles.`}
+                          onChange={(value) => updateFormState("accountId", value)}
+                          options={accountOptions}
+                          placeholderDescription="Selecciona la cuenta afectada por este abono."
+                          placeholderLabel="Selecciona una cuenta"
+                          queryPlaceholder="Buscar cuenta..."
+                          value={formState.accountId}
+                        />
+                      </Field>
+
+                      {selectedAccount && projectedAccountBalance !== null ? (
+                        <div className="mt-4 rounded-[24px] border border-white/10 bg-black/15 p-4">
+                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                            Asi quedara {selectedAccount.name}
+                          </p>
+                          <div className="mt-3 grid gap-2 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-storm">Saldo actual</span>
+                              <span className="font-semibold text-ink">
+                                {formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-storm">Movimiento</span>
+                              <span
+                                className={`font-semibold ${accountDelta >= 0 ? "text-pine" : "text-rose-300"}`}
+                              >
+                                {accountDelta >= 0 ? "+" : "-"}
+                                {formatCurrency(Math.abs(accountDelta), selectedAccount.currencyCode)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-storm">Quedara en</span>
+                              <span className="font-display text-base font-semibold text-ink">
+                                {formatCurrency(projectedAccountBalance, selectedAccount.currencyCode)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -2583,6 +2697,8 @@ export function ObligationsPage() {
     installmentNo: "",
     description: "",
     notes: "",
+    registerAccountMovement: true,
+    accountId: "",
   });
   const [principalAdjustmentFormState, setPrincipalAdjustmentFormState] =
     useState<PrincipalAdjustmentFormState>({
@@ -3407,6 +3523,23 @@ export function ObligationsPage() {
       return;
     }
 
+    const accountId = parseOptionalInteger(paymentFormState.accountId);
+    const hasSelectableAccount = accounts.some(
+      (account) => !account.isArchived && account.currencyCode === paymentTarget.currencyCode,
+    );
+    // Sin cuentas en la moneda del registro el abono se guarda igual, solo sin movimiento.
+    const shouldRegisterMovement = paymentFormState.registerAccountMovement && hasSelectableAccount;
+
+    if (shouldRegisterMovement && !accountId) {
+      setPaymentFeedback({
+        tone: "error",
+        title: "Falta la cuenta",
+        description:
+          "Selecciona la cuenta afectada o desactiva el registro del movimiento en cuenta.",
+      });
+      return;
+    }
+
     const remainingAfterPayment = Math.max(0, paymentTarget.pendingAmount - amount);
     const nextStatus: ObligationStatus =
       remainingAfterPayment <= 0
@@ -3425,15 +3558,20 @@ export function ObligationsPage() {
         installmentNo,
         description: paymentFormState.description,
         notes: paymentFormState.notes,
+        registerAccountMovement: shouldRegisterMovement,
+        accountId: shouldRegisterMovement ? accountId : null,
         nextStatus,
       } satisfies ObligationPaymentFormInput & { workspaceId: number; userId: string });
       setPageFeedback({
         tone: "success",
         title: "Abono registrado",
-        description:
+        description: `${
           remainingAfterPayment <= 0
             ? "El registro quedo liquidado y su saldo pendiente ya se actualizo."
-            : "El avance y el saldo pendiente se actualizaron correctamente.",
+            : "El avance y el saldo pendiente se actualizaron correctamente."
+        }${
+          shouldRegisterMovement ? " Tambien creamos el movimiento en la cuenta seleccionada." : ""
+        }`,
       });
       setPaymentTargetId(null);
     } catch (error) {
@@ -3965,6 +4103,7 @@ export function ObligationsPage() {
 
       {paymentTarget ? (
         <PaymentDialog
+          accounts={accounts}
           feedback={paymentFeedback}
           formState={paymentFormState}
           isSaving={isRegisteringPayment}

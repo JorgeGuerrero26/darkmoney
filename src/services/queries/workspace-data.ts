@@ -585,6 +585,8 @@ export type ObligationPaymentFormInput = {
   description?: string | null;
   notes?: string | null;
   movementId?: number | null;
+  registerAccountMovement?: boolean;
+  accountId?: number | null;
   nextStatus?: ObligationStatus;
 };
 
@@ -4342,6 +4344,38 @@ function getObligationOpeningMovementDescription(input: ObligationFormInput) {
     : `Entrada inicial: ${normalizedTitle}`;
 }
 
+function buildObligationPaymentMovement(
+  input: ObligationPaymentFormInput,
+  obligation: Pick<ObligationRow, "direction" | "title" | "counterparty_id">,
+  eventId: number,
+): MovementFormInput {
+  // receivable = te deben, el abono entra a la cuenta; payable = debes, el abono sale.
+  const isReceivable = obligation.direction === "receivable";
+  const accountId = input.accountId ?? null;
+  const fallbackDescription = isReceivable
+    ? `Cobro: ${obligation.title.trim()}`
+    : `Pago: ${obligation.title.trim()}`;
+
+  return {
+    movementType: "obligation_payment",
+    status: "posted",
+    occurredAt: buildMiddayTimestampFromDate(input.eventDate),
+    description: normalizeOptionalText(input.description) ?? fallbackDescription,
+    notes: normalizeOptionalText(input.notes),
+    sourceAccountId: isReceivable ? null : accountId,
+    sourceAmount: isReceivable ? null : input.amount,
+    destinationAccountId: isReceivable ? accountId : null,
+    destinationAmount: isReceivable ? input.amount : null,
+    fxRate: null,
+    categoryId: null,
+    counterpartyId: obligation.counterparty_id,
+    obligationId: input.obligationId,
+    subscriptionId: null,
+    // snake_case a proposito: la app movil resuelve el vinculo por esta clave.
+    metadata: { obligation_event_id: eventId },
+  };
+}
+
 function getObligationPrincipalAdjustmentDescription(
   title: string,
   eventType: ObligationPrincipalAdjustmentFormInput["eventType"],
@@ -4792,37 +4826,130 @@ export function useRegisterObligationPaymentMutation(workspaceId?: number, userI
   return useMutation({
     mutationFn: async (input: ObligationPaymentMutationInput) => {
       const client = getClient();
-      const { error: insertError } = await client.from("obligation_events").insert({
-        obligation_id: input.obligationId,
-        event_type: "payment",
-        event_date: input.eventDate,
-        amount: input.amount,
-        installment_no: input.installmentNo ?? null,
-        reason: null,
-        description: normalizeOptionalText(input.description),
-        notes: normalizeOptionalText(input.notes),
-        movement_id: input.movementId ?? null,
-        created_by_user_id: input.userId,
-        metadata: {},
-      });
+      const shouldRegisterMovement = Boolean(input.registerAccountMovement);
+      let createdEventId: number | null = null;
+      let createdMovementId: number | null = null;
 
-      if (insertError) {
-        throw insertError;
+      const { data: obligationData, error: obligationError } = await client
+        .from("obligations")
+        .select("id, workspace_id, direction, title, counterparty_id, currency_code")
+        .eq("id", input.obligationId)
+        .eq("workspace_id", input.workspaceId)
+        .single();
+
+      if (obligationError) {
+        throw obligationError;
       }
 
-      if (input.nextStatus) {
-        const { error: updateError } = await client
-          .from("obligations")
-          .update({
-            updated_by_user_id: input.userId,
-            status: input.nextStatus,
-          })
-          .eq("id", input.obligationId)
-          .eq("workspace_id", input.workspaceId);
+      const obligationRow = obligationData as ObligationRow;
 
-        if (updateError) {
-          throw updateError;
+      if (shouldRegisterMovement) {
+        if (!input.accountId) {
+          throw new Error("Necesitamos una cuenta para registrar el movimiento del abono.");
         }
+
+        const { data: accountData, error: accountError } = await client
+          .from("accounts")
+          .select("id, workspace_id, currency_code")
+          .eq("id", input.accountId)
+          .eq("workspace_id", input.workspaceId)
+          .single();
+
+        if (accountError) {
+          throw accountError;
+        }
+
+        if ((accountData?.currency_code ?? "").trim().toUpperCase() !== obligationRow.currency_code) {
+          throw new Error(
+            `La cuenta elegida debe estar en ${obligationRow.currency_code} para registrar este abono sin conversion.`,
+          );
+        }
+      }
+
+      try {
+        const { data: eventData, error: insertError } = await client
+          .from("obligation_events")
+          .insert({
+            obligation_id: input.obligationId,
+            event_type: "payment",
+            event_date: input.eventDate,
+            amount: input.amount,
+            installment_no: input.installmentNo ?? null,
+            reason: null,
+            description: normalizeOptionalText(input.description),
+            notes: normalizeOptionalText(input.notes),
+            movement_id: input.movementId ?? null,
+            created_by_user_id: input.userId,
+            metadata: {
+              registerAccountMovement: shouldRegisterMovement,
+              accountId: input.accountId ?? null,
+            },
+          })
+          .select("id")
+          .single();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        createdEventId = eventData.id as number;
+
+        if (shouldRegisterMovement) {
+          const paymentMovement = buildObligationPaymentMovement(input, obligationRow, createdEventId);
+          const { data: movementData, error: movementError } = await client
+            .from("movements")
+            .insert({
+              workspace_id: input.workspaceId,
+              created_by_user_id: input.userId,
+              ...buildMovementMutationPayload(paymentMovement, input.userId),
+            })
+            .select("id")
+            .single();
+
+          if (movementError) {
+            throw movementError;
+          }
+
+          createdMovementId = movementData.id as number;
+
+          const { error: linkError } = await client
+            .from("obligation_events")
+            .update({ movement_id: createdMovementId })
+            .eq("id", createdEventId);
+
+          if (linkError) {
+            throw linkError;
+          }
+        }
+
+        if (input.nextStatus) {
+          const { error: updateError } = await client
+            .from("obligations")
+            .update({
+              updated_by_user_id: input.userId,
+              status: input.nextStatus,
+            })
+            .eq("id", input.obligationId)
+            .eq("workspace_id", input.workspaceId);
+
+          if (updateError) {
+            throw updateError;
+          }
+        }
+      } catch (error) {
+        if (createdMovementId !== null) {
+          await client
+            .from("movements")
+            .delete()
+            .eq("id", createdMovementId)
+            .eq("workspace_id", input.workspaceId);
+        }
+
+        if (createdEventId !== null) {
+          await client.from("obligation_events").delete().eq("id", createdEventId);
+        }
+
+        throw error;
       }
     },
     onSuccess: async () => {
