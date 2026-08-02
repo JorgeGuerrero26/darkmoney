@@ -123,6 +123,26 @@ export function convertDashboardAmount({
     }
   }
 
+  // Puente por tasas cuando no hay monto en moneda base: es el ultimo paso de
+  // convertParityAmount en @darkmoney/shared/currency. Sin el, convertir entre
+  // dos monedas que solo tienen tasa contra la base devolvia null y el monto
+  // quedaba fuera del total. Afecta sobre todo a los presupuestos, que no
+  // traen un gemelo en moneda base.
+  const sourceToBaseRate = resolveDashboardExchangeRate(
+    exchangeRateMap,
+    normalizedSourceCurrency,
+    normalizedBaseCurrency,
+  );
+  const baseToTargetRate = resolveDashboardExchangeRate(
+    exchangeRateMap,
+    normalizedBaseCurrency,
+    normalizedTargetCurrency,
+  );
+
+  if (sourceToBaseRate !== null && baseToTargetRate !== null) {
+    return amount * sourceToBaseRate * baseToTargetRate;
+  }
+
   return null;
 }
 

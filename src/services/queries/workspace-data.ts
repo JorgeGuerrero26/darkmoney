@@ -1139,20 +1139,17 @@ function buildExchangeRateMap(exchangeRateRows: ExchangeRateRow[]) {
   return exchangeRateMap;
 }
 
-function resolveExchangeRate(
+function lookupDirectOrInverseRate(
   exchangeRateMap: Map<string, number>,
   fromCurrencyCode: string,
   toCurrencyCode: string,
 ) {
-  const normalizedFromCurrencyCode = normalizeCurrencyCode(fromCurrencyCode);
-  const normalizedToCurrencyCode = normalizeCurrencyCode(toCurrencyCode);
-
-  if (normalizedFromCurrencyCode === normalizedToCurrencyCode) {
+  if (fromCurrencyCode === toCurrencyCode) {
     return 1;
   }
 
   const directRate = exchangeRateMap.get(
-    buildExchangeRateKey(normalizedFromCurrencyCode, normalizedToCurrencyCode),
+    buildExchangeRateKey(fromCurrencyCode, toCurrencyCode),
   );
 
   if (directRate && directRate > 0) {
@@ -1160,11 +1157,69 @@ function resolveExchangeRate(
   }
 
   const inverseRate = exchangeRateMap.get(
-    buildExchangeRateKey(normalizedToCurrencyCode, normalizedFromCurrencyCode),
+    buildExchangeRateKey(toCurrencyCode, fromCurrencyCode),
   );
 
   if (inverseRate && inverseRate > 0) {
     return 1 / inverseRate;
+  }
+
+  return null;
+}
+
+/**
+ * Directa, inversa o puente por la moneda base. Sin el puente, convertir entre
+ * dos monedas que solo tienen tasa contra la base devolvia null y el monto se
+ * excluia del total. Es el contrato de @darkmoney/shared/currency, que la app
+ * ya usa via resolveParityRate.
+ *
+ * Nunca cae en 1 de forma silenciosa: sin tasa devuelve null y quien llama
+ * decide si excluye el monto o lo deja crudo.
+ */
+function resolveExchangeRate(
+  exchangeRateMap: Map<string, number>,
+  fromCurrencyCode: string,
+  toCurrencyCode: string,
+  baseCurrencyCode?: string,
+) {
+  const normalizedFromCurrencyCode = normalizeCurrencyCode(fromCurrencyCode);
+  const normalizedToCurrencyCode = normalizeCurrencyCode(toCurrencyCode);
+  const directRate = lookupDirectOrInverseRate(
+    exchangeRateMap,
+    normalizedFromCurrencyCode,
+    normalizedToCurrencyCode,
+  );
+
+  if (directRate !== null) {
+    return directRate;
+  }
+
+  if (!baseCurrencyCode) {
+    return null;
+  }
+
+  const normalizedBaseCurrencyCode = normalizeCurrencyCode(baseCurrencyCode);
+
+  if (
+    normalizedFromCurrencyCode === normalizedBaseCurrencyCode ||
+    normalizedToCurrencyCode === normalizedBaseCurrencyCode
+  ) {
+    return null;
+  }
+
+  const sourceToBase = lookupDirectOrInverseRate(
+    exchangeRateMap,
+    normalizedFromCurrencyCode,
+    normalizedBaseCurrencyCode,
+  );
+  const baseToTarget = lookupDirectOrInverseRate(
+    exchangeRateMap,
+    normalizedBaseCurrencyCode,
+    normalizedToCurrencyCode,
+  );
+
+  if (sourceToBase !== null && baseToTarget !== null) {
+    return sourceToBase * baseToTarget;
   }
 
   return null;
@@ -1175,8 +1230,14 @@ function convertAmountToCurrency(
   fromCurrencyCode: string,
   toCurrencyCode: string,
   exchangeRateMap: Map<string, number>,
+  baseCurrencyCode?: string,
 ) {
-  const rate = resolveExchangeRate(exchangeRateMap, fromCurrencyCode, toCurrencyCode);
+  const rate = resolveExchangeRate(
+    exchangeRateMap,
+    fromCurrencyCode,
+    toCurrencyCode,
+    baseCurrencyCode,
+  );
 
   return rate === null ? null : amount * rate;
 }
