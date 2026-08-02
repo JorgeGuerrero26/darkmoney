@@ -327,7 +327,7 @@ export function MovementsTable({
                 </td>
                 <td className="px-5 py-3.5 font-medium text-ink">{movement.description}</td>
                 <td className={`px-5 py-3.5 ${cv("tipo", "hidden sm:table-cell")}`}>
-                  <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
+                  <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType, movement)} />
                 </td>
                 <td className={`px-5 py-3.5 ${cv("estado", "hidden sm:table-cell")}`}>
                   <StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} />

@@ -15,6 +15,7 @@ import type {
   ExchangeRateSummary,
   JsonValue,
   MovementRecord,
+  MovementType,
   NotificationItem,
   ObligationShareInviteDetails,
   ObligationShareSummary,
@@ -947,6 +948,8 @@ function getClient() {
 
   return supabase;
 }
+
+type WorkspaceDataClient = ReturnType<typeof getClient>;
 
 async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
   const client = getClient();
@@ -4560,6 +4563,144 @@ function buildCounterpartyMutationPayload(input: CounterpartyFormInput, userId: 
   };
 }
 
+// Tipos de movimiento que pueden representar un abono a un credito o deuda.
+// Espeja LINKABLE_TYPES de la app movil (app/movement/[id].tsx).
+const OBLIGATION_LINKABLE_MOVEMENT_TYPES = new Set<MovementType>([
+  "expense",
+  "income",
+  "refund",
+  "obligation_payment",
+  "subscription_payment",
+]);
+
+function getMovementLinkedAmount(input: MovementFormInput) {
+  const source = input.sourceAmount ?? 0;
+  const destination = input.destinationAmount ?? 0;
+
+  return destination > source ? destination : source;
+}
+
+/**
+ * Mantiene el evento de obligacion en sintonia con el movimiento que lo origina.
+ * Sin esto, etiquetar un movimiento con un credito solo escribia obligation_id y
+ * el saldo pendiente nunca se movia, porque el pendiente se calcula desde los
+ * eventos. La app movil resuelve lo mismo en useLinkMovementToObligationMutation.
+ */
+async function syncObligationEventForMovement(input: {
+  client: WorkspaceDataClient;
+  workspaceId: number;
+  userId: string;
+  movementId: number;
+  movement: MovementFormInput;
+}) {
+  const { client, movement, movementId, userId, workspaceId } = input;
+  const targetObligationId = movement.obligationId ?? null;
+
+  const { data: existingRows, error: existingError } = await client
+    .from("obligation_events")
+    .select("id, obligation_id, event_type")
+    .eq("movement_id", movementId);
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const existingEvent = (existingRows ?? [])[0] as
+    | { id: number; obligation_id: number; event_type: string }
+    | undefined;
+
+  const shouldHaveEvent =
+    targetObligationId !== null && OBLIGATION_LINKABLE_MOVEMENT_TYPES.has(movement.movementType);
+
+  if (!shouldHaveEvent) {
+    if (existingEvent) {
+      const { error: deleteError } = await client
+        .from("obligation_events")
+        .delete()
+        .eq("id", existingEvent.id);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+    }
+
+    return;
+  }
+
+  const amount = getMovementLinkedAmount(movement);
+  const eventDate = movement.occurredAt.slice(0, 10);
+
+  if (existingEvent && existingEvent.obligation_id === targetObligationId) {
+    // No se cambia event_type: una apertura sigue siendo apertura al editarla.
+    const { error: updateError } = await client
+      .from("obligation_events")
+      .update({
+        event_date: eventDate,
+        amount,
+        description: normalizeOptionalText(movement.description),
+        notes: normalizeOptionalText(movement.notes),
+      })
+      .eq("id", existingEvent.id);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return;
+  }
+
+  if (existingEvent) {
+    const { error: deleteError } = await client
+      .from("obligation_events")
+      .delete()
+      .eq("id", existingEvent.id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  }
+
+  const nextInstallmentNo = await resolveNextObligationInstallmentNo(client, targetObligationId);
+  const { error: insertError } = await client.from("obligation_events").insert({
+    obligation_id: targetObligationId,
+    event_type: "payment",
+    event_date: eventDate,
+    amount,
+    installment_no: nextInstallmentNo,
+    reason: null,
+    description: normalizeOptionalText(movement.description),
+    notes: normalizeOptionalText(movement.notes),
+    movement_id: movementId,
+    created_by_user_id: userId,
+    metadata: { linkedFromMovement: true, workspaceId },
+  });
+
+  if (insertError) {
+    throw insertError;
+  }
+}
+
+async function resolveNextObligationInstallmentNo(
+  client: WorkspaceDataClient,
+  obligationId: number,
+): Promise<number | null> {
+  const { data, error } = await client
+    .from("obligation_events")
+    .select("installment_no")
+    .eq("obligation_id", obligationId)
+    .eq("event_type", "payment")
+    .order("installment_no", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  const highest = toNumber((data ?? [])[0]?.installment_no ?? 0);
+
+  return highest > 0 ? highest + 1 : null;
+}
+
 export function useCreateMovementMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -4580,7 +4721,27 @@ export function useCreateMovementMutation(workspaceId?: number, userId?: string)
         throw error;
       }
 
-      return data.id as number;
+      const createdMovementId = data.id as number;
+
+      try {
+        await syncObligationEventForMovement({
+          client,
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          movementId: createdMovementId,
+          movement: input,
+        });
+      } catch (syncError) {
+        await client
+          .from("movements")
+          .delete()
+          .eq("id", createdMovementId)
+          .eq("workspace_id", input.workspaceId);
+
+        throw syncError;
+      }
+
+      return createdMovementId;
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -4605,6 +4766,14 @@ export function useUpdateMovementMutation(workspaceId?: number, userId?: string)
       if (error) {
         throw error;
       }
+
+      await syncObligationEventForMovement({
+        client,
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        movementId: input.movementId,
+        movement: input,
+      });
     },
     onSuccess: async () => {
       if (workspaceId) {

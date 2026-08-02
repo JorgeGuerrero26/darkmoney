@@ -259,6 +259,22 @@ export function MovementEditorDialog({
           projectedBalance: selectedDestinationAccount.currentBalance + dstAmt,
         });
       }
+    } else {
+      // obligation_payment, obligation_opening y adjustment van en cualquier sentido.
+      if (selectedSourceAccount && srcAmt > 0) {
+        impacts.push({
+          account: selectedSourceAccount,
+          delta: -srcAmt,
+          projectedBalance: selectedSourceAccount.currentBalance - srcAmt,
+        });
+      }
+      if (selectedDestinationAccount && dstAmt > 0) {
+        impacts.push({
+          account: selectedDestinationAccount,
+          delta: dstAmt,
+          projectedBalance: selectedDestinationAccount.currentBalance + dstAmt,
+        });
+      }
     }
 
     return impacts;
@@ -361,18 +377,39 @@ export function MovementEditorDialog({
       })),
     [counterparties],
   );
-  const obligationPickerOptions = useMemo(
-    () =>
-      obligations.map((obligation) => ({
+  const obligationPickerOptions = useMemo(() => {
+    // Un movimiento que entra solo puede abonar algo que te deben, y al reves.
+    // Espeja compatibleObligations de la app movil.
+    const entersMoney = incomeLikeMovementTypes.has(formState.movementType)
+      ? true
+      : expenseLikeMovementTypes.has(formState.movementType)
+        ? false
+        : (parseOptionalNumber(formState.destinationAmount) ?? 0) >
+          (parseOptionalNumber(formState.sourceAmount) ?? 0);
+    const compatibleDirection = entersMoney ? "receivable" : "payable";
+
+    return obligations
+      .filter(
+        (obligation) =>
+          String(obligation.id) === formState.obligationId ||
+          (obligation.direction === compatibleDirection &&
+            (obligation.status === "active" || obligation.status === "draft")),
+      )
+      .map((obligation) => ({
         value: String(obligation.id),
         label: obligation.title,
         description: `${obligation.currencyCode} · ${obligation.counterparty}`,
         leadingLabel: obligation.currencyCode,
         leadingColor: obligation.direction === "receivable" ? "#1b6a58" : "#c46a31",
         searchText: `${obligation.title} ${obligation.currencyCode} ${obligation.counterparty} ${obligation.direction}`,
-      })),
-    [obligations],
-  );
+      }));
+  }, [
+    obligations,
+    formState.movementType,
+    formState.obligationId,
+    formState.sourceAmount,
+    formState.destinationAmount,
+  ]);
   const subscriptionPickerOptions = useMemo(
     () =>
       subscriptions.map((subscription) => ({

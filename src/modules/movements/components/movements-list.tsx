@@ -49,7 +49,7 @@ export function MovementsList({
               </p>
             </div>
             <div className="hidden gap-2 sm:flex">
-              <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
+              <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType, movement)} />
               <StatusBadge status={formatMovementStatusLabel(movement.status)} tone={getMovementStatusTone(movement.status)} />
             </div>
             {displayInfo.amount !== null ? (

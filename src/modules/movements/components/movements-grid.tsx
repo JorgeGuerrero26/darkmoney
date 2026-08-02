@@ -43,7 +43,7 @@ export function MovementsGrid({
                 checked={selectedIds.has(movement.id)}
                 onChange={() => onToggleSelect(movement.id)}
               />
-              <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType)} />
+              <StatusBadge status={movementTypeOption.label} tone={getMovementTypeTone(movement.movementType, movement)} />
             </div>
 
             <div className="min-w-0">

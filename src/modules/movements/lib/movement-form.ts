@@ -134,9 +134,34 @@ export const movementStatusOptions = [
 export const expenseLikeMovementTypes = new Set<MovementType>([
   "expense",
   "subscription_payment",
-  "obligation_payment",
 ]);
 export const incomeLikeMovementTypes = new Set<MovementType>(["income", "refund"]);
+
+/**
+ * obligation_payment es bidireccional: el abono de un cobro entra por la cuenta
+ * destino y el de un pago sale por la origen. Los tipos ambiguos se resuelven por
+ * montos, igual que movementActsAsIncome en la app movil.
+ */
+export function movementActsAsIncome(
+  movement: Pick<MovementRecord, "movementType" | "sourceAmount" | "destinationAmount">,
+) {
+  if (incomeLikeMovementTypes.has(movement.movementType)) {
+    return true;
+  }
+
+  if (expenseLikeMovementTypes.has(movement.movementType) || movement.movementType === "transfer") {
+    return false;
+  }
+
+  return (movement.destinationAmount ?? 0) > (movement.sourceAmount ?? 0);
+}
+
+/** Tipos cuyo sentido depende de los montos y no solo del tipo. */
+export const directionlessMovementTypes = new Set<MovementType>([
+  "obligation_payment",
+  "obligation_opening",
+  "adjustment",
+]);
 
 export type MovementDisplayInfo = {
   accountLabel: string;
@@ -179,6 +204,15 @@ export function getMovementDisplayInfo(
     };
   }
 
+  if (movementActsAsIncome(movement)) {
+    return {
+      accountLabel: movement.destinationAccountName ?? movement.sourceAccountName ?? "-",
+      amount: movement.destinationAmount ?? movement.sourceAmount,
+      currencyCode:
+        movement.destinationCurrencyCode ?? movement.sourceCurrencyCode ?? fallbackCurrencyCode,
+    };
+  }
+
   const amount = movement.sourceAmount ?? movement.destinationAmount;
   const accountLabel = movement.sourceAccountName ?? movement.destinationAccountName ?? "-";
 
@@ -198,7 +232,10 @@ export function getMovementStatusOption(status: MovementStatus) {
   return movementStatusOptions.find((option) => option.value === status) ?? movementStatusOptions[0];
 }
 
-export function getMovementTypeTone(movementType: MovementType) {
+export function getMovementTypeTone(
+  movementType: MovementType,
+  movement?: Pick<MovementRecord, "movementType" | "sourceAmount" | "destinationAmount">,
+) {
   if (expenseLikeMovementTypes.has(movementType)) {
     return "danger" as const;
   }
@@ -209,6 +246,11 @@ export function getMovementTypeTone(movementType: MovementType) {
 
   if (movementType === "transfer") {
     return "info" as const;
+  }
+
+  // Un abono puede ser cobro o pago; sin el movimiento no hay forma de saberlo.
+  if (movement && directionlessMovementTypes.has(movementType)) {
+    return movementActsAsIncome(movement) ? ("success" as const) : ("danger" as const);
   }
 
   return "warning" as const;
