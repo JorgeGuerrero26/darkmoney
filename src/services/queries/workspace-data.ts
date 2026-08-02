@@ -3567,6 +3567,85 @@ export function useMarkNotificationsUnreadMutation(userId?: string) {
   });
 }
 
+/**
+ * Copia los comprobantes de un abono al movimiento que lo refleja, para que se
+ * vean desde cualquiera de los dos lados. La app movil espeja solo archivos de
+ * Storage; aqui ademas se escriben las filas de `attachments`, que es de donde
+ * lee la web. El resultado lo entienden los dos clientes.
+ *
+ * Los fallos no deben tumbar la operacion que la disparo: el abono ya se guardo.
+ */
+export async function mirrorObligationEventAttachmentsToMovement(input: {
+  workspaceId: number;
+  eventId: number;
+  movementId: number;
+  userId: string;
+}) {
+  const client = getClient();
+  const [eventAttachments, movementAttachments] = await Promise.all([
+    fetchEntityAttachments(input.workspaceId, "obligation-event", input.eventId),
+    fetchEntityAttachments(input.workspaceId, "movement", input.movementId),
+  ]);
+
+  const eventFileNames = new Set(eventAttachments.map((attachment) => attachment.fileName));
+  // Se retiran los espejos que ya no existen en el evento; los propios del
+  // movimiento, subidos aparte, no se tocan.
+  const staleMirrors = movementAttachments.filter(
+    (attachment) =>
+      attachment.filePath.includes(`/${MIRRORED_ATTACHMENT_PREFIX}`) &&
+      !eventFileNames.has(attachment.fileName),
+  );
+
+  for (const attachment of staleMirrors) {
+    await client.from("attachments").delete().eq("id", attachment.id);
+    await client.storage.from(attachment.bucketName).remove([attachment.filePath]);
+  }
+
+  const alreadyMirrored = new Set(
+    movementAttachments
+      .filter((attachment) => attachment.filePath.includes(`/${MIRRORED_ATTACHMENT_PREFIX}`))
+      .map((attachment) => attachment.fileName),
+  );
+
+  for (const attachment of eventAttachments) {
+    if (alreadyMirrored.has(attachment.fileName)) {
+      continue;
+    }
+
+    const targetPath = `${input.workspaceId}/movement/${input.movementId}/${MIRRORED_ATTACHMENT_PREFIX}${crypto.randomUUID()}.webp`;
+    const { error: copyError } = await client.storage
+      .from(attachment.bucketName)
+      .copy(attachment.filePath, targetPath);
+
+    if (copyError) {
+      throw copyError;
+    }
+
+    const { error: insertError } = await client.from("attachments").insert({
+      workspace_id: input.workspaceId,
+      entity_type: "movement",
+      entity_id: input.movementId,
+      bucket_name: attachment.bucketName,
+      file_path: targetPath,
+      file_name: attachment.fileName,
+      mime_type: attachment.mimeType,
+      size_bytes: attachment.sizeBytes,
+      width: attachment.width ?? null,
+      height: attachment.height ?? null,
+      uploaded_by_user_id: input.userId,
+    });
+
+    if (insertError) {
+      await client.storage.from(attachment.bucketName).remove([targetPath]);
+
+      throw insertError;
+    }
+  }
+}
+
+/** Marca en la ruta que el archivo es copia de un evento, no un adjunto propio. */
+const MIRRORED_ATTACHMENT_PREFIX = "from-event-";
+
 export function useCreateAttachmentRecordMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -5215,6 +5294,9 @@ export function useRegisterObligationPaymentMutation(workspaceId?: number, userI
 
         throw error;
       }
+
+      // Los devuelve para poder adjuntar el comprobante recien subido.
+      return { eventId: createdEventId, movementId: createdMovementId };
     },
     onSuccess: async () => {
       if (workspaceId) {

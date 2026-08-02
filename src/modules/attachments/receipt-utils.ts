@@ -132,6 +132,19 @@ export async function uploadPreparedReceipt(preparedReceipt: PreparedReceiptUplo
   }
 }
 
+export async function copyStoredReceipt(
+  bucketName: string,
+  fromFilePath: string,
+  toFilePath: string,
+) {
+  const client = assertStorageClient();
+  const { error } = await client.storage.from(bucketName).copy(fromFilePath, toFilePath);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function deleteStoredReceipt(bucketName: string, filePath: string) {
   const client = assertStorageClient();
   const { error } = await client.storage.from(bucketName).remove([filePath]);

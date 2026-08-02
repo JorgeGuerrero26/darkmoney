@@ -164,7 +164,13 @@ export type CategoryOverview = CategorySummary & {
 
 export type BudgetScopeKind = "general" | "category" | "account" | "category_account";
 
-export type AttachmentEntityType = "movement" | "obligation" | "subscription";
+// "obligation-event" con guion, no guion bajo: es la ruta de Storage que ya
+// escribe la app movil (workspace_id/entity_type/entity_id/uuid.webp).
+export type AttachmentEntityType =
+  | "movement"
+  | "obligation"
+  | "obligation-event"
+  | "subscription";
 
 export type BudgetOverview = {
   id: number;

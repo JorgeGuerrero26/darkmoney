@@ -36,6 +36,8 @@ import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -78,6 +80,7 @@ import {
   useDeleteObligationMutation,
   useEntityAttachmentsQuery,
   useObligationSharesQuery,
+  mirrorObligationEventAttachmentsToMovement,
   useAcceptObligationEventDeleteRequestMutation,
   useAcceptObligationEventEditRequestMutation,
   useAcceptPaymentRequestMutation,
@@ -968,26 +971,42 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
 
 
 function PaymentDialog({
+  accessMessage,
   accounts,
+  attachments,
+  canManageReceipts,
   editEventAmount,
   feedback,
   formState,
   isEditMode,
   isSaving,
+  isUploadingReceipt,
   obligation,
   onCancel,
+  onDeleteReceipt,
   onSubmit,
+  onUploadReceipt,
+  pendingReceiptFile,
   updateFormState,
+  updatePendingReceiptFile,
 }: {
+  accessMessage: string;
   accounts: AccountSummary[];
+  attachments: AttachmentSummary[];
+  canManageReceipts: boolean;
   editEventAmount: number | null;
   feedback: FeedbackState | null;
   formState: PaymentFormState;
   isEditMode: boolean;
   isSaving: boolean;
+  isUploadingReceipt: boolean;
   obligation: ObligationSummary;
   onCancel: () => void;
+  onDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onUploadReceipt: (file: File) => Promise<void>;
+  pendingReceiptFile: File | null;
+  updatePendingReceiptFile: (file: File | null) => void;
   updateFormState: <Field extends keyof PaymentFormState>(
     field: Field,
     value: PaymentFormState[Field],
@@ -1255,6 +1274,39 @@ function PaymentDialog({
                       value={formState.notes}
                     />
                   </Field>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className={`${panelClassName} z-30`}>
+                  {isEditMode ? (
+                    <AttachmentGallery
+                      accessMessage={accessMessage}
+                      attachments={attachments}
+                      canManage={canManageReceipts}
+                      entityLabel="abono"
+                      isUploading={isUploadingReceipt}
+                      onDelete={(attachment) => {
+                        void onDeleteReceipt(attachment);
+                      }}
+                      onUpload={(file) => {
+                        void onUploadReceipt(file);
+                      }}
+                    />
+                  ) : (
+                    <PendingReceiptField
+                      canUpload={canManageReceipts}
+                      description="Opcional. Adjunta la foto del voucher o la constancia de la transferencia."
+                      file={pendingReceiptFile}
+                      lockedMessage={accessMessage}
+                      onChange={updatePendingReceiptFile}
+                    />
+                  )}
+                  {formState.registerAccountMovement ? (
+                    <p className="mt-3 text-xs leading-5 text-storm">
+                      El comprobante se copiara tambien al movimiento que genere este abono.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2737,6 +2789,7 @@ function downloadObligationsCSV(obligations: ObligationSummary[], filename: stri
 
 export function ObligationsPage() {
   const { profile, user } = useAuth();
+  const queryClient = useQueryClient();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const { canAccessProFeatures, genericAccessMessage } = useProFeatureAccess();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -2836,6 +2889,7 @@ export function ObligationsPage() {
   }
   const [paymentTargetId, setPaymentTargetId] = useState<number | null>(null);
   const [paymentEditEventId, setPaymentEditEventId] = useState<number | null>(null);
+  const [pendingPaymentReceiptFile, setPendingPaymentReceiptFile] = useState<File | null>(null);
   const [eventDeleteTarget, setEventDeleteTarget] = useState<{
     obligationId: number;
     event: ObligationEventSummary;
@@ -2896,6 +2950,11 @@ export function ObligationsPage() {
     sharedDetailObligation?.share.id ?? null,
   );
   const viewerEventRequestsQuery = useViewerObligationEventRequestsQuery(user?.id, sharedDetailId);
+  const paymentEventAttachmentsQuery = useEntityAttachmentsQuery(
+    activeWorkspace?.id,
+    "obligation-event",
+    paymentEditEventId,
+  );
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedObligation =
     selectedObligationId === null
@@ -3078,6 +3137,144 @@ export function ObligationsPage() {
     }
   }
 
+  /** Sube el comprobante al evento y lo copia al movimiento vinculado, si lo hay. */
+  async function uploadReceiptForEvent(eventId: number, movementId: number | null, file: File) {
+    if (!activeWorkspace || !user) {
+      throw new Error("Necesitamos un usuario y workspace activos para subir comprobantes.");
+    }
+
+    const preparedReceipt = await prepareReceiptUpload({
+      workspaceId: activeWorkspace.id,
+      entityType: "obligation-event",
+      entityId: eventId,
+      file,
+    });
+
+    await uploadPreparedReceipt(preparedReceipt);
+
+    try {
+      await createAttachmentRecordMutation.mutateAsync({
+        workspaceId: activeWorkspace.id,
+        entityType: "obligation-event",
+        entityId: eventId,
+        bucketName: preparedReceipt.bucketName,
+        filePath: preparedReceipt.filePath,
+        fileName: preparedReceipt.fileName,
+        mimeType: preparedReceipt.mimeType,
+        sizeBytes: preparedReceipt.sizeBytes,
+        width: preparedReceipt.width,
+        height: preparedReceipt.height,
+        uploadedByUserId: user.id,
+      });
+    } catch (error) {
+      await deleteStoredReceipt(preparedReceipt.bucketName, preparedReceipt.filePath).catch(
+        () => undefined,
+      );
+      throw error;
+    }
+
+    if (movementId !== null) {
+      await syncEventReceiptsToMovement(eventId, movementId);
+    }
+  }
+
+  /** El espejado es secundario: si falla, el comprobante del abono ya quedo guardado. */
+  async function syncEventReceiptsToMovement(eventId: number, movementId: number) {
+    if (!activeWorkspace || !user) {
+      return;
+    }
+
+    try {
+      await mirrorObligationEventAttachmentsToMovement({
+        workspaceId: activeWorkspace.id,
+        eventId,
+        movementId,
+        userId: user.id,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["attachments", activeWorkspace.id],
+        exact: false,
+      });
+    } catch (error) {
+      console.warn("[syncEventReceiptsToMovement]", error);
+    }
+  }
+
+  async function handleUploadPaymentReceipt(file: File) {
+    if (paymentEditEventId === null || !paymentTarget) {
+      return;
+    }
+
+    if (!canUploadReceipts) {
+      setPaymentFeedback({
+        tone: "error",
+        title: "Comprobantes en Modo Pro",
+        description: "Tu plan actual no tiene habilitada la subida de comprobantes.",
+      });
+      return;
+    }
+
+    setPaymentFeedback(null);
+
+    const editingEvent =
+      paymentTarget.events.find((event) => event.id === paymentEditEventId) ?? null;
+
+    try {
+      await uploadReceiptForEvent(paymentEditEventId, editingEvent?.movementId ?? null, file);
+      setPaymentFeedback({
+        tone: "success",
+        title: "Comprobante guardado",
+        description: editingEvent?.movementId
+          ? "Tambien lo copiamos al movimiento vinculado."
+          : "El adjunto quedo vinculado a este abono.",
+      });
+    } catch (error) {
+      setPaymentFeedback({
+        tone: "error",
+        title: "No pudimos subir el comprobante",
+        description: getQueryErrorMessage(error, "Intentalo otra vez en unos segundos."),
+      });
+    }
+  }
+
+  async function handleDeletePaymentReceipt(attachment: AttachmentSummary) {
+    if (!activeWorkspace || paymentEditEventId === null || !paymentTarget) {
+      return;
+    }
+
+    if (!canUploadReceipts) {
+      setPaymentFeedback({
+        tone: "error",
+        title: "Comprobantes en Modo Pro",
+        description: "Tu plan actual no tiene habilitada la gestion de comprobantes.",
+      });
+      return;
+    }
+
+    setPaymentFeedback(null);
+
+    const editingEvent =
+      paymentTarget.events.find((event) => event.id === paymentEditEventId) ?? null;
+
+    try {
+      await deleteAttachmentRecordMutation.mutateAsync({
+        attachmentId: attachment.id,
+        workspaceId: activeWorkspace.id,
+      });
+      await deleteStoredReceipt(attachment.bucketName, attachment.filePath).catch(() => undefined);
+
+      if (editingEvent?.movementId) {
+        await syncEventReceiptsToMovement(paymentEditEventId, editingEvent.movementId);
+      }
+    } catch (error) {
+      setPaymentFeedback({
+        tone: "error",
+        title: "No pudimos eliminar el comprobante",
+        description: getQueryErrorMessage(error, "Intentalo otra vez en unos segundos."),
+      });
+    }
+  }
+
   async function handleUploadReceipt(file: File) {
     if (!selectedObligation) {
       setEditorFeedback({
@@ -3155,6 +3352,7 @@ export function ObligationsPage() {
     setPageFeedback(null);
     setPaymentFeedback(null);
     setPaymentEditEventId(null);
+    setPendingPaymentReceiptFile(null);
     setPaymentTargetId(obligation.id);
     setPaymentFormState(createDefaultPaymentFormState(obligation));
   }
@@ -3175,6 +3373,7 @@ export function ObligationsPage() {
     setPageFeedback(null);
     setPaymentFeedback(null);
     setPaymentEditEventId(event.id);
+    setPendingPaymentReceiptFile(null);
     setPaymentTargetId(obligation.id);
     setPaymentFormState({
       amount: String(event.amount),
@@ -4326,7 +4525,7 @@ export function ObligationsPage() {
     }
 
     try {
-      await paymentMutation.mutateAsync({
+      const created = await paymentMutation.mutateAsync({
         workspaceId: activeWorkspace.id,
         userId: user.id,
         obligationId: paymentTarget.id,
@@ -4339,15 +4538,34 @@ export function ObligationsPage() {
         accountId: shouldRegisterMovement ? accountId : null,
         nextStatus,
       } satisfies ObligationPaymentFormInput & { workspaceId: number; userId: string });
+
+      // El comprobante va despues: el evento tiene que existir para colgarlo de el.
+      let receiptFailed = false;
+
+      if (pendingPaymentReceiptFile && canUploadReceipts && created.eventId !== null) {
+        try {
+          await uploadReceiptForEvent(
+            created.eventId,
+            created.movementId,
+            pendingPaymentReceiptFile,
+          );
+        } catch {
+          receiptFailed = true;
+        }
+      }
+
+      setPendingPaymentReceiptFile(null);
       setPageFeedback({
         tone: "success",
-        title: "Abono registrado",
+        title: receiptFailed ? "Abono registrado, sin comprobante" : "Abono registrado",
         description: `${
           remainingAfterPayment <= 0
             ? "El registro quedo liquidado y su saldo pendiente ya se actualizo."
             : "El avance y el saldo pendiente se actualizaron correctamente."
         }${
           shouldRegisterMovement ? " Tambien creamos el movimiento en la cuenta seleccionada." : ""
+        }${
+          receiptFailed ? " No pudimos adjuntar el comprobante, vuelve a subirlo al editarlo." : ""
         }`,
       });
       setPaymentTargetId(null);
@@ -4955,7 +5173,10 @@ export function ObligationsPage() {
 
       {paymentTarget ? (
         <PaymentDialog
+          accessMessage={accessMessage}
           accounts={accounts}
+          attachments={paymentEventAttachmentsQuery.data ?? []}
+          canManageReceipts={canUploadReceipts}
           editEventAmount={
             paymentEditEventId === null
               ? null
@@ -4965,15 +5186,21 @@ export function ObligationsPage() {
           formState={paymentFormState}
           isEditMode={paymentEditEventId !== null}
           isSaving={isRegisteringPayment}
+          isUploadingReceipt={isUploadingReceipt}
           obligation={paymentTarget}
           onCancel={() => {
             if (!isRegisteringPayment) {
               setPaymentTargetId(null);
               setPaymentEditEventId(null);
+              setPendingPaymentReceiptFile(null);
             }
           }}
+          onDeleteReceipt={handleDeletePaymentReceipt}
           onSubmit={handleSubmitPayment}
+          onUploadReceipt={handleUploadPaymentReceipt}
+          pendingReceiptFile={pendingPaymentReceiptFile}
           updateFormState={updatePaymentFormState}
+          updatePendingReceiptFile={setPendingPaymentReceiptFile}
         />
       ) : null}
 
