@@ -1222,10 +1222,19 @@ function buildCashflow(movements: MovementRow[]) {
       continue;
     }
 
+    if (movement.movement_type === "obligation_payment") {
+      // El abono de un cobro entra por la cuenta destino; el de un pago sale por la origen.
+      if (destinationAmount > sourceAmount) {
+        bucket.income += destinationAmount;
+      } else {
+        bucket.expense += sourceAmount || destinationAmount;
+      }
+      continue;
+    }
+
     if (
       movement.movement_type === "expense" ||
-      movement.movement_type === "subscription_payment" ||
-      movement.movement_type === "obligation_payment"
+      movement.movement_type === "subscription_payment"
     ) {
       bucket.expense += sourceAmount || destinationAmount;
       continue;

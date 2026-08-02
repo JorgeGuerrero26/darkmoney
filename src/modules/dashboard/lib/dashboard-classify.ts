@@ -50,6 +50,12 @@ export function getExpenseAmount(movement: MovementRecord) {
   );
 }
 
+// El abono de un cobro (receivable) entra por la cuenta destino y el de un pago (payable)
+// sale por la cuenta origen. Se resuelve por montos, igual que la app movil.
+export function obligationPaymentActsAsIncome(movement: MovementRecord) {
+  return (movement.destinationAmount ?? 0) > (movement.sourceAmount ?? 0);
+}
+
 export function getTransferLineAmount(movement: MovementRecord) {
   return Math.max(
     0,
@@ -72,10 +78,15 @@ export function classifyMovement(
     return { kind: "income", amount: getIncomeAmount(movement) };
   }
 
+  if (movement.movementType === "obligation_payment") {
+    return obligationPaymentActsAsIncome(movement)
+      ? { kind: "income", amount: getIncomeAmount(movement) }
+      : { kind: "expense", amount: getExpenseAmount(movement) };
+  }
+
   if (
     movement.movementType === "expense" ||
-    movement.movementType === "subscription_payment" ||
-    movement.movementType === "obligation_payment"
+    movement.movementType === "subscription_payment"
   ) {
     return { kind: "expense", amount: getExpenseAmount(movement) };
   }
@@ -129,10 +140,15 @@ export function classifyScheduledMovement(
     return { kind: "income", amount: getIncomeAmount(movement) };
   }
 
+  if (movement.movementType === "obligation_payment") {
+    return obligationPaymentActsAsIncome(movement)
+      ? { kind: "income", amount: getIncomeAmount(movement) }
+      : { kind: "expense", amount: getExpenseAmount(movement) };
+  }
+
   if (
     movement.movementType === "expense" ||
-    movement.movementType === "subscription_payment" ||
-    movement.movementType === "obligation_payment"
+    movement.movementType === "subscription_payment"
   ) {
     return { kind: "expense", amount: getExpenseAmount(movement) };
   }
