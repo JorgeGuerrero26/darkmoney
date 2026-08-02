@@ -3483,6 +3483,48 @@ export function useDeclineObligationShareMutation(userId?: string) {
   });
 }
 
+type UnlinkObligationShareFunctionResponse = {
+  ok: boolean;
+  error?: string;
+  shareId?: number;
+  status?: ObligationShareSummary["status"];
+  alreadyInactive?: boolean;
+};
+
+/** Corta el acceso de un invitado ya aceptado, sin borrar el credito ni su historial. */
+export function useUnlinkObligationShareMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { shareId?: number | null; obligationId?: number | null }) => {
+      const response = (await invokeAuthenticatedFunction<UnlinkObligationShareFunctionResponse>(
+        "unlink-obligation-share",
+        {
+          shareId: input.shareId ?? null,
+          workspaceId: workspaceId ?? null,
+          obligationId: input.obligationId ?? null,
+        },
+      )) as UnlinkObligationShareFunctionResponse;
+
+      if (!response.ok) {
+        throw new Error(response.error ?? "No pudimos desvincular la relacion compartida.");
+      }
+
+      return { alreadyInactive: Boolean(response.alreadyInactive) };
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["obligation-shares", workspaceId ?? null] }),
+        queryClient.invalidateQueries({ queryKey: ["shared-obligations", userId ?? null] }),
+      ]);
+
+      if (workspaceId) {
+        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+      }
+    },
+  });
+}
+
 export function useMarkNotificationsUnreadMutation(userId?: string) {
   const queryClient = useQueryClient();
 

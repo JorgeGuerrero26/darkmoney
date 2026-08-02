@@ -79,6 +79,7 @@ import {
   useDeleteObligationEventMutation,
   useRegisterObligationPaymentMutation,
   useSharedObligationsQuery,
+  useUnlinkObligationShareMutation,
   useUpdateObligationEventMutation,
   useUpdateObligationMutation,
   useWorkspaceSnapshotQuery,
@@ -507,6 +508,26 @@ function buildFormStateFromObligation(obligation: ObligationSummary): Obligation
   };
 }
 
+/**
+ * Sigue la cuota mas alta ya registrada, no la cantidad de abonos. Si se salto la
+ * cuota 3 y se pago la 4, el siguiente sugerido es 5 y no 3. Espeja
+ * suggestedInstallmentNo de la app movil.
+ */
+function suggestNextInstallmentNo(obligation: ObligationSummary): number {
+  const highestInstallmentNo = obligation.events.reduce((highest, event) => {
+    if (event.eventType !== "payment") {
+      return highest;
+    }
+
+    return Math.max(highest, event.installmentNo ?? 0);
+  }, 0);
+  const next = highestInstallmentNo > 0 ? highestInstallmentNo + 1 : obligation.paymentCount + 1;
+
+  return obligation.installmentCount && obligation.installmentCount > 0
+    ? Math.min(next, obligation.installmentCount)
+    : next;
+}
+
 function createDefaultPaymentFormState(obligation: ObligationSummary): PaymentFormState {
   const suggestedAmount = obligation.installmentAmount
     ? Math.min(obligation.installmentAmount, obligation.pendingAmount)
@@ -515,10 +536,7 @@ function createDefaultPaymentFormState(obligation: ObligationSummary): PaymentFo
   return {
     amount: suggestedAmount > 0 ? String(Number(suggestedAmount.toFixed(2))) : "",
     eventDate: toDateInputValue(new Date().toISOString()),
-    installmentNo:
-      obligation.installmentCount && obligation.installmentCount > 0
-        ? String(Math.min(obligation.paymentCount + 1, obligation.installmentCount))
-        : "",
+    installmentNo: String(suggestNextInstallmentNo(obligation)),
     description: "",
     notes: "",
     registerAccountMovement: true,
@@ -1538,18 +1556,22 @@ function ShareInviteDialog({
   feedback,
   formState,
   isSaving,
+  isUnlinkingShare,
   obligation,
   onCancel,
   onSubmit,
+  onUnlinkShare,
   updateFormState,
 }: {
   currentShare?: ObligationShareSummary | null;
   feedback: FeedbackState | null;
   formState: ShareInviteFormState;
   isSaving: boolean;
+  isUnlinkingShare?: boolean;
   obligation: ObligationSummary;
   onCancel: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onUnlinkShare?: () => Promise<void>;
   updateFormState: <Field extends keyof ShareInviteFormState>(
     field: Field,
     value: ShareInviteFormState[Field],
@@ -1662,6 +1684,26 @@ function ShareInviteDialog({
                         Si cambias el correo y vuelves a enviar la invitacion, este registro se
                         reasignara a la nueva persona.
                       </p>
+                      {onUnlinkShare ? (
+                        <Button
+                          className="mt-4"
+                          disabled={isUnlinkingShare}
+                          onClick={() => {
+                            void onUnlinkShare();
+                          }}
+                          type="button"
+                          variant="ghost"
+                        >
+                          {isUnlinkingShare ? (
+                            <>
+                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                              Desvinculando...
+                            </>
+                          ) : (
+                            "Quitar acceso"
+                          )}
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -2668,6 +2710,7 @@ export function ObligationsPage() {
   const deleteMutation = useDeleteObligationMutation(activeWorkspace?.id, user?.id);
   const paymentMutation = useRegisterObligationPaymentMutation(activeWorkspace?.id, user?.id);
   const eventUpdateMutation = useUpdateObligationEventMutation(activeWorkspace?.id, user?.id);
+  const unlinkShareMutation = useUnlinkObligationShareMutation(activeWorkspace?.id, user?.id);
   const eventDeleteMutation = useDeleteObligationEventMutation(activeWorkspace?.id, user?.id);
   const principalAdjustmentMutation = useAdjustObligationPrincipalMutation(activeWorkspace?.id, user?.id);
   const shareInviteMutation = useCreateObligationShareInviteMutation(activeWorkspace?.id, user?.id);
@@ -3054,6 +3097,31 @@ export function ObligationsPage() {
       registerAccountMovement: event.movementId != null,
       accountId: accountId != null ? String(accountId) : "",
     });
+  }
+
+  async function handleUnlinkShare(obligationId: number) {
+    const share = shareByObligationId.get(obligationId) ?? null;
+    setShareDialogFeedback(null);
+
+    try {
+      const result = await unlinkShareMutation.mutateAsync({
+        shareId: share?.id ?? null,
+        obligationId,
+      });
+      setShareTargetId(null);
+      setPageFeedback({
+        tone: "success",
+        title: result.alreadyInactive ? "El acceso ya estaba cerrado" : "Acceso retirado",
+        description:
+          "La persona invitada ya no vera este registro. El credito y su historial quedan intactos.",
+      });
+    } catch (error) {
+      setShareDialogFeedback({
+        tone: "error",
+        title: "No pudimos quitar el acceso",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
   }
 
   async function handleConfirmDeleteEvent() {
@@ -4417,6 +4485,7 @@ export function ObligationsPage() {
           feedback={shareDialogFeedback}
           formState={shareDialogFormState}
           isSaving={isSendingShareInvite}
+          isUnlinkingShare={unlinkShareMutation.isPending}
           obligation={shareTarget}
           onCancel={() => {
             if (!isSendingShareInvite) {
@@ -4424,6 +4493,7 @@ export function ObligationsPage() {
             }
           }}
           onSubmit={handleSubmitShareInvite}
+          onUnlinkShare={() => handleUnlinkShare(shareTarget.id)}
           updateFormState={updateShareDialogFormState}
         />
       ) : null}
