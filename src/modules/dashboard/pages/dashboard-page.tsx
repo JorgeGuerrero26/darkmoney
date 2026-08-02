@@ -89,6 +89,10 @@ import {
   getMonthlySubscriptionAmount,
 } from "../lib/dashboard-builders";
 import {
+  applyBudgetComputedMetrics,
+  buildBudgetMetricsMap,
+} from "../../budgets/lib/budget-metrics";
+import {
   buildPeriodTotals,
   classifyMovement,
   getExpenseAmount,
@@ -712,7 +716,18 @@ export function DashboardPage() {
       amountInBaseCurrency: convertedAmount ?? null,
     };
   });
-  const displayBudgets = snapshot.budgets.map((budget) => {
+  // Igual que en el modulo de presupuestos: la vista SQL se recalcula en cliente
+  // para que ambos clientes muestren el mismo consumido.
+  const budgetMetricsMap = buildBudgetMetricsMap(snapshot.budgets, snapshot.movements, {
+    workspaceBaseCurrencyCode: baseCurrencyCode,
+    exchangeRates: snapshot.exchangeRates,
+  });
+  const recomputedBudgets = snapshot.budgets.map((budget) => {
+    const budgetMetrics = budgetMetricsMap.get(budget.id);
+
+    return budgetMetrics ? applyBudgetComputedMetrics(budget, budgetMetrics) : budget;
+  });
+  const displayBudgets = recomputedBudgets.map((budget) => {
     const convertedLimitAmount = convertDashboardAmount({
       amount: budget.limitAmount,
       currencyCode: budget.currencyCode,

@@ -44,6 +44,7 @@ import { BudgetAnalyticsModal } from "../components/budget-analytics-modal";
 import { BudgetGrid } from "../components/budget-grid";
 import { BudgetList } from "../components/budget-list";
 import { BudgetTable } from "../components/budget-table";
+import { applyBudgetComputedMetrics, buildBudgetMetricsMap } from "../lib/budget-metrics";
 import { useBudgetsFilters } from "../hooks/use-budgets-filters";
 import type { BudgetScopeKind, ScopeFilter, StatusFilter } from "../lib/budgets-filters";
 import {
@@ -859,7 +860,31 @@ export function BudgetsPage() {
   const [formState, setFormState] = useState<BudgetFormState>(() => createDefaultFormState(activeWorkspace));
 
   const snapshot = snapshotQuery.data;
-  const budgets = snapshot?.budgets ?? [];
+  // La vista SQL no cuenta ajustes ni puentea divisas por la moneda base; se
+  // recalcula en cliente como hace la app movil.
+  const budgets = useMemo(() => {
+    const rawBudgets = snapshot?.budgets ?? [];
+
+    if (rawBudgets.length === 0) {
+      return rawBudgets;
+    }
+
+    const metrics = buildBudgetMetricsMap(rawBudgets, snapshot?.movements ?? [], {
+      workspaceBaseCurrencyCode: activeWorkspace?.baseCurrencyCode ?? "PEN",
+      exchangeRates: snapshot?.exchangeRates ?? [],
+    });
+
+    return rawBudgets.map((budget) => {
+      const budgetMetrics = metrics.get(budget.id);
+
+      return budgetMetrics ? applyBudgetComputedMetrics(budget, budgetMetrics) : budget;
+    });
+  }, [
+    snapshot?.budgets,
+    snapshot?.movements,
+    snapshot?.exchangeRates,
+    activeWorkspace?.baseCurrencyCode,
+  ]);
   const categories = snapshot?.catalogs.categories ?? [];
   const accounts = useMemo(
     () =>
