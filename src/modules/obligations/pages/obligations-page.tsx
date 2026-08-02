@@ -78,14 +78,24 @@ import {
   useDeleteObligationMutation,
   useEntityAttachmentsQuery,
   useObligationSharesQuery,
+  useAcceptObligationEventDeleteRequestMutation,
+  useAcceptObligationEventEditRequestMutation,
   useAcceptPaymentRequestMutation,
+  useCreateObligationEventDeleteRequestMutation,
+  useCreateObligationEventEditRequestMutation,
   useCreatePaymentRequestMutation,
   useDeleteObligationEventMutation,
   useDeleteViewerEventLinkMutation,
   useLinkEventToAccountMutation,
+  useObligationEventRequestsQuery,
   useObligationEventViewerLinksQuery,
   usePendingPaymentRequestsQuery,
+  useRejectObligationEventDeleteRequestMutation,
+  useRejectObligationEventEditRequestMutation,
+  useViewerObligationEventRequestsQuery,
   useViewerPaymentRequestsQuery,
+  type ObligationEventDeleteRequest,
+  type ObligationEventEditRequest,
   useRegisterObligationPaymentMutation,
   useRejectPaymentRequestMutation,
   useSharedObligationsQuery,
@@ -97,9 +107,11 @@ import {
 import { ObligationTable } from "../components/obligation-table";
 import { ObligationList } from "../components/obligation-list";
 import { ObligationGrid } from "../components/obligation-grid";
+import { PendingEventRequestsSection } from "../components/pending-event-requests-section";
 import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
 import {
   SharedObligationDetailDialog,
+  type EventEditProposal,
   type SharedObligationRequestFormState,
 } from "../components/shared-obligation-detail-dialog";
 import { SharedObligationsSection } from "../components/shared-obligations-section";
@@ -2749,6 +2761,25 @@ export function ObligationsPage() {
     activeWorkspace?.id,
     user?.id,
   );
+  const eventRequestsQuery = useObligationEventRequestsQuery(user?.id);
+  const createEventDeleteRequestMutation = useCreateObligationEventDeleteRequestMutation(user?.id);
+  const createEventEditRequestMutation = useCreateObligationEventEditRequestMutation(user?.id);
+  const acceptEventDeleteRequestMutation = useAcceptObligationEventDeleteRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
+  const rejectEventDeleteRequestMutation = useRejectObligationEventDeleteRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
+  const acceptEventEditRequestMutation = useAcceptObligationEventEditRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
+  const rejectEventEditRequestMutation = useRejectObligationEventEditRequestMutation(
+    activeWorkspace?.id,
+    user?.id,
+  );
   const acceptPaymentRequestMutation = useAcceptPaymentRequestMutation(
     activeWorkspace?.id,
     user?.id,
@@ -2864,6 +2895,7 @@ export function ObligationsPage() {
     sharedDetailId,
     sharedDetailObligation?.share.id ?? null,
   );
+  const viewerEventRequestsQuery = useViewerObligationEventRequestsQuery(user?.id, sharedDetailId);
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedObligation =
     selectedObligationId === null
@@ -3298,6 +3330,233 @@ export function ObligationsPage() {
       setSharedDetailFeedback({
         tone: "error",
         title: "No pudimos quitar el vinculo",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleRequestEventDelete(event: ObligationEventSummary) {
+    setSharedDetailFeedback(null);
+
+    if (!sharedDetailObligation || !user?.id) {
+      return;
+    }
+
+    try {
+      await createEventDeleteRequestMutation.mutateAsync({
+        obligation: sharedDetailObligation,
+        event,
+        viewerUserId: user.id,
+        viewerDisplayName: profile?.fullName ?? user.email ?? null,
+      });
+      setSharedDetailFeedback({
+        tone: "success",
+        title: "Solicitud enviada",
+        description: `${
+          sharedDetailObligation.share.ownerDisplayName ?? "El propietario"
+        } decide si elimina el evento. Nada cambia mientras tanto.`,
+      });
+    } catch (error) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "No pudimos enviar la solicitud",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleRequestEventEdit(
+    event: ObligationEventSummary,
+    proposal: EventEditProposal,
+  ) {
+    setSharedDetailFeedback(null);
+
+    if (!sharedDetailObligation || !user?.id) {
+      return;
+    }
+
+    const proposedAmount = parseOptionalNumber(proposal.amount);
+    const proposedInstallmentNo = parseOptionalInteger(proposal.installmentNo);
+
+    if (proposedAmount === null || Number.isNaN(proposedAmount) || proposedAmount <= 0) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Monto invalido",
+        description: "Propone un monto mayor que cero.",
+      });
+      return;
+    }
+
+    if (!proposal.eventDate) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "Falta la fecha",
+        description: "Selecciona la fecha que propones para el evento.",
+      });
+      return;
+    }
+
+    try {
+      await createEventEditRequestMutation.mutateAsync({
+        obligation: sharedDetailObligation,
+        event,
+        viewerUserId: user.id,
+        viewerDisplayName: profile?.fullName ?? user.email ?? null,
+        proposedAmount,
+        proposedEventDate: proposal.eventDate,
+        proposedInstallmentNo,
+        proposedDescription: proposal.description,
+        proposedNotes: proposal.notes,
+      });
+      setSharedDetailFeedback({
+        tone: "success",
+        title: "Propuesta enviada",
+        description: `${
+          sharedDetailObligation.share.ownerDisplayName ?? "El propietario"
+        } vera los cambios propuestos y decide si los aplica.`,
+      });
+    } catch (error) {
+      setSharedDetailFeedback({
+        tone: "error",
+        title: "No pudimos enviar la propuesta",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleAcceptEventDeleteRequest(request: ObligationEventDeleteRequest) {
+    if (!activeWorkspace || !user?.id) {
+      return;
+    }
+
+    const obligation = obligations.find((item) => item.id === request.payload.obligationId);
+    const eventAmount =
+      obligation?.events.find((item) => item.id === request.payload.eventId)?.amount ??
+      request.payload.amount ??
+      0;
+    // Al borrarse, el monto vuelve al pendiente: puede dejar de estar liquidado.
+    const nextStatus: ObligationStatus | undefined =
+      obligation && obligation.status === "paid" && obligation.pendingAmount + eventAmount > 0
+        ? "active"
+        : undefined;
+
+    try {
+      await acceptEventDeleteRequestMutation.mutateAsync({
+        payload: request.payload,
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+        nextStatus,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Evento eliminado",
+        description: "Aplicamos la solicitud y avisamos a quien la envio.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos eliminar el evento",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleRejectEventDeleteRequest(
+    request: ObligationEventDeleteRequest,
+    rejectionReason: string,
+  ) {
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      await rejectEventDeleteRequestMutation.mutateAsync({
+        payload: request.payload,
+        userId: user.id,
+        rejectionReason,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Solicitud rechazada",
+        description: "El evento sigue igual y avisamos a quien lo pidio.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos rechazar la solicitud",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleAcceptEventEditRequest(request: ObligationEventEditRequest) {
+    if (!activeWorkspace || !user?.id) {
+      return;
+    }
+
+    const obligation = obligations.find((item) => item.id === request.payload.obligationId);
+    const currentEvent =
+      obligation?.events.find((item) => item.id === request.payload.eventId) ?? null;
+    const currentMovementId = currentEvent?.movementId ?? null;
+    const currentAccountId = currentEvent ? resolveEventAccountId(currentEvent) : null;
+    const proposedAmount = request.payload.proposedAmount ?? currentEvent?.amount ?? 0;
+    // El pendiente actual ya tiene descontado el monto viejo del abono.
+    const pendingBefore = (obligation?.pendingAmount ?? 0) + (currentEvent?.amount ?? 0);
+    const remaining = Math.max(0, pendingBefore - proposedAmount);
+    const nextStatus: ObligationStatus | undefined = obligation
+      ? remaining <= 0
+        ? "paid"
+        : obligation.status === "paid"
+          ? "active"
+          : undefined
+      : undefined;
+
+    try {
+      await acceptEventEditRequestMutation.mutateAsync({
+        payload: request.payload,
+        workspaceId: activeWorkspace.id,
+        userId: user.id,
+        movementId: currentMovementId,
+        accountId: currentAccountId,
+        nextStatus,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Cambios aplicados",
+        description: "El evento y su movimiento vinculado quedaron con los datos propuestos.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos aplicar los cambios",
+        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+      });
+    }
+  }
+
+  async function handleRejectEventEditRequest(
+    request: ObligationEventEditRequest,
+    rejectionReason: string,
+  ) {
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      await rejectEventEditRequestMutation.mutateAsync({
+        payload: request.payload,
+        userId: user.id,
+        rejectionReason,
+      });
+      setPageFeedback({
+        tone: "success",
+        title: "Propuesta rechazada",
+        description: "El evento sigue igual y avisamos a quien la envio.",
+      });
+    } catch (error) {
+      setPageFeedback({
+        tone: "error",
+        title: "No pudimos rechazar la propuesta",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
     }
@@ -4361,6 +4620,22 @@ export function ObligationsPage() {
         requests={pendingPaymentRequests}
       />
 
+      <PendingEventRequestsSection
+        deleteRequests={eventRequestsQuery.data?.deleteRequests ?? []}
+        editRequests={eventRequestsQuery.data?.editRequests ?? []}
+        isResolving={
+          acceptEventDeleteRequestMutation.isPending ||
+          rejectEventDeleteRequestMutation.isPending ||
+          acceptEventEditRequestMutation.isPending ||
+          rejectEventEditRequestMutation.isPending
+        }
+        obligations={obligations}
+        onAcceptDelete={handleAcceptEventDeleteRequest}
+        onAcceptEdit={handleAcceptEventEditRequest}
+        onRejectDelete={handleRejectEventDeleteRequest}
+        onRejectEdit={handleRejectEventEditRequest}
+      />
+
       {/* Métricas compactas */}
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
         <ObligationSummaryChip label="registros" value={String(obligations.length)} />
@@ -4594,15 +4869,21 @@ export function ObligationsPage() {
       {sharedDetailObligation ? (
         <SharedObligationDetailDialog
           accounts={accounts}
+          eventRequests={viewerEventRequestsQuery.data ?? new Map()}
           feedback={sharedDetailFeedback}
           formState={sharedRequestFormState}
           isLinking={
             linkEventToAccountMutation.isPending || deleteViewerEventLinkMutation.isPending
           }
+          isSendingEventRequest={
+            createEventDeleteRequestMutation.isPending || createEventEditRequestMutation.isPending
+          }
           isSendingRequest={createPaymentRequestMutation.isPending}
           obligation={sharedDetailObligation}
           onClose={() => setSharedDetailId(null)}
           onLinkEvent={handleLinkSharedEvent}
+          onRequestEventDelete={handleRequestEventDelete}
+          onRequestEventEdit={handleRequestEventEdit}
           onSubmitRequest={handleSubmitSharedRequest}
           onUnlinkEvent={handleUnlinkSharedEvent}
           requests={viewerPaymentRequestsQuery.data ?? []}

@@ -1,5 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { CircleDollarSign, LoaderCircle, Link2, Link2Off, X } from "lucide-react";
+import {
+  CircleDollarSign,
+  LoaderCircle,
+  Link2,
+  Link2Off,
+  PencilLine,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
@@ -44,15 +52,35 @@ export type SharedObligationRequestFormState = {
   accountId: string;
 };
 
+export type ViewerEventRequestState = Map<
+  number,
+  { variant: "delete" | "edit"; status: "pending" | "accepted" | "rejected" }
+>;
+
+export type EventEditProposal = {
+  amount: string;
+  eventDate: string;
+  installmentNo: string;
+  description: string;
+  notes: string;
+};
+
 type SharedObligationDetailDialogProps = {
   accounts: AccountSummary[];
+  eventRequests: ViewerEventRequestState;
   feedback: { tone: "success" | "error" | "info"; title: string; description: string } | null;
   formState: SharedObligationRequestFormState;
   isLinking: boolean;
+  isSendingEventRequest: boolean;
   isSendingRequest: boolean;
   obligation: SharedObligationSummary;
   onClose: () => void;
   onLinkEvent: (event: ObligationEventSummary, accountId: number) => Promise<void>;
+  onRequestEventDelete: (event: ObligationEventSummary) => Promise<void>;
+  onRequestEventEdit: (
+    event: ObligationEventSummary,
+    proposal: EventEditProposal,
+  ) => Promise<void>;
   onSubmitRequest: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onUnlinkEvent: (link: ObligationEventViewerLink) => Promise<void>;
   requests: ObligationPaymentRequest[];
@@ -68,13 +96,17 @@ const panelClassName =
 
 export function SharedObligationDetailDialog({
   accounts,
+  eventRequests,
   feedback,
   formState,
   isLinking,
+  isSendingEventRequest,
   isSendingRequest,
   obligation,
   onClose,
   onLinkEvent,
+  onRequestEventDelete,
+  onRequestEventEdit,
   onSubmitRequest,
   onUnlinkEvent,
   requests,
@@ -84,6 +116,14 @@ export function SharedObligationDetailDialog({
   const [activeTab, setActiveTab] = useState<"history" | "requests">("requests");
   const [linkingEventId, setLinkingEventId] = useState<number | null>(null);
   const [linkAccountId, setLinkAccountId] = useState("");
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [editProposal, setEditProposal] = useState<EventEditProposal>({
+    amount: "",
+    eventDate: "",
+    installmentNo: "",
+    description: "",
+    notes: "",
+  });
 
   const collectsMoney = viewerActsAsCollector(obligation.direction);
   const statusOption = getStatusOption(obligation.status);
@@ -411,6 +451,9 @@ export function SharedObligationDetailDialog({
                       {obligation.events.map((event) => {
                         const link = linkByEventId.get(event.id) ?? null;
                         const isLinkingThis = linkingEventId === event.id;
+                        const isEditingThis = editingEventId === event.id;
+                        const pendingRequest = eventRequests.get(event.id) ?? null;
+                        const canPropose = event.eventType === "payment";
 
                         return (
                           <li
@@ -518,6 +561,161 @@ export function SharedObligationDetailDialog({
                                 Reflejar en mi cuenta
                               </button>
                             )}
+
+                            {/* Solo se proponen cambios sobre abonos: los ajustes de
+                                principal llevan motivo y su propio historial. */}
+                            {canPropose ? (
+                              pendingRequest?.status === "pending" ? (
+                                <p className="mt-3 inline-flex items-center rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">
+                                  {pendingRequest.variant === "delete"
+                                    ? "Eliminacion pendiente de respuesta"
+                                    : "Edicion pendiente de respuesta"}
+                                </p>
+                              ) : isEditingThis ? (
+                                <div className="mt-3 rounded-[18px] border border-white/10 bg-black/20 p-4">
+                                  <p className="text-sm font-medium text-ink">Proponer cambios</p>
+                                  <p className="mt-1 text-xs leading-5 text-storm">
+                                    {ownerName} decide si los aplica. Nada cambia mientras tanto.
+                                  </p>
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <label className="block">
+                                      <span className="text-[0.68rem] uppercase tracking-[0.2em] text-storm/75">
+                                        Monto
+                                      </span>
+                                      <Input
+                                        className="mt-2"
+                                        inputMode="decimal"
+                                        min="0"
+                                        onChange={(changeEvent) =>
+                                          setEditProposal((current) => ({
+                                            ...current,
+                                            amount: changeEvent.target.value,
+                                          }))
+                                        }
+                                        step="0.01"
+                                        type="number"
+                                        value={editProposal.amount}
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-[0.68rem] uppercase tracking-[0.2em] text-storm/75">
+                                        Fecha
+                                      </span>
+                                      <div className="mt-2">
+                                        <DatePickerField
+                                          onChange={(nextValue) =>
+                                            setEditProposal((current) => ({
+                                              ...current,
+                                              eventDate: nextValue,
+                                            }))
+                                          }
+                                          value={editProposal.eventDate}
+                                        />
+                                      </div>
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-[0.68rem] uppercase tracking-[0.2em] text-storm/75">
+                                        Cuota
+                                      </span>
+                                      <Input
+                                        className="mt-2"
+                                        inputMode="numeric"
+                                        min="1"
+                                        onChange={(changeEvent) =>
+                                          setEditProposal((current) => ({
+                                            ...current,
+                                            installmentNo: changeEvent.target.value,
+                                          }))
+                                        }
+                                        step="1"
+                                        type="number"
+                                        value={editProposal.installmentNo}
+                                      />
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-[0.68rem] uppercase tracking-[0.2em] text-storm/75">
+                                        Descripcion
+                                      </span>
+                                      <Input
+                                        className="mt-2"
+                                        maxLength={120}
+                                        onChange={(changeEvent) =>
+                                          setEditProposal((current) => ({
+                                            ...current,
+                                            description: changeEvent.target.value,
+                                          }))
+                                        }
+                                        type="text"
+                                        value={editProposal.description}
+                                      />
+                                    </label>
+                                  </div>
+                                  <div className="mt-4 flex flex-wrap justify-end gap-3">
+                                    <Button
+                                      disabled={isSendingEventRequest}
+                                      onClick={() => setEditingEventId(null)}
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      disabled={isSendingEventRequest}
+                                      onClick={() => {
+                                        void onRequestEventEdit(event, editProposal).then(() =>
+                                          setEditingEventId(null),
+                                        );
+                                      }}
+                                      type="button"
+                                    >
+                                      {isSendingEventRequest ? (
+                                        <>
+                                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                          Enviando...
+                                        </>
+                                      ) : (
+                                        "Enviar propuesta"
+                                      )}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-white/20 hover:text-ink"
+                                    disabled={isSendingEventRequest}
+                                    onClick={() => {
+                                      setEditingEventId(event.id);
+                                      setEditProposal({
+                                        amount: String(event.amount),
+                                        eventDate: event.eventDate,
+                                        installmentNo:
+                                          event.installmentNo != null
+                                            ? String(event.installmentNo)
+                                            : "",
+                                        description: event.description ?? "",
+                                        notes: event.notes ?? "",
+                                      });
+                                    }}
+                                    type="button"
+                                  >
+                                    <PencilLine className="mr-2 h-3.5 w-3.5" />
+                                    Proponer cambio
+                                  </button>
+                                  <button
+                                    className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm transition hover:border-rose-400/40 hover:text-rose-200"
+                                    disabled={isSendingEventRequest}
+                                    onClick={() => {
+                                      void onRequestEventDelete(event);
+                                    }}
+                                    type="button"
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                    Pedir eliminar
+                                  </button>
+                                </div>
+                              )
+                            ) : null}
                           </li>
                         );
                       })}
