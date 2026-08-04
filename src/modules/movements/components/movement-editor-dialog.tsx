@@ -426,7 +426,7 @@ export function MovementEditorDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-40 isolate bg-void/70 backdrop-blur-sm"
+      className="animate-fade-in fixed inset-0 z-[80] isolate bg-void/70 backdrop-blur-sm"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
       role="dialog"

@@ -724,7 +724,7 @@ export function QuickMovementDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-50 isolate bg-black/68 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-['']"
+      className="animate-fade-in fixed inset-0 z-[80] isolate bg-black/68 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-['']"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) requestClose(); }}
       role="dialog"
