@@ -33,7 +33,6 @@ import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import { AccountArchiveDialog } from "../components/account-archive-dialog";
 import { AccountEditorDialog } from "../components/account-editor-dialog";
-import { AccountSummaryStrip } from "../components/account-summary-strip";
 import { AccountsGrid } from "../components/accounts-grid";
 import { AccountsList } from "../components/accounts-list";
 import { AccountsTable } from "../components/accounts-table";
@@ -76,10 +75,10 @@ function AccountsLoadingSkeleton() {
   );
 }
 
-function AccountsModuleHeader() {
+function AccountsModuleHeader({ totalCount }: { totalCount?: number }) {
   return (
     <section className="min-w-0">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Cuentas</p>
+      <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Dinero</p>
       <div className="mt-1 flex items-center gap-2.5">
         <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
           Cuentas
@@ -90,7 +89,9 @@ function AccountsModuleHeader() {
           patrimonial desde una vista pensada para operar rapido y revisar con contexto.
         </InfoTip>
       </div>
-      <p className="mt-1 text-xs text-storm">Saldos, monedas, archivo e impacto patrimonial en un solo lugar.</p>
+      <p className="mt-1 text-sm text-storm">
+        {typeof totalCount === "number" ? `${totalCount} cuentas registradas. ` : ""}Consulta saldos y disponibilidad sin repetir el mismo conteo en tarjetas.
+      </p>
     </section>
   );
 }
@@ -483,9 +484,7 @@ export function AccountsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader />
-
-        <AccountSummaryStrip accounts={accounts} baseCurrencyCode={baseCurrencyCode} />
+        <AccountsModuleHeader totalCount={accounts.length} />
 
         <AccountsToolbar
           availableCurrencyCodes={availableCurrencyCodes}

@@ -1,7 +1,5 @@
 ﻿import {
   Download,
-  Plus,
-  RefreshCw,
   X,
 } from "lucide-react";
 import type { FormEvent } from "react";
@@ -10,17 +8,16 @@ import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Pagination } from "../../../components/ui/pagination";
 import { DataState } from "../../../components/ui/data-state";
+import { formatCurrency } from "../../../lib/formatting/money";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
-import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
-import { formatDateTime } from "../../../lib/formatting/dates";
 import type {
   AttachmentSummary,
   JsonValue,
@@ -102,33 +99,6 @@ function MovementsLoadingSkeleton() {
     </>
   );
 }
-type MovementSummaryChipProps = {
-  label: string;
-  tone?: "neutral" | "info" | "warning";
-  value: string;
-};
-
-function MovementSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: MovementSummaryChipProps) {
-  const valueTone = {
-    neutral: "text-ink",
-    info: "text-ember",
-    warning: "text-gold",
-  } as const;
-
-  return (
-    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
-      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
-      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
-        {value}
-      </p>
-    </article>
-  );
-}
-
 export function MovementsPage() {
   const { profile, user } = useAuth();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
@@ -383,11 +353,17 @@ export function MovementsPage() {
   }
 
   const transferCount = snapshot.movements.filter((movement) => movement.movementType === "transfer").length;
-  const queuedCount = snapshot.movements.filter(
-    (movement) => movement.status === "planned" || movement.status === "pending",
-  ).length;
-  const latestMovement = snapshot.movements[0] ?? null;
-  const hasAnyMovements = snapshot.movements.length > 0;
+  const filteredTotals = filteredMovements.reduce(
+    (totals, movement) => {
+      if (incomeLikeMovementTypes.has(movement.movementType)) {
+        totals.income += movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? 0;
+      } else if (expenseLikeMovementTypes.has(movement.movementType)) {
+        totals.expense += movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? 0;
+      }
+      return totals;
+    },
+    { income: 0, expense: 0 },
+  );
   const hasActiveFilters = Boolean(
     tableFilters.description.trim() ||
       tableFilters.category.trim() ||
@@ -751,52 +727,29 @@ export function MovementsPage() {
       <div className="flex flex-col gap-6 pb-8">
         {/* Header compacto (estándar de cuentas) */}
         <section className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Movimientos</p>
+          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Actividad</p>
           <div className="mt-1 flex items-center gap-2.5">
             <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
-              Libro de movimientos
+              Movimientos
             </h2>
             <InfoTip ariaLabel="Sobre el libro de movimientos">
               Entra directo a tus registros, revisa el estado de cada movimiento y filtra por columna
               cuando necesites encontrar algo puntual. La tabla manda; el resumen solo acompaña.
             </InfoTip>
           </div>
-          <p className="mt-1 text-xs text-storm">
-            Historial de ingresos, gastos y transferencias del workspace.
+          <p className="mt-1 text-sm text-storm">
+            <span className="text-ink">{snapshot.movements.length}</span> registrados; <span className="text-ink">{transferCount}</span> son traspasos entre tus cuentas y no cuentan como gasto.
           </p>
         </section>
 
-        {/* Métricas compactas */}
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-          <MovementSummaryChip label="movimientos" value={String(snapshot.movements.length)} />
-          <MovementSummaryChip label="aplicados" tone="info" value={String(snapshot.metrics.postedCount)} />
-          {queuedCount > 0 ? (
-            <MovementSummaryChip label="en cola" tone="warning" value={String(queuedCount)} />
-          ) : null}
-          <MovementSummaryChip label="transferencias" tone="info" value={String(transferCount)} />
-          {hasAnyMovements ? (
-            <MovementSummaryChip label="ult. registro" value={latestMovement ? formatDateTime(latestMovement.occurredAt) : "—"} />
-          ) : null}
-        </div>
-
         {/* Toolbar sticky (estándar de cuentas) */}
-        <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+        <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
           <div className="flex flex-wrap items-center gap-2">
-            <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+            <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
             {viewMode === "table" ? (
               <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
             ) : null}
-            <StatusBadge status={`${filteredMovements.length} visibles`} tone="neutral" />
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <button
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-                disabled={snapshotQuery.isFetching}
-                onClick={() => snapshotQuery.refetch()}
-                title="Actualizar"
-                type="button"
-              >
-                <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-              </button>
               {hasActiveFilters ? (
                 <Button onClick={clearTableFilters} variant="ghost">
                   <X className="mr-2 h-4 w-4" />
@@ -815,10 +768,6 @@ export function MovementsPage() {
               >
                 <Download className="mr-2 h-4 w-4" />
                 Exportar
-              </Button>
-              <Button data-tour="create-movement" onClick={openCreateEditor}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo movimiento
               </Button>
             </div>
           </div>
@@ -851,6 +800,13 @@ export function MovementsPage() {
               value={tableFilters.type}
             />
           </div>
+        </section>
+
+        <section className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-white/[0.07] py-3 text-sm">
+          <p className="mr-auto text-storm"><span className="font-medium text-ink">{filteredMovements.length}</span> movimientos en esta vista</p>
+          <p className="text-storm">Entró <span className="font-medium text-pine">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span></p>
+          <p className="text-storm">Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.expense, snapshot.workspace.baseCurrencyCode)}</span></p>
+          <p className="font-medium text-ink">Neto {formatCurrency(filteredTotals.income - filteredTotals.expense, snapshot.workspace.baseCurrencyCode)}</p>
         </section>
 
         {errorMessage && !isEditorOpen ? (

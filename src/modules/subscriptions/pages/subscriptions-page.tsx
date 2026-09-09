@@ -680,31 +680,6 @@ function SubscriptionsLoadingSkeleton() {
 }
 
 
-function SubscriptionSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: {
-  label: string;
-  tone?: "neutral" | "info" | "warning";
-  value: string;
-}) {
-  const valueTone = {
-    neutral: "text-ink",
-    info: "text-ember",
-    warning: "text-gold",
-  } as const;
-
-  return (
-    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
-      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
-      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
-        {value}
-      </p>
-    </article>
-  );
-}
-
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -800,7 +775,10 @@ export function SubscriptionsPage() {
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
 
-  const subscriptions = snapshot?.subscriptions ?? [];
+  const subscriptions = useMemo(
+    () => [...(snapshot?.subscriptions ?? [])].sort((left, right) => left.nextDueDate.localeCompare(right.nextDueDate)),
+    [snapshot?.subscriptions],
+  );
   const categories = snapshot?.catalogs.categories ?? [];
   const counterparties = snapshot?.catalogs.counterparties ?? [];
   const accounts = snapshot?.accounts ?? [];
@@ -934,32 +912,8 @@ export function SubscriptionsPage() {
     const differenceInDays = differenceInMs / 86_400_000;
     return differenceInDays >= 0 && differenceInDays <= 7;
   }).length;
-  const activeCount = subscriptions.filter((subscription) => subscription.status === "active").length;
   const autoCreatedCount = subscriptions.filter((subscription) => subscription.autoCreateMovement).length;
   const nextVisibleSubscription = filteredSubscriptions[0] ?? null;
-  const allAmountsConvertible =
-    subscriptions.length > 0 &&
-    subscriptions.every(
-      (subscription) =>
-        subscription.amountInBaseCurrency !== null && subscription.amountInBaseCurrency !== undefined,
-    );
-  const currencySet = new Set(subscriptions.map((subscription) => subscription.currencyCode));
-  const sharedCurrency = currencySet.size === 1 ? subscriptions[0]?.currencyCode ?? baseCurrencyCode : null;
-  const totalAmountDisplay =
-    sharedCurrency !== null
-      ? formatCurrency(
-          subscriptions.reduce((total, subscription) => total + subscription.amount, 0),
-          sharedCurrency,
-        )
-      : allAmountsConvertible
-        ? formatCurrency(
-            subscriptions.reduce(
-              (total, subscription) => total + (subscription.amountInBaseCurrency ?? 0),
-              0,
-            ),
-            baseCurrencyCode,
-          )
-        : "Multimoneda";
   const subscriptionVendors = useMemo(
     () =>
       Array.from(
@@ -1284,7 +1238,7 @@ export function SubscriptionsPage() {
     <div className="flex flex-col gap-6 pb-8">
       {/* Header compacto (estÃ¡ndar) */}
       <section className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Suscripciones</p>
+        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Compromisos</p>
         <div className="mt-1 flex items-center gap-2.5">
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
             Pagos recurrentes
@@ -1294,22 +1248,15 @@ export function SubscriptionsPage() {
             Los filtros de la barra superior aplican a todas las vistas.
           </InfoTip>
         </div>
-        <p className="mt-1 text-xs text-storm">Pagos recurrentes esperados del workspace.</p>
+        <p className="mt-1 text-sm text-storm">
+          {subscriptions.length} registradas; {dueSoonCount} vencen en los próximos 7 días. La lista está ordenada por el siguiente cobro.
+        </p>
       </section>
 
-      {/* MÃ©tricas compactas */}
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-        <SubscriptionSummaryChip label="registradas" value={String(subscriptions.length)} />
-        <SubscriptionSummaryChip label="vencen pronto" tone="warning" value={String(dueSoonCount)} />
-        <SubscriptionSummaryChip label="activas" tone="info" value={String(activeCount)} />
-        <SubscriptionSummaryChip label="auto movimiento" tone="info" value={String(autoCreatedCount)} />
-        <SubscriptionSummaryChip label="monto configurado" tone="info" value={totalAmountDisplay} />
-      </div>
-
       {/* Toolbar sticky (estÃ¡ndar) */}
-      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
           {viewMode === "table" ? (
             <ColumnPicker columns={subscriptionColumns} visible={colVis} onToggle={toggleCol} />
           ) : null}

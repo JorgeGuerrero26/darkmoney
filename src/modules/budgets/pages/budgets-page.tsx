@@ -744,29 +744,6 @@ function BudgetsLoadingSkeleton() {
   );
 }
 
-function BudgetSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: {
-  label: string;
-  tone?: "neutral" | "info" | "warning";
-  value: string;
-}) {
-  const valueTone = {
-    neutral: "text-ink",
-    info: "text-ember",
-    warning: "text-gold",
-  } as const;
-
-  return (
-    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
-      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
-      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>{value}</p>
-    </article>
-  );
-}
-
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -1055,9 +1032,7 @@ export function BudgetsPage() {
   );
   const totalLimitBase = currentActiveBudgets.reduce((total, budget) => total + budget.displayLimitAmount, 0);
   const totalSpentBase = currentActiveBudgets.reduce((total, budget) => total + budget.displaySpentAmount, 0);
-  const totalRemainingBase = currentActiveBudgets.reduce((total, budget) => total + budget.displayRemainingAmount, 0);
   const criticalBudgets = currentActiveBudgets.filter((budget) => budget.isNearLimit || budget.isOverLimit);
-  const totalTrackedMovements = currentActiveBudgets.reduce((total, budget) => total + budget.movementCount, 0);
 
   function updateFormState<Field extends keyof BudgetFormState>(field: Field, value: BudgetFormState[Field]) {
     setIsDirty(true);
@@ -1346,7 +1321,7 @@ export function BudgetsPage() {
     <div className="flex flex-col gap-6 pb-8">
       {/* Header compacto (estándar) */}
       <section className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Presupuestos</p>
+        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Planificación</p>
         <div className="mt-1 flex items-center gap-2.5">
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Presupuestos por periodo</h2>
           <InfoTip ariaLabel="Sobre los presupuestos">
@@ -1355,28 +1330,14 @@ export function BudgetsPage() {
           </InfoTip>
         </div>
         <p className="mt-1 text-xs text-storm">
-          Topes del workspace, consolidados en {displayCurrencyCode} con el último tipo de cambio disponible.
+          {currentActiveBudgets.length} vigentes; has consumido {formatCurrency(totalSpentBase, displayCurrencyCode)} de {formatCurrency(totalLimitBase, displayCurrencyCode)} y {criticalBudgets.length} requieren atención.
         </p>
       </section>
 
-      {/* Métricas compactas */}
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-        <BudgetSummaryChip label="vigentes" value={String(currentActiveBudgets.length)} />
-        <BudgetSummaryChip label="techo" tone="info" value={formatCurrency(totalLimitBase, displayCurrencyCode)} />
-        <BudgetSummaryChip label="consumido" tone="info" value={formatCurrency(totalSpentBase, displayCurrencyCode)} />
-        <BudgetSummaryChip
-          label="restante"
-          tone={totalRemainingBase < 0 ? "warning" : "info"}
-          value={formatCurrency(totalRemainingBase, displayCurrencyCode)}
-        />
-        <BudgetSummaryChip label="en alerta" tone="warning" value={String(criticalBudgets.length)} />
-        <BudgetSummaryChip label="movimientos" tone="info" value={String(totalTrackedMovements)} />
-      </div>
-
       {/* Toolbar sticky (estándar) */}
-      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
           {viewMode === "table" ? <ColumnPicker columns={budgetColumns} visible={colVis} onToggle={toggleCol} /> : null}
           <StatusBadge status={`${filteredBudgets.length} visibles`} tone="neutral" />
           <div className="ml-auto flex flex-wrap items-center gap-2">

@@ -2720,31 +2720,6 @@ function ObligationsLoadingSkeleton() {
   );
 }
 
-function ObligationSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: {
-  label: string;
-  tone?: "neutral" | "info" | "warning" | "success" | "danger";
-  value: string;
-}) {
-  const valueTone = {
-    neutral: "text-ink",
-    info: "text-ember",
-    warning: "text-gold",
-    success: "text-pine",
-    danger: "text-rosewood",
-  } as const;
-
-  return (
-    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
-      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
-      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>{value}</p>
-    </article>
-  );
-}
-
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -3959,20 +3934,6 @@ export function ObligationsPage() {
   const isSendingShareInvite = shareInviteMutation.isPending;
   const receivableObligations = obligations.filter((obligation) => obligation.direction === "receivable");
   const payableObligations = obligations.filter((obligation) => obligation.direction === "payable");
-  const activeCount = obligations.filter((obligation) =>
-    obligation.status === "draft" || obligation.status === "active" || obligation.status === "defaulted",
-  ).length;
-  const settledCount = obligations.filter((obligation) => obligation.status === "paid").length;
-  const totalPrincipalDisplay = getObligationAmountDisplay(
-    obligations,
-    "principal",
-    baseCurrencyCode,
-  );
-  const totalPendingDisplay = getObligationAmountDisplay(
-    obligations,
-    "pending",
-    baseCurrencyCode,
-  );
   const receivablePendingDisplay = getObligationAmountDisplay(
     receivableObligations,
     "pending",
@@ -4818,15 +4779,17 @@ export function ObligationsPage() {
     <div className="flex flex-col gap-6 pb-8">
       {/* Header compacto (estándar) */}
       <section className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Cartera</p>
+        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Cartera</p>
         <div className="mt-1 flex items-center gap-2.5">
-          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Creditos y deudas</h2>
+          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Créditos y deudas</h2>
           <InfoTip ariaLabel="Sobre creditos y deudas">
             Lleva lo que te deben y lo que debes, con abonos, ajustes de monto e historial. Los filtros de la barra
             superior aplican a todas las vistas.
           </InfoTip>
         </div>
-        <p className="mt-1 text-xs text-storm">Cartera de creditos por cobrar y deudas por pagar del workspace.</p>
+        <p className="mt-1 text-sm text-storm">
+          {obligations.length} registros. Te deben <span className="text-pine">{receivablePendingDisplay}</span> y debes <span className="text-ink">{payablePendingDisplay}</span>.
+        </p>
       </section>
 
       <PendingPaymentRequestsSection
@@ -4854,21 +4817,10 @@ export function ObligationsPage() {
         onRejectEdit={handleRejectEventEditRequest}
       />
 
-      {/* Métricas compactas */}
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-        <ObligationSummaryChip label="registros" value={String(obligations.length)} />
-        <ObligationSummaryChip label="principal total" tone="info" value={totalPrincipalDisplay} />
-        <ObligationSummaryChip label="pendiente total" tone="warning" value={totalPendingDisplay} />
-        <ObligationSummaryChip label="me deben" tone="success" value={receivablePendingDisplay} />
-        <ObligationSummaryChip label="yo debo" tone="danger" value={payablePendingDisplay} />
-        <ObligationSummaryChip label="activas" tone="info" value={String(activeCount)} />
-        <ObligationSummaryChip label="liquidadas" value={String(settledCount)} />
-      </div>
-
       {/* Toolbar sticky (estándar) */}
-      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
           {viewMode === "table" ? <ColumnPicker columns={obligationColumns} visible={colVis} onToggle={toggleCol} /> : null}
           <StatusBadge status={`${filteredObligations.length} visibles`} tone="neutral" />
           <div className="ml-auto flex flex-wrap items-center gap-2">

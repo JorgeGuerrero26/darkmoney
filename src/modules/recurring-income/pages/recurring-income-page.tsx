@@ -956,31 +956,6 @@ function RecurringIncomeLoadingSkeleton() {
 }
 
 
-function RecurringIncomeSummaryChip({
-  label,
-  tone = "neutral",
-  value,
-}: {
-  label: string;
-  tone?: "neutral" | "info" | "warning";
-  value: string;
-}) {
-  const valueTone = {
-    neutral: "text-ink",
-    info: "text-ember",
-    warning: "text-gold",
-  } as const;
-
-  return (
-    <article className="glass-panel-soft min-w-0 rounded-[24px] p-4 transition duration-300 hover:border-white/15">
-      <p className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">{label}</p>
-      <p className={`mt-2 truncate font-display text-2xl font-semibold leading-tight ${valueTone[tone]}`}>
-        {value}
-      </p>
-    </article>
-  );
-}
-
 function downloadCSV(csv: string, filename: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -1563,7 +1538,7 @@ export function RecurringIncomePage() {
     <div className="flex flex-col gap-6 pb-8">
       {/* Header compacto (estÃ¡ndar de cuentas) */}
       <section className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pine/80">Ingresos fijos</p>
+        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Entradas</p>
         <div className="mt-1 flex items-center gap-2.5">
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
             Ingresos recurrentes
@@ -1573,26 +1548,15 @@ export function RecurringIncomePage() {
             cuÃ¡ndo y cuÃ¡nto entra. Los filtros de la barra superior aplican a todas las vistas.
           </InfoTip>
         </div>
-        <p className="mt-1 text-xs text-storm">Ingresos esperados periÃ³dicos del workspace.</p>
+        <p className="mt-1 text-sm text-storm">
+          {recurringIncome.length} ingresos fijos; {dueSoonCount} llegan en los próximos 7 días. Total esperado: <span className="text-pine">{totalAmountDisplay}</span>.
+        </p>
       </section>
 
-      {/* MÃ©tricas compactas */}
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
-        <RecurringIncomeSummaryChip label="registrados" value={String(recurringIncome.length)} />
-        <RecurringIncomeSummaryChip label="llegan pronto" tone="warning" value={String(dueSoonCount)} />
-        <RecurringIncomeSummaryChip
-          label="activos"
-          tone="info"
-          value={String(recurringIncome.filter((r) => r.status === "active").length)}
-        />
-        <RecurringIncomeSummaryChip label="monto esperado" tone="info" value={totalAmountDisplay} />
-        <RecurringIncomeSummaryChip label="siguiente" value={nextIncome ? formatDate(nextIncome.nextExpectedDate) : "â€”"} />
-      </div>
-
       {/* Toolbar sticky (estÃ¡ndar de cuentas) */}
-      <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["grid", "list", "table"]} onChange={setViewMode} value={viewMode} />
+          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
           {viewMode === "table" ? (
             <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
           ) : null}

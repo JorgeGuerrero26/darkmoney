@@ -8,7 +8,6 @@ import {
 } from "../../../components/ui/column-picker";
 import { Input } from "../../../components/ui/fields";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
-import { StatusBadge } from "../../../components/ui/status-badge";
 import { ViewSelector, type ViewMode } from "../../../components/ui/view-selector";
 import type { AccountFilters, AccountStatusFilter } from "../lib/account-filters";
 import { accountStatusOptions } from "../lib/account-filters";
@@ -123,18 +122,17 @@ export function AccountsToolbar({
     filters.currency.trim() !== "";
 
   return (
-    <section className="sticky top-3 z-30 rounded-[24px] border border-white/10 bg-canvas/85 p-4 backdrop-blur-xl">
+    <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
       <div className="flex flex-wrap items-center gap-2">
         <ViewSelector
-          available={["grid", "list", "table"]}
+          available={["table"]}
           onChange={(view) => onUpdateFilters({ view: view as ViewMode }, { resetPage: true })}
           value={filters.view}
         />
         {filters.view === "table" ? (
           <ColumnPicker columns={columns} onToggle={onToggleColumn} visible={visibleColumns} />
         ) : null}
-        <StatusBadge status={`${filteredCount} visibles`} tone="neutral" />
-        <StatusBadge status={`${totalCount} totales`} tone="info" />
+        <span className="text-xs text-storm">{filteredCount} de {totalCount} cuentas</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             aria-label="Actualizar cuentas"

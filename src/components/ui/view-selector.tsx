@@ -10,9 +10,13 @@ const VIEW_MODES: Array<{ value: ViewMode; icon: typeof LayoutGrid; label: strin
   { value: "table", icon: Table2, label: "Tabla" },
 ];
 
+const LIST_FIRST_MODULES = new Set(["movements", "subscriptions", "recurring-income", "budgets", "obligations"]);
+
 export function useViewMode(module: string, defaultMode: ViewMode = "grid") {
   const { viewModes, setViewMode } = useUserPreferences();
-  const mode = (viewModes[module] as ViewMode | undefined) ?? defaultMode;
+  const mode = LIST_FIRST_MODULES.has(module)
+    ? "table"
+    : (viewModes[module] as ViewMode | undefined) ?? defaultMode;
   return [mode, (m: ViewMode) => setViewMode(module, m)] as const;
 }
 
@@ -28,6 +32,10 @@ export function ViewSelector({
   value,
 }: ViewSelectorProps) {
   const modes = VIEW_MODES.filter((m) => available.includes(m.value));
+
+  if (modes.length <= 1) {
+    return null;
+  }
 
   return (
     <div

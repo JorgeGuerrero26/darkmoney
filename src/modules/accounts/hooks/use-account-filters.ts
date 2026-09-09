@@ -4,7 +4,6 @@ import { useSearchParams } from "react-router-dom";
 import type { AccountFilters, AccountStatusFilter, AccountViewMode } from "../lib/account-filters";
 
 const statusValues: AccountStatusFilter[] = ["active", "all", "included", "excluded", "archived"];
-const viewValues: AccountViewMode[] = ["table", "list", "grid"];
 
 function parsePositiveInteger(value: string | null) {
   const parsed = Number.parseInt(value ?? "1", 10);
@@ -15,8 +14,8 @@ function parseStatus(value: string | null): AccountStatusFilter {
   return statusValues.includes(value as AccountStatusFilter) ? (value as AccountStatusFilter) : "active";
 }
 
-function parseView(value: string | null): AccountViewMode {
-  return viewValues.includes(value as AccountViewMode) ? (value as AccountViewMode) : "table";
+function parseView(_value: string | null): AccountViewMode {
+  return "table";
 }
 
 export function useAccountFilters() {
