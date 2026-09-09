@@ -502,14 +502,7 @@ export function DashboardPage() {
   });
   const parityInputs = buildParityInputs(snapshot, parityNow);
   const parityNetWorth = buildParityNetWorth(snapshot.accounts, parityCtx);
-  const parityPeriod: ParityPeriod =
-    comparisonPreset === "today"
-      ? "today"
-      : comparisonPreset === "week"
-        ? "week"
-        : comparisonPreset === "last30"
-          ? "last_30"
-          : "month";
+  const parityPeriod: ParityPeriod = comparisonPreset === "week" ? "week" : "month";
   const parityPeriodBounds = getParityPeriodBounds(parityPeriod, parityNow);
   const parityCurrentTotals = selectParityPeriodTotals(
     parityInputs.movements,
@@ -1624,6 +1617,126 @@ export function DashboardPage() {
       ? buildExposureLeaders(carteraFilteredObligations, "payable").slice(0, topCount)
       : visiblePayableLeaders;
 
+  if (comparisonOptions.length > 0) {
+    const coverageDays = healthScore.coverageMonths === null ? null : Math.round(healthScore.coverageMonths * 30);
+
+    return (
+      <div className="flex flex-col gap-7 pb-8">
+        <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Disponible hoy</p>
+            <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
+              {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
+            </p>
+            <p className="mt-3 text-sm text-storm">
+              En {visibleAccounts.length} {visibleAccounts.length === 1 ? "cuenta" : "cuentas"}. Este período entraron{" "}
+              <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> y salieron{" "}
+              <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>.
+            </p>
+          </div>
+          <PillControl
+            ariaLabel="Período de comparación"
+            onChange={setComparisonPreset}
+            options={comparisonOptions}
+            value={comparisonPreset}
+          />
+        </section>
+
+        <section>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-ink">Por revisar</h2>
+              <p className="mt-1 text-sm text-storm">
+                {uncategorizedMovements.length} movimientos, {duplicateExpenseMovementGroups} grupos y {subscriptionsNeedingAttentionCount} suscripciones.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-[9px] border border-white/[0.08] bg-[#1a1917]">
+            {[
+              {
+                title: "Sin categoría",
+                description: "Movimientos que todavía no tienen una clasificación útil.",
+                count: `${uncategorizedMovements.length}`,
+                action: "Resolver",
+                to: "/app/movements",
+              },
+              {
+                title: "Posibles duplicados",
+                description: "Grupos con el mismo día, monto y contraparte.",
+                count: `${duplicateExpenseMovementGroups}`,
+                action: "Revisar",
+                to: "/app/movements",
+              },
+              {
+                title: "Suscripciones por confirmar",
+                description: "Cobros sin cuenta asociada o con fecha vencida.",
+                count: `${subscriptionsNeedingAttentionCount}`,
+                action: "Ver",
+                to: "/app/subscriptions",
+              },
+            ].map((item, index) => (
+              <Link
+                className={`grid min-h-[66px] grid-cols-[1fr_auto_auto] items-center gap-5 px-4 py-3 transition hover:bg-white/[0.025] ${index ? "border-t border-white/[0.07]" : ""}`}
+                key={item.title}
+                to={item.to}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-ink">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-storm">{item.description}</p>
+                </div>
+                <span className="font-public-mono text-sm text-ink">{item.count}</span>
+                <span className="text-xs font-semibold text-ink">{item.action} →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">De dónde sale el cierre de mes</p>
+            <p className="mt-3 font-display text-3xl font-semibold text-ink">
+              {formatCurrency(parityMonthProjection.expectedBalance, displayCurrencyCode)}
+            </p>
+            <p className="mt-1 text-sm text-storm">Estimación al final del mes con lo registrado hasta hoy.</p>
+            <dl className="mt-5 divide-y divide-white/[0.07] border-t border-white/[0.07]">
+              <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                <dt className="text-storm">Saldo disponible hoy</dt>
+                <dd className="font-medium text-ink">{formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                <dt className="text-storm">Comprometido por pagar</dt>
+                <dd className="font-medium text-ink">− {formatCurrency(parityMonthProjection.committedOutflow, displayCurrencyCode)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-3 text-sm">
+                <dt className="text-storm">Ritmo variable estimado</dt>
+                <dd className="font-medium text-ink">{formatCurrency(parityMonthProjection.variableIncomeProjection - parityMonthProjection.variableExpenseProjection, displayCurrencyCode)}</dd>
+              </div>
+            </dl>
+          </article>
+
+          <div className="grid gap-5">
+            <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Este período</p>
+              <p className="mt-3 font-display text-3xl font-semibold text-ink">{formatCurrency(currentTotals.net, displayCurrencyCode)}</p>
+              <p className="mt-3 text-sm text-storm">
+                Entraron <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> · salieron <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>
+              </p>
+            </article>
+            <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Reserva</p>
+              <p className="mt-3 font-display text-3xl font-semibold text-ink">
+                {healthScore.coverageMonths === null ? "Sin dato" : `${healthScore.coverageMonths.toFixed(1)} meses`}
+              </p>
+              <p className="mt-2 text-sm text-storm">
+                {coverageDays === null ? "Aún faltan datos para estimar tu cobertura." : `Con lo que tienes hoy cubres aproximadamente ${coverageDays} días de gasto.`}
+              </p>
+            </article>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <DashboardHelpProvider>
     <div className="flex flex-col gap-6 pb-8">
@@ -1969,7 +2082,7 @@ export function DashboardPage() {
                 <li className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3">
                   <div>
                     <p className="font-semibold text-ink">Sin categoría</p>
-                    <p className="mt-1 text-sm text-storm">Movimientos aplicados que aún no clasificás.</p>
+                    <p className="mt-1 text-sm text-storm">Movimientos aplicados que aún no clasificas.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={`${uncategorizedMovements.length}`} tone="warning" />
@@ -2476,7 +2589,7 @@ export function DashboardPage() {
             </div>
             <p className="pr-10 text-[0.65rem] uppercase tracking-[0.2em] text-storm">Cierre estimado (mes calendario)</p>
             <p className="mt-3 font-display text-xl font-semibold leading-snug text-ink sm:text-2xl">
-              Si seguís el ritmo de ingresos y gastos de este mes, tu caja líquida rondaría{" "}
+              Si sigues el ritmo de ingresos y gastos de este mes, tu caja líquida rondaría{" "}
               {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)} al cierre.
             </p>
             <p className="mt-3 text-sm leading-6 text-storm">
@@ -2527,7 +2640,7 @@ export function DashboardPage() {
                 Todavía no hay meta guardada.{" "}
                 {canUseAdvancedDashboard ? (
                   <>
-                    Podés definirla en el widget{" "}
+                    Puedes definirla en el widget{" "}
                     <button
                       className="font-medium text-gold underline decoration-gold/35 underline-offset-2 hover:text-gold/90"
                       onClick={scrollToMetaDisciplinaWidget}
@@ -2539,7 +2652,7 @@ export function DashboardPage() {
                   </>
                 ) : (
                   <>
-                    Podés definirla en el widget{" "}
+                    Puedes definirla en el widget{" "}
                     <span className="font-medium text-ink">Meta y disciplina</span> (vista avanzada).
                   </>
                 )}
@@ -4309,7 +4422,7 @@ export function DashboardPage() {
                   <div className="mb-4 rounded-[22px] border border-gold/20 bg-gold/8 p-4">
                     <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Lectura rápida (mes calendario)</p>
                     <p className="mt-2 font-display text-lg font-semibold text-ink sm:text-xl">
-                      Si mantenés el ritmo de este mes, al cierre tu caja líquida rondaría{" "}
+                      Si mantienes el ritmo de este mes, al cierre tu caja líquida rondaría{" "}
                       {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}.
                     </p>
                     <p className="mt-2 text-xs text-storm">
@@ -4440,7 +4553,7 @@ export function DashboardPage() {
               {isWidgetVisible("data_quality") ? (
                 <SurfaceCard
                   action={<StatusBadge status={`${qualityIssuesTotal} pendientes`} tone={qualityIssuesTotal > 0 ? "warning" : "success"} />}
-                  description="Contadores de completitud para comparativos y reportes. Para una cola accionable (categorías, duplicados, cartera, etc.) usá el widget Por revisar si lo tenés visible."
+                  description="Contadores de completitud para comparativos y reportes. Para una cola accionable (categorías, duplicados, cartera, etc.), usa el bloque Por revisar si lo tienes visible."
                   title="Calidad de datos"
                   titleAccessory={<DashboardHelpTrigger metricId="widget_data_quality" />}
                 >

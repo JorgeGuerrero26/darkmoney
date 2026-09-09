@@ -62,28 +62,6 @@ export function formatShortDateRange(start: Date, end: Date) {
 export function buildComparisonDefinition(preset: ComparisonPreset, reference = new Date()): ComparisonDefinition {
   const today = endOfDay(reference);
 
-  if (preset === "today") {
-    const currentStart = startOfDay(reference);
-    const previousStart = addDays(currentStart, -1);
-
-    return {
-      preset,
-      current: {
-        start: currentStart,
-        end: today,
-        label: "Hoy",
-        detail: formatShortDateRange(currentStart, today),
-      },
-      previous: {
-        start: previousStart,
-        end: endOfDay(previousStart),
-        label: "Ayer",
-        detail: formatShortDateRange(previousStart, previousStart),
-      },
-      caption: "Hoy contra ayer para detectar cambios inmediatos.",
-    };
-  }
-
   if (preset === "week") {
     const currentStart = startOfWeek(reference);
     const daySpan = getDateDiffInclusive(currentStart, today);
@@ -108,26 +86,27 @@ export function buildComparisonDefinition(preset: ComparisonPreset, reference = 
     };
   }
 
-  if (preset === "last30") {
-    const currentStart = startOfDay(addDays(reference, -29));
-    const previousStart = addDays(currentStart, -30);
-    const previousEnd = addDays(previousStart, 29);
+  if (preset === "year") {
+    const currentStart = new Date(reference.getFullYear(), 0, 1);
+    const daySpan = getDateDiffInclusive(currentStart, today);
+    const previousStart = new Date(reference.getFullYear() - 1, 0, 1);
+    const previousEnd = addDays(previousStart, daySpan - 1);
 
     return {
       preset,
       current: {
         start: currentStart,
         end: today,
-        label: "Últimos 30 días",
+        label: "Este año",
         detail: formatShortDateRange(currentStart, today),
       },
       previous: {
         start: previousStart,
         end: endOfDay(previousEnd),
-        label: "30 dias previos",
+        label: "Mismo tramo del año anterior",
         detail: formatShortDateRange(previousStart, previousEnd),
       },
-      caption: "Comparación móvil para ver tendencia real sin depender del cambio de mes.",
+      caption: "Lectura anual contra el mismo tramo del año anterior.",
     };
   }
 

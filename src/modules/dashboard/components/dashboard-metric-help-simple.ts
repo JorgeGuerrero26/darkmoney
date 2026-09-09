@@ -17,16 +17,16 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
     paragraphs: [
       "Este panel es el “mando a distancia” de tu pantalla principal: no cambia tu dinero, solo cambia cuántas cosas ves a la vez.",
       "Vista simple = pocas tarjetas, más fácil de leer. Vista avanzada = más tarjetas con más detalle.",
-      "Cada “widget” es un bloque (por ejemplo presupuestos o gráficos). Podés mostrarlo u ocultarlo; la app guarda eso en tu navegador para la próxima vez que entres.",
+      "Cada bloque muestra una lectura concreta (por ejemplo, presupuestos o gráficos). Puedes mostrarlo u ocultarlo; la app guarda esa preferencia en tu navegador.",
       "Arriba también están los filtros de categoría y tipo de cuenta: categoría + cuenta (tocás la cuenta en Dinero por cuenta) cambian solo las gráficas de línea y el ritmo semanal; el tipo de cuenta solo achica la lista de cuentas.",
-      "Los números grandes del resumen (cuánto tenés, cuánto entró o salió en el período…) no se achican con ese filtro: siguen siendo de todo el período.",
+      "Los números grandes del resumen (cuánto tienes, cuánto entró o salió en el período…) no cambian con ese filtro: siguen siendo de todo el período.",
     ],
   }),
 
   kpi_total_money: S({
     paragraphs: [
-      "“Dinero total” es como juntar todo lo que tus cuentas dicen que tenés ahora, en un solo número.",
-      "La app suma los saldos de las cuentas que están activas (no las que archivaste). Si tenés varias monedas, las pasa a una sola (la que elegís arriba) para poder sumar.",
+      "“Dinero total” reúne en una sola cifra lo que tus cuentas indican que tienes ahora.",
+      "La app suma los saldos de las cuentas activas. Si tienes varias monedas, las convierte a la moneda configurada para poder compararlas.",
     ],
     bullets: [
       "No es solo billetes en la mano: puede incluir ahorros que no pensás gastar esta semana.",

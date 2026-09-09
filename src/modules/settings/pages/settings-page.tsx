@@ -1815,7 +1815,7 @@ export function SettingsPage() {
           />
           <SurfaceCard
             action={<ShieldCheck className="h-5 w-5 text-pine" />}
-            description="Detalles, moneda base y opciones del workspace que tenés seleccionado."
+            description="Detalles, moneda base y opciones del workspace que tienes seleccionado."
             title="Workspace activo"
           >
             {workspaceError ? (

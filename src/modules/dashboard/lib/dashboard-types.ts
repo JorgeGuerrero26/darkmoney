@@ -1,6 +1,6 @@
 import type { AccountSummary, SubscriptionSummary } from "../../../types/domain";
 
-export type ComparisonPreset = "today" | "week" | "month" | "last30";
+export type ComparisonPreset = "week" | "month" | "year";
 
 export type ComparisonWindow = {
   start: Date;
@@ -227,10 +227,9 @@ export const comparisonOptions: Array<{
   label: string;
   helper: string;
 }> = [
-  { value: "today", label: "Hoy vs ayer", helper: "corte diario" },
-  { value: "week", label: "Semana vs anterior", helper: "hasta hoy" },
-  { value: "month", label: "Mes vs anterior", helper: "mismo tramo" },
-  { value: "last30", label: "30 dias vs 30 previos", helper: "ventana movil" },
+  { value: "week", label: "Semana", helper: "vs. semana anterior" },
+  { value: "month", label: "Mes", helper: "vs. mes anterior" },
+  { value: "year", label: "Año", helper: "vs. año anterior" },
 ];
 
 export const topOptions = [5, 8, 12];
