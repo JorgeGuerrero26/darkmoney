@@ -292,7 +292,7 @@ export function SearchablePicker({
         <div
           className={
             isCompact
-              ? "animate-rise-in rounded-[7px] border border-white/[0.1] bg-[#171614] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.5)]"
+              ? "animate-rise-in rounded-[7px] border border-white/[0.1] bg-[#171614] p-1.5"
               : "animate-rise-in rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgb(10,15,24),rgb(8,12,20))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
           }
           ref={dropdownRef}

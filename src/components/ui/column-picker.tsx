@@ -97,7 +97,7 @@ export function ColumnPicker({
           <div
             className={
               isCompact
-                ? "fixed z-[201] w-52 rounded-[7px] border border-white/[0.1] bg-[#171614] p-2 shadow-[0_18px_50px_rgba(0,0,0,0.5)]"
+                ? "fixed z-[201] w-52 rounded-[7px] border border-white/[0.1] bg-[#171614] p-2"
                 : "fixed z-[201] w-52 rounded-[18px] border border-white/10 bg-[#0d1520] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
             }
             role="menu"
