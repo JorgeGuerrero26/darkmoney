@@ -43,7 +43,7 @@ export type FaqItem = {
 export const faqs: FaqItem[] = [
   {
     q: "¿Puedo cancelar cuando quiera?",
-    a: "Si. Podes cancelar tu suscripcion Pro desde tu cuenta en cualquier momento. Mantenes el acceso hasta el fin del periodo ya pagado.",
+    a: "Sí. Puedes cancelar tu suscripción Pro desde tu cuenta en cualquier momento. Mantienes el acceso hasta el final del periodo ya pagado.",
   },
   {
     q: "¿Hay cargos ocultos?",
@@ -51,7 +51,7 @@ export const faqs: FaqItem[] = [
   },
   {
     q: "¿Qué pasa si paso de Pro a Free?",
-    a: "Tu historial y datos se conservan. Perdes acceso a las funciones premium al vencer el periodo pagado, sin perdida de informacion.",
+    a: "Tu historial y tus datos se conservan. Pierdes acceso a las funciones premium al vencer el periodo pagado, sin pérdida de información.",
   },
 ];
 
@@ -62,7 +62,7 @@ export const productFaqs: FaqItem[] = [
   },
   {
     q: "¿Puedo compartir mis finanzas con otra persona?",
-    a: "Si. Los espacios compartidos te permiten gestionar finanzas en pareja, familia o equipo, con cuentas y movimientos visibles para todos los miembros.",
+    a: "Sí. Los espacios compartidos te permiten gestionar finanzas en pareja, familia o equipo, con cuentas y movimientos visibles para todos los miembros.",
   },
   ...faqs,
 ];

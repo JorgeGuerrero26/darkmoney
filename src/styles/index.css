@@ -93,6 +93,53 @@
     background-color: rgba(255, 255, 255, 0.03);
   }
 
+  .public-form-card {
+    border: 1px solid rgba(244, 241, 236, 0.08);
+    border-radius: 12px;
+    background: #141312;
+    padding: 24px;
+  }
+
+  .public-field {
+    width: 100%;
+    min-height: 50px;
+    border: 1px solid rgba(244, 241, 236, 0.12);
+    border-radius: 9px;
+    background: #1a1917;
+    padding: 12px 14px;
+    color: #f4f1ec;
+    font-size: 14px;
+    outline: none;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .public-field::placeholder {
+    color: #706a62;
+  }
+
+  .public-field:hover {
+    border-color: rgba(244, 241, 236, 0.2);
+  }
+
+  .public-field:focus {
+    border-color: rgba(244, 241, 236, 0.38);
+    background: #1d1b19;
+    box-shadow: 0 0 0 3px rgba(244, 241, 236, 0.06);
+  }
+
+  .public-auth-submit {
+    min-height: 48px;
+    border-radius: 9px !important;
+    background: #f4f1ec !important;
+    color: #141312 !important;
+  }
+
+  .public-auth-submit:hover {
+    background: #ffffff !important;
+  }
+
   .field-dark {
     @apply w-full rounded-2xl border px-4 py-3 text-sm text-ink outline-none transition duration-200 placeholder:text-storm/70;
     min-height: 52px;

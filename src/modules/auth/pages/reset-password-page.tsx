@@ -54,11 +54,11 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-7">
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-storm">nueva contraseña</p>
-        <h2 className="font-display text-4xl font-semibold text-ink">Elige una nueva clave.</h2>
-        <p className="text-sm leading-7 text-storm">
+        <p className="font-public-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#a39c90]">Nueva contraseña</p>
+        <h2 className="font-public-display text-[38px] font-semibold leading-[1.05] tracking-[-0.03em] text-[#f4f1ec]">Elige una nueva clave</h2>
+        <p className="max-w-[42ch] text-sm leading-[1.6] text-[#a39c90]">
           Si abriste el enlace que te enviamos por correo, aquí puedes guardar una nueva contraseña
           para tu cuenta.
         </p>
@@ -91,16 +91,16 @@ export function ResetPasswordPage() {
       ) : null}
 
       <form
-        className="glass-panel space-y-4 rounded-[28px] p-6"
+        className="public-form-card space-y-5"
         noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Nueva contraseña</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Nueva contraseña</span>
           <div className="relative">
             <input
               autoComplete="new-password"
-              className="field-dark pr-12"
+              className="public-field pr-12"
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Mínimo 8 caracteres"
               type={showPassword ? "text" : "password"}
@@ -108,7 +108,7 @@ export function ResetPasswordPage() {
             />
             <button
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-storm transition hover:text-ink"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e877c] transition hover:text-[#f4f1ec]"
               onClick={() => setShowPassword((v) => !v)}
               type="button"
             >
@@ -117,11 +117,11 @@ export function ResetPasswordPage() {
           </div>
         </label>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Confirmar contraseña</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Confirmar contraseña</span>
           <div className="relative">
             <input
               autoComplete="new-password"
-              className="field-dark pr-12"
+              className="public-field pr-12"
               onChange={(event) => setConfirmPassword(event.target.value)}
               placeholder="Vuelve a escribirla"
               type={showConfirm ? "text" : "password"}
@@ -129,7 +129,7 @@ export function ResetPasswordPage() {
             />
             <button
               aria-label={showConfirm ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-storm transition hover:text-ink"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e877c] transition hover:text-[#f4f1ec]"
               onClick={() => setShowConfirm((v) => !v)}
               type="button"
             >
@@ -157,7 +157,7 @@ export function ResetPasswordPage() {
         ) : null}
 
         <Button
-          className="w-full"
+          className="public-auth-submit w-full"
           disabled={!isConfigured || !user || isSubmitting || isLoading}
           type="submit"
         >
@@ -173,7 +173,7 @@ export function ResetPasswordPage() {
       </form>
 
       <NavLink
-        className="text-sm underline decoration-white/20 underline-offset-4 transition hover:text-ink"
+        className="text-sm font-semibold text-[#f4f1ec] underline decoration-[#f4f1ec]/25 underline-offset-4 transition hover:decoration-[#f4f1ec]"
         to="/auth/login"
       >
         Regresar al login

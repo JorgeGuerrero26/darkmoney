@@ -39,25 +39,25 @@ export function RecoveryPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-7">
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-storm">recuperación</p>
-        <h2 className="font-display text-4xl font-semibold text-ink">Recupera tu acceso.</h2>
-        <p className="text-sm leading-7 text-storm">
+        <p className="font-public-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#a39c90]">Recuperación</p>
+        <h2 className="font-public-display text-[38px] font-semibold leading-[1.05] tracking-[-0.03em] text-[#f4f1ec]">Recupera tu acceso</h2>
+        <p className="max-w-[42ch] text-sm leading-[1.6] text-[#a39c90]">
           Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña.
         </p>
       </div>
 
       <form
-        className="glass-panel space-y-4 rounded-[28px] p-6"
+        className="public-form-card space-y-5"
         noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Correo de recuperación</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Correo de recuperación</span>
           <input
             autoComplete="email"
-            className="field-dark"
+            className="public-field"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="tu@correo.com"
             type="email"
@@ -66,7 +66,7 @@ export function RecoveryPage() {
         </label>
         {errorMessage ? <InlineFormError message={errorMessage} /> : null}
         <Button
-          className="w-full"
+          className="public-auth-submit w-full"
           disabled={!isConfigured || isSubmitting}
           type="submit"
         >
@@ -82,7 +82,7 @@ export function RecoveryPage() {
       </form>
 
       <NavLink
-        className="text-sm underline decoration-white/20 underline-offset-4 transition hover:text-ink"
+        className="text-sm font-semibold text-[#f4f1ec] underline decoration-[#f4f1ec]/25 underline-offset-4 transition hover:decoration-[#f4f1ec]"
         to="/auth/login"
       >
         Regresar al login

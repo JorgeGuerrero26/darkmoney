@@ -76,25 +76,25 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-7">
       <div className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-storm">registro</p>
-        <h2 className="font-display text-4xl font-semibold text-ink">Crea tu workspace financiero.</h2>
-        <p className="text-sm leading-7 text-storm">
+        <p className="font-public-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#a39c90]">Registro</p>
+        <h2 className="font-public-display text-[38px] font-semibold leading-[1.05] tracking-[-0.03em] text-[#f4f1ec]">Crea tu espacio financiero</h2>
+        <p className="max-w-[42ch] text-sm leading-[1.6] text-[#a39c90]">
           Crea tu cuenta para organizar tus finanzas personales y abrir espacios compartidos cuando lo necesites.
         </p>
       </div>
 
       <form
-        className="glass-panel space-y-4 rounded-[28px] p-6"
+        className="public-form-card space-y-5"
         noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Nombre completo</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Nombre completo</span>
           <input
             autoComplete="name"
-            className="field-dark"
+            className="public-field"
             onChange={(event) => setFullName(event.target.value)}
             placeholder="Lucía Ramírez"
             type="text"
@@ -102,10 +102,10 @@ export function RegisterPage() {
           />
         </label>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Correo</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Correo</span>
           <input
             autoComplete="email"
-            className="field-dark"
+            className="public-field"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="tu@correo.com"
             type="email"
@@ -113,11 +113,11 @@ export function RegisterPage() {
           />
         </label>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Contraseña</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Contraseña</span>
           <div className="relative">
             <input
               autoComplete="new-password"
-              className="field-dark pr-12"
+              className="public-field pr-12"
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Mínimo 8 caracteres"
               type={showPassword ? "text" : "password"}
@@ -125,7 +125,7 @@ export function RegisterPage() {
             />
             <button
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-storm transition hover:text-ink"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e877c] transition hover:text-[#f4f1ec]"
               onClick={() => setShowPassword((v) => !v)}
               type="button"
             >
@@ -140,7 +140,7 @@ export function RegisterPage() {
           </div>
         ) : null}
         <Button
-          className="w-full"
+          className="public-auth-submit w-full"
           disabled={!isConfigured || isSubmitting}
           type="submit"
         >
@@ -155,10 +155,10 @@ export function RegisterPage() {
         </Button>
       </form>
 
-      <div className="text-sm text-storm">
+      <div className="text-sm text-[#a39c90]">
         <span>¿Ya tienes cuenta? </span>
         <NavLink
-          className="underline decoration-white/20 underline-offset-4 transition hover:text-ink"
+          className="font-semibold text-[#f4f1ec] underline decoration-[#f4f1ec]/25 underline-offset-4 transition hover:decoration-[#f4f1ec]"
           to={loginPath}
         >
           Volver al login

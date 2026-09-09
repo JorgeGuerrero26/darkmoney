@@ -54,13 +54,13 @@ export function LoginPage() {
   }
 
   return (
-    <section className="animate-rise-in space-y-6">
+    <section className="animate-rise-in space-y-7">
       <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-pine/80">Acceso</p>
-        <h2 className="font-display text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
+        <p className="font-public-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#a39c90]">Acceso</p>
+        <h2 className="font-public-display text-[38px] font-semibold leading-[1.05] tracking-[-0.03em] text-[#f4f1ec]">
           Hola de nuevo
         </h2>
-        <p className="text-sm leading-7 text-storm">
+        <p className="max-w-[42ch] text-sm leading-[1.6] text-[#a39c90]">
           Inicia sesión con tu correo y contraseña para entrar a tu espacio personal o compartido.
         </p>
       </div>
@@ -74,15 +74,15 @@ export function LoginPage() {
       ) : null}
 
       <form
-        className="glass-panel space-y-4 rounded-[28px] p-6"
+        className="public-form-card space-y-5"
         noValidate
         onSubmit={handleSubmit}
       >
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Correo</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Correo</span>
           <input
             autoComplete="email"
-            className="field-dark"
+            className="public-field"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="tu@correo.com"
             type="email"
@@ -90,11 +90,11 @@ export function LoginPage() {
           />
         </label>
         <label className="block space-y-2">
-          <span className="text-sm font-medium text-ink">Contraseña</span>
+          <span className="text-sm font-medium text-[#f4f1ec]">Contraseña</span>
           <div className="relative">
             <input
               autoComplete="current-password"
-              className="field-dark pr-12"
+              className="public-field pr-12"
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Tu contraseña"
               type={showPassword ? "text" : "password"}
@@ -102,7 +102,7 @@ export function LoginPage() {
             />
             <button
               aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-storm transition hover:text-ink"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8e877c] transition hover:text-[#f4f1ec]"
               onClick={() => setShowPassword((v) => !v)}
               type="button"
             >
@@ -119,17 +119,17 @@ export function LoginPage() {
               onChange={(event) => setRememberMe(event.target.checked)}
               type="checkbox"
             />
-            <div className="h-5 w-5 rounded-[6px] border border-white/20 bg-white/[0.05] transition peer-checked:border-pine/40 peer-checked:bg-pine/20 peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40" />
+            <div className="h-5 w-5 rounded-[5px] border border-[#f4f1ec]/20 bg-[#1a1917] transition peer-checked:border-[#f4f1ec] peer-checked:bg-[#f4f1ec] peer-focus-visible:ring-2 peer-focus-visible:ring-[#f4f1ec]/30" />
             {rememberMe ? (
-              <svg className="pointer-events-none absolute h-3 w-3 text-pine" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 12 12">
+              <svg className="pointer-events-none absolute h-3 w-3 text-[#141312]" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 12 12">
                 <polyline points="1.5,6 4.5,9 10.5,3" />
               </svg>
             ) : null}
           </div>
-          <span className="text-sm text-storm">Recordar mi correo</span>
+          <span className="text-sm text-[#a39c90]">Recordar mi correo</span>
         </label>
         <NavLink
-          className="text-sm text-storm transition hover:text-pine"
+          className="text-sm text-[#a39c90] transition hover:text-[#f4f1ec]"
           to="/auth/recovery"
         >
           Olvidé mi contraseña
@@ -143,7 +143,7 @@ export function LoginPage() {
           </div>
         ) : null}
         <Button
-          className="w-full"
+          className="public-auth-submit w-full"
           disabled={!isConfigured || isSubmitting}
           type="submit"
         >
@@ -158,10 +158,10 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <p className="text-center text-sm text-storm">
+      <p className="text-sm text-[#a39c90]">
         ¿No tienes cuenta?{" "}
         <NavLink
-          className="font-semibold text-pine transition hover:text-ink"
+          className="font-semibold text-[#f4f1ec] underline decoration-[#f4f1ec]/25 underline-offset-4 transition hover:decoration-[#f4f1ec]"
           to={registerPath}
         >
           Crear cuenta gratis

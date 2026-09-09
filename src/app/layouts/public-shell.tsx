@@ -33,6 +33,18 @@ export function PublicShell() {
     window.scrollTo({ behavior: "auto", left: 0, top: 0 });
   }, [location.pathname, location.search]);
 
+  useEffect(() => {
+    if (!location.hash) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "start" });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [location.hash, location.pathname]);
+
   const isNavigationActive = (to: string) => {
     if (to === "/#producto") {
       return isHomePage;
