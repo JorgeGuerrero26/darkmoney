@@ -13,10 +13,8 @@ import {
 } from "../lib/dashboard-classify";
 import { fullDateFormatter } from "../lib/dashboard-format";
 import type { DailyFlowPoint, DailySavingsPoint } from "../lib/dashboard-types";
-import { DeltaBadge } from "./dashboard-bits";
-
 const CHART_VIEW_WIDTH = 760;
-const CHART_VIEW_HEIGHT = 260;
+const CHART_VIEW_HEIGHT = 232;
 const CHART_PADDING_X = 22;
 const CHART_PADDING_Y = 24;
 
@@ -102,7 +100,7 @@ function LineChartSvg<P extends ChartPointBase>({
     <div className="relative" ref={inViewRef}>
       {hoverPoint ? (
         <div
-          className="pointer-events-none absolute top-2 z-10 w-max max-w-[220px] -translate-x-1/2 rounded-xl border border-white/12 bg-shell/95 px-3 py-2 shadow-haze backdrop-blur-xl"
+          className="pointer-events-none absolute top-2 z-10 w-max max-w-[220px] -translate-x-1/2 rounded-[6px] border border-white/[0.12] bg-[#11110f] px-3 py-2 shadow-xl"
           style={{ left: `${Math.min(Math.max((hoverX / width) * 100, 16), 84)}%` }}
         >
           <p className="text-[0.65rem] font-semibold text-ink">{hoverPoint.fullLabel}</p>
@@ -137,8 +135,7 @@ function LineChartSvg<P extends ChartPointBase>({
         {[0, 0.5, 1].map((step) => (
           <line
             key={`grid-${step}`}
-            stroke="rgba(255,255,255,0.08)"
-            strokeDasharray="4 6"
+            stroke="rgba(255,255,255,0.07)"
             x1={paddingX}
             x2={width - paddingX}
             y1={paddingY + (height - paddingY * 2) * step}
@@ -155,10 +152,10 @@ function LineChartSvg<P extends ChartPointBase>({
           fill="none"
           points={previousPath}
           stroke="rgba(255,255,255,0.48)"
-          strokeDasharray="7 7"
+          strokeDasharray="4 6"
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="3"
+          strokeWidth="1.5"
         />
         <polyline
           className={isInView ? "chart-line-draw" : "opacity-0"}
@@ -168,7 +165,7 @@ function LineChartSvg<P extends ChartPointBase>({
           stroke={lineColor}
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="4"
+          strokeWidth="2.5"
         />
         {hoverPoint ? (
           <g pointerEvents="none">
@@ -190,29 +187,24 @@ function LineChartSvg<P extends ChartPointBase>({
             />
           </g>
         ) : null}
-        {points.map((point, index) => {
-          const x = paddingX + stepX * index;
-          const isSelected = index === selectedIndex;
-
-          return (
-            <g key={point.key}>
-              <circle
-                cx={x}
-                cy={getY(point.previousCumulative)}
-                fill="rgba(255,255,255,0.3)"
-                r="4"
-              />
-              <circle
-                cx={x}
-                cy={getY(point.cumulative)}
-                fill={isSelected ? "rgba(255,255,255,1)" : lineColor}
-                r={isSelected ? 7 : 5}
-                stroke={isSelected ? lineColor : "rgba(255,255,255,0.12)"}
-                strokeWidth="2"
-              />
-            </g>
-          );
-        })}
+        {points[selectedIndex] ? (
+          <g pointerEvents="none">
+            <circle
+              cx={paddingX + stepX * selectedIndex}
+              cy={getY(points[selectedIndex].cumulative)}
+              fill="#171715"
+              r="6"
+              stroke={lineColor}
+              strokeWidth="2"
+            />
+            <circle
+              cx={paddingX + stepX * selectedIndex}
+              cy={getY(points[selectedIndex].cumulative)}
+              fill={lineColor}
+              r="2"
+            />
+          </g>
+        ) : null}
       </svg>
     </div>
   );
@@ -220,28 +212,25 @@ function LineChartSvg<P extends ChartPointBase>({
 
 export const FLOW_CHART_THEME = {
   expense: {
-    line: "rgba(225, 112, 85, 0.95)",
-    fillTop: "rgba(225, 112, 85, 0.26)",
-    fillBottom: "rgba(225, 112, 85, 0.02)",
+    line: "rgba(244, 241, 236, 0.9)",
+    fillTop: "rgba(244, 241, 236, 0.1)",
+    fillBottom: "rgba(244, 241, 236, 0.01)",
     gradientId: "dashboard-flow-expense-fill",
-    accentClass: "text-ember",
-    panelClass: "border-ember/18 bg-ember/10",
+    accentClass: "text-ink",
   },
   income: {
-    line: "rgba(56, 161, 105, 0.95)",
-    fillTop: "rgba(56, 161, 105, 0.28)",
-    fillBottom: "rgba(56, 161, 105, 0.02)",
+    line: "rgba(79, 196, 132, 0.95)",
+    fillTop: "rgba(79, 196, 132, 0.16)",
+    fillBottom: "rgba(79, 196, 132, 0.01)",
     gradientId: "dashboard-flow-income-fill",
     accentClass: "text-pine",
-    panelClass: "border-pine/18 bg-pine/10",
   },
   transfer: {
-    line: "rgba(212, 175, 55, 0.95)",
-    fillTop: "rgba(212, 175, 55, 0.24)",
-    fillBottom: "rgba(212, 175, 55, 0.02)",
+    line: "rgba(155, 157, 153, 0.9)",
+    fillTop: "rgba(155, 157, 153, 0.1)",
+    fillBottom: "rgba(155, 157, 153, 0.01)",
     gradientId: "dashboard-flow-transfer-fill",
-    accentClass: "text-gold",
-    panelClass: "border-gold/18 bg-gold/10",
+    accentClass: "text-storm",
   },
 } as const;
 
@@ -261,19 +250,19 @@ export function ChronologicalMovementList({
   if (!movements.length) {
     return (
       <div>
-        <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
-        <p className="mt-2 text-sm text-storm">{emptyHint}</p>
+        <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{title}</p>
+        <p className="mt-3 text-sm text-storm">{emptyHint}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="text-xs uppercase tracking-[0.18em] text-storm">{title}</p>
-      <ul className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+      <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{title}</p>
+      <ul className="mt-3 max-h-52 divide-y divide-white/[0.07] overflow-y-auto border-y border-white/[0.07]">
         {movements.map((movement) => (
           <li
-            className="flex flex-wrap items-start justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-3 py-2"
+            className="flex flex-wrap items-start justify-between gap-3 py-3"
             key={movement.id}
           >
             <div className="min-w-0">
@@ -285,7 +274,7 @@ export function ChronologicalMovementList({
                   movement.movementType}
               </p>
             </div>
-            <p className="shrink-0 font-display text-sm font-semibold text-ink">
+            <p className="shrink-0 font-public-mono text-xs font-medium text-ink">
               {formatCurrency(resolveAmount(movement), currencyCode)}
             </p>
           </li>
@@ -326,10 +315,10 @@ export function DayMovementsBreakdown({
   return (
     <div
       className={
-        withTopDivider ? "space-y-5 border-t border-white/8 pt-5" : "space-y-5"
+        withTopDivider ? "space-y-5 border-t border-white/[0.07] pt-5" : "space-y-5"
       }
     >
-      <p className="text-sm font-semibold text-ink">Movimientos del día seleccionado</p>
+      <p className="font-display text-base font-semibold text-ink">Movimientos del día seleccionado</p>
       <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
         <ChronologicalMovementList
           currencyCode={currencyCode}
@@ -393,120 +382,77 @@ export function FlowLineChart({
   const minValue = Math.min(...values);
   const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
   const selected = points[selectedIndex];
+  const selectedDelta = selected ? selected.daily - selected.previousDaily : 0;
 
   return (
-    <>
-      <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-storm">{chartTitle}</p>
-              <p className="mt-2 text-sm text-storm">
-                Toca un punto para ver el detalle de ese día frente al período anterior.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-storm">
-              <span className="inline-flex items-center gap-2 rounded-full border border-pine/20 bg-pine/10 px-3 py-1">
-                <span className="h-2 w-2 rounded-full bg-pine" style={{ backgroundColor: theme.line }} />
-                Periodo actual
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-                <span className="h-2 w-2 rounded-full bg-white/60" />
-                Comparación
-              </span>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
-            <div className="hidden gap-2 lg:flex lg:flex-col lg:justify-between">
-              {axisSteps.map((value, index) => (
-                <span className="text-xs text-storm" key={`flow-axis-${index}`}>
-                  {formatCurrency(value, currencyCode)}
-                </span>
-              ))}
-            </div>
-            <LineChartSvg
-              buildTooltipRows={(point) => [
-                {
-                  label: dailyLabel,
-                  value: formatCurrency(point.daily, currencyCode),
-                  accentClassName: theme.accentClass,
-                },
-                { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
-                {
-                  label: "Comparativo",
-                  value: formatCurrency(point.previousCumulative, currencyCode),
-                },
-              ]}
-              fillBottom={theme.fillBottom}
-              fillTop={theme.fillTop}
-              gradientId={theme.gradientId}
-              lineColor={theme.line}
-              onSelect={onSelect}
-              points={points}
-              selectedIndex={selectedIndex}
-            />
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4 text-xs text-storm">
-            {points
-              .filter((_, index) => {
-                if (points.length <= 5) {
-                  return true;
-                }
-
-                const step = Math.max(1, Math.floor((points.length - 1) / 4));
-                return index === 0 || index === points.length - 1 || index % step === 0;
-              })
-              .map((point) => (
-                <span key={`flow-tick-${point.key}`}>{point.label}</span>
-              ))}
-          </div>
+    <div>
+      <div className="flex flex-col gap-4 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">{chartTitle}</p>
+          <p className="mt-2 text-sm text-storm">Selecciona un punto para comparar ese día.</p>
         </div>
-
-        <div className="glass-panel-soft rounded-[28px] p-5">
-          {selected ? (
-            <>
-              <p className="text-xs uppercase tracking-[0.22em] text-storm">Detalle del día</p>
-              <h4 className="mt-3 font-display text-3xl font-semibold text-ink">{selected.fullLabel}</h4>
-              <p className="mt-2 text-sm text-storm">
-                Frente a {fullDateFormatter.format(selected.previousDate)}
-              </p>
-
-              <div className="mt-6 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
-                <div className={`rounded-[22px] border p-4 ${theme.panelClass}`}>
-                  <p className={`text-xs uppercase tracking-[0.18em] ${theme.accentClass}`}>{dailyLabel}</p>
-                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {formatCurrency(selected.daily, currencyCode)}
-                  </p>
-                  <p className="mt-2 text-sm text-storm">
-                    Acumulado en el período {formatCurrency(selected.cumulative, currencyCode)}.
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-storm">{comparisonDailyLabel}</p>
-                  <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                    {formatCurrency(selected.previousDaily, currencyCode)}
-                  </p>
-                  <p className="mt-2 text-sm text-storm">
-                    Acumulado comparativo {formatCurrency(selected.previousCumulative, currencyCode)}.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-ink">Cambio frente al comparativo (día)</p>
-                  <DeltaBadge currencyCode={currencyCode} inverse={false} value={selected.daily - selected.previousDaily} />
-                </div>
-              </div>
-            </>
-          ) : null}
+        <div className="flex flex-wrap gap-5 text-xs text-storm" aria-label="Leyenda del gráfico">
+          <span className="inline-flex items-center gap-2"><i className="h-0.5 w-5" style={{ backgroundColor: theme.line }} />Período actual</span>
+          <span className="inline-flex items-center gap-2"><i className="w-5 border-t border-dashed border-white/40" />Comparación</span>
         </div>
       </div>
 
+      <div className="grid gap-3 py-5 lg:grid-cols-[auto_1fr]">
+        <div className="hidden gap-2 font-public-mono text-[10px] text-storm lg:flex lg:flex-col lg:justify-between">
+          {axisSteps.map((value, index) => <span key={`flow-axis-${index}`}>{formatCurrency(value, currencyCode)}</span>)}
+        </div>
+        <LineChartSvg
+          buildTooltipRows={(point) => [
+            { label: dailyLabel, value: formatCurrency(point.daily, currencyCode), accentClassName: theme.accentClass },
+            { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
+            { label: "Comparativo", value: formatCurrency(point.previousCumulative, currencyCode) },
+          ]}
+          fillBottom={theme.fillBottom}
+          fillTop={theme.fillTop}
+          gradientId={theme.gradientId}
+          lineColor={theme.line}
+          onSelect={onSelect}
+          points={points}
+          selectedIndex={selectedIndex}
+        />
+      </div>
+
+      <div className="flex flex-wrap justify-between gap-3 border-t border-white/[0.07] pt-3 font-public-mono text-[10px] text-storm">
+        {points
+          .filter((_, index) => {
+            if (points.length <= 5) return true;
+            const step = Math.max(1, Math.floor((points.length - 1) / 4));
+            return index === 0 || index === points.length - 1 || index % step === 0;
+          })
+          .map((point) => <span key={`flow-tick-${point.key}`}>{point.label}</span>)}
+      </div>
+
       {selected ? (
-        <div className="glass-panel-soft mt-6 rounded-[28px] p-5">
+        <>
+          <section className="mt-6 grid border-y border-white/[0.07] sm:grid-cols-4">
+            <div className="py-4 sm:pr-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Detalle del día</p>
+              <p className="mt-2 font-display text-lg font-semibold text-ink">{selected.fullLabel}</p>
+              <p className="mt-1 text-xs text-storm">vs. {fullDateFormatter.format(selected.previousDate)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
+              <p className={`font-public-mono text-[10px] uppercase tracking-[0.18em] ${theme.accentClass}`}>{dailyLabel}</p>
+              <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.daily, currencyCode)}</p>
+              <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.cumulative, currencyCode)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{comparisonDailyLabel}</p>
+              <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.previousDaily, currencyCode)}</p>
+              <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.previousCumulative, currencyCode)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:pl-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Variación del día</p>
+              <p className="mt-2 font-public-mono text-base font-medium text-ink">
+                {selectedDelta > 0 ? "+" : ""}{formatCurrency(selectedDelta, currencyCode)}
+              </p>
+            </div>
+          </section>
+          <div className="mt-6">
           <ChronologicalMovementList
             currencyCode={currencyCode}
             emptyHint="No hubo movimientos de este tipo ese día."
@@ -520,9 +466,10 @@ export function FlowLineChart({
             }
             title="Movimientos ese día"
           />
-        </div>
+          </div>
+        </>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -552,140 +499,85 @@ export function SavingsLineChart({
   const maxValue = Math.max(...values);
   const minValue = Math.min(...values);
   const axisSteps = [maxValue, (maxValue + minValue) / 2, minValue];
+  const selected = points[selectedIndex];
+  const selectedDelta = selected ? selected.net - selected.previousNet : 0;
 
   return (
-    <>
-      <div className="grid gap-6 min-[1500px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-      <div className="glass-panel-soft rounded-[28px] p-3 sm:p-4">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-storm">Ahorro acumulado</p>
-            <p className="mt-2 text-sm text-storm">
-              Toca un punto para ver el detalle de ese día frente al período anterior.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-storm">
-            <span className="inline-flex items-center gap-2 rounded-full border border-pine/20 bg-pine/10 px-3 py-1">
-              <span className="h-2 w-2 rounded-full bg-pine" />
-              Periodo actual
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-              <span className="h-2 w-2 rounded-full bg-white/60" />
-              Comparación
-            </span>
-          </div>
+    <div>
+      <div className="flex flex-col gap-4 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Ahorro acumulado</p>
+          <p className="mt-2 text-sm text-storm">Selecciona un punto para comparar ese día.</p>
         </div>
-
-        <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
-          <div className="hidden gap-2 lg:flex lg:flex-col lg:justify-between">
-            {axisSteps.map((value, index) => (
-              <span className="text-xs text-storm" key={`axis-${index}`}>
-                {formatCurrency(value, currencyCode)}
-              </span>
-            ))}
-          </div>
-          <LineChartSvg
-            buildTooltipRows={(point) => [
-              {
-                label: "Ahorro del día",
-                value: formatCurrency(point.net, currencyCode),
-                accentClassName: "text-pine",
-              },
-              { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
-              {
-                label: "Comparativo",
-                value: formatCurrency(point.previousCumulative, currencyCode),
-              },
-            ]}
-            fillBottom="rgba(56, 161, 105, 0.02)"
-            fillTop="rgba(56, 161, 105, 0.28)"
-            gradientId="dashboard-savings-fill"
-            lineColor="rgba(56, 161, 105, 0.95)"
-            onSelect={onSelect}
-            points={points}
-            selectedIndex={selectedIndex}
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap justify-between gap-3 border-t border-white/8 pt-4 text-xs text-storm">
-          {points
-            .filter((_, index) => {
-              if (points.length <= 5) {
-                return true;
-              }
-
-              const step = Math.max(1, Math.floor((points.length - 1) / 4));
-              return index === 0 || index === points.length - 1 || index % step === 0;
-            })
-            .map((point) => (
-              <span key={`tick-${point.key}`}>{point.label}</span>
-            ))}
+        <div className="flex flex-wrap gap-5 text-xs text-storm" aria-label="Leyenda del gráfico">
+          <span className="inline-flex items-center gap-2"><i className="h-0.5 w-5 bg-[#f4f1ec]" />Período actual</span>
+          <span className="inline-flex items-center gap-2"><i className="w-5 border-t border-dashed border-white/40" />Comparación</span>
         </div>
       </div>
 
-      <div className="glass-panel-soft rounded-[28px] p-5">
-        {points[selectedIndex] ? (
-          <>
-            <p className="text-xs uppercase tracking-[0.22em] text-storm">Detalle del ritmo</p>
-            <h4 className="mt-3 font-display text-3xl font-semibold text-ink">
-              {points[selectedIndex].fullLabel}
-            </h4>
-            <p className="mt-2 text-sm text-storm">
-              Frente a {fullDateFormatter.format(points[selectedIndex].previousDate)}
-            </p>
-
-            <div className="mt-6 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))]">
-              <div className="rounded-[22px] border border-pine/18 bg-pine/10 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-pine">Ahorro del dia</p>
-                <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                  {formatCurrency(points[selectedIndex].net, currencyCode)}
-                </p>
-                <p className="mt-2 text-sm text-storm">
-                  Ingresos {formatCurrency(points[selectedIndex].income, currencyCode)} y gastos{" "}
-                  {formatCurrency(points[selectedIndex].expense, currencyCode)}.
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-storm">Comparación</p>
-                <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                  {formatCurrency(points[selectedIndex].previousNet, currencyCode)}
-                </p>
-                <p className="mt-2 text-sm text-storm">
-                  Acumulado actual {formatCurrency(points[selectedIndex].cumulative, currencyCode)}.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-ink">Cambio frente al comparativo</p>
-                <DeltaBadge
-                  currencyCode={currencyCode}
-                  inverse={false}
-                  value={points[selectedIndex].net - points[selectedIndex].previousNet}
-                />
-              </div>
-              <p className="mt-3 text-sm leading-7 text-storm">
-                Si mantienes este ritmo, el acumulado del período seguiría en{" "}
-                <span className="font-semibold text-ink">
-                  {formatCurrency(points[selectedIndex].cumulative, currencyCode)}
-                </span>
-                .
-              </p>
-            </div>
-          </>
-        ) : null}
+      <div className="grid gap-3 py-5 lg:grid-cols-[auto_1fr]">
+        <div className="hidden gap-2 font-public-mono text-[10px] text-storm lg:flex lg:flex-col lg:justify-between">
+          {axisSteps.map((value, index) => <span key={`axis-${index}`}>{formatCurrency(value, currencyCode)}</span>)}
+        </div>
+        <LineChartSvg
+          buildTooltipRows={(point) => [
+            { label: "Ahorro del día", value: formatCurrency(point.net, currencyCode), accentClassName: "text-ink" },
+            { label: "Acumulado", value: formatCurrency(point.cumulative, currencyCode) },
+            { label: "Comparativo", value: formatCurrency(point.previousCumulative, currencyCode) },
+          ]}
+          fillBottom="rgba(244, 241, 236, 0.01)"
+          fillTop="rgba(244, 241, 236, 0.1)"
+          gradientId="dashboard-savings-fill"
+          lineColor="rgba(244, 241, 236, 0.9)"
+          onSelect={onSelect}
+          points={points}
+          selectedIndex={selectedIndex}
+        />
       </div>
-    </div>
-      {points[selectedIndex] ? (
-        <div className="glass-panel-soft mt-6 rounded-[28px] p-5">
+
+      <div className="flex flex-wrap justify-between gap-3 border-t border-white/[0.07] pt-3 font-public-mono text-[10px] text-storm">
+        {points
+          .filter((_, index) => {
+            if (points.length <= 5) return true;
+            const step = Math.max(1, Math.floor((points.length - 1) / 4));
+            return index === 0 || index === points.length - 1 || index % step === 0;
+          })
+          .map((point) => <span key={`tick-${point.key}`}>{point.label}</span>)}
+      </div>
+
+      {selected ? (
+        <>
+          <section className="mt-6 grid border-y border-white/[0.07] sm:grid-cols-4">
+            <div className="py-4 sm:pr-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Detalle del ritmo</p>
+              <p className="mt-2 font-display text-lg font-semibold text-ink">{selected.fullLabel}</p>
+              <p className="mt-1 text-xs text-storm">vs. {fullDateFormatter.format(selected.previousDate)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Ahorro del día</p>
+              <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.net, currencyCode)}</p>
+              <p className="mt-1 text-xs text-storm">Entradas {formatCurrency(selected.income, currencyCode)} · salidas {formatCurrency(selected.expense, currencyCode)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Comparación</p>
+              <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.previousNet, currencyCode)}</p>
+              <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.cumulative, currencyCode)}</p>
+            </div>
+            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:pl-5">
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Variación del día</p>
+              <p className="mt-2 font-public-mono text-base font-medium text-ink">{selectedDelta > 0 ? "+" : ""}{formatCurrency(selectedDelta, currencyCode)}</p>
+              <p className="mt-1 text-xs text-storm">Frente al período anterior</p>
+            </div>
+          </section>
+          <div className="mt-6">
           <DayMovementsBreakdown
             currencyCode={currencyCode}
             movements={dayMovements}
             withTopDivider={false}
           />
-        </div>
+          </div>
+        </>
       ) : null}
-    </>
+    </div>
   );
 }
