@@ -1,102 +1,148 @@
-import { Reveal } from "../reveal";
+import {
+  ArrowLeftRight,
+  CreditCard,
+  House,
+  LayoutGrid,
+  Scale,
+} from "lucide-react";
 
-const chartBars = [38, 56, 44, 70, 52, 84, 64, 92, 58, 76, 68, 88];
-
-const fakeMovements = [
-  { dot: "bg-pine/70", w1: "w-28", w2: "w-16", amount: "text-pine", amountW: "w-14" },
-  { dot: "bg-ember/70", w1: "w-36", w2: "w-20", amount: "text-rosewood", amountW: "w-12" },
-  { dot: "bg-gold/70", w1: "w-24", w2: "w-14", amount: "text-pine", amountW: "w-16" },
+const movements = [
+  {
+    amount: "− 45.00",
+    label: "Yape a Lucía",
+    meta: "Hoy · Cuenta Principal",
+    positive: false,
+  },
+  {
+    amount: "+ 2,630.50",
+    label: "Sueldo AGV",
+    meta: "Ayer · Cuenta Sueldo",
+    positive: true,
+  },
+  {
+    amount: "− 32.90",
+    label: "Rappi",
+    meta: "Ayer · Alimentación",
+    positive: false,
+  },
+  {
+    amount: "− 4.00",
+    label: "Moto",
+    meta: "Ayer · Transporte",
+    positive: false,
+  },
 ];
 
-const fakeStats = [
-  { label: "Balance total", value: "S/ 12,480", delta: "+8.2%", deltaColor: "text-pine" },
-  { label: "Gastos del mes", value: "S/ 2,140", delta: "-3.1%", deltaColor: "text-pine" },
-  { label: "Suscripciones", value: "S/ 186", delta: "4 activas", deltaColor: "text-storm" },
-];
+const navigation = [House, ArrowLeftRight, CreditCard, Scale, LayoutGrid];
 
 export function DashboardPreview() {
   return (
-    <Reveal className="mx-auto w-full max-w-4xl">
-      <div
-        aria-hidden="true"
-        className="rounded-[30px] bg-[linear-gradient(180deg,rgba(107,228,197,0.18),rgba(255,255,255,0.04)_40%,transparent)] p-px"
-      >
-        <div className="glass-panel-strong overflow-hidden rounded-[29px] bg-canvas/80">
-          <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-5 py-3.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-rosewood/60" />
-            <span className="h-2.5 w-2.5 rounded-full bg-gold/60" />
-            <span className="h-2.5 w-2.5 rounded-full bg-pine/60" />
-            <span className="ml-4 h-2 w-40 rounded-full bg-white/[0.06]" />
-          </div>
+    <div
+      aria-label="Vista previa de la aplicación DarkMoney"
+      className="mx-auto w-[min(100%,340px)] rounded-[46px] bg-[#080807] p-[10px] shadow-[0_30px_70px_rgba(0,0,0,0.5)]"
+    >
+      <div className="font-public-body relative h-[660px] overflow-hidden rounded-[37px] bg-[#141312] text-[#f4f1ec]">
+        <div className="absolute left-1/2 top-2 z-20 h-[26px] w-[92px] -translate-x-1/2 rounded-full bg-[#080807]" />
 
-          <div className="flex">
-            <div className="hidden w-44 shrink-0 flex-col gap-3 border-r border-white/[0.06] p-5 sm:flex">
-              <span className="h-2.5 w-24 rounded-full bg-pine/30" />
-              <span className="mt-3 h-2 w-28 rounded-full bg-white/[0.08]" />
-              <span className="h-2 w-20 rounded-full bg-white/[0.06]" />
-              <span className="h-2 w-24 rounded-full bg-white/[0.06]" />
-              <span className="h-2 w-16 rounded-full bg-white/[0.06]" />
-              <span className="h-2 w-24 rounded-full bg-white/[0.06]" />
-              <span className="h-2 w-20 rounded-full bg-white/[0.06]" />
+        <div className="font-public-display flex h-11 items-center justify-between px-[22px] text-xs font-semibold tabular-nums">
+          <span>9:41</span>
+          <div className="flex items-end gap-1">
+            <div className="flex items-end gap-[2px]" aria-hidden="true">
+              <i className="block h-1 w-[3px] rounded-sm bg-[#f4f1ec]" />
+              <i className="block h-1.5 w-[3px] rounded-sm bg-[#f4f1ec]" />
+              <i className="block h-2 w-[3px] rounded-sm bg-[#f4f1ec]" />
             </div>
-
-            <div className="flex flex-1 flex-col gap-4 p-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {fakeStats.map((stat) => (
-                  <div
-                    className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4"
-                    key={stat.label}
-                  >
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-storm/70">
-                      {stat.label}
-                    </p>
-                    <p className="mt-1.5 font-display text-lg font-semibold text-ink">
-                      {stat.value}
-                    </p>
-                    <p className={`mt-0.5 text-[11px] font-medium ${stat.deltaColor}`}>
-                      {stat.delta}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between">
-                  <span className="h-2 w-24 rounded-full bg-white/[0.1]" />
-                  <span className="h-2 w-12 rounded-full bg-white/[0.06]" />
-                </div>
-                <div className="mt-4 flex h-24 items-end gap-1.5">
-                  {chartBars.map((height, index) => (
-                    <div
-                      className="flex-1 rounded-t bg-gradient-to-t from-pine/25 to-pine/70"
-                      key={index}
-                      style={{ height: `${height}%` }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
-                {fakeMovements.map((movement, index) => (
-                  <div
-                    className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3"
-                    key={index}
-                  >
-                    <span className={`h-7 w-7 shrink-0 rounded-full ${movement.dot} opacity-60`} />
-                    <div className="flex flex-1 flex-col gap-1.5">
-                      <span className={`h-2 ${movement.w1} rounded-full bg-white/[0.1]`} />
-                      <span className={`h-1.5 ${movement.w2} rounded-full bg-white/[0.05]`} />
-                    </div>
-                    <span
-                      className={`h-2 ${movement.amountW} rounded-full bg-current opacity-50 ${movement.amount}`}
-                    />
-                  </div>
-                ))}
-              </div>
+            <div className="h-[10px] w-5 rounded-[3px] border border-[#f4f1ec]/50 p-[2px]">
+              <div className="h-full w-[62%] rounded-[1px] bg-[#f4f1ec]" />
             </div>
           </div>
         </div>
+
+        <div className="flex h-10 items-center justify-between px-[18px]">
+          <span className="font-public-display text-[15px] font-semibold tracking-[-0.015em]">
+            Inicio
+          </span>
+          <span className="font-public-display flex h-[26px] w-[26px] items-center justify-center rounded-lg bg-[#f4f1ec] text-[10px] font-semibold text-[#141312]">
+            AG
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-[5px] px-[18px] pt-[14px]">
+          <span className="text-[10px] font-medium uppercase tracking-[0.11em] text-[#a39c90]">
+            Disponible hoy
+          </span>
+          <strong className="font-public-display text-[34px] leading-none tracking-[-0.035em] tabular-nums">
+            S/ 4,226.92
+          </strong>
+          <span className="text-[11.5px] leading-[1.4] text-[#a39c90]">
+            En 3 cuentas. Comprometido este mes:{" "}
+            <span className="text-[#f4f1ec] tabular-nums">S/ 1,180</span>.
+          </span>
+        </div>
+
+        <div className="px-[18px] pt-4">
+          <div className="flex items-baseline justify-between pb-0.5 text-[10px] uppercase tracking-[0.11em] text-[#a39c90]">
+            <span className="font-medium">Movimientos</span>
+            <span className="text-[11px] normal-case tracking-normal text-[#c4beb4]">
+              Ver todos
+            </span>
+          </div>
+          {movements.map((movement) => (
+            <div
+              className="flex h-[50px] items-center gap-2.5 border-b border-[#f4f1ec]/[0.07] last:border-b-0"
+              key={movement.label}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[13px] font-medium leading-[1.2] text-[#f4f1ec]">
+                  {movement.label}
+                </span>
+                <span className="text-[10.5px] leading-none text-[#8e877c]">
+                  {movement.meta}
+                </span>
+              </div>
+              <strong
+                className={`font-public-display flex-none text-[13.5px] font-semibold tabular-nums ${
+                  movement.positive ? "text-[#86ce96]" : "text-[#f4f1ec]"
+                }`}
+              >
+                {movement.amount}
+              </strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2 px-[18px] pt-3">
+          <span className="text-[10px] font-medium uppercase tracking-[0.11em] text-[#a39c90]">
+            Alimentación · septiembre
+          </span>
+          <div className="flex items-baseline gap-[7px]">
+            <strong className="font-public-display text-[17px] font-semibold tabular-nums">
+              S/ 322.12
+            </strong>
+            <span className="text-[11.5px] text-[#a39c90]">de S/ 400.00</span>
+          </div>
+          <div className="relative h-[5px] overflow-hidden rounded-full bg-[#252320]">
+            <div className="h-full w-[81%] bg-[#c4beb4]" />
+            <i className="absolute -bottom-0.5 -top-0.5 left-[27%] block w-[1.5px] bg-[#f4f1ec]/45" />
+          </div>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 z-10 flex h-[60px] items-start border-t border-[#f4f1ec]/[0.09] bg-[#141312]/95 px-3 pt-3">
+          {navigation.map((Icon, index) => (
+            <div
+              className="flex flex-1 flex-col items-center gap-1 text-[#a39c90] first:text-[#f4f1ec]"
+              key={Icon.displayName ?? index}
+            >
+              <Icon
+                aria-hidden="true"
+                className="h-[18px] w-[18px]"
+                strokeWidth={1.8}
+              />
+              {index === 0 ? <i className="block h-[3.5px] w-[3.5px] rounded-full bg-current" /> : null}
+            </div>
+          ))}
+        </div>
       </div>
-    </Reveal>
+    </div>
   );
 }

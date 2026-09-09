@@ -1,61 +1,41 @@
 import { Link } from "react-router-dom";
 
-import { getButtonClassName } from "../../../../components/ui/button";
+import { DashboardPreview } from "./dashboard-preview";
+
+const primaryButton =
+  "inline-flex h-12 items-center justify-center rounded-[9px] bg-[#f4f1ec] px-6 text-[15px] font-semibold text-[#141312] transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
+const secondaryButton =
+  "inline-flex h-12 items-center justify-center rounded-[9px] border border-[#f4f1ec]/20 px-[22px] text-[15px] font-medium text-[#f4f1ec] transition hover:-translate-y-0.5 hover:border-[#f4f1ec]/35 hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
 
 export function HeroSection() {
   return (
-    <section className="relative flex flex-col items-center gap-6 pb-16 pt-14 text-center sm:pt-24">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[-4rem] -z-20 h-[150%] w-screen -translate-x-1/2 overflow-hidden"
-      >
-        <img
-          alt=""
-          className="h-full w-full object-cover opacity-80 [mask-image:linear-gradient(180deg,black_55%,transparent_96%)]"
-          decoding="async"
-          src="/hero-darkmoney.jpg"
-        />
-      </div>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 overflow-visible"
-      >
-        <div className="animate-float-slow absolute -top-20 left-[8%] h-72 w-72 rounded-full bg-pine/15 blur-[120px]" />
-        <div className="animate-float-slower absolute -top-10 right-[6%] h-80 w-80 rounded-full bg-ember/12 blur-[120px]" />
-      </div>
-
-      <div className="animate-rise-in flex flex-col items-center gap-6">
-        <span className="rounded-full border border-pine/25 bg-pine/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-pine">
-          Finanzas personales y colaborativas
+    <section className="mx-auto grid w-full max-w-[1240px] items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.02fr)] lg:px-11 lg:py-[60px]">
+      <div className="flex min-w-0 flex-col items-start gap-[22px]">
+        <span className="font-public-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#a39c90]">
+          Finanzas personales y compartidas
         </span>
-
-        <h1 className="text-balance font-display text-5xl font-semibold leading-[1.05] tracking-[-0.045em] text-ink sm:text-7xl">
-          Tu dinero, claro
-          <br />
-          <span className="text-gradient-pine">y bajo control</span>
+        <h1 className="text-balance font-public-display text-[clamp(3.25rem,6vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.035em] text-[#f4f1ec]">
+          Tu dinero, claro y bajo control
         </h1>
-
-        <p className="max-w-xl text-balance text-base leading-8 text-storm sm:text-lg">
+        <p className="max-w-[34ch] text-[16.5px] leading-[1.55] text-[#c4beb4]">
           Cuentas, movimientos, suscripciones, deudas y espacios compartidos en un solo lugar.
-          Sin hojas de calculo, sin sorpresas.
+          Sin hojas de cálculo, sin sorpresas.
         </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-          <Link
-            className={getButtonClassName({ className: "px-6" })}
-            to="/auth/register"
-          >
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <Link className={primaryButton} to="/auth/register">
             Crear cuenta gratis
           </Link>
-          <Link
-            className={getButtonClassName({ variant: "ghost", className: "px-6" })}
-            to="/pricing"
-          >
+          <Link className={secondaryButton} to="/pricing">
             Ver planes
           </Link>
         </div>
+        <span className="text-[13px] text-[#8e877c]">
+          Gratis para siempre · sin tarjeta de crédito
+        </span>
+      </div>
 
-        <p className="text-xs text-storm/60">Gratis para siempre · Sin tarjeta de credito</p>
+      <div className="flex min-w-0 justify-center lg:justify-end">
+        <DashboardPreview />
       </div>
     </section>
   );

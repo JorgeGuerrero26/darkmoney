@@ -1,8 +1,5 @@
-import { Check } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { getButtonClassName } from "../../../components/ui/button";
-import { StatusBadge } from "../../../components/ui/status-badge";
 import { freeFeatures, PRO_REGISTER_PATH, proFeatures } from "../lib/plans-data";
 
 type PlanCardsProps = {
@@ -10,102 +7,87 @@ type PlanCardsProps = {
   highlightPro?: boolean;
 };
 
+const secondaryButton =
+  "inline-flex h-11 w-full items-center justify-center rounded-[9px] border border-[#f4f1ec]/20 px-5 text-sm font-medium text-[#f4f1ec] transition hover:border-[#f4f1ec]/35 hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
+const primaryButton =
+  "inline-flex h-11 w-full items-center justify-center rounded-[9px] bg-[#f4f1ec] px-5 text-sm font-semibold text-[#141312] transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
+
 export function PlanCards({ compact = false, highlightPro = false }: PlanCardsProps) {
   const freeList = compact ? freeFeatures.slice(0, 4) : freeFeatures;
   const proList = compact ? proFeatures.slice(0, 4) : proFeatures;
 
   return (
-    <div className="grid w-full max-w-3xl gap-5 md:grid-cols-2">
-      <article className="glass-panel-soft flex flex-col rounded-[32px] p-8">
-        <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-storm">Plan</p>
-          <h3 className="mt-2 font-display text-3xl font-semibold text-ink">Free</h3>
-          <div className="mt-4 flex items-end gap-1.5">
-            <span className="font-display text-5xl font-semibold leading-none text-ink">$0</span>
-            <span className="mb-1 text-sm text-storm">/ para siempre</span>
+    <div className="grid w-full max-w-[820px] gap-4 md:grid-cols-2">
+      <article className="flex flex-col gap-4 rounded-xl border border-[#f4f1ec]/[0.08] bg-[#1a1917] p-[26px] pb-7">
+        <div className="flex flex-col gap-2.5">
+          <span className="font-public-mono text-[11px] font-medium uppercase tracking-[0.13em] text-[#a39c90]">
+            Free
+          </span>
+          <div className="flex flex-wrap items-baseline gap-[7px]">
+            <strong className="font-public-display text-[38px] font-semibold leading-none tracking-[-0.03em] text-[#f4f1ec] tabular-nums">
+              S/ 0
+            </strong>
+            <span className="text-[13.5px] text-[#a39c90]">para siempre</span>
           </div>
-          <p className="mt-4 text-sm leading-7 text-storm">
-            Para empezar a ordenar tus finanzas y construir historial desde el dia uno.
+          <p className="text-[13.5px] leading-[1.5] text-[#a39c90]">
+            Para empezar a ordenar tus finanzas y construir historial desde el día uno.
           </p>
         </div>
 
-        <ul className="mt-8 flex flex-col gap-3.5">
+        <ul className="flex flex-col gap-[9px] border-t border-[#f4f1ec]/[0.07] pt-[15px]">
           {freeList.map((feature) => (
-            <li
-              className="flex items-start gap-3"
-              key={feature}
-            >
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-pine" />
-              <span className="text-sm text-storm">{feature}</span>
+            <li className="text-[13.5px] leading-[1.4] text-[#c4beb4]" key={feature}>
+              {feature}
             </li>
           ))}
         </ul>
 
-        <div className="mt-auto pt-10">
-          <Link
-            className={getButtonClassName({ className: "w-full", variant: "secondary" })}
-            to="/auth/register"
-          >
+        <div className="mt-auto pt-1">
+          <Link className={secondaryButton} to="/auth/register">
             Empezar gratis
           </Link>
         </div>
       </article>
 
       <article
-        className={`relative flex flex-col overflow-hidden rounded-[32px] border border-pine/25 bg-[radial-gradient(circle_at_top_left,rgba(107,228,197,0.13),transparent_45%),linear-gradient(160deg,rgba(255,255,255,0.07),rgba(5,9,16,0.88)_65%)] p-8 ${
+        className={`flex flex-col gap-4 rounded-xl border bg-[#211f1c] p-[26px] pb-7 ${
           highlightPro
-            ? "border-pine/35 shadow-[0_0_60px_rgba(107,228,197,0.12)] lg:scale-[1.03]"
-            : ""
+            ? "border-[#f4f1ec]/30 shadow-[0_18px_55px_rgba(0,0,0,0.22)]"
+            : "border-[#f4f1ec]/20"
         }`}
       >
-        {highlightPro ? (
-          <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b-2xl border border-t-0 border-pine/30 bg-pine/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-pine">
-            Recomendado
-          </span>
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_45%)]" />
-        <div className={`relative flex flex-1 flex-col ${highlightPro ? "pt-4" : ""}`}>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <p className="text-xs uppercase tracking-[0.22em] text-storm">Plan</p>
-              <StatusBadge
-                status="Popular"
-                tone="success"
-              />
-            </div>
-            <h3 className="mt-2 font-display text-3xl font-semibold text-ink">Pro</h3>
-            <div className="mt-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-storm">Precio</p>
-              <p className="mt-1.5 text-sm leading-6 text-storm">
-                El importe exacto, moneda e impuestos se muestran en el checkout antes de
-                confirmar.
-              </p>
-            </div>
-            <p className="mt-4 text-sm leading-7 text-storm">
-              Para quienes quieren analisis profundo, automatizacion y herramientas avanzadas.
-            </p>
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-[9px]">
+            <span className="font-public-mono text-[11px] font-medium uppercase tracking-[0.13em] text-[#f4f1ec]">
+              Pro
+            </span>
+            <span className="font-public-mono rounded-[3px] bg-[#f4f1ec] px-[7px] py-1 text-[9.5px] font-medium uppercase leading-none tracking-[0.11em] text-[#141312]">
+              Popular
+            </span>
           </div>
-
-          <ul className="mt-8 flex flex-col gap-3.5">
-            {proList.map((feature) => (
-              <li
-                className="flex items-start gap-3"
-                key={feature}
-              >
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-pine" />
-                <span className="text-sm text-ink">{feature}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-auto pt-10">
-            <Link
-              className={getButtonClassName({ className: "w-full" })}
-              to={PRO_REGISTER_PATH}
-            >
-              Empezar con Pro
-            </Link>
+          <div className="flex flex-wrap items-baseline gap-[7px]">
+            <strong className="font-public-display text-[38px] font-semibold leading-none tracking-[-0.03em] text-[#f4f1ec] tabular-nums">
+              S/ 19
+            </strong>
+            <span className="text-[13.5px] text-[#a39c90]">al mes · IGV incluido</span>
           </div>
+          <p className="text-[13.5px] leading-[1.5] text-[#c4beb4]">
+            Para quienes quieren análisis profundo, automatización y herramientas avanzadas.
+          </p>
+        </div>
+
+        <ul className="flex flex-col gap-[9px] border-t border-[#f4f1ec]/[0.09] pt-[15px]">
+          {proList.map((feature) => (
+            <li className="text-[13.5px] leading-[1.4] text-[#f4f1ec]" key={feature}>
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-auto pt-1">
+          <Link className={primaryButton} to={PRO_REGISTER_PATH}>
+            Empezar con Pro
+          </Link>
         </div>
       </article>
     </div>

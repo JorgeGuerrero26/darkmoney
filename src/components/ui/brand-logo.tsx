@@ -8,23 +8,47 @@ type BrandLogoProps = {
 export function BrandLogo({
   alt = "DarkMoney",
   className = "",
-  imageClassName = "",
-  loading = "lazy",
 }: BrandLogoProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-[22px] bg-[linear-gradient(160deg,rgba(13,19,27,0.96),rgba(9,12,18,0.88))] shadow-[0_24px_54px_rgba(4,8,14,0.48)] ${className}`}
+      aria-label={alt}
+      className={`flex items-center justify-center overflow-hidden bg-[#0c0b0a] ${className}`}
+      role="img"
     >
-      <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(108,241,196,0.12),transparent_34%),radial-gradient(circle_at_82%_24%,rgba(245,176,76,0.08),transparent_28%)]" />
-      <img
-        alt={alt}
-        className={`relative h-full w-full object-cover object-center ${imageClassName}`}
-        decoding="async"
-        height={64}
-        loading={loading}
-        src="/logo-darkmoney.jpg"
-        width={64}
-      />
+      <svg
+        aria-hidden="true"
+        className="h-full w-full"
+        viewBox="0 0 1024 1024"
+      >
+        <rect
+          fill="#86ce96"
+          height="140"
+          rx="18"
+          width="336"
+          x="344"
+          y="276"
+        />
+        <path
+          d="M228 396h568a28 28 0 0 1 28 28v324a28 28 0 0 1-28 28H228a28 28 0 0 1-28-28V424a28 28 0 0 1 28-28Z"
+          fill="#f4f1ec"
+        />
+        <rect
+          fill="#0c0b0a"
+          height="124"
+          rx="20"
+          width="196"
+          x="628"
+          y="524"
+        />
+        <rect
+          fill="#f4f1ec"
+          height="68"
+          rx="14"
+          width="156"
+          x="668"
+          y="552"
+        />
+      </svg>
     </div>
   );
 }

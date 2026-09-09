@@ -128,7 +128,7 @@ export function PricingPage() {
         </Reveal>
       </section>
 
-      <section className="w-full max-w-2xl">
+      <section className="w-full max-w-2xl scroll-mt-24" id="preguntas">
         <Reveal>
           <SectionHeading title="Preguntas frecuentes" />
         </Reveal>

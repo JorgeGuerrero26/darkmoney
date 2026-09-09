@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -137,6 +137,18 @@
 }
 
 @layer utilities {
+  .font-public-body {
+    font-family: "IBM Plex Sans", sans-serif;
+  }
+
+  .font-public-display {
+    font-family: "Archivo", sans-serif;
+  }
+
+  .font-public-mono {
+    font-family: "IBM Plex Mono", monospace;
+  }
+
   .text-balance {
     text-wrap: balance;
   }

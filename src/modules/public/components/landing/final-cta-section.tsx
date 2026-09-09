@@ -1,55 +1,31 @@
 import { Link } from "react-router-dom";
 
-import { getButtonClassName } from "../../../../components/ui/button";
-import { Reveal } from "../reveal";
+const primaryButton =
+  "inline-flex h-12 items-center justify-center rounded-[9px] bg-[#f4f1ec] px-6 text-[15px] font-semibold text-[#141312] transition hover:-translate-y-0.5 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
+const secondaryButton =
+  "inline-flex h-12 items-center justify-center rounded-[9px] border border-[#f4f1ec]/20 px-[22px] text-[15px] font-medium text-[#f4f1ec] transition hover:-translate-y-0.5 hover:border-[#f4f1ec]/35 hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4f1ec]";
 
 export function FinalCtaSection() {
   return (
-    <Reveal>
-      <section className="relative overflow-hidden rounded-[32px] border border-pine/20 bg-[radial-gradient(circle_at_50%_-20%,rgba(107,228,197,0.18),transparent_60%)] px-6 py-14 text-center sm:px-12 sm:py-16">
-        <div
-          aria-hidden="true"
-          className="coin-flip mx-auto mb-7 h-28 w-28"
-          title="DarkMoney"
-        >
-          <div className="coin-flip-inner">
-            <img
-              alt=""
-              className="coin-face h-full w-full object-contain drop-shadow-[0_0_24px_rgba(107,228,197,0.25)]"
-              decoding="async"
-              loading="lazy"
-              src="/logo-coin.png"
-            />
-            <img
-              alt=""
-              className="coin-face coin-face-back h-full w-full object-contain drop-shadow-[0_0_24px_rgba(107,228,197,0.25)]"
-              decoding="async"
-              loading="lazy"
-              src="/logo-coin-back.png"
-            />
-          </div>
+    <section className="border-t border-[#f4f1ec]/[0.07]">
+      <div className="mx-auto flex w-full max-w-[1240px] flex-col items-start gap-8 px-5 py-11 sm:px-8 md:flex-row md:items-center md:justify-between md:gap-10 lg:px-11 lg:py-[46px]">
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+          <h2 className="font-public-display text-[30px] font-semibold leading-[1.12] tracking-[-0.028em] text-[#f4f1ec]">
+            Toma el control de tu dinero hoy
+          </h2>
+          <p className="max-w-[44ch] text-[14.5px] leading-[1.5] text-[#a39c90]">
+            Crea tu cuenta gratis en menos de un minuto y empieza a ver tus finanzas con claridad.
+          </p>
         </div>
-        <h2 className="text-balance font-display text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-5xl">
-          Toma el control de tu dinero hoy
-        </h2>
-        <p className="mx-auto mt-4 max-w-lg text-balance text-base leading-8 text-storm">
-          Crea tu cuenta gratis en menos de un minuto y empieza a ver tus finanzas con claridad.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            className={getButtonClassName({ className: "px-6" })}
-            to="/auth/register"
-          >
+        <div className="flex flex-none flex-wrap items-center gap-3">
+          <Link className={primaryButton} to="/auth/register">
             Crear cuenta gratis
           </Link>
-          <Link
-            className={getButtonClassName({ variant: "ghost", className: "px-6" })}
-            to="/pricing"
-          >
-            Ver planes y precios
+          <Link className={secondaryButton} to="/pricing">
+            Ver planes
           </Link>
         </div>
-      </section>
-    </Reveal>
+      </div>
+    </section>
   );
 }
