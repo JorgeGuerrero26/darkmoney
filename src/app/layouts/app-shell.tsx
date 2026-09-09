@@ -396,7 +396,6 @@ function AppShellContent() {
   const hasProAccess = isAdminOverride || Boolean(entitlementQuery.data?.proAccessEnabled);
   const normalizedBillingStatus = entitlementQuery.data?.billingStatus?.trim().toLowerCase() ?? null;
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
-  const workspaceInitials = buildInitials(activeWorkspace?.name, "WS");
   const workspaceErrorMessage = error
     ? getQueryErrorMessage(error, "No se pudieron cargar tus workspaces.")
     : "";
@@ -701,10 +700,10 @@ function AppShellContent() {
       <div className="flex min-h-screen w-full lg:h-full lg:min-h-0">
         <aside
           aria-label="Menú principal"
-          className={`fixed inset-y-0 left-0 z-50 w-[232px] overflow-y-auto overscroll-contain border-r border-white/[0.07] bg-[#0f0e0d] px-4 py-5 text-ink transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-hidden lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-50 w-[232px] overflow-y-auto overscroll-contain border-r border-white/[0.07] bg-[#0f0e0d] px-4 py-5 text-ink transition-[width,padding,transform] duration-300 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
-            isSidebarCollapsed ? "lg:w-[76px] lg:px-3" : "lg:w-[232px] lg:px-4"
+            isSidebarCollapsed ? "lg:w-[68px] lg:px-2" : "lg:w-[232px] lg:px-4"
           }`}
         >
           <div className="flex h-full min-h-0 flex-col">
@@ -748,7 +747,7 @@ function AppShellContent() {
               {isSidebarCollapsed ? (
                 <button
                   aria-label="Expandir menú lateral"
-                  className="hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-storm transition hover:bg-white/[0.09] hover:text-ink lg:inline-flex"
+                    className="hidden h-9 w-9 items-center justify-center rounded-[7px] border border-white/[0.08] bg-[#1a1917] text-storm transition hover:border-white/15 hover:text-ink lg:inline-flex"
                   onClick={() => toggleSidebarCollapsed()}
                   title="Expandir menú"
                   type="button"
@@ -787,33 +786,7 @@ function AppShellContent() {
               ) : null}
             </div>
 
-            <div
-              className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} glass-panel-soft mt-6 flex-col items-center gap-3 rounded-[30px] px-3 py-4 text-center`}
-              title={
-                activeWorkspace
-                  ? `${activeWorkspace.name} · ${activeWorkspace.kind} · ${activeWorkspace.role}`
-                  : "Sin workspace activo"
-              }
-            >
-              <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-gradient-to-br from-ember to-pine font-display text-xl font-semibold text-void shadow-lg">
-                {workspaceInitials}
-              </div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-storm/80">
-                {activeWorkspace?.kind ?? "workspace"}
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    activeWorkspace ? "bg-pine shadow-[0_0_16px_rgba(107,228,197,0.45)]" : "bg-storm/45"
-                  }`}
-                />
-                <span className="text-[10px] uppercase tracking-[0.18em] text-storm/70">
-                  {activeWorkspace?.role ?? "ready"}
-                </span>
-              </div>
-            </div>
-
-            <nav aria-label="Navegación principal" className={isSidebarCollapsed ? "mt-8 space-y-2" : "hidden"}>
+            <nav aria-label="Navegación principal" className={isSidebarCollapsed ? "mt-6 space-y-1" : "hidden"}>
               {compactNavigation.map((item) => {
                 const Icon = item.icon;
                 const isNotificationsItem = item.to === "/app/notifications";
@@ -822,11 +795,11 @@ function AppShellContent() {
                     className={({ isActive }) =>
                       `group flex items-center gap-3 text-sm font-medium transition ${
                         isActive
-                          ? "bg-white/[0.08] text-ink ring-1 ring-white/12"
+                          ? "bg-[#252320] text-ink"
                           : "text-storm hover:bg-white/[0.04] hover:text-ink"
                       } ${
                         isSidebarCollapsed
-                          ? "rounded-[20px] px-4 py-3 lg:mx-auto lg:h-14 lg:w-14 lg:justify-center lg:gap-0 lg:px-0 lg:py-0"
+                          ? "rounded-[7px] px-4 py-3 lg:mx-auto lg:h-10 lg:w-10 lg:justify-center lg:gap-0 lg:px-0 lg:py-0"
                           : "rounded-2xl px-4 py-3"
                       }`
                     }
@@ -838,7 +811,7 @@ function AppShellContent() {
                     title={isSidebarCollapsed ? item.label : undefined}
                   >
                     <span className="relative inline-flex">
-                      <Icon className={isSidebarCollapsed ? "h-5 w-5" : "h-4 w-4"} />
+                      <Icon className={isSidebarCollapsed ? "h-4 w-4" : "h-4 w-4"} strokeWidth={1.7} />
                       {isNotificationsItem && unreadNotificationsCount > 0 ? (
                         <span className="absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
                           {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
@@ -967,19 +940,18 @@ function AppShellContent() {
               ) : null}
             </div>
 
-            <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-6 flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] px-3 py-4 backdrop-blur-2xl`}>
-              <IdentityAvatar
-                imageUrl={profile?.avatarUrl}
-                initials={currentUserInitials}
-                size="regular"
+            <div className={`${isSidebarCollapsed ? "hidden lg:flex" : "hidden"} mt-auto flex-col items-center gap-2 border-t border-white/[0.07] pt-3`}>
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[7px] border border-white/[0.1] bg-[#f4f1ec] font-display text-xs font-semibold text-[#141312]"
                 title={currentUserName}
-              />
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-storm/70">
-                perfil
-              </p>
+              >
+                {profile?.avatarUrl ? (
+                  <img alt={currentUserName} className="h-full w-full object-cover" src={profile.avatarUrl} />
+                ) : currentUserInitials}
+              </div>
               <button
                 aria-label="Cerrar sesión"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition hover:bg-white/[0.08] hover:text-ink"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink"
                 onClick={() => void handleSignOut()}
                 title="Cerrar sesión"
                 type="button"
