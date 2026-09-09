@@ -747,7 +747,7 @@ export function MovementsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
             {viewMode === "table" ? (
-              <ColumnPicker columns={movementColumns} visible={colVis} onToggle={toggleCol} />
+              <ColumnPicker appearance="compact" columns={movementColumns} visible={colVis} onToggle={toggleCol} />
             ) : null}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {hasActiveFilters ? (
@@ -782,21 +782,25 @@ export function MovementsPage() {
               value={tableFilters.description}
             />
             <SearchablePicker
+              appearance="compact"
               emptyMessage="No hay estados para mostrar."
               onChange={(value) => updateTableFilter("status", value as MovementStatus | "all")}
               options={statusFilterPickerOptions}
               placeholderDescription="Filtra por estado del movimiento."
               placeholderLabel="Estado"
               queryPlaceholder="Buscar estado..."
+              showSearch={false}
               value={tableFilters.status}
             />
             <SearchablePicker
+              appearance="compact"
               emptyMessage="No hay tipos para mostrar."
               onChange={(value) => updateTableFilter("type", value as MovementType | "all")}
               options={typeFilterPickerOptions}
               placeholderDescription="Filtra por tipo de movimiento."
               placeholderLabel="Tipo"
               queryPlaceholder="Buscar tipo..."
+              showSearch={false}
               value={tableFilters.type}
             />
           </div>

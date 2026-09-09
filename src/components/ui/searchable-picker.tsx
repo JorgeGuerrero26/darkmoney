@@ -29,6 +29,8 @@ export type SearchablePickerProps = {
   actionLeadingLabel?: string;
   actionLeadingColor?: string;
   disabled?: boolean;
+  appearance?: "default" | "compact";
+  showSearch?: boolean;
 };
 
 const triggerClassName =
@@ -91,6 +93,8 @@ export function SearchablePicker({
   actionLeadingLabel,
   actionLeadingColor,
   disabled = false,
+  appearance = "default",
+  showSearch = true,
 }: SearchablePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -99,6 +103,7 @@ export function SearchablePicker({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const isCompact = appearance === "compact";
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -241,7 +246,11 @@ export function SearchablePicker({
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        className={triggerClassName}
+        className={
+          isCompact
+            ? "flex h-11 w-full items-center justify-between gap-3 rounded-[7px] border border-white/[0.08] bg-[#1a1917] px-3 text-left text-sm text-ink outline-none transition hover:border-white/[0.14] focus-visible:border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            : triggerClassName
+        }
         disabled={disabled}
         onClick={() => {
           if (!isOpen) {
@@ -250,24 +259,30 @@ export function SearchablePicker({
           setIsOpen((currentValue) => !currentValue);
         }}
         ref={triggerRef}
-        style={getTriggerStyle(isOpen)}
+        style={isCompact ? undefined : getTriggerStyle(isOpen)}
         type="button"
       >
-        <span className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-          <LeadingChip
-            color={selectedOption?.leadingColor}
-            label={selectedOption?.leadingLabel ?? "?"}
-          />
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">
-              {selectedOption ? selectedOption.label : placeholderLabel}
-            </span>
-            <TruncatedDescription
-              className="mt-0.5 text-xs text-storm"
-              text={selectedOption ? selectedOption.description : placeholderDescription}
-            />
+        {isCompact ? (
+          <span className="min-w-0 truncate font-medium">
+            {selectedOption ? selectedOption.label : placeholderLabel}
           </span>
-        </span>
+        ) : (
+          <span className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <LeadingChip
+              color={selectedOption?.leadingColor}
+              label={selectedOption?.leadingLabel ?? "?"}
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-ink">
+                {selectedOption ? selectedOption.label : placeholderLabel}
+              </span>
+              <TruncatedDescription
+                className="mt-0.5 text-xs text-storm"
+                text={selectedOption ? selectedOption.description : placeholderDescription}
+              />
+            </span>
+          </span>
+        )}
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`}
         />
@@ -275,22 +290,32 @@ export function SearchablePicker({
 
       {isOpen ? createPortal(
         <div
-          className="animate-rise-in rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgb(10,15,24),rgb(8,12,20))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          className={
+            isCompact
+              ? "animate-rise-in rounded-[7px] border border-white/[0.1] bg-[#171614] p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.5)]"
+              : "animate-rise-in rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgb(10,15,24),rgb(8,12,20))] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.58)]"
+          }
           ref={dropdownRef}
           style={dropdownStyle}
         >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
-            <input
-              autoFocus
-              className="w-full rounded-2xl border border-white/10 bg-[#101928] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder={queryPlaceholder}
-              type="text"
-              value={query}
-            />
-          </div>
+          {showSearch ? (
+            <div className="relative">
+              <Search className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-storm ${isCompact ? "left-3" : "left-4"}`} />
+              <input
+                autoFocus
+                className={
+                  isCompact
+                    ? "w-full rounded-[5px] border border-white/[0.08] bg-[#11110f] py-2.5 pl-9 pr-3 text-sm text-ink outline-none placeholder:text-storm/70 focus:border-white/20"
+                    : "w-full rounded-2xl border border-white/10 bg-[#101928] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+                }
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={queryPlaceholder}
+                type="text"
+                value={query}
+              />
+            </div>
+          ) : null}
 
           {onAction && actionLabel ? (
             <button
@@ -320,7 +345,7 @@ export function SearchablePicker({
           ) : null}
 
           <div
-            className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1"
+            className={`${showSearch || (onAction && actionLabel) ? "mt-3" : ""} max-h-72 overflow-y-auto ${isCompact ? "divide-y divide-white/[0.07]" : "space-y-1 pr-1"}`}
             role="listbox"
           >
             {filteredOptions.length ? (
@@ -331,37 +356,40 @@ export function SearchablePicker({
                 return (
                   <button
                     aria-selected={isSelected}
-                    className={`flex w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 py-3 text-left transition duration-200 ${
-                      isSelected ? "text-ink" : "text-storm hover:text-ink"
-                    }`}
+                    className={
+                      isCompact
+                        ? `flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition ${isSelected ? "text-ink" : "text-storm hover:bg-white/[0.04] hover:text-ink"}`
+                        : `flex w-full items-center justify-between gap-2.5 rounded-2xl border px-3.5 py-3 text-left transition duration-200 ${isSelected ? "text-ink" : "text-storm hover:text-ink"}`
+                    }
                     key={option.value}
                     onClick={() => selectOption(option)}
                     onPointerEnter={() => setHighlightedIndex(index)}
                     role="option"
-                    style={getOptionStyle(isSelected, isHighlighted)}
+                    style={isCompact ? undefined : getOptionStyle(isSelected, isHighlighted)}
                     type="button"
                   >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <LeadingChip
-                        color={option.leadingColor}
-                        label={option.leadingLabel}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-ink">
-                          {option.label}
+                    {isCompact ? (
+                      <span className="truncate font-medium">{option.label}</span>
+                    ) : (
+                      <span className="flex min-w-0 items-center gap-3">
+                        <LeadingChip color={option.leadingColor} label={option.leadingLabel} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-ink">
+                            {option.label}
+                          </span>
+                          <TruncatedDescription
+                            className="mt-0.5 text-xs text-storm"
+                            text={option.description}
+                          />
                         </span>
-                        <TruncatedDescription
-                          className="mt-0.5 text-xs text-storm"
-                          text={option.description}
-                        />
                       </span>
-                    </span>
-                    {isSelected ? <Check className="h-4 w-4 shrink-0 text-pine" /> : null}
+                    )}
+                    {isSelected ? <Check className={`h-4 w-4 shrink-0 ${isCompact ? "text-ink" : "text-pine"}`} /> : null}
                   </button>
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgb(14,21,32),rgb(11,17,26))] px-4 py-5 text-sm text-storm">
+              <div className={isCompact ? "px-3 py-4 text-sm text-storm" : "rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgb(14,21,32),rgb(11,17,26))] px-4 py-5 text-sm text-storm"}>
                 {emptyMessage}
               </div>
             )}
