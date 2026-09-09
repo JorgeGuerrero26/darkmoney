@@ -1733,6 +1733,181 @@ export function DashboardPage() {
             </article>
           </div>
         </section>
+
+        <section className="border-t border-white/[0.07] pt-7">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Evolución</p>
+              <h2 className="mt-1 font-display text-xl font-semibold text-ink">Cómo se mueve tu dinero</h2>
+            </div>
+            <div className="flex rounded-[8px] border border-white/[0.08] bg-[#1a1917] p-1">
+              {([
+                ["savings", "Neto"],
+                ["expense", "Salidas"],
+                ["income", "Entradas"],
+                ["transfer", "Traspasos"],
+              ] as const).map(([value, label]) => (
+                <button
+                  className={`rounded-[6px] px-3 py-1.5 text-xs transition ${chronologicalTrendTab === value ? "bg-[#f4f1ec] text-[#141312]" : "text-storm hover:text-ink"}`}
+                  key={value}
+                  onClick={() => setChronologicalTrendTab(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-4">
+            {chronologicalTrendTab === "savings" ? (
+              <SavingsLineChart currencyCode={displayCurrencyCode} dayMovements={movementsForSelectedChronologicalDay} onSelect={setSelectedTrendIndex} points={trendFilteredSavingsSeries} selectedIndex={selectedTrendSafeIndex} />
+            ) : null}
+            {chronologicalTrendTab === "expense" ? (
+              <FlowLineChart chartTitle="Salidas acumuladas" comparisonDailyLabel="Comparación" currencyCode={displayCurrencyCode} dailyLabel="Salió ese día" movementsForDay={expenseMovementsSelectedDay} onSelect={setSelectedTrendIndex} points={trendFilteredExpenseFlowSeries} selectedIndex={selectedTrendSafeIndex} variant="expense" />
+            ) : null}
+            {chronologicalTrendTab === "income" ? (
+              <FlowLineChart chartTitle="Entradas acumuladas" comparisonDailyLabel="Comparación" currencyCode={displayCurrencyCode} dailyLabel="Entró ese día" movementsForDay={incomeMovementsSelectedDay} onSelect={setSelectedTrendIndex} points={trendFilteredIncomeFlowSeries} selectedIndex={selectedTrendSafeIndex} variant="income" />
+            ) : null}
+            {chronologicalTrendTab === "transfer" ? (
+              <FlowLineChart chartTitle="Traspasos acumulados" comparisonDailyLabel="Comparación" currencyCode={displayCurrencyCode} dailyLabel="Traspasado ese día" movementsForDay={transferMovementsSelectedDay} onSelect={setSelectedTrendIndex} points={transferFlowSeries} selectedIndex={selectedTrendSafeIndex} variant="transfer" />
+            ) : null}
+          </div>
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-2">
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-lg font-semibold text-ink">Gasto por categoría</h3>
+              <Link className="text-xs text-storm hover:text-ink" to="/app/categories">Ver categorías →</Link>
+            </div>
+            <p className="mt-1 text-sm text-storm">Período actual frente al anterior.</p>
+            <div className="mt-5 space-y-4">
+              {visibleCategories.length ? visibleCategories.map((item) => (
+                <div key={item.key}>
+                  <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-storm">{item.name}</span><span className="font-medium text-ink">{formatCurrency(item.current, displayCurrencyCode)}</span></div>
+                  <div className="mt-2 space-y-1">
+                    <div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.current / maxCategoryAmount) * 100}%` }} /></div>
+                    <div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-white/20" style={{ width: `${(item.previous / maxCategoryAmount) * 100}%` }} /></div>
+                  </div>
+                </div>
+              )) : <p className="text-sm text-storm">Aún no hay gastos categorizados en este período.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-lg font-semibold text-ink">Dinero por cuenta</h3>
+              <Link className="text-xs text-storm hover:text-ink" to="/app/accounts">Ver cuentas →</Link>
+            </div>
+            <p className="mt-1 text-sm text-storm">Participación de cada cuenta en el saldo visible.</p>
+            <div className="mt-5 space-y-4">
+              {visibleAccountsBreakdown.length ? visibleAccountsBreakdown.map((item) => (
+                <div key={item.account.id}>
+                  <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-storm">{item.account.name}</span><span className="font-medium text-ink">{formatCurrency(item.account.currentBalance, item.account.currencyCode)}</span></div>
+                  <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.share / maxAccountShare) * 100}%` }} /></div>
+                </div>
+              )) : <p className="text-sm text-storm">Aún no hay cuentas activas para comparar.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Pulso mensual</h3>
+            <p className="mt-1 text-sm text-storm">Entradas y salidas de los últimos meses.</p>
+            <div className="mt-5 flex h-44 items-end gap-3 border-b border-white/[0.07] pb-2">
+              {monthlyPulse.length ? monthlyPulse.map((item) => (
+                <div className="flex min-w-0 flex-1 flex-col items-center gap-2" key={item.key} title={`${item.label}: ${formatCurrency(item.net, displayCurrencyCode)}`}>
+                  <div className="flex h-32 w-full items-end justify-center gap-1">
+                    <div className="w-[38%] rounded-t-[3px] bg-pine" style={{ height: `${Math.max(2, (item.income / maxMonthlyAmount) * 100)}%` }} />
+                    <div className="w-[38%] rounded-t-[3px] bg-[#f4f1ec]" style={{ height: `${Math.max(2, (item.expense / maxMonthlyAmount) * 100)}%` }} />
+                  </div>
+                  <span className="truncate text-[10px] text-storm">{item.label}</span>
+                </div>
+              )) : <p className="m-auto text-sm text-storm">Sin historia mensual todavía.</p>}
+            </div>
+            <div className="mt-3 flex gap-4 text-xs text-storm"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-pine" />Entradas</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-[#f4f1ec]" />Salidas</span></div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Ritmo semanal</h3>
+            <p className="mt-1 text-sm text-storm">Días que concentran entradas y salidas.</p>
+            <div className="mt-5 space-y-3">
+              {crossFilteredWeekdayPattern.map((item) => (
+                <div className="grid grid-cols-[72px_1fr_auto] items-center gap-3" key={item.key}>
+                  <span className="text-xs text-storm">{item.label}</span>
+                  <div className="space-y-1"><div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-pine" style={{ width: `${(item.income / maxCrossFilteredWeekdayAmount) * 100}%` }} /></div><div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.expense / maxCrossFilteredWeekdayAmount) * 100}%` }} /></div></div>
+                  <span className="text-xs font-medium text-ink">{formatCurrency(item.net, displayCurrencyCode)}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Cartera por estado</h3>
+            <p className="mt-1 text-sm text-storm">Importes al día, próximos y vencidos.</p>
+            <div className="mt-5 space-y-4">
+              {obligationAgingBuckets.map((bucket) => {
+                const maxAmount = Math.max(1, ...obligationAgingBuckets.map((item) => item.amount));
+                return <div key={bucket.key}><div className="flex items-center justify-between gap-3 text-xs"><span className="text-storm">{bucket.label} · {bucket.count}</span><span className="font-medium text-ink">{formatCurrency(bucket.amount, displayCurrencyCode)}</span></div><div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(bucket.amount / maxAmount) * 100}%` }} /></div></div>;
+              })}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Próximos 30 días</h3>
+            <p className="mt-1 text-sm text-storm">Entradas y salidas ya comprometidas.</p>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              {futureFlowWindows.map((window) => {
+                const maxFlow = Math.max(1, window.expectedInflow, window.expectedOutflow);
+                return <div className="rounded-[7px] border border-white/[0.07] p-3" key={window.days}><p className="font-public-mono text-[10px] uppercase text-storm">{window.days} días</p><div className="mt-3 flex h-24 items-end justify-center gap-1"><div className="w-5 rounded-t-[3px] bg-pine" style={{ height: `${Math.max(2, (window.expectedInflow / maxFlow) * 100)}%` }} /><div className="w-5 rounded-t-[3px] bg-[#f4f1ec]" style={{ height: `${Math.max(2, (window.expectedOutflow / maxFlow) * 100)}%` }} /></div><p className="mt-2 truncate text-center text-xs font-medium text-ink">{formatCurrency(window.estimatedBalance, displayCurrencyCode)}</p></div>;
+              })}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Exposición por moneda</h3>
+            <p className="mt-1 text-sm text-storm">Composición del dinero antes de consolidarlo.</p>
+            <div className="mt-5 space-y-4">
+              {currencyExposure.length ? currencyExposure.map((item) => (
+                <div key={item.currencyCode}><div className="flex items-center justify-between gap-3 text-xs"><span className="text-storm">{item.currencyCode} · {item.accountCount} cuentas</span><span className="font-medium text-ink">{formatCurrency(item.amount, displayCurrencyCode)}</span></div><div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.amount / maxCurrencyExposure) * 100}%` }} /></div></div>
+              )) : <p className="text-sm text-storm">Sin exposición visible.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-lg font-semibold text-ink">Uso de presupuestos</h3>
+              <Link className="text-xs text-storm hover:text-ink" to="/app/budgets">Ver presupuestos →</Link>
+            </div>
+            <p className="mt-1 text-sm text-storm">Consumo frente al límite vigente.</p>
+            <div className="mt-5 space-y-4">
+              {budgetLeaders.length ? budgetLeaders.map((budget) => {
+                const usage = budget.limitAmount > 0 ? Math.min(100, (budget.spentAmount / budget.limitAmount) * 100) : 0;
+                return (
+                  <div key={budget.id}>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="truncate text-storm">{budget.name}</span>
+                      <span className="font-medium text-ink">{formatCurrency(budget.spentAmount, displayCurrencyCode)} / {formatCurrency(budget.limitAmount, displayCurrencyCode)}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]">
+                      <div className={`h-full rounded-full ${usage >= 90 ? "bg-rosewood" : "bg-[#f4f1ec]"}`} style={{ width: `${usage}%` }} />
+                    </div>
+                  </div>
+                );
+              }) : <p className="text-sm text-storm">Aún no hay presupuestos vigentes.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+            <h3 className="font-display text-lg font-semibold text-ink">Flujo entre cuentas</h3>
+            <p className="mt-1 text-sm text-storm">Rutas de transferencia más usadas.</p>
+            <div className="mt-5 space-y-4">
+              {visibleTransferRoutes.length ? visibleTransferRoutes.map((route) => {
+                const maxRoute = Math.max(1, ...visibleTransferRoutes.map((item) => item.amount));
+                return <div key={route.key}><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-storm">{route.label} · {route.count}</span><span className="font-medium text-ink">{formatCurrency(route.amount, displayCurrencyCode)}</span></div><div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(route.amount / maxRoute) * 100}%` }} /></div></div>;
+              }) : <p className="text-sm text-storm">Aún no hay transferencias en el período.</p>}
+            </div>
+          </article>
+        </section>
       </div>
     );
   }
