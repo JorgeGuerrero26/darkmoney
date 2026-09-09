@@ -15,16 +15,16 @@ export function PageHeader({
   children,
 }: PageHeaderProps) {
   return (
-    <section className="glass-panel-strong rounded-[30px] p-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.28em] text-storm/90">{eyebrow}</p>
-          <h2 className="font-display text-4xl font-semibold text-ink">{title}</h2>
-          <p className="max-w-3xl text-sm leading-7 text-storm">{description}</p>
+    <section className="min-w-0">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">{eyebrow}</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-0.02em] text-ink">{title}</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-storm">{description}</p>
         </div>
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
       </div>
-      {children ? <div className="mt-6">{children}</div> : null}
+      {children ? <div className="mt-4">{children}</div> : null}
     </section>
   );
 }

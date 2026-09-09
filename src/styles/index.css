@@ -93,6 +93,37 @@
     background-color: rgba(255, 255, 255, 0.03);
   }
 
+  .app-v39 .glass-panel,
+  .app-v39 .glass-panel-strong,
+  .app-v39 .glass-panel-soft {
+    border-color: rgba(244, 241, 236, 0.08);
+    border-radius: 10px;
+    background: #1a1917;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .app-v39 .field-dark {
+    min-height: 42px;
+    border-color: rgba(244, 241, 236, 0.1);
+    border-radius: 7px;
+    background: #1a1917;
+  }
+
+  .app-v39 .field-dark:focus {
+    border-color: rgba(244, 241, 236, 0.3);
+    background: #1d1b19;
+    box-shadow: 0 0 0 3px rgba(244, 241, 236, 0.05);
+  }
+
+  .app-v39 table {
+    border-collapse: collapse;
+  }
+
+  .app-v39 tbody tr {
+    cursor: pointer;
+  }
+
   .public-form-card {
     border: 1px solid rgba(244, 241, 236, 0.08);
     border-radius: 12px;

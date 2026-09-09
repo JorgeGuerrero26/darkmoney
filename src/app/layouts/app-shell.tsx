@@ -21,13 +21,11 @@ import {
   Shapes,
   Sparkles,
   TrendingUp,
-  Users,
   Wallet,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
 import { CommandPalette, type CommandAction } from "../../components/command-palette/command-palette";
@@ -35,7 +33,6 @@ import { OnboardingTour } from "../../components/onboarding/onboarding-tour";
 import { useOnboardingTour } from "../../components/onboarding/use-onboarding-tour";
 import { BrandLogo } from "../../components/ui/brand-logo";
 import { DataState } from "../../components/ui/data-state";
-import { InfoTip } from "../../components/ui/info-tip";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { useToast } from "../../components/ui/toast-provider";
 import { useAuth } from "../../modules/auth/auth-context";
@@ -57,91 +54,24 @@ import {
 } from "../../services/queries/workspace-data";
 import { getPublicAppUrl } from "../../lib/app-url";
 import { isPaddleCheckoutConfigured, openPaddleProCheckout } from "../../lib/paddle";
-import { isSupabaseConfigured } from "../../services/supabase/client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import type { Workspace } from "../../types/domain";
 import { PRO_ADMIN_EMAIL } from "../../modules/shared/use-pro-feature-access";
 
 const compactNavigation = [
-  { to: "/app", label: "Dashboard", icon: LayoutGrid, end: true },
-  { to: "/app/accounts", label: "Cuentas", icon: Wallet },
+  { to: "/app", label: "Inicio", icon: LayoutGrid, end: true },
   { to: "/app/movements", label: "Movimientos", icon: Gauge },
-  { to: "/app/categories", label: "Categorías", icon: Shapes },
-  { to: "/app/budgets", label: "Presupuestos", icon: PiggyBank },
-  { to: "/app/contacts", label: "Contactos", icon: Users },
+  { to: "/app/accounts", label: "Cuentas", icon: Wallet },
   { to: "/app/obligations", label: "Créditos y deudas", icon: HandCoins },
   { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
   { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
-  { to: "/app/notifications", label: "Notificaciones", icon: Bell },
+  { to: "/app/budgets", label: "Presupuestos", icon: PiggyBank },
+  { to: "/app/categories", label: "Categorías y contactos", icon: Shapes },
   { to: "/app/settings", label: "Configuración", icon: Settings },
 ];
 
-type NavigationItem = {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-  end?: boolean;
-};
-
-type NavigationGroupId = "operations" | "planning" | "catalogs" | "relations" | "system";
-
-type NavigationGroup = {
-  id: NavigationGroupId;
-  title: string;
-  summary: string;
-  items: NavigationItem[];
-};
-
-const dashboardNavigationItem: NavigationItem = {
-  to: "/app",
-  label: "Dashboard",
-  icon: LayoutGrid,
-  end: true,
-};
-
-const navigationGroups: NavigationGroup[] = [
-  {
-    id: "operations",
-    title: "Operacion",
-    summary: "Cuentas, flujo y cobros",
-    items: [
-      { to: "/app/accounts", label: "Cuentas", icon: Wallet },
-      { to: "/app/movements", label: "Movimientos", icon: Gauge },
-      { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
-      { to: "/app/subscriptions", label: "Suscripciones", icon: CreditCard },
-    ],
-  },
-  {
-    id: "planning",
-    title: "Planeacion",
-    summary: "Presupuestos y seguimiento",
-    items: [{ to: "/app/budgets", label: "Presupuestos", icon: PiggyBank }],
-  },
-  {
-    id: "catalogs",
-    title: "Catalogos",
-    summary: "Base y clasificacion",
-    items: [
-      { to: "/app/categories", label: "Categorias", icon: Shapes },
-      { to: "/app/contacts", label: "Contactos", icon: Users },
-    ],
-  },
-  {
-    id: "relations",
-    title: "Relaciones",
-    summary: "Creditos y terceros",
-    items: [{ to: "/app/obligations", label: "Creditos y deudas", icon: HandCoins }],
-  },
-  {
-    id: "system",
-    title: "Sistema",
-    summary: "Alertas y ajustes",
-    items: [
-      { to: "/app/notifications", label: "Notificaciones", icon: Bell },
-      { to: "/app/settings", label: "Configuracion", icon: Settings },
-    ],
-  },
-];
+const primaryNavigation = compactNavigation.slice(0, 7);
+const secondaryNavigation = compactNavigation.slice(7);
 
 const PRO_BANNER_DISMISS_PREFIX = "darkmoney.pro-banner.dismissed-until";
 const PRO_BANNER_SNOOZE_DAYS = 7;
@@ -314,18 +244,14 @@ function WorkspacePicker({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label="Seleccionar workspace activo"
-        className={`flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-3.5 py-3 text-left text-ink transition duration-200 hover:border-white/16 hover:bg-white/[0.06] ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`flex h-[52px] w-full items-center justify-between gap-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-3 text-left text-ink transition hover:border-white/15 ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
       >
         <span className="flex min-w-0 items-center gap-2.5">
           <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/10 text-xs font-semibold text-ink"
-            style={{
-              backgroundColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}22` : "rgba(255,255,255,0.04)",
-              borderColor: selectedWorkspace ? `${getWorkspaceAccentColor(selectedWorkspace.kind)}55` : undefined,
-            }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] bg-[#f4f1ec] text-[10px] font-semibold text-[#141312]"
           >
             {selectedWorkspace ? buildInitials(selectedWorkspace.name, "WS") : "WS"}
           </span>
@@ -344,12 +270,12 @@ function WorkspacePicker({
       </button>
 
       {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[30px] border border-white/10 bg-[#0a111b] p-3 shadow-[0_30px_80px_rgba(0,0,0,0.62)]">
+        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 rounded-[12px] border border-white/10 bg-[#1a1917] p-3 shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
             <input
               autoFocus
-              className="w-full rounded-[22px] border border-white/10 bg-[#111a28] py-3.5 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"
+              className="w-full rounded-[8px] border border-white/10 bg-[#141312] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-white/25"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar workspace..."
               type="text"
@@ -437,9 +363,7 @@ function AppShellContent() {
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [openNavigationGroup, setOpenNavigationGroup] = useState<NavigationGroupId | null>("operations");
   const { showToast } = useToast();
-  const location = useLocation();
   const navigate = useNavigate();
   const { profile, saveAvatar, signOut, user } = useAuth();
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
@@ -447,7 +371,6 @@ function AppShellContent() {
   const {
     activeWorkspace,
     error,
-    isFetching: isWorkspacesFetching,
     isLoading,
     setActiveWorkspaceId,
     workspaces,
@@ -474,33 +397,9 @@ function AppShellContent() {
   const normalizedBillingStatus = entitlementQuery.data?.billingStatus?.trim().toLowerCase() ?? null;
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
   const workspaceInitials = buildInitials(activeWorkspace?.name, "WS");
-  const activeNavigationGroup = useMemo(
-    () =>
-      navigationGroups.find((group) =>
-        group.items.some((item) => location.pathname === item.to),
-      )?.id ?? null,
-    [location.pathname],
-  );
   const workspaceErrorMessage = error
     ? getQueryErrorMessage(error, "No se pudieron cargar tus workspaces.")
     : "";
-  const shellStatus = !isSupabaseConfigured
-    ? { label: "Supabase pendiente", tone: "warning" as const }
-    : error
-      ? { label: "Revision RLS", tone: "danger" as const }
-      : activeWorkspace && (isWorkspacesFetching || workspaceSnapshotQuery.isFetching)
-        ? { label: "Actualizando", tone: "info" as const }
-      : activeWorkspace
-        ? { label: "Datos en vivo", tone: "success" as const }
-        : { label: "Sin workspace", tone: "warning" as const };
-  const shellDescription = error
-    ? workspaceErrorMessage
-    : activeWorkspace
-      ? activeWorkspace.description ||
-        "Todos tus movimientos, cuentas y datos financieros están disponibles."
-      : isLoading
-        ? "Preparando tu espacio financiero, solo toma un momento."
-        : "No encontramos workspaces activos para esta cuenta todavía.";
 
   async function handleSignOut() {
     await signOut();
@@ -773,12 +672,6 @@ function AppShellContent() {
     setIsProBannerDismissed(Boolean(dismissedUntil && dismissedUntilTimestamp > Date.now()));
   }, [hasProAccess, user?.id]);
 
-  useEffect(() => {
-    if (activeNavigationGroup) {
-      setOpenNavigationGroup(activeNavigationGroup);
-    }
-  }, [activeNavigationGroup]);
-
   function handleDismissProBanner() {
     if (!user?.id) {
       setIsProBannerDismissed(true);
@@ -792,7 +685,7 @@ function AppShellContent() {
   }
 
   return (
-    <div className="min-h-screen bg-glow text-ink lg:h-screen lg:overflow-hidden">
+    <div className="app-v39 min-h-screen bg-[#141312] font-public-body text-ink lg:h-screen lg:overflow-hidden">
       <a className="skip-to-content" href="#main-content">
         Saltar al contenido principal
       </a>
@@ -805,13 +698,13 @@ function AppShellContent() {
         />
       ) : null}
 
-      <div className="flex min-h-screen w-full gap-4 px-2 py-2 sm:px-3 sm:py-3 lg:h-full lg:min-h-0 lg:gap-5 lg:px-4 lg:py-4">
+      <div className="flex min-h-screen w-full lg:h-full lg:min-h-0">
         <aside
           aria-label="Menú principal"
-          className={`fixed inset-y-3 left-3 z-50 w-[296px] overflow-y-auto overscroll-contain rounded-[30px] border border-white/[0.08] bg-canvas/80 px-5 py-5 text-ink backdrop-blur-2xl transition-[transform,width,padding] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-50 w-[232px] overflow-y-auto overscroll-contain border-r border-white/[0.07] bg-[#0f0e0d] px-4 py-5 text-ink transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-hidden lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-[120%]"
           } ${
-            isSidebarCollapsed ? "lg:w-[132px] lg:px-4" : "lg:w-[296px] lg:px-5"
+            isSidebarCollapsed ? "lg:w-[76px] lg:px-3" : "lg:w-[232px] lg:px-4"
           }`}
         >
           <div className="flex h-full min-h-0 flex-col">
@@ -825,21 +718,18 @@ function AppShellContent() {
               >
                 {isSidebarCollapsed ? (
                   <BrandLogo
-                    className="h-12 w-12 rounded-2xl"
+                    className="h-9 w-9 rounded-[9px]"
                     imageClassName="scale-[1.02] object-[center_48%]"
                   />
                 ) : (
                   <div className="flex w-full items-center gap-3">
                     <BrandLogo
-                      className="h-12 w-12 rounded-2xl"
+                      className="h-9 w-9 rounded-[9px]"
                       imageClassName="scale-[1.02] object-[center_48%]"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="font-display text-base font-semibold tracking-tight text-ink">
+                      <p className="font-public-display text-[15px] font-semibold tracking-tight text-ink">
                         DarkMoney
-                      </p>
-                      <p className="text-[0.62rem] uppercase tracking-[0.22em] text-pine/70">
-                        Finanzas claras
                       </p>
                     </div>
                     <button
@@ -884,10 +774,7 @@ function AppShellContent() {
                   : "lg:pr-1"
               }`}
             >
-            <div className={`mt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`} data-tour="workspace-picker">
-              <p className="mb-1.5 text-[0.58rem] font-semibold uppercase tracking-[0.22em] text-storm/55">
-                Workspace
-              </p>
+            <div className={`mt-5 ${isSidebarCollapsed ? "lg:hidden" : ""}`} data-tour="workspace-picker">
               <WorkspacePicker
                 activeWorkspaceId={activeWorkspace?.id ?? null}
                 disabled={!workspaces.length}
@@ -965,110 +852,40 @@ function AppShellContent() {
             </nav>
 
             {!isSidebarCollapsed ? (
-              <nav aria-label="Navegacion principal agrupada" className="mt-7 space-y-1">
-                <NavLink
-                  className={({ isActive }) =>
-                    `group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition duration-200 ${
-                      isActive
-                        ? "bg-white/[0.06] text-ink"
-                        : "text-storm hover:translate-x-0.5 hover:bg-white/[0.03] hover:text-ink"
-                    }`
-                  }
-                  end={dashboardNavigationItem.end}
-                  onClick={() => setSidebarOpen(false)}
-                  to={dashboardNavigationItem.to}
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        className={`absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full transition ${
-                          isActive ? "bg-pine" : "bg-transparent"
-                        }`}
-                      />
-                      <LayoutGrid className="h-4 w-4" />
-                      <span>{dashboardNavigationItem.label}</span>
-                    </>
-                  )}
-                </NavLink>
-
-                {navigationGroups.map((group) => {
-                  const isGroupActive = group.items.some((item) => location.pathname === item.to);
-                  const isOpen = openNavigationGroup === group.id;
-
-                  return (
-                    <div className="pt-4 first:pt-0" key={group.id}>
-                      <button
-                        className="flex w-full items-center justify-between gap-2 rounded-lg px-3.5 py-1 text-left transition duration-200 hover:text-ink"
-                        onClick={() =>
-                          setOpenNavigationGroup((current) => (current === group.id ? null : group.id))
-                        }
-                        title={group.summary}
-                        type="button"
-                      >
-                        <span
-                          className={`text-[0.6rem] font-semibold uppercase tracking-[0.22em] transition ${
-                            isGroupActive || isOpen ? "text-storm/80" : "text-storm/50"
-                          }`}
+              <nav aria-label="Navegación principal" className="mt-5 space-y-1">
+                {[primaryNavigation, secondaryNavigation].map((items, groupIndex) => (
+                  <div
+                    className={groupIndex === 1 ? "mt-3 border-t border-white/[0.07] pt-3" : "space-y-1"}
+                    key={groupIndex}
+                  >
+                    {items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <NavLink
+                          className={({ isActive }) =>
+                            `flex h-9 items-center gap-3 rounded-[7px] px-3 text-[13px] transition ${
+                              isActive
+                                ? "bg-[#252320] font-medium text-ink"
+                                : "text-storm hover:bg-white/[0.035] hover:text-ink"
+                            }`
+                          }
+                          end={item.end}
+                          key={item.to}
+                          onClick={() => setSidebarOpen(false)}
+                          to={item.to}
                         >
-                          {group.title}
-                        </span>
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 shrink-0 transition ${
-                            isOpen ? "rotate-180 text-storm/70" : "text-storm/40"
-                          }`}
-                        />
-                      </button>
-
-                      {isOpen ? (
-                        <div className="mt-1 space-y-0.5">
-                          {group.items.map((item) => {
-                            const Icon = item.icon;
-                            const isNotificationsItem = item.to === "/app/notifications";
-
-                            return (
-                              <NavLink
-                                className={({ isActive }) =>
-                                  `group relative flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition duration-200 ${
-                                    isActive
-                                      ? "bg-white/[0.06] font-medium text-ink"
-                                      : "text-storm hover:translate-x-0.5 hover:bg-white/[0.03] hover:text-ink"
-                                  }`
-                                }
-                                key={item.to}
-                                onClick={() => setSidebarOpen(false)}
-                                to={item.to}
-                              >
-                                {({ isActive }) => (
-                                  <>
-                                    <span
-                                      className={`absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full transition ${
-                                        isActive ? "bg-pine" : "bg-transparent"
-                                      }`}
-                                    />
-                                    <span className="relative inline-flex">
-                                      <Icon className="h-4 w-4" />
-                                      {isNotificationsItem && unreadNotificationsCount > 0 ? (
-                                        <span className="absolute -right-2 -top-2 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ff6b7a] px-1 text-[9px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.35)]">
-                                          {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    <span>{item.label}</span>
-                                  </>
-                                )}
-                              </NavLink>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                          <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                ))}
               </nav>
             ) : null}
             </div>
 
-            <div className={`mt-6 rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.03] p-4 backdrop-blur-2xl ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
+            <div className={`mt-auto border-t border-white/[0.07] px-1 pt-4 ${isSidebarCollapsed ? "lg:hidden" : ""}`}>
               <div className="flex items-center gap-3">
                 <IdentityAvatar
                   imageUrl={profile?.avatarUrl}
@@ -1078,7 +895,7 @@ function AppShellContent() {
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{currentUserName}</p>
-                  <p className="truncate text-xs text-storm">{currentUserEmail}</p>
+                  <p className="truncate text-xs text-storm">Plan {hasProAccess ? "Pro" : "Free"}</p>
                 </div>
                 <StatusBadge
                   status={hasProAccess ? "Pro" : "Free"}
@@ -1092,7 +909,7 @@ function AppShellContent() {
                   type="button"
                 >
                   <LogOut className="h-4 w-4" />
-                  Cerrar sesion
+                  Cerrar sesión
                 </button>
                 {!hasProAccess && !entitlementQuery.isLoading ? (
                   <button
@@ -1173,9 +990,9 @@ function AppShellContent() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:ml-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1" id="main-content" tabIndex={-1}>
-          <header aria-label="Encabezado del workspace" className="glass-panel rounded-[24px] px-4 py-3.5 sm:px-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <main className="flex min-w-0 flex-1 flex-col gap-0 lg:min-h-0 lg:overflow-y-auto" id="main-content" tabIndex={-1}>
+          <header aria-label="Encabezado del workspace" className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
+            <div className="flex min-h-9 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   aria-label="Abrir menú"
@@ -1186,40 +1003,21 @@ function AppShellContent() {
                   <Menu className="h-5 w-5" />
                 </button>
 
-                <div className="min-w-0">
-                  <p className="text-[0.62rem] uppercase tracking-[0.22em] text-storm/70">
-                    Workspace activo
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2.5">
-                    <h1 className="truncate font-display text-2xl font-semibold tracking-[-0.02em]">
-                      {activeWorkspace?.name ?? (isLoading ? "Tu workspace" : "Sin workspace")}
-                    </h1>
-                    <StatusBadge
-                      className={shellStatus.label === "Actualizando" ? "animate-soft-pulse" : ""}
-                      status={shellStatus.label}
-                      tone={shellStatus.tone}
-                    />
-                    <InfoTip ariaLabel="Acerca de este workspace">{shellDescription}</InfoTip>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 <button
-                  aria-label="Abrir paleta de comandos"
-                  className="hidden h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 text-xs text-storm transition duration-200 hover:border-white/16 hover:text-ink lg:inline-flex"
+                  className="hidden w-[320px] items-center gap-2 rounded-[7px] border border-white/[0.08] bg-[#1a1917] px-3 py-2 text-left text-[13px] text-storm transition hover:border-white/15 hover:text-ink lg:flex"
                   onClick={() => setIsPaletteOpen(true)}
-                  title="Paleta de comandos (Ctrl+K)"
                   type="button"
                 >
                   <Search className="h-3.5 w-3.5" />
-                  <kbd className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px]">
-                    Ctrl K
-                  </kbd>
+                  <span className="flex-1">Buscar en DarkMoney</span>
+                  <kbd className="font-public-mono text-[10px] text-storm/60">Ctrl K</kbd>
                 </button>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <button
                   aria-label="Ver alertas"
-                  className="relative col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 text-sm font-semibold text-storm transition duration-200 hover:border-white/16 hover:text-ink sm:col-span-1 sm:w-11 sm:gap-0 sm:px-0"
+                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink"
                   onClick={() => navigate("/app/notifications")}
                   title="Alertas"
                   type="button"
@@ -1233,31 +1031,13 @@ function AppShellContent() {
                   ) : null}
                 </button>
                 <button
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-rosewood/20 bg-rosewood/[0.08] px-3.5 text-sm font-semibold text-rosewood transition duration-200 hover:border-rosewood/35 hover:bg-rosewood/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-[7px] bg-[#f4f1ec] px-3.5 text-[13px] font-semibold text-[#141312] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canUseQuickMovement}
                   onClick={() => openQuickMovement("expense")}
                   type="button"
                 >
-                  <Minus className="h-4 w-4" />
-                  Gasto
-                </button>
-                <button
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-pine/20 bg-pine/[0.08] px-3.5 text-sm font-semibold text-pine transition duration-200 hover:border-pine/35 hover:bg-pine/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!canUseQuickMovement}
-                  onClick={() => openQuickMovement("income")}
-                  type="button"
-                >
-                  <Plus className="h-4 w-4" />
-                  Ingreso
-                </button>
-                <button
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-ember/20 bg-ember/[0.08] px-3.5 text-sm font-semibold text-ember transition duration-200 hover:border-ember/35 hover:bg-ember/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!canUseQuickMovement}
-                  onClick={() => openQuickMovement("transfer")}
-                  type="button"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                  Transferencia
+                  <Plus className="h-3.5 w-3.5" />
+                  Nuevo movimiento
                 </button>
               </div>
             </div>
@@ -1276,7 +1056,7 @@ function AppShellContent() {
             ) : null}
           </header>
 
-          {shouldShowProBanner ? (
+          <div className="flex flex-col gap-6 px-4 pb-8 pt-6 sm:px-6 lg:px-[30px]">{shouldShowProBanner ? (
             <section className="animate-rise-in flex flex-wrap items-center gap-3 rounded-2xl border border-pine/20 bg-pine/[0.06] px-4 py-2.5">
               <Sparkles className="h-4 w-4 shrink-0 text-pine" />
               <p className="min-w-0 flex-1 text-sm text-storm">
@@ -1304,6 +1084,7 @@ function AppShellContent() {
           ) : null}
 
           <Outlet />
+          </div>
         </main>
       </div>
 
