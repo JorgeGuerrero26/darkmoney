@@ -191,13 +191,13 @@ export function ContactQuickCreateDialog({
     <div
       aria-labelledby="contact-create-title"
       aria-modal="true"
-      className="fixed inset-0 z-[95] isolate overflow-y-auto bg-[#02060d]/84 p-3 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-[#02060d]/70 before:backdrop-blur-2xl before:content-[''] sm:p-6"
+      className="fixed inset-0 z-[95] isolate overflow-y-auto bg-black/75 p-3 sm:p-6"
       onClick={handleRequestClose}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[860px] overflow-hidden rounded-[34px] [transform:translateZ(0)] border border-white/10 bg-[#060b12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onClick={(event) => event.stopPropagation()}>
-          <div className="pointer-events-none absolute inset-0">
+        <div className="animate-rise-in relative w-full max-w-[560px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]" onClick={(event) => event.stopPropagation()}>
+          <div className="hidden">
             <div
               className="absolute -left-12 top-8 h-48 w-48 rounded-full blur-3xl"
               style={{ backgroundColor: `${selectedType.color}30` }}
@@ -207,26 +207,13 @@ export function ContactQuickCreateDialog({
 
           <form className="relative flex flex-col" noValidate onSubmit={(event) => void handleSubmit(event)}>
             <div className="px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="max-w-2xl">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                      nuevo contacto
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
-                      {subtitle ?? "Crealo sin salir del formulario actual"}
-                    </span>
-                  </div>
-                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]" id="contact-create-title">
-                    Agregar contraparte
-                  </h2>
-                  <p className="mt-3 max-w-xl text-sm leading-7 text-storm">
-                    Registra rápido a la persona, empresa o banco relacionado y déjalo
-                    seleccionado para este movimiento.
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <h2 className="font-display text-xl font-semibold text-ink" id="contact-create-title">
+                  Nuevo contacto
+                </h2>
+                {subtitle ? <span className="sr-only">{subtitle}</span> : null}
                 <button
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
+                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
                   disabled={isSaving}
                   onClick={handleRequestClose}
                   type="button"
@@ -243,8 +230,8 @@ export function ContactQuickCreateDialog({
                 />
               ) : null}
 
-              <div className="mt-7 grid gap-5 lg:grid-cols-[1.02fr_0.98fr]">
-                <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,31,41,0.96),rgba(8,12,20,0.92))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+              <div className="mt-5 grid gap-4">
+                <div className="hidden">
                   <div className="flex items-start gap-4">
                     <div
                       className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-white/10 text-white"
@@ -344,7 +331,9 @@ export function ContactQuickCreateDialog({
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <details className="mt-5 rounded-xl border border-white/10 bg-[#141311] p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-ink">Detalles</summary>
+              <div className="mt-4 grid gap-4">
                 <div className="glass-panel-soft rounded-[30px] border border-white/10 bg-white/[0.04] p-5 sm:p-6">
                   <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                     Contacto
@@ -398,21 +387,14 @@ export function ContactQuickCreateDialog({
                   </label>
                 </div>
               </div>
+              </details>
             </div>
 
-            <div className="flex flex-col gap-4 border-t border-white/8 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <p className="text-sm text-storm">
-                También lo verás después en el módulo de contactos para editarlo o archivarlo.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button disabled={isSaving} onClick={handleRequestClose} type="button" variant="ghost">
-                  Cancelar
-                </Button>
+            <div className="flex justify-end border-t border-white/10 px-4 py-4 sm:px-6">
                 <Button disabled={isSaving} type="submit">
                   {isSaving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Crear contacto
                 </Button>
-              </div>
             </div>
           </form>
         </div>

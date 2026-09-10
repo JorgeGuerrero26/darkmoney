@@ -93,7 +93,7 @@ export function SearchablePicker({
   actionLeadingLabel,
   actionLeadingColor,
   disabled = false,
-  appearance = "default",
+  appearance = "compact",
   showSearch = true,
 }: SearchablePickerProps) {
   const [isOpen, setIsOpen] = useState(false);

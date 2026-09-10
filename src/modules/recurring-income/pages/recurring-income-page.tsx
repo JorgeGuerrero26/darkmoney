@@ -461,32 +461,18 @@ function EditorDialog({
     formState.frequency === "yearly";
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
             <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="max-w-3xl">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
-                      {isCreateMode ? "Nuevo ingreso recurrente" : "Editar ingreso recurrente"}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
-                      {isCreateMode ? "Quedara listo para seguirlo" : "Ajusta monto, ritmo y recordatorios"}
-                    </span>
-                  </div>
-                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.7rem]">
-                    {isCreateMode ? "Registrar ingreso recurrente" : "Actualizar ingreso recurrente"}
-                  </h2>
-                  <p className="mt-4 max-w-2xl text-base leading-9 text-storm">
-                    Configura el monto, la frecuencia, los recordatorios y la cuenta sugerida para
-                    tener tus ingresos fijos bajo control.
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <h2 className="font-display text-xl font-semibold text-ink">
+                  {isCreateMode ? "Nuevo ingreso recurrente" : "Editar ingreso recurrente"}
+                </h2>
 
                 <button
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
+                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
                   onClick={closeEditor}
                   type="button"
                 >
@@ -502,7 +488,7 @@ function EditorDialog({
                 />
               ) : null}
 
-              <div className="glass-panel-soft mt-7 rounded-[24px] p-5 sm:p-6">
+              <div className="hidden">
                 <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
                   <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                     <div className="flex items-start gap-4">
@@ -542,11 +528,11 @@ function EditorDialog({
                 </div>
               </div>
 
-              <div className="mt-4 sm:mt-7 grid gap-3 sm:gap-5 lg:grid-cols-2">
+              <div className="mt-5 grid gap-4 [&>*:nth-child(2)]:order-first">
                 <div className={panelClassName}>
                   <p className={labelClassName}>Identidad</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Base del ingreso recurrente</h3>
-                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-4">
                     <Field errorKey="name" hint="Nombre visible para reconocerlo en la app." invalidFields={invalidFields} label="Nombre">
                       <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Sueldo mensual" type="text" value={formState.name} />
                     </Field>
@@ -565,7 +551,7 @@ function EditorDialog({
                 <div className={panelClassName}>
                   <p className={labelClassName}>Monto</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Monto y moneda</h3>
-                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-4">
                     <Field errorKey="amount" hint="Monto esperado en cada ingreso." invalidFields={invalidFields} label="Monto">
                       <Input inputMode="decimal" min="0" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
                     </Field>
@@ -578,7 +564,7 @@ function EditorDialog({
                 <div className={panelClassName}>
                   <p className={labelClassName}>Ritmo</p>
                   <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
-                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-4">
                     <Field hint="Define cada cuanto esperas el ingreso." label="Frecuencia">
                       <SearchablePicker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as RecurringIncomeFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
                     </Field>
@@ -622,7 +608,7 @@ function EditorDialog({
                     onClick={() => setShowAdvanced(true)}
                     type="button"
                   >
-                    Más opciones (estado, recordatorio, notas)
+                    Detalles
                   </button>
                 ) : null}
 
@@ -654,17 +640,8 @@ function EditorDialog({
               </div>
             </div>
 
-            <div className="relative z-[60] border-t border-white/10 bg-shell/95 px-4 py-4 sm:px-6 backdrop-blur-md">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm leading-7 text-storm">
-                  {isCreateMode
-                    ? "El ingreso recurrente quedara listo para aparecer en tu radar de compromisos futuros."
-                    : "Los cambios actualizaran el resumen y las tarjetas al instante."}
-                </p>
-                <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                  <Button disabled={isSaving} onClick={closeEditor} type="button" variant="ghost">
-                    Cancelar
-                  </Button>
+            <div className="relative z-[60] border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
+              <div className="flex justify-end">
                   <Button disabled={isSaving} type="submit">
                     {isSaving ? (
                       <>
@@ -683,7 +660,6 @@ function EditorDialog({
                       </>
                     )}
                   </Button>
-                </div>
               </div>
             </div>
           </form>

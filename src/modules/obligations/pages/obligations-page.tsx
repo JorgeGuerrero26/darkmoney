@@ -2,6 +2,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CircleDollarSign,
+  ChevronDown,
   Download,
   LoaderCircle,
   MailPlus,
@@ -1016,7 +1017,6 @@ function PaymentDialog({
   // Al editar, el pendiente actual ya tiene descontado el monto viejo del abono.
   const pendingBeforePayment = obligation.pendingAmount + (editEventAmount ?? 0);
   const projectedPending = Math.max(0, pendingBeforePayment - paymentAmount);
-  const directionOption = getDirectionOption(obligation.direction);
   // receivable = te deben, el abono entra a la cuenta; payable = debes, el abono sale.
   const isReceivable = obligation.direction === "receivable";
   const accountOptions = accounts
@@ -1042,37 +1042,22 @@ function PaymentDialog({
       : null;
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6">
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[880px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]">
+        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]">
           <form
             className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="max-w-3xl">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                      {isEditMode ? "Editar abono" : "Registrar abono"}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
-                      {directionOption.label}
-                    </span>
-                  </div>
-                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]">
-                    {isEditMode ? "Corrige este abono" : "Actualiza el avance del registro"}
-                  </h2>
-                  <p className="mt-4 max-w-2xl text-base leading-9 text-storm">
-                    {isEditMode
-                      ? "El saldo pendiente y el movimiento vinculado se recalculan con los nuevos datos."
-                      : "Registra un abono puntual para actualizar el saldo pendiente y el historial de esta relacion financiera."}
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <h2 className="font-display text-xl font-semibold text-ink">
+                  {isEditMode ? "Editar abono" : "Registrar abono"}
+                </h2>
 
                 <button
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
+                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
                   onClick={onCancel}
                   type="button"
                 >
@@ -1089,8 +1074,8 @@ function PaymentDialog({
                 />
               ) : null}
 
-              <div className="mt-6 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className={`${panelClassName} bg-[linear-gradient(135deg,rgba(16,24,36,0.96),rgba(8,12,20,0.92))]`}>
+              <div className="mt-5 grid gap-4">
+                <div className="hidden">
                   <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
                     Resumen
                   </p>
@@ -1311,20 +1296,8 @@ function PaymentDialog({
               </div>
             </div>
 
-            <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm leading-7 text-storm">
-                  El saldo pendiente y el porcentaje de avance se actualizan al instante.
-                </p>
-                <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                  <Button
-                    disabled={isSaving}
-                    onClick={onCancel}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancelar
-                  </Button>
+            <div className="border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
+              <div className="flex justify-end">
                   <Button
                     disabled={isSaving}
                     type="submit"
@@ -1341,7 +1314,6 @@ function PaymentDialog({
                       </>
                     )}
                   </Button>
-                </div>
               </div>
             </div>
           </form>
@@ -1945,6 +1917,7 @@ function EditorDialog({
     value: ObligationFormState[Field],
   ) => void;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   useEffect(() => {
     if (invalidFields.size === 0) return;
     const firstField = [...invalidFields][0];
@@ -2035,36 +2008,22 @@ function EditorDialog({
   }));
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
+    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
       <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[1120px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           <form
             className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
             noValidate
             onSubmit={onSubmit}
           >
             <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="max-w-3xl">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                      {isCreateMode ? "Nuevo registro" : "Editar registro"}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-storm">
-                      {isCreateMode ? "Se reflejara en tu cartera" : "Ajusta datos y seguimiento"}
-                    </span>
-                  </div>
-                  <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.7rem]">
-                    {isCreateMode ? "Crear credito o deuda" : "Actualizar credito o deuda"}
-                  </h2>
-                  <p className="mt-4 max-w-2xl text-base leading-9 text-storm">
-                    Define el origen, la apertura y el seguimiento para que la cartera refleje
-                    correctamente lo que entra, sale o queda pendiente desde el primer momento.
-                  </p>
-                </div>
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <h2 className="font-display text-xl font-semibold text-ink">
+                  {isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda"}
+                </h2>
 
                 <button
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
+                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
                   onClick={closeEditor}
                   type="button"
                 >
@@ -2081,7 +2040,7 @@ function EditorDialog({
                 />
               ) : null}
 
-              <div className="mt-7 rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(16,24,36,0.96),rgba(8,12,20,0.92))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
+              <div className="hidden">
                 <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
                   <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
                     <div className="flex items-start gap-4">
@@ -2150,13 +2109,13 @@ function EditorDialog({
                 </div>
               </div>
 
-              <div className="mt-7 grid gap-5 lg:grid-cols-2">
+              <div className="mt-5 grid gap-4 [&>*:nth-child(2)]:order-first">
                 <div className={`${panelClassName} z-30`}>
                   <p className={labelClassName}>Identidad</p>
                   <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
                     Base del registro
                   </h3>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                  <div className="mt-4 grid gap-4">
                     <Field
                       hint={
                         isCreateMode
@@ -2246,7 +2205,7 @@ function EditorDialog({
                   <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
                     Datos principales
                   </h3>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                  <div className="mt-4 grid gap-4 [&>*:first-child]:order-first">
                     <Field
                       errorKey="principalAmount"
                       hint={
@@ -2375,7 +2334,16 @@ function EditorDialog({
                   </div>
                 </div>
 
-                <div className={`${panelClassName} z-10`}>
+                <button
+                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm font-semibold text-ink"
+                  onClick={() => setShowAdvanced((current) => !current)}
+                  type="button"
+                >
+                  Detalles
+                  <ChevronDown className={`h-4 w-4 transition ${showAdvanced ? "rotate-180" : ""}`} />
+                </button>
+
+                <div className={`${panelClassName} z-10 ${showAdvanced ? "" : "hidden"}`}>
                   <p className={labelClassName}>Plan</p>
                   <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
                     Seguimiento esperado
@@ -2446,7 +2414,7 @@ function EditorDialog({
                   </div>
                 </div>
 
-                <div className={`${panelClassName} z-10`}>
+                <div className={`${panelClassName} z-10 ${showAdvanced ? "" : "hidden"}`}>
                   <p className={labelClassName}>Contexto</p>
                   <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
                     Descripcion y notas
@@ -2583,7 +2551,7 @@ function EditorDialog({
               </div>
 
             {/* ── Historial de cambios (solo en modo edición) ── */}
-            {!isCreateMode && selectedObligation && selectedObligation.events.length > 0 ? (
+            {showAdvanced && !isCreateMode && selectedObligation && selectedObligation.events.length > 0 ? (
               <div className="border-t border-white/8 px-4 py-6 sm:px-6">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/75">
                   Historial de cambios
@@ -2658,24 +2626,8 @@ function EditorDialog({
             ) : null}
             </div>
 
-            <div className="border-t border-white/10 bg-black/10 px-4 py-4 sm:px-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm leading-7 text-storm">
-                  {isCreateMode
-                    ? openingImpactMeta.requiresAccount
-                      ? "Al guardar, se creara el registro, su apertura y el movimiento inicial en la cuenta elegida."
-                      : "Al guardar, se creara el registro con su apertura lista, sin mover una cuenta al inicio."
-                    : "Los cambios actualizaran el seguimiento visible de inmediato, sin reescribir la apertura original."}
-                </p>
-                <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                  <Button
-                    disabled={isSaving}
-                    onClick={closeEditor}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancelar
-                  </Button>
+            <div className="border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
+              <div className="flex justify-end">
                   <Button
                     disabled={isSaving}
                     type="submit"
@@ -2697,7 +2649,6 @@ function EditorDialog({
                       </>
                     )}
                   </Button>
-                </div>
               </div>
             </div>
           </form>

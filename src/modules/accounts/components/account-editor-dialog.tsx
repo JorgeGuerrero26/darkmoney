@@ -103,20 +103,16 @@ export function AccountEditorDialog({
 
   return (
     <Modal
+      className="!rounded-[14px] !bg-shell !shadow-none !backdrop-blur-none"
       disableOutsideClose={isSaving}
       labelledBy="account-editor-title"
       onClose={onClose}
-      size="xl"
+      size="md"
     >
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
         <ModalHeader
           accessory={
             selectedAccount?.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null
-          }
-          description={
-            isCreateMode
-              ? "Registra una cuenta real para movimientos, presupuesto y patrimonio."
-              : "Actualiza identidad, moneda, saldo inicial e impacto patrimonial."
           }
           onClose={isSaving ? undefined : onClose}
           title={isCreateMode ? "Nueva cuenta" : "Editar cuenta"}
@@ -132,18 +128,16 @@ export function AccountEditorDialog({
             />
           ) : null}
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+          <section className="grid gap-4">
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 [&>*:nth-child(4)]:order-first">
                 <FormField
-                  className="sm:col-span-2"
                   error={formErrors.name}
                   errorKey="name"
                   label="Nombre"
                   required
                 >
                   <Input
-                    autoFocus
                     onChange={(event) => onFieldChange("name", event.target.value)}
                     placeholder="Ej. Cuenta Principal"
                     value={formState.name}
@@ -171,7 +165,7 @@ export function AccountEditorDialog({
                 <FormField
                   error={formErrors.currencyCode}
                   errorKey="currencyCode"
-                  hint={`Moneda base del workspace: ${baseCurrencyCode}.`}
+                  hint={`Moneda base del espacio: ${baseCurrencyCode}.`}
                   label="Moneda"
                   required
                 >
@@ -194,6 +188,7 @@ export function AccountEditorDialog({
                   required
                 >
                   <Input
+                    autoFocus
                     inputMode="decimal"
                     onChange={(event) => onFieldChange("openingBalance", event.target.value)}
                     placeholder="0.00"
@@ -271,20 +266,20 @@ export function AccountEditorDialog({
                     Incluir en patrimonio
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-storm">
-                    Si esta activo, el saldo suma al resumen patrimonial del workspace.
+                    Si está activo, el saldo suma al resumen patrimonial del espacio.
                   </span>
                 </span>
               </label>
 
               <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">
-                  Opciones avanzadas
+                  Detalles
                 </summary>
                 <div className="mt-4 space-y-4">
                   <FormField
                     error={formErrors.notes}
                     errorKey="notes"
-                    hint="Notas internas visibles solo dentro del workspace."
+                    hint="Notas internas visibles solo dentro del espacio."
                     label="Notas"
                   >
                     <Textarea
@@ -306,7 +301,7 @@ export function AccountEditorDialog({
               </details>
             </div>
 
-            <aside className="space-y-4">
+            <aside className="hidden">
               <div className="glass-panel-soft rounded-[24px] p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div
@@ -370,9 +365,6 @@ export function AccountEditorDialog({
         </ModalBody>
 
         <ModalFooter>
-          <Button disabled={isSaving} onClick={onClose} variant="ghost">
-            Cancelar
-          </Button>
           <Button disabled={isSaving} type="submit">
             <Save className="h-4 w-4" />
             {isSaving ? "Guardando..." : isCreateMode ? "Crear cuenta" : "Guardar cambios"}
