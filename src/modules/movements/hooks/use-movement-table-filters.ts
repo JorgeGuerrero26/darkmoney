@@ -12,6 +12,7 @@ import type {
   MovementTableFilterField,
   MovementTableFilters,
 } from "../lib/movement-form";
+import { getCurrentMonthDateRange } from "../lib/movement-date-range";
 
 /**
  * Estado de filtros + paginación de movimientos, persistido en la URL
@@ -24,6 +25,8 @@ export function useMovementTableFilters(viewMode: string) {
 
   const tableFilters = useMemo<MovementTableFilters>(() => {
     const defaults = defaultMovementTableFilters();
+    const currentMonth = getCurrentMonthDateRange();
+    const showAllDates = searchParams.get("period") === "all";
     const typeParam = searchParams.get("type");
     const statusParam = searchParams.get("status");
 
@@ -39,8 +42,8 @@ export function useMovementTableFilters(viewMode: string) {
       counterparty: searchParams.get("who") ?? defaults.counterparty,
       sourceAccount: searchParams.get("account") ?? defaults.sourceAccount,
       amount: searchParams.get("amount") ?? defaults.amount,
-      dateFrom: searchParams.get("from") ?? defaults.dateFrom,
-      dateTo: searchParams.get("to") ?? defaults.dateTo,
+      dateFrom: searchParams.get("from") ?? (showAllDates ? defaults.dateFrom : currentMonth.from),
+      dateTo: searchParams.get("to") ?? (showAllDates ? defaults.dateTo : currentMonth.to),
     };
   }, [searchParams]);
 
@@ -58,6 +61,7 @@ export function useMovementTableFilters(viewMode: string) {
       if (filters.amount.trim()) params.set("amount", filters.amount);
       if (filters.dateFrom) params.set("from", filters.dateFrom);
       if (filters.dateTo) params.set("to", filters.dateTo);
+      if (!filters.dateFrom && !filters.dateTo) params.set("period", "all");
       if (page > 1) params.set("page", String(page));
       setSearchParams(params, { replace: true });
     },
@@ -123,6 +127,13 @@ export function useMovementTableFilters(viewMode: string) {
     [setTableFilters],
   );
 
+  const updateDateRange = useCallback(
+    (dateFrom: string, dateTo: string) => {
+      setTableFilters((current) => ({ ...current, dateFrom, dateTo }));
+    },
+    [setTableFilters],
+  );
+
   const clearTableFilters = useCallback(() => {
     setTableFilters(defaultMovementTableFilters());
     setOpenTableFilter(null);
@@ -155,6 +166,7 @@ export function useMovementTableFilters(viewMode: string) {
     setCurrentPage,
     openTableFilter,
     updateTableFilter,
+    updateDateRange,
     clearTableFilters,
     toggleTableFilterMenu,
     closeTableFilterMenu,

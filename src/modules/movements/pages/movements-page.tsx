@@ -44,6 +44,7 @@ import {
 } from "../../../services/queries/workspace-data";
 
 import { MovementEditorDialog } from "../components/movement-editor-dialog";
+import { MovementDateFilter } from "../components/movement-date-filter";
 import { MovementsTable } from "../components/movements-table";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import {
@@ -65,6 +66,7 @@ import type {
   MovementFormState,
 } from "../lib/movement-form";
 import { useMovementTableFilters } from "../hooks/use-movement-table-filters";
+import { getMovementDateRangeLabel, movementDateInPeru } from "../lib/movement-date-range";
 
 const statusFilterPickerOptions: PickerOption[] = [
   { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
@@ -138,6 +140,7 @@ export function MovementsPage() {
     setCurrentPage,
     openTableFilter,
     updateTableFilter,
+    updateDateRange,
     clearTableFilters,
     toggleTableFilterMenu,
     closeTableFilterMenu,
@@ -222,7 +225,7 @@ export function MovementsPage() {
       ]
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
         .map((value) => String(value));
-      const occurredDate = movement.occurredAt.slice(0, 10);
+      const occurredDate = movementDateInPeru(movement.occurredAt);
 
       const matchesDescription =
         !normalizedDescription ||
@@ -348,6 +351,7 @@ export function MovementsPage() {
   }
 
   const transferCount = filteredMovements.filter((movement) => movement.movementType === "transfer").length;
+  const activeDateLabel = getMovementDateRangeLabel(tableFilters.dateFrom, tableFilters.dateTo);
   const filteredTotals = filteredMovements.reduce(
     (totals, movement) => {
       if (movement.status === "voided") {
@@ -813,13 +817,18 @@ export function MovementsPage() {
           </div>
         </section>
 
-        <section className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,0.72fr)_minmax(0,0.72fr)]">
+        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.72fr)_minmax(0,0.72fr)_minmax(0,0.72fr)]">
             <input
               className="field-dark"
               onChange={(event) => updateTableFilter("description", event.target.value)}
               placeholder="Buscar por descripción, categoría o contraparte..."
               type="text"
               value={tableFilters.description}
+            />
+            <MovementDateFilter
+              dateFrom={tableFilters.dateFrom}
+              dateTo={tableFilters.dateTo}
+              onChange={updateDateRange}
             />
             <SearchablePicker
               appearance="compact"
@@ -846,10 +855,28 @@ export function MovementsPage() {
         </section>
 
         <section className="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-4 py-3 text-sm">
-          <p className="mr-auto text-storm">Los <span className="font-medium text-ink">{filteredMovements.length}</span> del filtro</p>
-          <p className="text-storm">Entró <span className="font-medium text-ink">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span></p>
-          <p className="text-storm">Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.outflow, snapshot.workspace.baseCurrencyCode)}</span></p>
-          <p className="text-right text-storm">Gasto real, sin traspasos <span className="block font-medium text-ink sm:inline">{formatCurrency(filteredTotals.realExpense, snapshot.workspace.baseCurrencyCode)}</span></p>
+          <p className="mr-auto text-storm">
+            Los <span className="font-medium text-ink">{filteredMovements.length}</span> del filtro
+            <span className="ml-2 text-storm/70">· {activeDateLabel}</span>
+          </p>
+          <p
+            className="text-storm"
+            title="Suma lo que llegó a tus cuentas en el período, incluidos los traspasos recibidos."
+          >
+            Entró <span className="font-medium text-ink">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span>
+          </p>
+          <p
+            className="text-storm"
+            title="Suma lo que salió de tus cuentas en el período, incluidos los traspasos enviados."
+          >
+            Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.outflow, snapshot.workspace.baseCurrencyCode)}</span>
+          </p>
+          <p
+            className="text-right text-storm"
+            title="Suma solo las salidas que son gasto; no cuenta dinero movido entre tus cuentas."
+          >
+            Gasto real, sin traspasos <span className="block font-medium text-ink sm:inline">{formatCurrency(filteredTotals.realExpense, snapshot.workspace.baseCurrencyCode)}</span>
+          </p>
         </section>
 
         {errorMessage && !isEditorOpen ? (
