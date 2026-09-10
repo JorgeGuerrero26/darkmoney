@@ -951,11 +951,13 @@ export function MovementsPage() {
           accessMessage={accessMessage}
           attachments={selectedMovementAttachments}
           baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
+          budgets={snapshot.budgets}
           canManageReceipts={canUploadReceipts}
           categories={snapshot.catalogs.categories}
           closeEditor={requestCloseEditor}
           counterparties={snapshot.catalogs.counterparties}
           errorMessage={errorMessage}
+          exchangeRates={snapshot.exchangeRates}
           formState={formState}
           handleDeleteMovement={handleDeleteMovement}
           handleDeleteReceipt={handleDeleteReceipt}
@@ -969,6 +971,7 @@ export function MovementsPage() {
           obligations={snapshot.obligations}
           pendingReceiptFile={pendingReceiptFile}
           proAccessEnabled={entitlementQuery.data?.proAccessEnabled}
+          recurringIncome={snapshot.recurringIncome}
           movementHistory={snapshot.movements}
           selectedMovement={selectedMovement}
           subscriptions={snapshot.subscriptions}

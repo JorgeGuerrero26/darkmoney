@@ -25,12 +25,15 @@ import { useReceiptFeatureAccess } from "../../attachments/use-receipt-feature-a
 import { ContactQuickCreateDialog } from "../../contacts/components/contact-quick-create-dialog";
 import {
   MovementDetailOptionsPanel,
+  MovementInsightRow,
   MovementDetailsPanel,
   MovementDetailsReceiptRow,
   MovementSuggestionRow,
   PendingMovementReceiptControl,
 } from "./movement-details-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
+import { useMovementInsights } from "../hooks/use-movement-insights";
+import { recurringFrequencyLabel } from "../lib/movement-insights";
 import type {
   AccountSummary,
   CategorySummary,
@@ -385,6 +388,26 @@ export function QuickMovementDialog({
     categories: filteredCategories,
     counterparties: availableCounterparties,
     movements: snapshot.movements,
+  });
+  const insights = useMovementInsights({
+    account: selectedAccount,
+    actsAsIncome: kind === "income",
+    amount: computedAmount,
+    baseCurrencyCode: snapshot.workspace.baseCurrencyCode,
+    budgets: snapshot.budgets,
+    category: selectedCategory,
+    counterparty: selectedCounterparty,
+    currencyCode: suggestionCurrencyCode,
+    description: formState.description,
+    enabled: activePanel === "details",
+    exchangeRates: snapshot.exchangeRates,
+    movementType: kind,
+    movements: snapshot.movements,
+    occurredAt: formState.occurredAt,
+    proAccessEnabled,
+    recurringIncome: snapshot.recurringIncome,
+    subscriptions: snapshot.subscriptions,
+    workspaceId,
   });
 
   useEffect(() => {
@@ -1064,10 +1087,37 @@ export function QuickMovementDialog({
                             value={suggestions.counterparty.counterpartyName}
                           />
                         ) : null}
-                        {suggestions.isLoading &&
+                        {insights.recurring ? (
+                          <MovementInsightRow
+                            description={insights.recurring.reasons[0] ?? "Coincide con un patrón que ya aparece en tus movimientos."}
+                            kind="recurring"
+                            label="Posible recurrencia"
+                            title={`${insights.recurring.name} · ${recurringFrequencyLabel(insights.recurring.frequency)}`}
+                          />
+                        ) : null}
+                        {insights.risk ? (
+                          <MovementInsightRow
+                            description={insights.risk.explanation}
+                            kind="risk"
+                            label="Revisión"
+                            title={insights.risk.title}
+                          />
+                        ) : null}
+                        {insights.budget ? (
+                          <MovementInsightRow
+                            description={insights.budget.recommendation}
+                            kind="budget"
+                            label="Presupuesto"
+                            title={insights.budget.title}
+                          />
+                        ) : null}
+                        {(suggestions.isLoading || insights.isLoading) &&
                         !suggestions.description &&
                         !suggestions.category &&
-                        !suggestions.counterparty ? (
+                        !suggestions.counterparty &&
+                        !insights.recurring &&
+                        !insights.risk &&
+                        !insights.budget ? (
                           <div className="flex h-[54px] items-center gap-3 border-t border-white/10 px-4 text-sm text-storm">
                             <LoaderCircle className="h-4 w-4 animate-spin" />
                             Buscando sugerencias…

@@ -26,6 +26,45 @@ export type DescriptionSuggestion = {
   source: MovementSuggestionSource;
 };
 
+export type RecurringInsight = {
+  type: "subscription" | "recurring_income";
+  name: string;
+  frequency: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
+  confidence: number;
+  reasons: string[];
+  source: MovementSuggestionSource;
+};
+
+export type RiskInsight = {
+  kind: "duplicate" | "amount_anomaly";
+  severity: "low" | "medium" | "high";
+  confidence: number;
+  title: string;
+  explanation: string;
+  reasons: string[];
+  relatedMovementIds: number[];
+  source: MovementSuggestionSource;
+};
+
+export type BudgetInsight = {
+  budgetId: number;
+  budgetName: string;
+  currencyCode: string;
+  impactAmount: number;
+  previousSpentAmount: number;
+  projectedSpentAmount: number;
+  limitAmount: number;
+  previousUsedPercent: number;
+  projectedUsedPercent: number;
+  overAmount: number;
+  severity: "low" | "medium" | "high";
+  confidence: number;
+  title: string;
+  recommendation: string;
+  reasons: string[];
+  source: MovementSuggestionSource;
+};
+
 type CategoryAiResponse = {
   ok: boolean;
   recommendation: {
@@ -183,4 +222,65 @@ export async function requestDescriptionSuggestion(input: {
     reasons: response.reasons,
     source: "deepseek" as const,
   } satisfies DescriptionSuggestion;
+}
+
+export async function requestRecurringInsight(input: Record<string, unknown>) {
+  const response = await invokeAuthenticatedFunction<{
+    ok: boolean;
+    recommendation: {
+      type: "subscription" | "recurring_income" | "none";
+      name: string | null;
+      frequency: RecurringInsight["frequency"] | null;
+      confidence: number;
+      reasons: string[];
+    } | null;
+  }>("movement-recurring-ai-suggestion", { ...input, surface: "movement_form" });
+  const recommendation = response.ok ? response.recommendation : null;
+  if (
+    !recommendation ||
+    recommendation.type === "none" ||
+    !recommendation.name ||
+    !recommendation.frequency ||
+    recommendation.confidence < 0.65
+  ) {
+    return null;
+  }
+  return {
+    type: recommendation.type,
+    name: recommendation.name,
+    frequency: recommendation.frequency,
+    confidence: recommendation.confidence,
+    reasons: recommendation.reasons,
+    source: "deepseek" as const,
+  } satisfies RecurringInsight;
+}
+
+export async function requestRiskInsight(input: Record<string, unknown>) {
+  const response = await invokeAuthenticatedFunction<{
+    ok: boolean;
+    explanation: Omit<RiskInsight, "source"> | null;
+  }>("movement-risk-ai-explanation", { ...input, surface: "movement_form" });
+  if (!response.ok || !response.explanation || response.explanation.confidence < 0.65) return null;
+  return { ...response.explanation, source: "deepseek" as const } satisfies RiskInsight;
+}
+
+export async function requestBudgetInsight(input: Record<string, unknown>, local: BudgetInsight) {
+  const response = await invokeAuthenticatedFunction<{
+    ok: boolean;
+    recommendation: {
+      budgetId: number;
+      budgetName: string;
+      severity: BudgetInsight["severity"];
+      confidence: number;
+      title: string;
+      recommendation: string;
+      reasons: string[];
+    } | null;
+  }>("movement-budget-ai-recommendation", { ...input, surface: "movement_form" });
+  if (!response.ok || !response.recommendation || response.recommendation.confidence < 0.65) return null;
+  return {
+    ...local,
+    ...response.recommendation,
+    source: "deepseek" as const,
+  } satisfies BudgetInsight;
 }

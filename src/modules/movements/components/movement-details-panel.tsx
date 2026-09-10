@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Paperclip, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Gauge, Paperclip, Repeat2, Sparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useId } from "react";
 
@@ -259,6 +259,32 @@ export function MovementSuggestionRow({
       >
         Usar
       </button>
+    </div>
+  );
+}
+
+export function MovementInsightRow({
+  description,
+  kind,
+  label,
+  title,
+}: {
+  description: string;
+  kind: "budget" | "recurring" | "risk";
+  label: string;
+  title: string;
+}) {
+  const Icon = kind === "recurring" ? Repeat2 : kind === "budget" ? Gauge : AlertTriangle;
+  const iconClassName = kind === "risk" ? "text-ember" : kind === "budget" ? "text-gold" : "text-pine";
+
+  return (
+    <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4">
+      <Icon className={`h-4 w-4 shrink-0 ${iconClassName}`} />
+      <div className="min-w-0 flex-1 py-2">
+        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-storm/70">{label}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <p className="text-xs leading-5 text-storm/70">{description}</p>
+      </div>
     </div>
   );
 }

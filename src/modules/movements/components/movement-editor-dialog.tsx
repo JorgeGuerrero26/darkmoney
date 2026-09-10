@@ -27,12 +27,15 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import type {
   AccountSummary,
   AttachmentSummary,
+  BudgetOverview,
   CategorySummary,
   CounterpartySummary,
+  ExchangeRateSummary,
   MovementRecord,
   MovementStatus,
   MovementType,
   ObligationSummary,
+  RecurringIncomeSummary,
   SubscriptionSummary,
 } from "../../../types/domain";
 import { AttachmentGallery } from "../../attachments/components/attachment-gallery";
@@ -59,6 +62,7 @@ import type {
 } from "../lib/movement-form";
 import {
   MovementDetailOptionsPanel,
+  MovementInsightRow,
   MovementDetailsNavigationRow,
   MovementDetailsPanel,
   MovementDetailsReceiptRow,
@@ -66,6 +70,8 @@ import {
   PendingMovementReceiptControl,
 } from "./movement-details-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
+import { useMovementInsights } from "../hooks/use-movement-insights";
+import { recurringFrequencyLabel } from "../lib/movement-insights";
 
 const movementTextInputClassName = "field-dark";
 const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
@@ -112,12 +118,14 @@ export type MovementEditorDialogProps = {
   accessMessage: string;
   attachments: AttachmentSummary[];
   baseCurrencyCode: string;
+  budgets: BudgetOverview[];
   canManageReceipts: boolean;
   categories: CategorySummary[];
   clearFieldError: (field: string) => void;
   closeEditor: () => void;
   counterparties: CounterpartySummary[];
   errorMessage: string;
+  exchangeRates: ExchangeRateSummary[];
   formState: MovementFormState;
   invalidFields: Set<string>;
   handleDeleteMovement: () => void;
@@ -130,6 +138,7 @@ export type MovementEditorDialogProps = {
   obligations: ObligationSummary[];
   pendingReceiptFile: File | null;
   proAccessEnabled?: boolean;
+  recurringIncome: RecurringIncomeSummary[];
   movementHistory: MovementRecord[];
   selectedMovement: MovementRecord | null;
   subscriptions: SubscriptionSummary[];
@@ -155,12 +164,14 @@ export function MovementEditorDialog({
   accessMessage,
   attachments,
   baseCurrencyCode,
+  budgets,
   canManageReceipts,
   categories,
   clearFieldError,
   closeEditor,
   counterparties,
   errorMessage,
+  exchangeRates,
   formState,
   handleDeleteMovement,
   handleDeleteReceipt,
@@ -173,6 +184,7 @@ export function MovementEditorDialog({
   obligations,
   pendingReceiptFile,
   proAccessEnabled,
+  recurringIncome,
   movementHistory,
   selectedMovement,
   subscriptions,
@@ -362,6 +374,27 @@ export function MovementEditorDialog({
     counterparties,
     movements: movementHistory,
     editingMovementId: selectedMovement?.id,
+  });
+  const insights = useMovementInsights({
+    account: primaryAccount,
+    actsAsIncome: primaryUsesDestination,
+    amount: displayAmount,
+    baseCurrencyCode,
+    budgets,
+    category: selectedCategory,
+    counterparty: selectedCounterparty,
+    currencyCode: displayCurrencyCode,
+    description: formState.description,
+    editingMovementId: selectedMovement?.id,
+    enabled: activePanel === "details",
+    exchangeRates,
+    movementType: formState.movementType,
+    movements: movementHistory,
+    occurredAt: formState.occurredAt,
+    proAccessEnabled,
+    recurringIncome,
+    subscriptions,
+    workspaceId,
   });
 
   useEffect(() => {
@@ -712,10 +745,37 @@ export function MovementEditorDialog({
                             value={suggestions.counterparty.counterpartyName}
                           />
                         ) : null}
-                        {suggestions.isLoading &&
+                        {insights.recurring ? (
+                          <MovementInsightRow
+                            description={insights.recurring.reasons[0] ?? "Coincide con un patrón que ya aparece en tus movimientos."}
+                            kind="recurring"
+                            label="Posible recurrencia"
+                            title={`${insights.recurring.name} · ${recurringFrequencyLabel(insights.recurring.frequency)}`}
+                          />
+                        ) : null}
+                        {insights.risk ? (
+                          <MovementInsightRow
+                            description={insights.risk.explanation}
+                            kind="risk"
+                            label="Revisión"
+                            title={insights.risk.title}
+                          />
+                        ) : null}
+                        {insights.budget ? (
+                          <MovementInsightRow
+                            description={insights.budget.recommendation}
+                            kind="budget"
+                            label="Presupuesto"
+                            title={insights.budget.title}
+                          />
+                        ) : null}
+                        {(suggestions.isLoading || insights.isLoading) &&
                         !suggestions.description &&
                         !suggestions.category &&
-                        !suggestions.counterparty ? (
+                        !suggestions.counterparty &&
+                        !insights.recurring &&
+                        !insights.risk &&
+                        !insights.budget ? (
                           <div className="flex h-[54px] items-center gap-3 border-t border-white/10 px-4 text-sm text-storm">
                             <LoaderCircle className="h-4 w-4 animate-spin" />
                             Buscando sugerencias…
