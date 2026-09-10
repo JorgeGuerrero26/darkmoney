@@ -27,8 +27,10 @@ import {
   MovementDetailOptionsPanel,
   MovementDetailsPanel,
   MovementDetailsReceiptRow,
+  MovementSuggestionRow,
   PendingMovementReceiptControl,
 } from "./movement-details-panel";
+import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import type {
   AccountSummary,
   CategorySummary,
@@ -51,6 +53,7 @@ type QuickMovementDialogProps = {
   snapshot: WorkspaceSnapshot;
   userId: string;
   workspaceId: number;
+  proAccessEnabled?: boolean;
 };
 
 type QuickMovementFormState = {
@@ -288,6 +291,7 @@ export function QuickMovementDialog({
   snapshot,
   userId,
   workspaceId,
+  proAccessEnabled,
 }: QuickMovementDialogProps) {
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const [kind, setKind] = useState<QuickMovementKind>(initialKind);
@@ -362,6 +366,26 @@ export function QuickMovementDialog({
     hasTransferCurrencyMismatch && computedAmount > 0 && computedDestinationAmount > 0
       ? computedDestinationAmount / computedAmount
       : null;
+  const suggestionCurrencyCode =
+    selectedAccount?.currencyCode ??
+    selectedSourceAccount?.currencyCode ??
+    selectedDestinationAccount?.currencyCode ??
+    snapshot.workspace.baseCurrencyCode;
+  const suggestions = useMovementSuggestions({
+    enabled: activePanel === "details",
+    workspaceId,
+    proAccessEnabled,
+    movementType: kind,
+    amount: computedAmount > 0 ? computedAmount : null,
+    currencyCode: suggestionCurrencyCode,
+    description: formState.description,
+    occurredAt: formState.occurredAt,
+    categoryId: Number.isFinite(selectedCategoryId) ? selectedCategoryId : null,
+    counterpartyId: selectedCounterparty?.id ?? null,
+    categories: filteredCategories,
+    counterparties: availableCounterparties,
+    movements: snapshot.movements,
+  });
 
   useEffect(() => {
     setKind(initialKind);
@@ -1013,6 +1037,43 @@ export function QuickMovementDialog({
                           }}
                         />
                       </MovementDetailsReceiptRow>
+                    }
+                    suggestionRows={
+                      <>
+                        {suggestions.description ? (
+                          <MovementSuggestionRow
+                            label="Descripción sugerida"
+                            onAccept={() => updateFormState("description", suggestions.description!.cleanedDescription)}
+                            reason={suggestions.description.reasons[0]}
+                            value={suggestions.description.cleanedDescription}
+                          />
+                        ) : null}
+                        {suggestions.category ? (
+                          <MovementSuggestionRow
+                            label="Categoría sugerida"
+                            onAccept={() => updateFormState("categoryId", String(suggestions.category!.categoryId))}
+                            reason={suggestions.category.reasons[0]}
+                            value={suggestions.category.categoryName}
+                          />
+                        ) : null}
+                        {suggestions.counterparty ? (
+                          <MovementSuggestionRow
+                            label="Contraparte sugerida"
+                            onAccept={() => updateFormState("counterpartyId", String(suggestions.counterparty!.counterpartyId))}
+                            reason={suggestions.counterparty.reasons[0]}
+                            value={suggestions.counterparty.counterpartyName}
+                          />
+                        ) : null}
+                        {suggestions.isLoading &&
+                        !suggestions.description &&
+                        !suggestions.category &&
+                        !suggestions.counterparty ? (
+                          <div className="flex h-[54px] items-center gap-3 border-t border-white/10 px-4 text-sm text-storm">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            Buscando sugerencias…
+                          </div>
+                        ) : null}
+                      </>
                     }
                     showDestinationAmount={isTransfer && hasTransferCurrencyMismatch}
                   />

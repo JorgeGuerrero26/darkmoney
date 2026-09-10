@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Paperclip, X } from "lucide-react";
+import { Check, ChevronRight, Paperclip, Sparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useId } from "react";
 
@@ -20,6 +20,7 @@ type MovementDetailsPanelProps = {
   onOpenType?: () => void;
   occurredAt: string;
   receiptRows: ReactNode;
+  suggestionRows?: ReactNode;
   showDestinationAmount?: boolean;
   typeLabel?: string;
 };
@@ -138,6 +139,7 @@ export function MovementDetailsPanel({
   onOpenType,
   occurredAt,
   receiptRows,
+  suggestionRows,
   showDestinationAmount = false,
   typeLabel,
 }: MovementDetailsPanelProps) {
@@ -206,6 +208,8 @@ export function MovementDetailsPanel({
           />
         </label>
 
+        {suggestionRows}
+
         <label
           className={`flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4 ${
             invalidFields.has("occurredAt") ? "field-error-ring" : ""
@@ -225,6 +229,36 @@ export function MovementDetailsPanel({
       </div>
 
       <p className="mt-4 text-xs leading-5 text-storm/70">{helperText}</p>
+    </div>
+  );
+}
+
+export function MovementSuggestionRow({
+  label,
+  onAccept,
+  reason,
+  value,
+}: {
+  label: string;
+  onAccept: () => void;
+  reason?: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4">
+      <Sparkles className="h-4 w-4 shrink-0 text-gold" />
+      <div className="min-w-0 flex-1 py-2">
+        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-storm/70">{label}</p>
+        <p className="truncate text-sm text-ink">{value}</p>
+        {reason ? <p className="truncate text-xs text-storm/65">{reason}</p> : null}
+      </div>
+      <button
+        className="shrink-0 text-sm font-semibold text-ink underline-offset-4 hover:underline"
+        onClick={onAccept}
+        type="button"
+      >
+        Usar
+      </button>
     </div>
   );
 }

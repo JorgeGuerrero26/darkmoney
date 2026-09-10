@@ -62,8 +62,10 @@ import {
   MovementDetailsNavigationRow,
   MovementDetailsPanel,
   MovementDetailsReceiptRow,
+  MovementSuggestionRow,
   PendingMovementReceiptControl,
 } from "./movement-details-panel";
+import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 
 const movementTextInputClassName = "field-dark";
 const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
@@ -127,6 +129,8 @@ export type MovementEditorDialogProps = {
   isUploadingReceipt: boolean;
   obligations: ObligationSummary[];
   pendingReceiptFile: File | null;
+  proAccessEnabled?: boolean;
+  movementHistory: MovementRecord[];
   selectedMovement: MovementRecord | null;
   subscriptions: SubscriptionSummary[];
   updatePendingReceiptFile: (file: File | null) => void;
@@ -134,6 +138,7 @@ export type MovementEditorDialogProps = {
     field: Field,
     value: MovementFormState[Field],
   ) => void;
+  workspaceId: number;
 };
 
 type MovementEditorPanel =
@@ -167,10 +172,13 @@ export function MovementEditorDialog({
   isUploadingReceipt,
   obligations,
   pendingReceiptFile,
+  proAccessEnabled,
+  movementHistory,
   selectedMovement,
   subscriptions,
   updatePendingReceiptFile,
   updateFormState,
+  workspaceId,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
@@ -338,6 +346,23 @@ export function MovementEditorDialog({
     ? balanceImpacts.find((impact) => impact.account.id === primaryAccount.id)?.projectedBalance ??
       primaryAccount.currentBalance
     : null;
+
+  const suggestions = useMovementSuggestions({
+    enabled: activePanel === "details",
+    workspaceId,
+    proAccessEnabled,
+    movementType: formState.movementType,
+    amount: Number.isFinite(displayAmount) && displayAmount > 0 ? displayAmount : null,
+    currencyCode: displayCurrencyCode,
+    description: formState.description,
+    occurredAt: formState.occurredAt,
+    categoryId: Number.isFinite(selectedCategoryId) ? selectedCategoryId : null,
+    counterpartyId: selectedCounterparty?.id ?? null,
+    categories: filteredCategories,
+    counterparties,
+    movements: movementHistory,
+    editingMovementId: selectedMovement?.id,
+  });
 
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
@@ -660,6 +685,43 @@ export function MovementEditorDialog({
                           onUpload={(file) => void handleUploadReceipt(file)}
                         />
                       ) : null
+                    }
+                    suggestionRows={
+                      <>
+                        {suggestions.description ? (
+                          <MovementSuggestionRow
+                            label="Descripción sugerida"
+                            onAccept={() => updateFormState("description", suggestions.description!.cleanedDescription)}
+                            reason={suggestions.description.reasons[0]}
+                            value={suggestions.description.cleanedDescription}
+                          />
+                        ) : null}
+                        {suggestions.category ? (
+                          <MovementSuggestionRow
+                            label="Categoría sugerida"
+                            onAccept={() => updateFormState("categoryId", String(suggestions.category!.categoryId))}
+                            reason={suggestions.category.reasons[0]}
+                            value={suggestions.category.categoryName}
+                          />
+                        ) : null}
+                        {suggestions.counterparty ? (
+                          <MovementSuggestionRow
+                            label="Contraparte sugerida"
+                            onAccept={() => updateFormState("counterpartyId", String(suggestions.counterparty!.counterpartyId))}
+                            reason={suggestions.counterparty.reasons[0]}
+                            value={suggestions.counterparty.counterpartyName}
+                          />
+                        ) : null}
+                        {suggestions.isLoading &&
+                        !suggestions.description &&
+                        !suggestions.category &&
+                        !suggestions.counterparty ? (
+                          <div className="flex h-[54px] items-center gap-3 border-t border-white/10 px-4 text-sm text-storm">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            Buscando sugerencias…
+                          </div>
+                        ) : null}
+                      </>
                     }
                     showDestinationAmount={
                       formState.movementType === "transfer" &&

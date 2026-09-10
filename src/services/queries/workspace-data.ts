@@ -995,7 +995,7 @@ function getClient() {
 
 type WorkspaceDataClient = ReturnType<typeof getClient>;
 
-async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
+export async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
   const client = getClient();
   const {
     data: { session },

@@ -39,6 +39,7 @@ import {
   useDeleteAttachmentRecordMutation,
   useDeleteMovementMutation,
   useEntityAttachmentsQuery,
+  useCurrentUserEntitlementQuery,
   useUpdateMovementMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
@@ -104,6 +105,7 @@ export function MovementsPage() {
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const snapshot = snapshotQuery.data;
   const movementColumns: ColumnDef[] = [
     { key: "categoria", label: "Categoría" },
@@ -966,10 +968,13 @@ export function MovementsPage() {
           isUploadingReceipt={isUploadingReceipt}
           obligations={snapshot.obligations}
           pendingReceiptFile={pendingReceiptFile}
+          proAccessEnabled={entitlementQuery.data?.proAccessEnabled}
+          movementHistory={snapshot.movements}
           selectedMovement={selectedMovement}
           subscriptions={snapshot.subscriptions}
           updatePendingReceiptFile={setPendingReceiptFile}
           updateFormState={updateFormState}
+          workspaceId={activeWorkspace.id}
         />
       ) : null}
 

@@ -1276,6 +1276,7 @@ function AppShellContent() {
           snapshot={workspaceSnapshotQuery.data}
           userId={user.id}
           workspaceId={activeWorkspace.id}
+          proAccessEnabled={hasProAccess}
         />
       ) : null}
     </div>
