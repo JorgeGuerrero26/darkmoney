@@ -1,7 +1,9 @@
 ﻿import {
+  ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
   ChevronDown,
+  ChevronRight,
   LoaderCircle,
   ReceiptText,
   Trash2,
@@ -160,13 +162,16 @@ export function MovementEditorDialog({
   useEffect(() => {
     if (invalidFields.size === 0) return;
     const firstField = [...invalidFields][0];
-    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
-    if (firstEl) {
-      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
-      }, 300);
+    if (["description", "occurredAt"].includes(firstField)) {
+      setShowAdvanced(true);
     }
+    setTimeout(() => {
+      const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
+      }
+    }, 0);
     invalidFields.forEach((field) => {
       const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
       if (!el) return;
@@ -320,6 +325,7 @@ export function MovementEditorDialog({
 
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
+    setShowAdvanced(false);
   }, [isCreateMode, selectedMovement?.id]);
 
   const movementTypePickerOptions = useMemo(
@@ -449,9 +455,20 @@ export function MovementEditorDialog({
         >
           <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              <h2 className="font-display text-xl font-semibold text-ink">
-                {isCreateMode ? "Nuevo movimiento" : "Editar movimiento"}
-              </h2>
+              {showAdvanced ? (
+                <button
+                  className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white"
+                  onClick={() => setShowAdvanced(false)}
+                  type="button"
+                >
+                  <ArrowLeft className="h-4 w-4 shrink-0" />
+                  <span className="truncate font-display text-xl font-semibold">Detalles</span>
+                </button>
+              ) : (
+                <h2 className="font-display text-xl font-semibold text-ink">
+                  {isCreateMode ? "Nuevo movimiento" : "Editar movimiento"}
+                </h2>
+              )}
               <button
                 aria-label="Cerrar editor de movimiento"
                 className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
@@ -476,6 +493,7 @@ export function MovementEditorDialog({
               ) : null}
 
               <div className="space-y-5">
+                <div className={showAdvanced ? "hidden" : "contents"}>
                 <MovementField
                   errorKey={primaryAmountField}
                   invalidFields={invalidFields}
@@ -544,19 +562,19 @@ export function MovementEditorDialog({
                     ))}
                   </div>
                 </div>
+                </div>
 
-                <div className="rounded-xl border border-white/10 bg-[#141311]">
+                <div className={showAdvanced ? "" : "rounded-xl border border-white/10 bg-[#141311]"}>
                   <button
-                    aria-expanded={showAdvanced}
-                    className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-semibold text-ink"
-                    onClick={() => setShowAdvanced((open) => !open)}
+                    className={`h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink ${showAdvanced ? "hidden" : "flex"}`}
+                    onClick={() => setShowAdvanced(true)}
                     type="button"
                   >
                     Detalles
-                    <ChevronDown className={`h-4 w-4 transition ${showAdvanced ? "rotate-180" : ""}`} />
+                    <ChevronRight className="h-4 w-4 text-storm" />
                   </button>
                   {showAdvanced ? (
-                    <div className="space-y-4 border-t border-white/10 p-4">
+                    <div className="space-y-4">
                       <MovementField label="Tipo de movimiento">
                         <SearchablePicker
                           appearance="compact"
