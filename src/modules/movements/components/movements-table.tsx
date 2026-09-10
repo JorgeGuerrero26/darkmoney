@@ -14,6 +14,7 @@ type MovementsTableProps = {
   counterparties: string[];
   sourceAccounts: string[];
   selectedIds: Set<number>;
+  visibleColumns: Record<string, boolean>;
   allSelected: boolean;
   someSelected: boolean;
   onToggleSelect: (id: number) => void;
@@ -56,6 +57,7 @@ export function MovementsTable({
   movements,
   baseCurrencyCode,
   selectedIds,
+  visibleColumns,
   allSelected,
   someSelected,
   onToggleSelect,
@@ -97,9 +99,28 @@ export function MovementsTable({
             const display = getMovementDisplayInfo(movement, baseCurrencyCode);
             const isIncoming = incomingTypes.has(movement.movementType);
             const isTransfer = movement.movementType === "transfer";
+            const contextParts = [
+              visibleColumns.categoria ? movement.category : null,
+              visibleColumns.contraparte && movement.counterparty ? movement.counterparty : null,
+              visibleColumns.estado && movement.status !== "posted"
+                ? movement.status === "pending"
+                  ? "Pendiente"
+                  : movement.status === "planned"
+                    ? "Planificado"
+                    : "Anulado"
+                : null,
+              new Date(movement.occurredAt).toLocaleTimeString("es-PE", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            ].filter(Boolean);
             return (
               <div
-                className="grid min-h-[54px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_minmax(120px,0.45fr)_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-2px] focus-visible:outline-white/30 sm:px-0"
+                className={`grid min-h-[54px] cursor-pointer items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-2px] focus-visible:outline-white/30 sm:px-0 ${
+                  visibleColumns.cuenta_origen
+                    ? "grid-cols-[auto_minmax(0,1fr)_minmax(120px,0.45fr)_auto]"
+                    : "grid-cols-[auto_minmax(0,1fr)_auto]"
+                }`}
                 key={movement.id}
                 onClick={() => onOpen(movement)}
                 onKeyDown={(event) => {
@@ -116,9 +137,11 @@ export function MovementsTable({
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">{movement.description}</p>
-                  <p className="mt-0.5 truncate text-xs text-storm">{movement.category} · {new Date(movement.occurredAt).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}</p>
+                  <p className="mt-0.5 truncate text-xs text-storm">{contextParts.join(" · ")}</p>
                 </div>
-                <p className="hidden truncate text-xs text-storm sm:block">{display.accountLabel}</p>
+                {visibleColumns.cuenta_origen ? (
+                  <p className="hidden truncate text-xs text-storm sm:block">{display.accountLabel}</p>
+                ) : null}
                 <p className={`text-right text-sm font-semibold ${isIncoming ? "text-pine" : isTransfer ? "text-storm" : "text-ink"}`}>
                   {isIncoming ? "+ " : isTransfer ? "" : "− "}
                   {display.amount === null ? "—" : formatCurrency(display.amount, display.currencyCode)}

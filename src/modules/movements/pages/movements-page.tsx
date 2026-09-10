@@ -1,6 +1,7 @@
 ﻿import {
+  Check,
   Download,
-  X,
+  MoreVertical,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
@@ -11,11 +12,9 @@ import { DataState } from "../../../components/ui/data-state";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
-import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
-import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
+import { type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import type {
   AttachmentSummary,
@@ -45,8 +44,6 @@ import {
 } from "../../../services/queries/workspace-data";
 
 import { MovementEditorDialog } from "../components/movement-editor-dialog";
-import { MovementsList } from "../components/movements-list";
-import { MovementsGrid } from "../components/movements-grid";
 import { MovementsTable } from "../components/movements-table";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import {
@@ -56,6 +53,7 @@ import {
   expenseLikeMovementTypes,
   getMovementDisplayInfo,
   incomeLikeMovementTypes,
+  movementActsAsIncome,
   movementStatusOptions,
   movementTypeOptions,
   parseMetadataValue,
@@ -105,15 +103,13 @@ export function MovementsPage() {
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const snapshot = snapshotQuery.data;
   const movementColumns: ColumnDef[] = [
-    { key: "tipo", label: "Tipo" },
-    { key: "estado", label: "Estado" },
-    { key: "categoria", label: "Categoria" },
-    { key: "contraparte", label: "Contraparte" },
+    { key: "categoria", label: "Categoría" },
     { key: "cuenta_origen", label: "Cuenta" },
-    { key: "fecha", label: "Fecha" },
+    { key: "contraparte", label: "Contraparte" },
+    { key: "estado", label: "Estado", defaultVisible: false },
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-movements", movementColumns);
-  const [viewMode, setViewMode] = useViewMode("movements", "table");
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -147,7 +143,7 @@ export function MovementsPage() {
     closeTableFilterMenu,
     clearSingleTableFilter,
     applyTableFilterAndClose,
-  } = useMovementTableFilters(viewMode);
+  } = useMovementTableFilters("table");
 
   const createMovementMutation = useCreateMovementMutation(activeWorkspace?.id, user?.id);
   const updateMovementMutation = useUpdateMovementMutation(activeWorkspace?.id, user?.id);
@@ -351,17 +347,27 @@ export function MovementsPage() {
     );
   }
 
-  const transferCount = snapshot.movements.filter((movement) => movement.movementType === "transfer").length;
+  const transferCount = filteredMovements.filter((movement) => movement.movementType === "transfer").length;
   const filteredTotals = filteredMovements.reduce(
     (totals, movement) => {
-      if (incomeLikeMovementTypes.has(movement.movementType)) {
-        totals.income += movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? 0;
-      } else if (expenseLikeMovementTypes.has(movement.movementType)) {
-        totals.expense += movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? 0;
+      if (movement.status === "voided") {
+        return totals;
       }
+
+      const incomingAmount =
+        movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? 0;
+      const outgoingAmount = movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? 0;
+
+      totals.income += incomingAmount;
+      totals.outflow += outgoingAmount;
+
+      if (movement.movementType !== "transfer" && !movementActsAsIncome(movement)) {
+        totals.realExpense += outgoingAmount || incomingAmount;
+      }
+
       return totals;
     },
-    { income: 0, expense: 0 },
+    { income: 0, outflow: 0, realExpense: 0 },
   );
   const hasActiveFilters = Boolean(
     tableFilters.description.trim() ||
@@ -724,59 +730,92 @@ export function MovementsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        {/* Header compacto (estándar de cuentas) */}
-        <section className="min-w-0">
-          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Actividad</p>
-          <div className="mt-1 flex items-center gap-2.5">
+        <section className="relative z-40 flex min-w-0 items-start justify-between gap-4">
+          <div className="min-w-0">
             <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
               Movimientos
             </h2>
-            <InfoTip ariaLabel="Sobre el libro de movimientos">
-              Entra directo a tus registros, revisa el estado de cada movimiento y filtra por columna
-              cuando necesites encontrar algo puntual. La tabla manda; el resumen solo acompaña.
-            </InfoTip>
+            <p className="mt-1 text-sm text-storm">
+              <span className="text-ink">{filteredMovements.length}</span> movimientos · mostrando los{" "}
+              <span className="text-ink">{paginatedMovements.length}</span>{" "}
+              {safePage === 1 ? "más recientes" : "de esta página"}.{" "}
+              <span className="text-ink">{transferCount}</span> son traspasos entre tus cuentas y no cuentan como gasto.
+            </p>
           </div>
-          <p className="mt-1 text-sm text-storm">
-            <span className="text-ink">{snapshot.movements.length}</span> registrados; <span className="text-ink">{transferCount}</span> son traspasos entre tus cuentas y no cuentan como gasto.
-          </p>
+
+          <div className="relative shrink-0">
+            <button
+              aria-expanded={isActionsMenuOpen}
+              aria-label="Más opciones de movimientos"
+              className="grid h-9 w-9 place-items-center rounded-[7px] border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink"
+              onClick={() => setIsActionsMenuOpen((current) => !current)}
+              type="button"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            {isActionsMenuOpen ? (
+              <>
+                <button
+                  aria-label="Cerrar opciones"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setIsActionsMenuOpen(false)}
+                  type="button"
+                />
+                <div className="absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
+                  <p className="px-4 pb-2 pt-4 font-public-mono text-[10px] uppercase tracking-[0.16em] text-storm">
+                    Columnas visibles
+                  </p>
+                  {movementColumns.map((column) => (
+                    <button
+                      aria-checked={colVis[column.key]}
+                      className="flex h-9 w-full items-center gap-3 px-4 text-left text-sm text-ink transition hover:bg-white/[0.04]"
+                      key={column.key}
+                      onClick={() => toggleCol(column.key)}
+                      role="menuitemcheckbox"
+                      type="button"
+                    >
+                      <Check className={`h-3.5 w-3.5 ${colVis[column.key] ? "opacity-100" : "opacity-0"}`} />
+                      {column.label}
+                    </button>
+                  ))}
+                  {hasActiveFilters ? (
+                    <button
+                      className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm transition hover:bg-white/[0.04] hover:text-ink"
+                      onClick={() => {
+                        clearTableFilters();
+                        setIsActionsMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      Limpiar filtros
+                    </button>
+                  ) : null}
+                  <button
+                    className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm font-medium text-ink transition hover:bg-white/[0.04] disabled:text-storm/45"
+                    disabled={!filteredMovements.length}
+                    onClick={() => {
+                      downloadMovementsCSV(
+                        filteredMovements,
+                        `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
+                      );
+                      setIsActionsMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar los {filteredMovements.length}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
         </section>
 
-        {/* Toolbar sticky (estándar de cuentas) */}
-        <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
-            {viewMode === "table" ? (
-              <ColumnPicker appearance="compact" columns={movementColumns} visible={colVis} onToggle={toggleCol} />
-            ) : null}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {hasActiveFilters ? (
-                <Button onClick={clearTableFilters} variant="ghost">
-                  <X className="mr-2 h-4 w-4" />
-                  Limpiar
-                </Button>
-              ) : null}
-              <Button
-                disabled={!filteredMovements.length}
-                onClick={() =>
-                  downloadMovementsCSV(
-                    filteredMovements,
-                    `movimientos-${new Date().toISOString().slice(0, 10)}.csv`,
-                  )
-                }
-                variant="ghost"
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar
-              </Button>
-            </div>
-          </div>
-
-          {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
-          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,0.72fr)_minmax(0,0.72fr)]">
             <input
               className="field-dark"
               onChange={(event) => updateTableFilter("description", event.target.value)}
-              placeholder="Buscar por descripcion, categoria o contraparte..."
+              placeholder="Buscar por descripción, categoría o contraparte..."
               type="text"
               value={tableFilters.description}
             />
@@ -802,14 +841,13 @@ export function MovementsPage() {
               showSearch={false}
               value={tableFilters.type}
             />
-          </div>
         </section>
 
-        <section className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-white/[0.07] py-3 text-sm">
-          <p className="mr-auto text-storm"><span className="font-medium text-ink">{filteredMovements.length}</span> movimientos en esta vista</p>
-          <p className="text-storm">Entró <span className="font-medium text-pine">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span></p>
-          <p className="text-storm">Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.expense, snapshot.workspace.baseCurrencyCode)}</span></p>
-          <p className="font-medium text-ink">Neto {formatCurrency(filteredTotals.income - filteredTotals.expense, snapshot.workspace.baseCurrencyCode)}</p>
+        <section className="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-4 py-3 text-sm">
+          <p className="mr-auto text-storm">Los <span className="font-medium text-ink">{filteredMovements.length}</span> del filtro</p>
+          <p className="text-storm">Entró <span className="font-medium text-ink">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span></p>
+          <p className="text-storm">Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.outflow, snapshot.workspace.baseCurrencyCode)}</span></p>
+          <p className="text-right text-storm">Gasto real, sin traspasos <span className="block font-medium text-ink sm:inline">{formatCurrency(filteredTotals.realExpense, snapshot.workspace.baseCurrencyCode)}</span></p>
         </section>
 
         {errorMessage && !isEditorOpen ? (
@@ -818,18 +856,8 @@ export function MovementsPage() {
           title="No pudimos completar la accion"
           tone="error"
         />
-      ) : null}
+        ) : null}
         <section className="relative z-10">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-display text-lg font-semibold text-ink sm:text-xl">
-              Movimientos registrados
-            </h2>
-            <InfoTip ariaLabel="Sobre la lista de movimientos">
-              Abre cualquier movimiento para editarlo o revisarlo. Los filtros de la barra superior
-              aplican a todas las vistas.
-            </InfoTip>
-          </div>
-          <div className="mt-4">
           {filteredMovements.length === 0 ? (
             <DataState
               action={
@@ -848,23 +876,7 @@ export function MovementsPage() {
               }
               title={hasActiveFilters ? "Sin resultados" : "Sin movimientos"}
             />
-          ) : viewMode === "list" ? (
-            <MovementsList
-              baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
-              movements={paginatedMovements}
-              onOpen={openEditEditor}
-              onToggleSelect={toggleSelect}
-              selectedIds={selectedIds}
-            />
-          ) : viewMode === "grid" ? (
-            <MovementsGrid
-              baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
-              movements={paginatedMovements}
-              onOpen={openEditEditor}
-              onToggleSelect={toggleSelect}
-              selectedIds={selectedIds}
-            />
-          ) : viewMode === "table" ? (
+          ) : (
             <MovementsTable
               allSelected={allSelected}
               baseCurrencyCode={snapshot.workspace.baseCurrencyCode}
@@ -886,8 +898,9 @@ export function MovementsPage() {
               someSelected={someSelected}
               selectedIds={selectedIds}
               sourceAccounts={movementSourceAccounts}
+              visibleColumns={colVis}
             />
-          ) : null}
+          )}
 
           <Pagination
             className="mt-5"
@@ -896,7 +909,6 @@ export function MovementsPage() {
             pageSize={MOVEMENTS_PAGE_SIZE}
             totalItems={filteredMovements.length}
           />
-          </div>
         </section>
 
       </div>
