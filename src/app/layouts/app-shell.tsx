@@ -284,7 +284,7 @@ function WorkspacePicker({
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        aria-label="Seleccionar workspace activo"
+        aria-label="Seleccionar espacio activo"
         className={`flex h-[52px] w-full items-center justify-between gap-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-3 text-left text-ink transition hover:border-white/15 ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
@@ -298,12 +298,12 @@ function WorkspacePicker({
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium text-ink">
-              {selectedWorkspace?.name ?? (isLoading ? "Preparando..." : "Sin workspace")}
+              {selectedWorkspace?.name ?? (isLoading ? "Preparando..." : "Sin espacio")}
             </span>
             <span className="block truncate text-[0.65rem] text-storm">
               {selectedWorkspace
                 ? `${getWorkspaceKindLabel(selectedWorkspace.kind)} · ${getWorkspaceRoleLabel(selectedWorkspace.role)}`
-                : "Sin workspace activo"}
+                : "Sin espacio activo"}
             </span>
           </span>
         </span>
@@ -318,13 +318,13 @@ function WorkspacePicker({
               autoFocus
               className="w-full rounded-[8px] border border-white/10 bg-[#141312] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-white/25"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar workspace..."
+              placeholder="Buscar espacio..."
               type="text"
               value={query}
             />
           </div>
 
-          <div aria-label="Lista de workspaces" className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1" role="listbox">
+          <div aria-label="Lista de espacios" className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1" role="listbox">
             {filteredWorkspaces.length ? (
               filteredWorkspaces.map((workspace) => {
                 const isSelected = workspace.id === activeWorkspaceId;
@@ -466,7 +466,7 @@ function AppShellContent() {
   const normalizedBillingStatus = entitlementQuery.data?.billingStatus?.trim().toLowerCase() ?? null;
   const currentUserInitials = profile?.initials ?? buildInitials(currentUserName, "DM");
   const workspaceErrorMessage = error
-    ? getQueryErrorMessage(error, "No se pudieron cargar tus workspaces.")
+    ? getQueryErrorMessage(error, "No se pudieron cargar tus espacios.")
     : "";
 
   async function handleSignOut() {
@@ -1066,7 +1066,7 @@ function AppShellContent() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col gap-0 lg:min-h-0 lg:overflow-y-auto" id="main-content" tabIndex={-1}>
-          <header aria-label="Encabezado del workspace" className="sticky top-0 z-[60] border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
+          <header aria-label="Encabezado del espacio" className="sticky top-0 z-[60] border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
             <div className="flex min-h-9 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -1120,7 +1120,7 @@ function AppShellContent() {
                           <h2 className="font-display text-lg font-semibold text-ink">Notificaciones</h2>
                           <p className="mt-0.5 text-xs text-storm">
                             {actionRequiredNotifications.length
-                              ? `${actionRequiredNotifications.length} piden algo tuyo`
+                              ? `${actionRequiredNotifications.length} ${actionRequiredNotifications.length === 1 ? "pide" : "piden"} algo tuyo`
                               : "Nada requiere tu atención"}
                           </p>
                         </div>
@@ -1206,9 +1206,9 @@ function AppShellContent() {
                   description={
                     error
                       ? workspaceErrorMessage
-                      : "Ve a Configuración para crear tu primer workspace y empezar a registrar tus finanzas."
+                      : "Ve a Configuración para crear tu primer espacio y empezar a registrar tus finanzas."
                   }
-                  title={error ? "No se pudo cargar tu workspace" : "No hay un workspace activo todavía"}
+                  title={error ? "No se pudo cargar tu espacio" : "No hay un espacio activo todavía"}
                   tone={error ? "error" : "neutral"}
                 />
               </div>

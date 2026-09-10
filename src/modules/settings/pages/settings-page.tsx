@@ -241,9 +241,7 @@ function NotificationPreferenceCard({
 }) {
   return (
     <label
-      className={`glass-panel-soft flex cursor-pointer items-start justify-between gap-4 rounded-[24px] px-5 py-4 transition duration-200 hover:border-white/16 ${
-        checked ? "border-pine/25" : ""
-      }`}
+      className="flex cursor-pointer items-start justify-between gap-4 border-t border-white/[0.09] py-5 transition duration-200 hover:bg-white/[0.015]"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -283,6 +281,7 @@ const settingsPickerFieldClassName =
   "w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-sm text-ink outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-white/[0.06] focus:border-pine/25 focus:bg-white/[0.07] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] disabled:cursor-not-allowed disabled:opacity-60";
 
 function SettingsPicker({
+  compact = false,
   disabled = false,
   emptyMessage,
   onChange,
@@ -292,6 +291,7 @@ function SettingsPicker({
   queryPlaceholder,
   value,
 }: {
+  compact?: boolean;
   disabled?: boolean;
   emptyMessage?: string;
   onChange: (value: string) => void;
@@ -331,36 +331,42 @@ function SettingsPicker({
   return (
     <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
       <button
-        className={`${settingsPickerFieldClassName} flex min-h-[5.25rem] items-start justify-between gap-3 py-3.5 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={compact
+          ? `flex min-h-[54px] min-w-[180px] items-center justify-end gap-3 px-1 text-right text-sm text-ink transition hover:text-white ${disabled ? "cursor-not-allowed opacity-60" : ""}`
+          : `${settingsPickerFieldClassName} flex min-h-[5.25rem] items-start justify-between gap-3 py-3.5 text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         type="button"
       >
-        <span className="flex min-w-0 items-start gap-3">
-          <span
-            className="mt-0.5 flex h-10 min-w-[3.25rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
-            style={{
-              backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
-              borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
-              color: selectedOption?.leadingColor ? "#fff" : undefined,
-            }}
-          >
-            {selectedOption?.leadingLabel ?? "?"}
-          </span>
+        <span className={`flex min-w-0 items-start ${compact ? "gap-0" : "gap-3"}`}>
+          {!compact ? (
+            <span
+              className="mt-0.5 flex h-10 min-w-[3.25rem] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-ink"
+              style={{
+                backgroundColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}22` : undefined,
+                borderColor: selectedOption?.leadingColor ? `${selectedOption.leadingColor}55` : undefined,
+                color: selectedOption?.leadingColor ? "#fff" : undefined,
+              }}
+            >
+              {selectedOption?.leadingLabel ?? "?"}
+            </span>
+          ) : null}
           <span className="min-w-0 flex-1">
             <span className="block whitespace-normal text-sm font-semibold leading-6 text-ink">
               {selectedOption ? selectedOption.label : placeholderLabel}
             </span>
-            <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
-              {selectedOption ? selectedOption.description : placeholderDescription}
-            </span>
+            {!compact ? (
+              <span className="mt-1 block whitespace-normal text-xs leading-5 text-storm">
+                {selectedOption ? selectedOption.description : placeholderDescription}
+              </span>
+            ) : null}
           </span>
         </span>
-        <ChevronDown className={`mt-2 h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`${compact ? "mt-0" : "mt-2"} h-4 w-4 shrink-0 text-storm transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.65rem)] z-50 rounded-[24px] border border-white/10 bg-shell/95 p-3 shadow-haze backdrop-blur-2xl">
+        <div className={`animate-rise-in absolute top-[calc(100%+0.65rem)] z-50 rounded-[24px] border border-white/10 bg-shell/95 p-3 shadow-haze backdrop-blur-2xl ${compact ? "right-0 w-[min(360px,calc(100vw-3rem))]" : "left-0 right-0"}`}>
           {queryPlaceholder ? (
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
@@ -445,7 +451,7 @@ function WorkspaceDialogShell({
             <div className="flex items-start justify-between gap-4">
               <div className="max-w-3xl">
                 <div className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                  Workspace colaborativo
+                  Espacio colaborativo
                 </div>
                 <h2 className="mt-4 font-display text-3xl font-semibold text-ink sm:text-[2.5rem]">
                   {title}
@@ -1236,37 +1242,32 @@ export function SettingsPage() {
         <div className="space-y-8">
         {activeSettingsSection === "general" || activeSettingsSection === "notifications" ? (
         <section className="space-y-5" id="settings-section-general">
-          <SettingsSectionLead
-            description={activeSettingsSection === "general"
-              ? "Administra tus datos personales y revisa el plan asociado a tu cuenta."
-              : "Elige cómo quieres recibir recordatorios y actividad importante."}
-            eyebrow={activeSettingsSection === "general" ? "Cuenta" : "Alertas"}
-            title={activeSettingsSection === "general" ? "Perfil" : "Notificaciones"}
-          />
+          {activeSettingsSection === "notifications" ? (
+            <SettingsSectionLead
+              description="Elige cómo quieres recibir recordatorios y actividad importante."
+              eyebrow="Alertas"
+              title="Notificaciones"
+            />
+          ) : null}
         <section className="grid gap-6">
           <div className={`relative z-20 ${activeSettingsSection === "general" ? "" : "hidden"}`}>
-            <SurfaceCard
-            action={<Briefcase className="h-5 w-5 text-gold" />}
-            description="Tu nombre y los datos de acceso asociados a tu cuenta."
-            title="Perfil"
-          >
-            <div className="grid gap-4">
+            <div className="grid gap-5">
               {canAccessProFeatures ? (
-                <div className="flex items-center gap-4 rounded-[24px] border border-white/[0.07] bg-white/[0.025] p-4">
+                <div className="flex items-center gap-4 border-b border-white/[0.09] pb-5">
                   <div className="relative shrink-0">
                     {profile?.avatarUrl ? (
                       <img
                         alt={profile.fullName}
-                        className="h-16 w-16 rounded-[20px] object-cover ring-1 ring-white/10"
+                        className="h-14 w-14 rounded-full object-cover ring-1 ring-white/10"
                         src={profile.avatarUrl}
                       />
                     ) : (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-gradient-to-br from-ember via-[#a8b9ff] to-pine font-display text-xl font-semibold text-void shadow-md">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#252320] font-display text-lg font-semibold text-storm">
                         {profile?.initials ?? "DM"}
                       </div>
                     )}
                     <label
-                      className={`absolute -bottom-1.5 -right-1.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#0d1420] text-storm shadow-md transition hover:text-ink ${isUploadingAvatar ? "pointer-events-none opacity-60" : ""}`}
+                      className={`absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#1a1917] text-storm transition hover:text-ink ${isUploadingAvatar ? "pointer-events-none opacity-60" : ""}`}
                     >
                       {isUploadingAvatar ? (
                         <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -1288,23 +1289,23 @@ export function SettingsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-ink">Foto de perfil</p>
                     <p className="mt-1 text-xs leading-5 text-storm">
-                      JPG, PNG o WebP hasta 2 MB. Se recorta al centro en cuadrado automaticamente.
+                      JPG, PNG o WebP hasta 2 MB. Se recorta al centro.
                     </p>
-                    {profile?.avatarUrl ? (
-                      <button
-                        className="mt-2 text-xs text-rosewood transition hover:opacity-75 disabled:opacity-50"
-                        disabled={isUploadingAvatar}
-                        onClick={() => void handleRemoveAvatar()}
-                        type="button"
-                      >
-                        Eliminar foto
-                      </button>
-                    ) : null}
                   </div>
+                  {profile?.avatarUrl ? (
+                    <button
+                      className="text-xs font-semibold text-storm transition hover:text-ink disabled:opacity-50"
+                      disabled={isUploadingAvatar}
+                      onClick={() => void handleRemoveAvatar()}
+                      type="button"
+                    >
+                      Quitar
+                    </button>
+                  ) : null}
                 </div>
               ) : (
-                <div className="flex items-center gap-3 rounded-[24px] border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
+                <div className="flex items-center gap-3 border-b border-white/[0.09] pb-5">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#252320]">
                     <Camera className="h-4 w-4 text-storm/50" />
                   </div>
                   <div>
@@ -1314,23 +1315,24 @@ export function SettingsPage() {
                 </div>
               )}
 
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-ink">Nombre completo</span>
+              <label className="block space-y-2 border-b border-white/[0.09] pb-5">
+                <span className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Nombre</span>
                 <input
-                  className="field-dark"
+                  className="w-full rounded-[7px] border border-white/[0.1] bg-[#1a1917] px-4 py-3 text-sm text-ink outline-none transition focus:border-white/25"
                   onChange={(event) => setFullName(event.target.value)}
                   type="text"
                   value={fullName}
                 />
               </label>
-              <div className="flex items-center justify-between border-y border-white/10 py-3 text-sm">
-                <span className="text-storm">Correo</span>
-                <span className="font-medium text-ink">{user?.email ?? "Sin correo"}</span>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-ink">Moneda base</span>
+              <div className="divide-y divide-white/[0.09] overflow-visible rounded-[9px] border border-white/[0.09] bg-[#1a1917]">
+                <div className="flex min-h-[54px] items-center justify-between gap-4 px-4 text-sm">
+                  <span className="font-semibold text-ink">Correo</span>
+                  <span className="truncate text-storm">{user?.email ?? "Sin correo"}</span>
+                </div>
+                <div className="flex min-h-[54px] items-center justify-between gap-4 px-4 text-sm">
+                  <span className="font-semibold text-ink">Moneda base</span>
                   <SettingsPicker
+                    compact
                     onChange={setBaseCurrencyCode}
                     options={currencyPickerOptions}
                     placeholderDescription="Usaremos esta moneda como lectura principal del espacio."
@@ -1338,10 +1340,11 @@ export function SettingsPage() {
                     queryPlaceholder="Buscar PEN, USD, EUR..."
                     value={baseCurrencyCode}
                   />
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-ink">Zona horaria</span>
+                </div>
+                <div className="flex min-h-[54px] items-center justify-between gap-4 px-4 text-sm">
+                  <span className="font-semibold text-ink">Zona horaria</span>
                   <SettingsPicker
+                    compact
                     onChange={setTimezone}
                     options={timezonePickerOptions}
                     placeholderDescription="Afecta recordatorios, fechas y cortes visibles para ti."
@@ -1349,33 +1352,27 @@ export function SettingsPage() {
                     queryPlaceholder="Buscar zona horaria..."
                     value={timezone}
                   />
-                </label>
+                </div>
               </div>
-              <div className="border-t border-white/10 pt-4">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/65">Tu plan</p>
-                <div className="mt-3 flex items-start justify-between gap-4 text-sm">
-                  <span className="font-semibold text-ink">
+              <div className="border-y border-white/[0.09] py-5">
+                <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Tu plan</p>
+                <div className="mt-3 text-sm">
+                  <p className="font-semibold text-ink">
                     {canAccessProFeatures ? "DarkMoney Pro" : "DarkMoney Free"}
-                  </span>
-                  <span className="text-right text-storm">
+                  </p>
+                  <p className="mt-1 text-storm">
                     {isAdminOverride
-                      ? "Acceso administrador · sin cobro ni vencimiento"
+                      ? "Acceso de administrador, sin cobros ni renovación."
                       : canAccessProFeatures
                         ? coverageSummary
-                        : "Sin cobros programados"}
-                  </span>
+                        : "Sin cobros programados ni fecha de vencimiento."}
+                  </p>
                 </div>
               </div>
             </div>
-            </SurfaceCard>
           </div>
 
           <div className={activeSettingsSection === "notifications" ? "" : "hidden"}>
-          <SurfaceCard
-            action={<BellDot className="h-5 w-5 text-ember" />}
-            description="Elige cómo y cuándo recibir alertas de recordatorios, cobros y pagos del espacio."
-            title="Preferencias de notificación"
-          >
             {preferencesQuery.isLoading ? (
               <DataState
                 description="Buscando tu configuración de alertas guardada."
@@ -1391,10 +1388,10 @@ export function SettingsPage() {
                 tone="error"
               />
             ) : (
-              <div className="grid gap-3">
+              <div className="grid">
                 <NotificationPreferenceCard
                   checked={inAppEnabled}
-                  description="Muestra alertas dentro de DarkMoney, incluyendo el contador rojo, la bandeja de notificaciones y los recordatorios visibles en la app."
+                  description="Muestra la bandeja y un contador neutro con las acciones que requieren tu atención."
                   detail="Este canal ya funciona hoy dentro de la web."
                   isLive
                   onChange={setInAppEnabled}
@@ -1416,12 +1413,11 @@ export function SettingsPage() {
                   onChange={setPushEnabled}
                   title="Notificaciones push"
                 />
-                <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-storm">
+                <p className="border-t border-white/[0.09] py-5 text-sm leading-7 text-storm">
                   Hoy la funcionalidad activa es la bandeja dentro de la app. Correo y push ya se guardan en tu perfil para usarlos cuando se habiliten esos canales.
-                </div>
+                </p>
               </div>
             )}
-          </SurfaceCard>
           </div>
         </section>
         </section>
@@ -1882,7 +1878,7 @@ export function SettingsPage() {
                     variant="ghost"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    Crear workspace compartido
+                    Crear espacio compartido
                   </Button>
                   {activeWorkspace.kind === "shared" && canManageWorkspaceMembers ? (
                     <Button
@@ -1904,15 +1900,15 @@ export function SettingsPage() {
                 {activeWorkspace.kind === "shared" && !canManageWorkspaceMembers ? (
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm leading-7 text-storm">
                     Tu rol actual es {formatWorkspaceRoleLabel(activeWorkspace.role).toLowerCase()}.
-                    Puedes ver este workspace y trabajar segun tus permisos, pero solo owner y
+                    Puedes ver este espacio y trabajar según tus permisos, pero solo propietarios y
                     admin pueden invitar nuevos miembros.
                   </div>
                 ) : null}
 
                 {activeWorkspace.kind === "personal" ? (
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 text-sm leading-7 text-storm">
-                    Este es tu workspace personal. Si quieres trabajar con otra persona, crea un
-                    workspace compartido y mueve o registra ahi las cuentas, movimientos,
+                    Este es tu espacio personal. Si quieres trabajar con otra persona, crea un
+                    espacio compartido y mueve o registra ahí las cuentas, movimientos,
                     presupuestos, suscripciones y créditos/deudas que quieran ver juntos.
                   </div>
                 ) : workspaceCollaborationQuery.isLoading ? (
@@ -1963,7 +1959,7 @@ export function SettingsPage() {
                           ))
                         ) : (
                           <div className="rounded-[20px] border border-white/10 bg-black/15 p-4 text-sm leading-7 text-storm">
-                            Aún no hay miembros cargados para este workspace.
+                            Aún no hay miembros cargados para este espacio.
                           </div>
                         )}
                       </div>
@@ -2072,7 +2068,7 @@ export function SettingsPage() {
                   </span>
                 </div>
                 <div className="glass-panel-soft rounded-[24px] p-4 text-sm leading-7 text-storm">
-                  Cuentas del workspace:{" "}
+                  Cuentas del espacio:{" "}
                   <span className="font-medium text-ink">
                     {snapshotQuery.data?.accounts.length ?? 0}
                   </span>
@@ -2141,7 +2137,7 @@ export function SettingsPage() {
                     />
                   </label>
                   <div className="rounded-[24px] border border-white/10 bg-black/15 p-4 text-sm leading-7 text-storm">
-                    DarkMoney lo creará como un workspace separado, con tu cuenta como
+                    DarkMoney lo creará como un espacio separado, con tu cuenta como
                     propietaria. Luego podrás invitar miembros y cambiar a ese espacio desde el
                     selector superior.
                   </div>
@@ -2170,7 +2166,7 @@ export function SettingsPage() {
                 ) : (
                   <>
                     <Plus className="mr-2 h-4 w-4" />
-                    Crear workspace
+                    Crear espacio
                   </>
                 )}
               </Button>
@@ -2237,7 +2233,7 @@ export function SettingsPage() {
                   </label>
                   <div className="rounded-[24px] border border-white/10 bg-black/15 p-4 text-sm leading-7 text-storm">
                     La persona recibira un correo bonito para aceptar el acceso. Cuando confirme,
-                    este workspace le aparecera en su selector sin necesidad de Modo Pro.
+                    este espacio aparecerá en su selector sin necesidad de Modo Pro.
                   </div>
                 </div>
               </div>
