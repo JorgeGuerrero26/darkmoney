@@ -58,10 +58,9 @@ import type {
 const movementTextInputClassName = "field-dark";
 const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
 const movementEditorPanelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
+  "relative min-w-0 overflow-visible rounded-xl border border-white/10 bg-[#141311] p-4";
 const movementFieldLabelClassName =
   "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
-const movementFieldHintClassName = "mt-1.5 break-words text-xs leading-6 text-storm/70";
 function MovementField({ children, errorKey, hint, invalidFields, label }: MovementFieldProps) {
   const hasError = !!errorKey && !!invalidFields?.has(errorKey);
   return (
@@ -73,7 +72,7 @@ function MovementField({ children, errorKey, hint, invalidFields, label }: Movem
       >
         {children}
       </div>
-      {hint ? <p className={movementFieldHintClassName}>{hint}</p> : null}
+      {hint ? <p className="sr-only">{hint}</p> : null}
     </label>
   );
 }
@@ -156,8 +155,7 @@ export function MovementEditorDialog({
   updateFormState,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  // Divulgación progresiva: en creación lo avanzado arranca plegado; en edición abierto.
-  const [showAdvanced, setShowAdvanced] = useState(!isCreateMode);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -307,7 +305,18 @@ export function MovementEditorDialog({
       ? manualFxRate.toFixed(6)
       : inferredFxRate !== null && Number.isFinite(inferredFxRate)
         ? inferredFxRate.toFixed(6)
-        : "Sin conversion";
+      : "Sin conversion";
+  const primaryUsesDestination =
+    incomeLikeMovementTypes.has(formState.movementType) ||
+    (!formState.sourceAmount.trim() && Boolean(formState.destinationAmount.trim()));
+  const primaryAccount = primaryUsesDestination ? selectedDestinationAccount : selectedSourceAccount;
+  const primaryAmount = primaryUsesDestination ? formState.destinationAmount : formState.sourceAmount;
+  const primaryAmountField = primaryUsesDestination ? "destinationAmount" : "sourceAmount";
+  const primaryAccountField = primaryUsesDestination ? "destinationAccountId" : "sourceAccountId";
+  const primaryProjectedBalance = primaryAccount
+    ? balanceImpacts.find((impact) => impact.account.id === primaryAccount.id)?.projectedBalance ??
+      primaryAccount.currentBalance
+    : null;
 
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
@@ -426,38 +435,26 @@ export function MovementEditorDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-[80] isolate bg-void/70 backdrop-blur-sm"
+      className="animate-fade-in fixed inset-0 z-[80] isolate bg-black/75"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
       onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1120px] overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl [transform:translateZ(0)]"
+          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="max-w-2xl space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
-                    {isCreateMode ? "nuevo movimiento" : "editar movimiento"}
-                  </span>
-                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-storm/75">
-                    Se refleja al guardar
-                  </span>
-                </div>
-                <div>
-                  <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">
-                    {isCreateMode ? "Registrar movimiento" : previewTitle}
-                  </h2>
-                </div>
-              </div>
+            <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <h2 className="font-display text-xl font-semibold text-ink">
+                {isCreateMode ? "Nuevo movimiento" : "Editar movimiento"}
+              </h2>
               <button
                 aria-label="Cerrar editor de movimiento"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:-translate-y-0.5 hover:bg-white/[0.08] hover:text-ink"
+                className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
                 onClick={closeEditor}
                 type="button"
               >
@@ -478,7 +475,198 @@ export function MovementEditorDialog({
                 />
               ) : null}
 
-              <section className="glass-panel-soft relative hidden min-w-0 overflow-hidden rounded-[24px] p-4 sm:p-6 lg:block lg:p-7">
+              <div className="space-y-5">
+                <MovementField
+                  errorKey={primaryAmountField}
+                  invalidFields={invalidFields}
+                  label="Monto"
+                >
+                  <EditorInput
+                    autoFocus
+                    className="h-16 font-display text-[2rem] font-semibold"
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      clearFieldError(primaryAmountField);
+                      updateFormState(primaryAmountField, event.target.value);
+                    }}
+                    placeholder="0.00"
+                    value={primaryAmount}
+                  />
+                </MovementField>
+
+                <div className="rounded-xl border border-white/10 bg-[#141311]">
+                  <div className="p-3" data-field={primaryAccountField}>
+                    <SearchablePicker
+                      appearance="compact"
+                      emptyMessage="No encontramos una cuenta con ese término."
+                      onChange={(nextValue) => {
+                        clearFieldError(primaryAccountField);
+                        updateFormState(primaryAccountField, nextValue);
+                      }}
+                      options={accountPickerOptions}
+                      placeholderDescription="Cuenta principal del movimiento."
+                      placeholderLabel="Selecciona una cuenta"
+                      queryPlaceholder="Buscar cuenta..."
+                      value={primaryUsesDestination ? formState.destinationAccountId : formState.sourceAccountId}
+                    />
+                  </div>
+                  {primaryAccount && primaryProjectedBalance !== null ? (
+                    <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
+                      <span className="text-storm">Saldo después</span>
+                      <span className="font-semibold text-ink">
+                        {formatCurrency(primaryProjectedBalance, primaryAccount.currencyCode)}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div>
+                  <p className={movementFieldLabelClassName}>Estado</p>
+                  <div className="mt-2 grid grid-cols-4 rounded-xl border border-white/10 bg-[#141311] p-1">
+                    {([
+                      { value: "posted", label: "Confirmado" },
+                      { value: "pending", label: "Pendiente" },
+                      { value: "planned", label: "Planificado" },
+                      { value: "voided", label: "Anulado" },
+                    ] as const).map((option) => (
+                      <button
+                        className={`rounded-lg px-1 py-2.5 text-xs font-semibold transition ${
+                          formState.status === option.value
+                            ? "bg-ink text-void"
+                            : "text-storm hover:text-ink"
+                        }`}
+                        key={option.value}
+                        onClick={() => updateFormState("status", option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-[#141311]">
+                  <button
+                    aria-expanded={showAdvanced}
+                    className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-semibold text-ink"
+                    onClick={() => setShowAdvanced((open) => !open)}
+                    type="button"
+                  >
+                    Detalles
+                    <ChevronDown className={`h-4 w-4 transition ${showAdvanced ? "rotate-180" : ""}`} />
+                  </button>
+                  {showAdvanced ? (
+                    <div className="space-y-4 border-t border-white/10 p-4">
+                      <MovementField label="Tipo de movimiento">
+                        <SearchablePicker
+                          appearance="compact"
+                          emptyMessage="No encontramos un tipo de movimiento con ese término."
+                          onChange={(nextValue) => updateFormState("movementType", nextValue as MovementType)}
+                          options={movementTypePickerOptions}
+                          placeholderDescription="Comportamiento del movimiento."
+                          placeholderLabel="Selecciona un tipo"
+                          queryPlaceholder="Buscar tipo..."
+                          value={formState.movementType}
+                        />
+                      </MovementField>
+
+                      <MovementField errorKey="description" invalidFields={invalidFields} label="Descripción">
+                        <EditorInput
+                          onChange={(event) => {
+                            clearFieldError("description");
+                            updateFormState("description", event.target.value);
+                          }}
+                          placeholder="Ej. Pago de internet"
+                          value={formState.description}
+                        />
+                      </MovementField>
+
+                      <MovementField errorKey="occurredAt" invalidFields={invalidFields} label="Fecha">
+                        <DatePickerField
+                          mode="datetime-local"
+                          onChange={(nextValue) => {
+                            clearFieldError("occurredAt");
+                            updateFormState("occurredAt", nextValue);
+                          }}
+                          value={formState.occurredAt}
+                        />
+                      </MovementField>
+
+                      <MovementField label="Categoría">
+                        <SearchablePicker
+                          appearance="compact"
+                          emptyMessage="No encontramos una categoría con ese término."
+                          onChange={(nextValue) => updateFormState("categoryId", nextValue)}
+                          options={categoryPickerOptions}
+                          placeholderDescription="Opcional"
+                          placeholderLabel="Sin categoría"
+                          queryPlaceholder="Buscar categoría..."
+                          value={formState.categoryId}
+                        />
+                      </MovementField>
+
+                      {formState.movementType === "transfer" ? (
+                        <>
+                          <MovementField label="Cuenta de destino">
+                            <SearchablePicker
+                              appearance="compact"
+                              emptyMessage="No encontramos una cuenta con ese término."
+                              onChange={(nextValue) => updateFormState("destinationAccountId", nextValue)}
+                              options={accountPickerOptions}
+                              placeholderDescription="Cuenta que recibe."
+                              placeholderLabel="Selecciona destino"
+                              queryPlaceholder="Buscar cuenta..."
+                              value={formState.destinationAccountId}
+                            />
+                          </MovementField>
+                          <MovementField label="Monto de destino">
+                            <EditorInput
+                              inputMode="decimal"
+                              onChange={(event) => updateFormState("destinationAmount", event.target.value)}
+                              placeholder="0.00"
+                              value={formState.destinationAmount}
+                            />
+                          </MovementField>
+                        </>
+                      ) : null}
+
+                      <MovementField label="Contraparte">
+                        <SearchablePicker
+                          appearance="compact"
+                          emptyMessage="No encontramos una contraparte con ese término."
+                          onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
+                          options={counterpartyPickerOptions}
+                          placeholderDescription="Opcional"
+                          placeholderLabel="Sin contraparte"
+                          queryPlaceholder="Buscar contraparte..."
+                          value={formState.counterpartyId}
+                        />
+                      </MovementField>
+
+                      {isCreateMode ? (
+                        <PendingReceiptField
+                          canUpload={canManageReceipts}
+                          file={pendingReceiptFile}
+                          lockedMessage={accessMessage}
+                          onChange={updatePendingReceiptFile}
+                        />
+                      ) : selectedMovement ? (
+                        <AttachmentGallery
+                          accessMessage={accessMessage}
+                          attachments={attachments}
+                          canManage={canManageReceipts}
+                          entityLabel="movimiento"
+                          isUploading={isUploadingReceipt}
+                          onDelete={(attachment) => void handleDeleteReceipt(attachment)}
+                          onUpload={(file) => void handleUploadReceipt(file)}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <section className="hidden">
               <div
                 className="absolute -right-10 top-0 h-32 w-32 rounded-full blur-3xl animate-soft-pulse"
                 style={{ backgroundColor: `${movementVisual.color}3d` }}
@@ -628,7 +816,7 @@ export function MovementEditorDialog({
               </div>
               </section>
 
-              <div className="mt-8 flex items-center gap-4 px-1">
+              <div className="hidden">
               <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/10 to-white/5" />
               <span className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/70">
                 Configuracion del movimiento
@@ -636,7 +824,7 @@ export function MovementEditorDialog({
               <div className="h-px flex-1 bg-gradient-to-r from-white/5 via-white/10 to-transparent" />
               </div>
 
-              <div className="mt-4 sm:mt-8 grid gap-4 sm:gap-6 xl:gap-7 xl:grid-cols-[1.08fr_0.92fr]">
+              <div className="hidden">
               <div className="space-y-4 sm:space-y-6">
                 <section className={`${movementEditorPanelClassName} z-30`}>
                   <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
@@ -653,6 +841,7 @@ export function MovementEditorDialog({
                       label="Tipo de movimiento"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos un tipo de movimiento con ese termino."
                         onChange={(nextValue) =>
                           updateFormState("movementType", nextValue as MovementType)
@@ -670,6 +859,7 @@ export function MovementEditorDialog({
                       label="Estado"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos un estado con ese termino."
                         onChange={(nextValue) => updateFormState("status", nextValue as MovementStatus)}
                         options={movementStatusPickerOptions}
@@ -725,6 +915,7 @@ export function MovementEditorDialog({
                       label="Cuenta origen"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una cuenta origen con ese termino."
                         onChange={(nextValue) => { clearFieldError("sourceAccountId"); updateFormState("sourceAccountId", nextValue); }}
                         options={accountPickerOptions}
@@ -756,6 +947,7 @@ export function MovementEditorDialog({
                       label="Cuenta destino"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una cuenta destino con ese termino."
                         onChange={(nextValue) => { clearFieldError("destinationAccountId"); updateFormState("destinationAccountId", nextValue); }}
                         options={accountPickerOptions}
@@ -798,21 +990,23 @@ export function MovementEditorDialog({
                       />
                     </MovementField>
 
-                    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-                      <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">
-                        Preview financiero
-                      </p>
-                      <p className="mt-2 sm:mt-4 font-display text-xl sm:text-3xl font-semibold text-ink">
-                        {formatCurrency(displayAmount, displayCurrencyCode)}
-                      </p>
-                      <p className="mt-1 sm:mt-2 break-words text-xs sm:text-sm text-storm">{previewFlowLabel}</p>
-                      <div className="mt-4 h-px bg-white/8" />
-                      <p className="mt-4 text-xs leading-6 text-storm/75">
-                        Las transferencias usan origen y destino. Los gastos salen de una cuenta y
-                        los ingresos entran a una cuenta. Los movimientos aplicados actualizan tus
-                        balances.
-                      </p>
-                    </div>
+                    {balanceImpacts.length > 0 ? (
+                      <div className="rounded-xl border border-white/10 bg-black/10">
+                        {balanceImpacts.map(({ account, projectedBalance }) => (
+                          <div
+                            className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-sm last:border-b-0"
+                            key={account.id}
+                          >
+                            <span className="min-w-0 truncate text-storm">
+                              Saldo después · {account.name}
+                            </span>
+                            <span className="shrink-0 font-semibold text-ink">
+                              {formatCurrency(projectedBalance, account.currencyCode)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </section>
               </div>
@@ -833,6 +1027,7 @@ export function MovementEditorDialog({
                       label="Categoria"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una categoria con ese termino."
                         onChange={(nextValue) => updateFormState("categoryId", nextValue)}
                         options={categoryPickerOptions}
@@ -856,10 +1051,7 @@ export function MovementEditorDialog({
                   type="button"
                 >
                   <span className="text-sm font-semibold">
-                    Más opciones
-                    <span className="ml-2 text-xs font-normal text-storm/70">
-                      contraparte, obligación, suscripción, notas, metadata y adjuntos
-                    </span>
+                    Detalles
                   </span>
                   <ChevronDown
                     className={`h-4 w-4 shrink-0 transition ${showAdvanced ? "rotate-180" : ""}`}
@@ -883,6 +1075,7 @@ export function MovementEditorDialog({
                       label="Contraparte"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una contraparte con ese termino."
                         onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
                         options={counterpartyPickerOptions}
@@ -898,6 +1091,7 @@ export function MovementEditorDialog({
                       label="Obligacion"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una obligacion con ese termino."
                         onChange={(nextValue) => updateFormState("obligationId", nextValue)}
                         options={obligationPickerOptions}
@@ -913,6 +1107,7 @@ export function MovementEditorDialog({
                       label="Suscripcion"
                     >
                       <SearchablePicker
+                        appearance="compact"
                         emptyMessage="No encontramos una suscripcion con ese termino."
                         onChange={(nextValue) => updateFormState("subscriptionId", nextValue)}
                         options={subscriptionPickerOptions}
@@ -987,15 +1182,8 @@ export function MovementEditorDialog({
               </div>
               </div>
 
-              <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[28px] border-t border-white/10 bg-shell/95 px-4 py-5 sm:px-6 backdrop-blur-md">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <p className="max-w-xl text-sm leading-7 text-storm">
-                  {isCreateMode
-                    ? "El movimiento se guardara en este espacio y se reflejara en tu historial enseguida."
-                    : "Los cambios se aplicaran de inmediato y actualizaran la informacion del movimiento."}
-                </p>
-
-                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+              <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
+                <div className="flex items-center justify-end gap-3">
                   {!isCreateMode && selectedMovement ? (
                     <Button
                       className="min-w-[150px] justify-center"
@@ -1009,16 +1197,7 @@ export function MovementEditorDialog({
                     </Button>
                   ) : null}
                   <Button
-                    className="min-w-[140px] justify-center"
-                    disabled={isSaving}
-                    onClick={closeEditor}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    className="min-w-[190px] justify-center shadow-[0_18px_50px_rgba(245,247,251,0.12)]"
+                    className="min-w-[190px] justify-center"
                     disabled={isSaving}
                     type="submit"
                   >
@@ -1034,7 +1213,6 @@ export function MovementEditorDialog({
                     )}
                   </Button>
                 </div>
-              </div>
               </div>
           </form>
 
