@@ -7,10 +7,8 @@ import { useOutsidePointerClose } from "../../../hooks/use-outside-pointer-close
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { PageHeader } from "../../../components/ui/page-header";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
-import { RestartTourCard } from "../../../components/onboarding/restart-tour-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -67,14 +65,14 @@ const workspaceInviteRoleOptions: Array<{
   {
     value: "admin",
     label: "Administrador",
-    description: "Puede editar casi todo el workspace y también invitar a otros miembros.",
+    description: "Puede editar casi todo el espacio y también invitar a otros miembros.",
     leadingLabel: "AD",
     leadingColor: "#4566d6",
   },
   {
     value: "member",
     label: "Miembro",
-    description: "Puede registrar y editar datos del workspace, sin administrar miembros.",
+    description: "Puede registrar y editar datos del espacio, sin administrar miembros.",
     leadingLabel: "MB",
     leadingColor: "#1b6a58",
   },
@@ -472,7 +470,7 @@ function WorkspaceDialogShell({
   );
 }
 
-type SettingsSectionId = "general" | "billing" | "workspace" | "catalogs";
+type SettingsSectionId = "general" | "notifications" | "workspace" | "billing" | "catalogs";
 
 const settingsSectionDefinitions: Array<{
   id: SettingsSectionId;
@@ -482,27 +480,21 @@ const settingsSectionDefinitions: Array<{
 }> = [
   {
     id: "general",
-    title: "General",
-    description: "Perfil y notificaciones",
+    title: "Perfil",
+    description: "Datos personales y plan",
     icon: <Briefcase className="h-4 w-4" />,
   },
   {
-    id: "billing",
-    title: "Facturacion",
-    description: "Plan, pagos e historial",
-    icon: <Sparkles className="h-4 w-4" />,
+    id: "notifications",
+    title: "Notificaciones",
+    description: "Canales y recordatorios",
+    icon: <BellDot className="h-4 w-4" />,
   },
   {
     id: "workspace",
-    title: "Workspace",
+    title: "Espacios",
     description: "Equipo y permisos",
     icon: <ShieldCheck className="h-4 w-4" />,
-  },
-  {
-    id: "catalogs",
-    title: "Catalogos",
-    description: "Resumen del espacio",
-    icon: <Tag className="h-4 w-4" />,
   },
 ];
 
@@ -584,7 +576,7 @@ export function SettingsPage() {
   });
   useSuccessToast(workspaceFeedbackMessage, {
     clear: () => setWorkspaceFeedbackMessage(""),
-    title: "Workspace colaborativo actualizado",
+    title: "Espacio colaborativo actualizado",
   });
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
@@ -1004,7 +996,7 @@ export function SettingsPage() {
       setWorkspaceErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos crear el workspace colaborativo.",
+          "No pudimos crear el espacio colaborativo.",
         ),
       );
     }
@@ -1016,7 +1008,7 @@ export function SettingsPage() {
     setWorkspaceErrorMessage("");
 
     if (!activeWorkspace) {
-      setWorkspaceErrorMessage("Primero necesitamos un workspace activo para enviar invitaciones.");
+      setWorkspaceErrorMessage("Primero necesitamos un espacio activo para enviar invitaciones.");
       return;
     }
 
@@ -1042,20 +1034,33 @@ export function SettingsPage() {
       setInvitationNote("");
       setWorkspaceFeedbackMessage(
         result.alreadyMember
-          ? `${result.invitedDisplayName ?? result.invitedEmail} ya pertenece a este workspace.`
+          ? `${result.invitedDisplayName ?? result.invitedEmail} ya pertenece a este espacio.`
           : `Le enviamos una invitación por correo a ${result.invitedDisplayName ?? result.invitedEmail}.`,
       );
     } catch (error) {
       setWorkspaceErrorMessage(
         getQueryErrorMessage(
           error,
-          "No pudimos enviar la invitación de este workspace.",
+          "No pudimos enviar la invitación de este espacio.",
         ),
       );
     }
   }
 
   const isSaving = isSubmitting || savePreferencesMutation.isPending;
+  const hasProfileChanges = Boolean(
+    profile &&
+      (fullName.trim() !== profile.fullName ||
+        baseCurrencyCode !== profile.baseCurrencyCode ||
+        timezone !== profile.timezone),
+  );
+  const hasNotificationChanges = Boolean(
+    preferencesQuery.data &&
+      (inAppEnabled !== preferencesQuery.data.inAppEnabled ||
+        emailEnabled !== preferencesQuery.data.emailEnabled ||
+        pushEnabled !== preferencesQuery.data.pushEnabled),
+  );
+  const hasSettingsChanges = hasProfileChanges || hasNotificationChanges;
   const isCreatingSharedWorkspace = createSharedWorkspaceMutation.isPending;
   const isInvitingMember = createWorkspaceInvitationMutation.isPending;
   const entitlement = entitlementQuery.data;
@@ -1194,79 +1199,52 @@ export function SettingsPage() {
     : "Aun sin fecha de inicio";
   const billingHistory = billingHistoryQuery.data;
   const hasBillingHistory = Boolean(billingHistory?.payments.length || billingHistory?.events.length);
-
   return (
     <div className="space-y-6 pb-8">
-      <PageHeader
-        actions={
-          <Button
-            form="settings-form"
-            disabled={isSaving}
-            type="submit"
-          >
-            {isSaving ? "Guardando..." : "Guardar cambios"}
-          </Button>
-        }
-        description="Administra tu perfil, preferencias de notificación, plan y la configuración del workspace activo."
-        eyebrow="configuración"
-        title="Configuración"
-      />
+      <header className="border-b border-white/10 pb-5">
+        <h1 className="font-display text-3xl font-semibold text-ink sm:text-4xl">Configuración</h1>
+      </header>
 
       <form
-        className="grid gap-8 xl:grid-cols-[260px_minmax(0,1fr)]"
+        className="grid gap-8 lg:grid-cols-[200px_minmax(0,1fr)]"
         id="settings-form"
         noValidate
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <aside className="xl:sticky xl:top-24 xl:self-start">
-          <div className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.025] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="rounded-[24px] border border-white/8 bg-black/15 px-4 py-4">
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-storm/65">Ajustes</p>
-              <p className="mt-2 text-sm leading-7 text-storm">
-                Navega por las secciones principales y ajusta solo lo que necesites.
-              </p>
-            </div>
-            <nav className="mt-3 grid gap-2">
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+            <nav className="grid border-y border-white/10">
               {settingsSectionDefinitions.map((section) => {
                 const isActive = activeSettingsSection === section.id;
                 return (
                   <button
-                    className={`flex items-start gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                    className={`border-b border-white/10 px-3 py-4 text-left text-sm transition last:border-b-0 ${
                       isActive
-                        ? "border-white/14 bg-white/[0.08] text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-                        : "border-transparent bg-transparent text-storm hover:border-white/8 hover:bg-white/[0.04] hover:text-ink"
+                        ? "bg-white/[0.05] font-semibold text-ink"
+                        : "text-storm hover:bg-white/[0.025] hover:text-ink"
                     }`}
                     key={section.id}
                     onClick={() => openSettingsSection(section.id)}
                     type="button"
                   >
-                    <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
-                      isActive ? "border-gold/25 bg-gold/10 text-gold" : "border-white/10 bg-white/[0.04] text-storm"
-                    }`}>
-                      {section.icon}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">{section.title}</span>
-                      <span className="mt-1 block text-xs leading-5 text-storm/80">{section.description}</span>
-                    </span>
+                    {section.title}
                   </button>
                 );
               })}
             </nav>
-          </div>
         </aside>
 
         <div className="space-y-8">
-        {activeSettingsSection === "general" ? (
+        {activeSettingsSection === "general" || activeSettingsSection === "notifications" ? (
         <section className="space-y-5" id="settings-section-general">
           <SettingsSectionLead
-            description="Administra tu perfil base y como quieres que DarkMoney te avise de recordatorios, cobros y actividad importante."
-            eyebrow="General"
-            title="Perfil y preferencias"
+            description={activeSettingsSection === "general"
+              ? "Administra tus datos personales y revisa el plan asociado a tu cuenta."
+              : "Elige cómo quieres recibir recordatorios y actividad importante."}
+            eyebrow={activeSettingsSection === "general" ? "Cuenta" : "Alertas"}
+            title={activeSettingsSection === "general" ? "Perfil" : "Notificaciones"}
           />
-        <RestartTourCard />
         <section className="grid gap-6">
-          <div className="relative z-20">
+          <div className={`relative z-20 ${activeSettingsSection === "general" ? "" : "hidden"}`}>
             <SurfaceCard
             action={<Briefcase className="h-5 w-5 text-gold" />}
             description="Tu nombre y los datos de acceso asociados a tu cuenta."
@@ -1345,13 +1323,17 @@ export function SettingsPage() {
                   value={fullName}
                 />
               </label>
+              <div className="flex items-center justify-between border-y border-white/10 py-3 text-sm">
+                <span className="text-storm">Correo</span>
+                <span className="font-medium text-ink">{user?.email ?? "Sin correo"}</span>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block space-y-2">
                   <span className="text-sm font-medium text-ink">Moneda base</span>
                   <SettingsPicker
                     onChange={setBaseCurrencyCode}
                     options={currencyPickerOptions}
-                    placeholderDescription="Usaremos esta moneda como lectura principal del workspace."
+                    placeholderDescription="Usaremos esta moneda como lectura principal del espacio."
                     placeholderLabel="Selecciona una moneda"
                     queryPlaceholder="Buscar PEN, USD, EUR..."
                     value={baseCurrencyCode}
@@ -1369,13 +1351,29 @@ export function SettingsPage() {
                   />
                 </label>
               </div>
+              <div className="border-t border-white/10 pt-4">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/65">Tu plan</p>
+                <div className="mt-3 flex items-start justify-between gap-4 text-sm">
+                  <span className="font-semibold text-ink">
+                    {canAccessProFeatures ? "DarkMoney Pro" : "DarkMoney Free"}
+                  </span>
+                  <span className="text-right text-storm">
+                    {isAdminOverride
+                      ? "Acceso administrador · sin cobro ni vencimiento"
+                      : canAccessProFeatures
+                        ? coverageSummary
+                        : "Sin cobros programados"}
+                  </span>
+                </div>
+              </div>
             </div>
             </SurfaceCard>
           </div>
 
+          <div className={activeSettingsSection === "notifications" ? "" : "hidden"}>
           <SurfaceCard
             action={<BellDot className="h-5 w-5 text-ember" />}
-            description="Elige cómo y cuándo recibir alertas de recordatorios, cobros y pagos del workspace."
+            description="Elige cómo y cuándo recibir alertas de recordatorios, cobros y pagos del espacio."
             title="Preferencias de notificación"
           >
             {preferencesQuery.isLoading ? (
@@ -1424,15 +1422,30 @@ export function SettingsPage() {
               </div>
             )}
           </SurfaceCard>
+          </div>
         </section>
         </section>
         ) : null}
 
-        {activeSettingsSection === "general" && errorMessage ? (
+        {(activeSettingsSection === "general" || activeSettingsSection === "notifications") && errorMessage ? (
           <FormFeedbackBanner
             description={errorMessage}
             title="No pudimos guardar los cambios"
           />
+        ) : null}
+        {activeSettingsSection === "general" || activeSettingsSection === "notifications" ? (
+          <div className="flex items-center justify-end gap-4 border-t border-white/10 pt-5">
+            <span className="text-sm text-storm/70">
+              {hasSettingsChanges ? "Cambios sin guardar" : "Nada por guardar todavía"}
+            </span>
+            <Button
+              className="min-w-40 [&:disabled]:bg-[#252320] [&:disabled]:text-[#6b6459] [&:disabled]:opacity-100"
+              disabled={isSaving || !hasSettingsChanges}
+              type="submit"
+            >
+              {isSaving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </div>
         ) : null}
         {activeSettingsSection === "billing" ? (
         <section className="space-y-5" id="settings-section-billing">
@@ -1809,22 +1822,22 @@ export function SettingsPage() {
         {activeSettingsSection === "workspace" ? (
         <section className="space-y-5" id="settings-section-workspace">
           <SettingsSectionLead
-            description="Revisa el workspace activo, crea espacios compartidos, invita personas y confirma tu contexto actual."
-            eyebrow="Workspace"
+            description="Revisa el espacio activo, crea espacios compartidos, invita personas y confirma tu contexto actual."
+            eyebrow="Espacios"
             title="Espacio y colaboracion"
           />
           <SurfaceCard
             action={<ShieldCheck className="h-5 w-5 text-pine" />}
-            description="Detalles, moneda base y opciones del workspace que tienes seleccionado."
-            title="Workspace activo"
+            description="Detalles, moneda base y opciones del espacio que tienes seleccionado."
+            title="Espacio activo"
           >
             {workspaceError ? (
               <DataState
                 description={getQueryErrorMessage(
                   workspaceError,
-                  "No pudimos leer el workspace activo del usuario.",
+                  "No pudimos leer el espacio activo del usuario.",
                 )}
-                title="No fue posible cargar el workspace"
+                title="No fue posible cargar el espacio"
                 tone="error"
               />
             ) : activeWorkspace ? (
@@ -1904,14 +1917,14 @@ export function SettingsPage() {
                   </div>
                 ) : workspaceCollaborationQuery.isLoading ? (
                   <DataState
-                    description="Buscando miembros activos e invitaciones del workspace."
+                    description="Buscando miembros activos e invitaciones del espacio."
                     title="Cargando colaboración"
                   />
                 ) : workspaceCollaborationQuery.error ? (
                   <DataState
                     description={getQueryErrorMessage(
                       workspaceCollaborationQuery.error,
-                      "No pudimos leer los miembros ni las invitaciones de este workspace.",
+                      "No pudimos leer los miembros ni las invitaciones de este espacio.",
                     )}
                     title="No pudimos cargar la colaboración"
                     tone="error"
@@ -1999,8 +2012,8 @@ export function SettingsPage() {
               </div>
             ) : (
               <DataState
-                description="Todavía no existe un workspace activo para esta sesión."
-                title="Sin workspace activo"
+                description="Todavía no existe un espacio activo para esta sesión."
+                title="Sin espacio activo"
               />
             )}
           </SurfaceCard>
@@ -2016,30 +2029,30 @@ export function SettingsPage() {
         {activeSettingsSection === "catalogs" ? (
         <section className="space-y-5" id="settings-section-catalogs">
           <SettingsSectionLead
-            description="Mira el pulso general de categorias, contrapartes y cuentas registradas dentro del workspace seleccionado."
+            description="Mira el pulso general de categorías, contrapartes y cuentas registradas dentro del espacio seleccionado."
             eyebrow="Catalogos"
             title="Resumen operativo"
           />
           <SurfaceCard
             action={<Tag className="h-5 w-5 text-gold" />}
-            description="Resumen de categorías, cuentas, contactos y suscripciones del workspace activo."
-            title="Catálogos del workspace"
+            description="Resumen de categorías, cuentas, contactos y suscripciones del espacio activo."
+            title="Catálogos del espacio"
           >
             {!activeWorkspace ? (
               <DataState
-                description="Los catalogos se mostraran cuando exista un workspace seleccionado."
-                title="Sin contexto de workspace"
+                description="Los catálogos se mostrarán cuando exista un espacio seleccionado."
+                title="Sin contexto de espacio"
               />
             ) : snapshotQuery.isLoading ? (
               <DataState
-                description="Consultando categorías, contactos y cuentas del workspace."
+                description="Consultando categorías, contactos y cuentas del espacio."
                 title="Cargando catálogos"
               />
             ) : snapshotQuery.error ? (
               <DataState
                 description={getQueryErrorMessage(
                   snapshotQuery.error,
-                  "No pudimos leer los catalogos del workspace.",
+                  "No pudimos leer los catálogos del espacio.",
                 )}
                 title="No fue posible cargar los catalogos"
                 tone="error"
@@ -2074,13 +2087,13 @@ export function SettingsPage() {
 
       {isCreateWorkspaceOpen ? (
         <WorkspaceDialogShell
-          description="Crea un espacio aparte para llevar finanzas con otra persona, familia o equipo sin mezclarlo con tu workspace personal."
+          description="Crea un espacio aparte para llevar finanzas con otra persona, familia o equipo sin mezclarlo con tu espacio personal."
           onClose={() => {
             if (!isCreatingSharedWorkspace) {
               setIsCreateWorkspaceOpen(false);
             }
           }}
-          title="Crear workspace compartido"
+          title="Crear espacio compartido"
         >
           <form
             className="space-y-5"
@@ -2092,7 +2105,7 @@ export function SettingsPage() {
                 <p className="text-xs uppercase tracking-[0.2em] text-storm">Identidad</p>
                 <div className="mt-5 grid gap-5">
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium text-ink">Nombre del workspace</span>
+                    <span className="text-sm font-medium text-ink">Nombre del espacio</span>
                     <input
                       className="field-dark"
                       onChange={(event) => setSharedWorkspaceName(event.target.value)}
@@ -2106,7 +2119,7 @@ export function SettingsPage() {
                     <textarea
                       className="field-dark min-h-[140px] py-4"
                       onChange={(event) => setSharedWorkspaceDescription(event.target.value)}
-                      placeholder="Ej. Workspace para llevar gastos, ingresos y metas del hogar."
+                      placeholder="Ej. Espacio para llevar gastos, ingresos y metas del hogar."
                       value={sharedWorkspaceDescription}
                     />
                   </label>
@@ -2121,7 +2134,7 @@ export function SettingsPage() {
                     <SettingsPicker
                       onChange={setSharedWorkspaceCurrencyCode}
                       options={currencyPickerOptions}
-                      placeholderDescription="Se usara para resúmenes y conversiones de este workspace."
+                      placeholderDescription="Se usará para resúmenes y conversiones de este espacio."
                       placeholderLabel="Selecciona una moneda"
                       queryPlaceholder="Buscar PEN, USD, EUR..."
                       value={sharedWorkspaceCurrencyCode}
@@ -2174,7 +2187,7 @@ export function SettingsPage() {
               setIsInviteMemberOpen(false);
             }
           }}
-          title="Invitar miembro al workspace"
+          title="Invitar miembro al espacio"
         >
           <form
             className="space-y-5"
