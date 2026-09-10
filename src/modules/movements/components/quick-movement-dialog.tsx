@@ -2,9 +2,11 @@
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowUpCircle,
-  ChevronDown,
+  ArrowLeft,
+  Check,
   ChevronRight,
   LoaderCircle,
+  Paperclip,
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
@@ -12,11 +14,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
-import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SearchablePicker as QuickPicker } from "../../../components/ui/searchable-picker";
-import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
   deleteStoredReceipt,
@@ -62,6 +62,8 @@ type QuickMovementFormState = {
   status: Exclude<MovementStatus, "voided">;
 };
 
+type QuickMovementPanel = "main" | "details" | "category" | "counterparty";
+
 type QuickFieldProps = {
   children: ReactNode;
   errorKey?: string;
@@ -83,7 +85,6 @@ const quickMovementModes: Array<{
   description: string;
   color: string;
   icon: typeof ArrowDownCircle;
-  cta: string;
 }> = [
   {
     kind: "expense",
@@ -91,7 +92,6 @@ const quickMovementModes: Array<{
     description: "Registra una salida de dinero desde una cuenta existente.",
     color: "#8f3e3e",
     icon: ArrowDownCircle,
-    cta: "Guardar gasto",
   },
   {
     kind: "income",
@@ -99,7 +99,6 @@ const quickMovementModes: Array<{
     description: "Registra una entrada de dinero a una cuenta del espacio.",
     color: "#1b6a58",
     icon: ArrowUpCircle,
-    cta: "Guardar ingreso",
   },
   {
     kind: "transfer",
@@ -107,7 +106,6 @@ const quickMovementModes: Array<{
     description: "Mueve saldo entre dos cuentas del mismo espacio.",
     color: "#4566d6",
     icon: ArrowLeftRight,
-    cta: "Guardar transferencia",
   },
 ];
 
@@ -294,7 +292,7 @@ export function QuickMovementDialog({
   );
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [activePanel, setActivePanel] = useState<QuickMovementPanel>("main");
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
@@ -363,6 +361,7 @@ export function QuickMovementDialog({
 
   useEffect(() => {
     setKind(initialKind);
+    setActivePanel("main");
     setErrorMessage("");
     setInvalidFields(new Set());
     setPendingReceiptFile(null);
@@ -390,7 +389,7 @@ export function QuickMovementDialog({
         node.classList.add("field-error-shake");
       }
     });
-  }, [invalidFields]);
+  }, [activePanel, invalidFields]);
 
   function clearFieldError(field: string) {
     setInvalidFields((prev) => {
@@ -473,6 +472,7 @@ export function QuickMovementDialog({
     const occurredAt = new Date(formState.occurredAt);
 
     if (Number.isNaN(occurredAt.getTime())) {
+      setActivePanel("details");
       setInvalidFields(new Set(["occurredAt"]));
       setErrorMessage("La fecha del movimiento no es valida.");
       return;
@@ -567,6 +567,9 @@ export function QuickMovementDialog({
       }
 
       if (tErrors.length > 0) {
+        if (tErrors.includes("destinationAmount")) {
+          setActivePanel("details");
+        }
         setInvalidFields(new Set(tErrors));
         setErrorMessage("Completa los campos requeridos antes de guardar.");
         return;
@@ -649,11 +652,11 @@ export function QuickMovementDialog({
     () => [
       {
         value: "",
-        label: "Sin categoria",
-        description: "Puedes registrarlo rapido y categorizar despues.",
+        label: "Sin categoría",
+        description: "Puedes registrarlo rápido y categorizar después.",
         leadingLabel: "?",
         leadingColor: "#6b7280",
-        searchText: "sin categoria",
+        searchText: "sin categoría",
       },
       ...filteredCategories.map((category) => ({
         value: String(category.id),
@@ -715,7 +718,30 @@ export function QuickMovementDialog({
           onMouseUp={(event) => event.stopPropagation()}
         >
           <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5 sm:px-6">
-            <h2 className="font-display text-xl font-semibold text-ink">Nuevo movimiento</h2>
+            {activePanel === "main" ? (
+              <h2 className="font-display text-xl font-semibold text-ink">Nuevo movimiento</h2>
+            ) : (
+              <button
+                className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white"
+                onClick={() =>
+                  setActivePanel(
+                    activePanel === "category" || activePanel === "counterparty"
+                      ? "details"
+                      : "main",
+                  )
+                }
+                type="button"
+              >
+                <ArrowLeft className="h-4 w-4 shrink-0" />
+                <span className="truncate font-display text-xl font-semibold">
+                  {activePanel === "details"
+                    ? "Detalles"
+                    : activePanel === "category"
+                      ? "Categoría"
+                      : "Contraparte"}
+                </span>
+              </button>
+            )}
             <button
               aria-label="Cerrar formulario"
               className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
@@ -733,7 +759,8 @@ export function QuickMovementDialog({
             onSubmit={(event) => void handleSubmit(event)}
           >
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-              <div className="grid grid-cols-3 gap-2">
+              <div className={activePanel === "main" ? "" : "hidden"}>
+                <div className="grid grid-cols-3 gap-2">
                 {quickMovementModes.map((mode) => {
                   const ModeIcon = mode.icon;
                   const isActive = mode.kind === kind;
@@ -757,7 +784,7 @@ export function QuickMovementDialog({
                     </button>
                   );
                 })}
-              </div>
+                </div>
 
               {visibleAccounts.length < minimumAccountsRequired ? (
                 <div className="mt-5">
@@ -926,99 +953,13 @@ export function QuickMovementDialog({
 
                   <div className="mt-5 rounded-xl border border-white/10 bg-[#141311]">
                     <button
-                      className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-semibold text-ink"
-                      onClick={() => setShowDetails((current) => !current)}
+                      className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink transition hover:bg-white/[0.03]"
+                      onClick={() => setActivePanel("details")}
                       type="button"
                     >
                       Detalles
-                      {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <ChevronRight className="h-4 w-4 text-storm" />
                     </button>
-
-                    {showDetails ? (
-                      <div className="space-y-4 border-t border-white/10 p-4">
-                        {isTransfer && hasTransferCurrencyMismatch ? (
-                          <QuickField
-                            errorKey="destinationAmount"
-                            invalidFields={invalidFields}
-                            label={`Monto que llega · ${selectedDestinationAccount?.currencyCode ?? "destino"}`}
-                          >
-                            <QuickInput
-                              inputMode="decimal"
-                              onChange={(event) => {
-                                clearFieldError("destinationAmount");
-                                updateFormState("destinationAmount", event.target.value);
-                              }}
-                              placeholder="0.00"
-                              value={formState.destinationAmount}
-                            />
-                          </QuickField>
-                        ) : null}
-
-                        {!isTransfer ? (
-                          <>
-                            <QuickField label="Categoría">
-                              <QuickPicker
-                                appearance="compact"
-                                emptyMessage="No encontramos una categoría con ese término."
-                                onChange={(nextValue) => updateFormState("categoryId", nextValue)}
-                                options={categoryOptions}
-                                placeholderDescription="Opcional"
-                                placeholderLabel="Sin categoría"
-                                queryPlaceholder="Buscar categoría..."
-                                value={formState.categoryId}
-                              />
-                            </QuickField>
-                            <QuickField label="Contraparte">
-                              <QuickPicker
-                                actionDescription="Regístrala y quedará seleccionada."
-                                actionLabel="Nuevo contacto"
-                                actionLeadingColor="#1b6a58"
-                                actionLeadingLabel="+"
-                                appearance="compact"
-                                emptyMessage="No encontramos una contraparte con ese término."
-                                onAction={openContactDialog}
-                                onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
-                                options={counterpartyOptions}
-                                placeholderDescription="Opcional"
-                                placeholderLabel="Sin contraparte"
-                                queryPlaceholder="Buscar contraparte..."
-                                value={formState.counterpartyId}
-                              />
-                            </QuickField>
-                          </>
-                        ) : null}
-
-                        <QuickField label="Descripción">
-                          <QuickInput
-                            onChange={(event) => updateFormState("description", event.target.value)}
-                            placeholder="Descripción opcional"
-                            value={formState.description}
-                          />
-                        </QuickField>
-
-                        <QuickField errorKey="occurredAt" invalidFields={invalidFields} label="Fecha">
-                          <DatePickerField
-                            mode="datetime-local"
-                            onChange={(nextValue) => {
-                              clearFieldError("occurredAt");
-                              updateFormState("occurredAt", nextValue);
-                            }}
-                            value={formState.occurredAt}
-                          />
-                        </QuickField>
-
-                        <PendingReceiptField
-                          canUpload={canUploadReceipts}
-                          description="Opcional. Adjunta una foto del comprobante."
-                          file={pendingReceiptFile}
-                          lockedMessage={accessMessage}
-                          onChange={(file) => {
-                            setPendingReceiptFile(file);
-                            setIsDirty(true);
-                          }}
-                        />
-                      </div>
-                    ) : null}
                   </div>
 
                   <p className="mt-4 text-xs leading-5 text-storm/70">
@@ -1026,9 +967,194 @@ export function QuickMovementDialog({
                   </p>
                 </>
               )}
+              </div>
+
+              {activePanel === "details" ? (
+                <div>
+                  {errorMessage ? (
+                    <div className="mb-4">
+                      <FormFeedbackBanner description={errorMessage} title="Revisa el movimiento" />
+                    </div>
+                  ) : null}
+
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
+                    {isTransfer && hasTransferCurrencyMismatch ? (
+                      <label
+                        className={`flex h-[54px] items-center justify-between gap-4 px-4 ${
+                          invalidFields.has("destinationAmount") ? "field-error-ring" : ""
+                        }`}
+                        data-field="destinationAmount"
+                      >
+                        <span className="text-sm font-medium text-ink">Monto que llega</span>
+                        <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
+                          <span>{selectedDestinationAccount?.currencyCode ?? ""}</span>
+                          <input
+                            className="w-28 bg-transparent text-right font-semibold text-ink outline-none placeholder:text-storm/55"
+                            inputMode="decimal"
+                            onChange={(event) => {
+                              clearFieldError("destinationAmount");
+                              updateFormState("destinationAmount", event.target.value);
+                            }}
+                            placeholder="0.00"
+                            value={formState.destinationAmount}
+                          />
+                        </span>
+                      </label>
+                    ) : null}
+
+                    {!isTransfer ? (
+                      <>
+                        <button
+                          className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left first:border-t-0"
+                          onClick={() => setActivePanel("category")}
+                          type="button"
+                        >
+                          <span className="text-sm font-medium text-ink">Categoría</span>
+                          <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
+                            <span className="truncate">{selectedCategory?.name ?? "Sin categoría"}</span>
+                            <ChevronRight className="h-4 w-4 shrink-0" />
+                          </span>
+                        </button>
+                        <button
+                          className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left"
+                          onClick={() => setActivePanel("counterparty")}
+                          type="button"
+                        >
+                          <span className="text-sm font-medium text-ink">Contraparte</span>
+                          <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
+                            <span className="truncate">{selectedCounterparty?.name ?? "Sin asignar"}</span>
+                            <ChevronRight className="h-4 w-4 shrink-0" />
+                          </span>
+                        </button>
+                      </>
+                    ) : null}
+
+                    <label className="flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4">
+                      <span className="shrink-0 text-sm font-medium text-ink">Descripción</span>
+                      <input
+                        className="min-w-0 flex-1 bg-transparent text-right text-sm text-ink outline-none placeholder:text-storm/55"
+                        onChange={(event) => updateFormState("description", event.target.value)}
+                        placeholder="Se genera automáticamente"
+                        value={formState.description}
+                      />
+                    </label>
+
+                    <label
+                      className={`flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4 ${
+                        invalidFields.has("occurredAt") ? "field-error-ring" : ""
+                      }`}
+                      data-field="occurredAt"
+                    >
+                      <span className="shrink-0 text-sm font-medium text-ink">Fecha</span>
+                      <input
+                        className="min-w-0 bg-transparent text-right text-sm text-storm outline-none [color-scheme:dark]"
+                        onChange={(event) => {
+                          clearFieldError("occurredAt");
+                          updateFormState("occurredAt", event.target.value);
+                        }}
+                        type="datetime-local"
+                        value={formState.occurredAt}
+                      />
+                    </label>
+
+                    <div className="flex min-h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4">
+                      <span className="shrink-0 text-sm font-medium text-ink">Comprobante</span>
+                      {canUploadReceipts ? (
+                        <div className="flex min-w-0 items-center gap-2">
+                          <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm text-storm transition hover:text-ink">
+                            <span className="max-w-48 truncate">
+                              {pendingReceiptFile?.name ?? "Adjuntar"}
+                            </span>
+                            <Paperclip className="h-4 w-4 shrink-0" />
+                            <input
+                              accept="image/jpeg,image/png,image/webp"
+                              className="sr-only"
+                              onChange={(event) => {
+                                setPendingReceiptFile(event.target.files?.[0] ?? null);
+                                setIsDirty(true);
+                              }}
+                              type="file"
+                            />
+                          </label>
+                          {pendingReceiptFile ? (
+                            <button
+                              aria-label="Quitar comprobante"
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
+                              onClick={() => {
+                                setPendingReceiptFile(null);
+                                setIsDirty(true);
+                              }}
+                              type="button"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="truncate text-right text-xs text-storm/70">{accessMessage}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-xs leading-5 text-storm/70">
+                    Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha.
+                  </p>
+                </div>
+              ) : null}
+
+              {activePanel === "category" ? (
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
+                  {categoryOptions.map((option) => (
+                    <button
+                      className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm first:border-t-0 hover:bg-white/[0.03]"
+                      key={option.value || "none"}
+                      onClick={() => {
+                        updateFormState("categoryId", option.value);
+                        setActivePanel("details");
+                      }}
+                      type="button"
+                    >
+                      <span className="truncate text-ink">{option.label}</span>
+                      {formState.categoryId === option.value ? (
+                        <Check className="h-4 w-4 shrink-0 text-ink" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {activePanel === "counterparty" ? (
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
+                  {counterpartyOptions.map((option) => (
+                    <button
+                      className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm first:border-t-0 hover:bg-white/[0.03]"
+                      key={option.value || "none"}
+                      onClick={() => {
+                        updateFormState("counterpartyId", option.value);
+                        setActivePanel("details");
+                      }}
+                      type="button"
+                    >
+                      <span className="truncate text-ink">{option.label}</span>
+                      {formState.counterpartyId === option.value ? (
+                        <Check className="h-4 w-4 shrink-0 text-ink" />
+                      ) : null}
+                    </button>
+                  ))}
+                  <button
+                    className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm font-semibold text-ink hover:bg-white/[0.03]"
+                    onClick={openContactDialog}
+                    type="button"
+                  >
+                    Nuevo contacto
+                    <ChevronRight className="h-4 w-4 text-storm" />
+                  </button>
+                </div>
+              ) : null}
             </div>
 
-            {visibleAccounts.length >= minimumAccountsRequired ? (
+            {visibleAccounts.length >= minimumAccountsRequired &&
+            (activePanel === "main" || activePanel === "details") ? (
               <footer className="shrink-0 border-t border-white/10 px-5 py-4 sm:px-6">
                 <Button className="w-full justify-center" disabled={isSaving} type="submit">
                   {isSaving ? (
@@ -1036,9 +1162,7 @@ export function QuickMovementDialog({
                       <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                       Guardando...
                     </>
-                  ) : (
-                    selectedMode.cta
-                  )}
+                  ) : "Guardar"}
                 </Button>
               </footer>
             ) : null}
