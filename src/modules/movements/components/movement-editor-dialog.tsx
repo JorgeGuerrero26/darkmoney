@@ -36,6 +36,7 @@ import type {
   SubscriptionSummary,
 } from "../../../types/domain";
 import { AttachmentGallery } from "../../attachments/components/attachment-gallery";
+import { CompactAttachmentField } from "../../attachments/components/compact-attachment-field";
 import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
 import {
   expenseLikeMovementTypes,
@@ -669,11 +670,10 @@ export function MovementEditorDialog({
                           onChange={updatePendingReceiptFile}
                         />
                       ) : selectedMovement ? (
-                        <AttachmentGallery
+                        <CompactAttachmentField
                           accessMessage={accessMessage}
                           attachments={attachments}
                           canManage={canManageReceipts}
-                          entityLabel="movimiento"
                           isUploading={isUploadingReceipt}
                           onDelete={(attachment) => void handleDeleteReceipt(attachment)}
                           onUpload={(file) => void handleUploadReceipt(file)}
