@@ -106,6 +106,18 @@ export const movementTypeOptions = [
   },
 ] as const;
 
+/**
+ * El filtro agrupa los tipos técnicos bajo los tres tipos que el usuario
+ * puede registrar directamente. Los tipos internos siguen disponibles para
+ * edición y presentación de movimientos generados por otros módulos.
+ */
+export const movementFilterTypeOptions = movementTypeOptions.filter(
+  (option) =>
+    option.value === "expense" ||
+    option.value === "income" ||
+    option.value === "transfer",
+);
+
 export const movementStatusOptions = [
   {
     value: "planned" as const,
@@ -154,6 +166,29 @@ export function movementActsAsIncome(
   }
 
   return (movement.destinationAmount ?? 0) > (movement.sourceAmount ?? 0);
+}
+
+export function movementMatchesTypeFilter(
+  movement: Pick<MovementRecord, "movementType" | "sourceAmount" | "destinationAmount">,
+  filter: MovementType | "all",
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "transfer") {
+    return movement.movementType === "transfer";
+  }
+
+  if (filter === "income") {
+    return movement.movementType !== "transfer" && movementActsAsIncome(movement);
+  }
+
+  if (filter === "expense") {
+    return movement.movementType !== "transfer" && !movementActsAsIncome(movement);
+  }
+
+  return false;
 }
 
 /** Tipos cuyo sentido depende de los montos y no solo del tipo. */

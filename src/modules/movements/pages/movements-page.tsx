@@ -55,8 +55,9 @@ import {
   getMovementDisplayInfo,
   incomeLikeMovementTypes,
   movementActsAsIncome,
+  movementFilterTypeOptions,
+  movementMatchesTypeFilter,
   movementStatusOptions,
-  movementTypeOptions,
   parseMetadataValue,
   parseOptionalInteger,
   parseOptionalNumber,
@@ -81,7 +82,7 @@ const statusFilterPickerOptions: PickerOption[] = [
 
 const typeFilterPickerOptions: PickerOption[] = [
   { value: "all", label: "Todos los tipos", description: "No filtra por tipo.", leadingLabel: "TO", searchText: "todos tipos" },
-  ...movementTypeOptions.map((option) => ({
+  ...movementFilterTypeOptions.map((option) => ({
     value: option.value,
     label: option.label,
     description: option.description,
@@ -231,7 +232,7 @@ export function MovementsPage() {
         !normalizedDescription ||
         movement.description.toLowerCase().includes(normalizedDescription);
       const matchesStatus = tableFilters.status === "all" || movement.status === tableFilters.status;
-      const matchesType = tableFilters.type === "all" || movement.movementType === tableFilters.type;
+      const matchesType = movementMatchesTypeFilter(movement, tableFilters.type);
       const matchesCategory =
         !normalizedCategory || movement.category.toLowerCase().includes(normalizedCategory);
       const matchesCounterparty =

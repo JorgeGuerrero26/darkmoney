@@ -4,9 +4,9 @@ import { useSearchParams } from "react-router-dom";
 import type { MovementStatus, MovementType } from "../../../types/domain";
 import {
   defaultMovementTableFilters,
+  movementFilterTypeOptions,
   movementStatusOptions,
   movementTableFilterDefaults,
-  movementTypeOptions,
 } from "../lib/movement-form";
 import type {
   MovementTableFilterField,
@@ -32,7 +32,7 @@ export function useMovementTableFilters(viewMode: string) {
 
     return {
       description: searchParams.get("q") ?? defaults.description,
-      type: movementTypeOptions.some((option) => option.value === typeParam)
+      type: movementFilterTypeOptions.some((option) => option.value === typeParam)
         ? (typeParam as MovementType)
         : "all",
       status: movementStatusOptions.some((option) => option.value === statusParam)
