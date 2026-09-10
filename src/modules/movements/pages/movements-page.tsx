@@ -832,7 +832,7 @@ export function MovementsPage() {
               onChange={updateDateRange}
             />
             <SearchablePicker
-              appearance="compact"
+              appearance="toolbar"
               emptyMessage="No hay estados para mostrar."
               onChange={(value) => updateTableFilter("status", value as MovementStatus | "all")}
               options={statusFilterPickerOptions}
@@ -843,7 +843,7 @@ export function MovementsPage() {
               value={tableFilters.status}
             />
             <SearchablePicker
-              appearance="compact"
+              appearance="toolbar"
               emptyMessage="No hay tipos para mostrar."
               onChange={(value) => updateTableFilter("type", value as MovementType | "all")}
               options={typeFilterPickerOptions}

@@ -29,7 +29,7 @@ export type SearchablePickerProps = {
   actionLeadingLabel?: string;
   actionLeadingColor?: string;
   disabled?: boolean;
-  appearance?: "default" | "compact";
+  appearance?: "default" | "compact" | "toolbar";
   showSearch?: boolean;
 };
 
@@ -103,7 +103,8 @@ export function SearchablePicker({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const isCompact = appearance === "compact";
+  const isCompact = appearance === "compact" || appearance === "toolbar";
+  const isToolbar = appearance === "toolbar";
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -248,7 +249,7 @@ export function SearchablePicker({
         aria-haspopup="listbox"
         className={
           isCompact
-            ? "flex h-11 w-full items-center justify-between gap-3 rounded-[7px] border border-white/[0.08] bg-[#1a1917] px-3 text-left text-sm text-ink outline-none transition hover:border-white/[0.14] focus-visible:border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            ? `flex w-full items-center justify-between gap-3 border border-white/[0.08] bg-[#1a1917] text-left text-sm text-ink outline-none transition hover:border-white/[0.14] focus-visible:border-white/20 disabled:cursor-not-allowed disabled:opacity-60 ${isToolbar ? "h-full min-h-[56px] rounded-xl px-4" : "h-11 rounded-[7px] px-3"}`
             : triggerClassName
         }
         disabled={disabled}
