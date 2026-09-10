@@ -264,14 +264,18 @@ export function MovementSuggestionRow({
 }
 
 export function MovementInsightRow({
+  actionLabel,
   description,
   kind,
   label,
+  onAction,
   title,
 }: {
+  actionLabel?: string;
   description: string;
   kind: "budget" | "recurring" | "risk";
   label: string;
+  onAction?: () => void;
   title: string;
 }) {
   const Icon = kind === "recurring" ? Repeat2 : kind === "budget" ? Gauge : AlertTriangle;
@@ -285,6 +289,15 @@ export function MovementInsightRow({
         <p className="text-sm font-medium text-ink">{title}</p>
         <p className="text-xs leading-5 text-storm/70">{description}</p>
       </div>
+      {actionLabel && onAction ? (
+        <button
+          className="shrink-0 text-sm font-semibold text-ink underline-offset-4 hover:underline"
+          onClick={onAction}
+          type="button"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+  AccountSummary,
   CategorySummary,
   CounterpartySummary,
   MovementRecord,
@@ -15,17 +16,22 @@ import {
   type DescriptionSuggestion,
 } from "../../../services/queries/movement-ai";
 import {
+  suggestAccountLocally,
   suggestCategoryLocally,
   suggestCounterpartyLocally,
   suggestDescriptionCleanupLocally,
 } from "../lib/movement-suggestions";
+import type { AccountSuggestion } from "../lib/movement-suggestions";
 
 type MovementSuggestions = {
+  account: AccountSuggestion | null;
   category: CategorySuggestion | null;
   counterparty: CounterpartySuggestion | null;
   description: DescriptionSuggestion | null;
   isLoading: boolean;
 };
+
+type RemoteMovementSuggestions = Pick<MovementSuggestions, "category" | "counterparty" | "description">;
 
 const categoryCache = new Map<string, CategorySuggestion | null>();
 const counterpartyCache = new Map<string, CounterpartySuggestion | null>();
@@ -36,6 +42,9 @@ export function useMovementSuggestions(input: {
   workspaceId: number;
   proAccessEnabled?: boolean;
   movementType: MovementType;
+  accountId: number | null;
+  accounts: AccountSummary[];
+  actsAsIncome: boolean;
   amount: number | null;
   currencyCode: string;
   description: string;
@@ -47,6 +56,25 @@ export function useMovementSuggestions(input: {
   movements: MovementRecord[];
   editingMovementId?: number;
 }): MovementSuggestions {
+  const localAccount = useMemo(
+    () =>
+      suggestAccountLocally({
+        accountId: input.accountId,
+        accounts: input.accounts,
+        actsAsIncome: input.actsAsIncome,
+        counterpartyId: input.counterpartyId,
+        movements: input.movements,
+        excludedMovementId: input.editingMovementId,
+      }),
+    [
+      input.accountId,
+      input.accounts,
+      input.actsAsIncome,
+      input.counterpartyId,
+      input.editingMovementId,
+      input.movements,
+    ],
+  );
   const localCategory = useMemo(
     () =>
       input.categoryId === null
@@ -85,7 +113,7 @@ export function useMovementSuggestions(input: {
     () => suggestDescriptionCleanupLocally(input.description),
     [input.description],
   );
-  const [remote, setRemote] = useState<Omit<MovementSuggestions, "isLoading">>({
+  const [remote, setRemote] = useState<RemoteMovementSuggestions>({
     category: null,
     counterparty: null,
     description: null,
@@ -224,6 +252,7 @@ export function useMovementSuggestions(input: {
   ]);
 
   return {
+    account: localAccount,
     category: input.categoryId === null ? remote.category ?? localCategory : null,
     counterparty: input.counterpartyId === null ? remote.counterparty ?? localCounterparty : null,
     description: remote.description ?? localDescription,

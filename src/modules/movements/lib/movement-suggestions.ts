@@ -1,4 +1,5 @@
 import type {
+  AccountSummary,
   CategorySummary,
   CounterpartySummary,
   MovementRecord,
@@ -10,6 +11,13 @@ import type {
   DescriptionSuggestion,
 } from "../../../services/queries/movement-ai";
 import { movementActsAsIncome } from "./movement-form";
+
+export type AccountSuggestion = {
+  accountId: number;
+  accountName: string;
+  confidence: number;
+  reasons: string[];
+};
 
 function normalizeText(value: string) {
   return value
@@ -89,8 +97,10 @@ export function suggestCategoryLocally(input: {
   const category = categories.get(best[0]);
   if (!category) return null;
   return {
+    type: "existing_category",
     categoryId: category.id,
     categoryName: category.name,
+    newCategoryName: null,
     confidence: best[1].score,
     reasons: [
       best[1].exact
@@ -118,8 +128,11 @@ export function suggestCounterpartyLocally(input: {
   });
   if (exactName) {
     return {
+      type: "existing_counterparty",
       counterpartyId: exactName.id,
       counterpartyName: exactName.name,
+      newCounterpartyName: null,
+      counterpartyType: exactName.type,
       confidence: 0.9,
       reasons: ["el nombre aparece en la descripción"],
       source: "local",
@@ -141,11 +154,53 @@ export function suggestCounterpartyLocally(input: {
   );
   if (!counterparty) return null;
   return {
+    type: "existing_counterparty",
     counterpartyId: counterparty.id,
     counterpartyName: counterparty.name,
+    newCounterpartyName: null,
+    counterpartyType: counterparty.type,
     confidence: 0.88,
     reasons: ["la usaste antes con esta descripción"],
     source: "local",
+  };
+}
+
+export function suggestAccountLocally(input: {
+  accountId: number | null;
+  accounts: AccountSummary[];
+  actsAsIncome: boolean;
+  counterpartyId: number | null;
+  movements: MovementRecord[];
+  excludedMovementId?: number;
+}): AccountSuggestion | null {
+  if (input.accountId !== null || input.counterpartyId === null) return null;
+  const availableAccounts = new Map(
+    input.accounts.filter((account) => !account.isArchived).map((account) => [account.id, account]),
+  );
+  const scores = new Map<number, number>();
+  input.movements.forEach((movement) => {
+    if (
+      movement.id === input.excludedMovementId ||
+      movement.status === "voided" ||
+      movement.movementType === "transfer" ||
+      movement.counterpartyId !== input.counterpartyId ||
+      movementActsAsIncome(movement) !== input.actsAsIncome
+    ) {
+      return;
+    }
+    const accountId = input.actsAsIncome ? movement.destinationAccountId : movement.sourceAccountId;
+    if (accountId == null || !availableAccounts.has(accountId)) return;
+    scores.set(accountId, (scores.get(accountId) ?? 0) + 1);
+  });
+  const best = [...scores.entries()].sort((left, right) => right[1] - left[1])[0];
+  if (!best) return null;
+  const account = availableAccounts.get(best[0]);
+  if (!account) return null;
+  return {
+    accountId: account.id,
+    accountName: account.name,
+    confidence: Math.min(0.94, 0.68 + best[1] * 0.06),
+    reasons: [best[1] === 1 ? "la usaste antes con esta contraparte" : `la usaste ${best[1]} veces con esta contraparte`],
   };
 }
 

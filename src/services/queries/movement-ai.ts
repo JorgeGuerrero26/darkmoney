@@ -4,16 +4,21 @@ import { invokeAuthenticatedFunction } from "./workspace-data";
 export type MovementSuggestionSource = "local" | "deepseek";
 
 export type CategorySuggestion = {
-  categoryId: number;
+  type: "existing_category" | "new_category";
+  categoryId: number | null;
   categoryName: string;
+  newCategoryName: string | null;
   confidence: number;
   reasons: string[];
   source: MovementSuggestionSource;
 };
 
 export type CounterpartySuggestion = {
-  counterpartyId: number;
+  type: "existing_counterparty" | "new_counterparty";
+  counterpartyId: number | null;
   counterpartyName: string;
+  newCounterpartyName: string | null;
+  counterpartyType: CounterpartyType;
   confidence: number;
   reasons: string[];
   source: MovementSuggestionSource;
@@ -71,6 +76,7 @@ type CategoryAiResponse = {
     type: "existing_category" | "new_category" | "none";
     categoryId: number | null;
     categoryName: string | null;
+    newCategoryName: string | null;
     confidence: number;
     reasons: string[];
   } | null;
@@ -82,6 +88,8 @@ type CounterpartyAiResponse = {
     type: "existing_counterparty" | "new_counterparty" | "none";
     counterpartyId: number | null;
     counterpartyName: string | null;
+    newCounterpartyName: string | null;
+    counterpartyType: CounterpartyType;
     confidence: number;
     reasons: string[];
   } | null;
@@ -122,16 +130,18 @@ export async function requestCategorySuggestion(input: {
   const recommendation = response.ok ? response.recommendation : null;
   if (
     !recommendation ||
-    recommendation.type !== "existing_category" ||
-    recommendation.categoryId === null ||
-    !recommendation.categoryName ||
+    recommendation.type === "none" ||
+    (recommendation.type === "existing_category" && recommendation.categoryId === null) ||
+    !(recommendation.categoryName || recommendation.newCategoryName) ||
     recommendation.confidence < 0.65
   ) {
     return null;
   }
   return {
+    type: recommendation.type,
     categoryId: recommendation.categoryId,
-    categoryName: recommendation.categoryName,
+    categoryName: recommendation.categoryName ?? recommendation.newCategoryName!,
+    newCategoryName: recommendation.newCategoryName,
     confidence: recommendation.confidence,
     reasons: recommendation.reasons,
     source: "deepseek" as const,
@@ -157,7 +167,8 @@ export async function requestCounterpartySuggestion(input: {
             type: "existing_counterparty",
             counterpartyId: input.localSuggestion.counterpartyId,
             counterpartyName: input.localSuggestion.counterpartyName,
-            newCounterpartyName: null,
+            newCounterpartyName: input.localSuggestion.newCounterpartyName,
+            counterpartyType: input.localSuggestion.counterpartyType,
             confidence: input.localSuggestion.confidence,
             reasons: input.localSuggestion.reasons,
           }
@@ -167,16 +178,19 @@ export async function requestCounterpartySuggestion(input: {
   const recommendation = response.ok ? response.recommendation : null;
   if (
     !recommendation ||
-    recommendation.type !== "existing_counterparty" ||
-    recommendation.counterpartyId === null ||
-    !recommendation.counterpartyName ||
+    recommendation.type === "none" ||
+    (recommendation.type === "existing_counterparty" && recommendation.counterpartyId === null) ||
+    !(recommendation.counterpartyName || recommendation.newCounterpartyName) ||
     recommendation.confidence < 0.65
   ) {
     return null;
   }
   return {
+    type: recommendation.type,
     counterpartyId: recommendation.counterpartyId,
-    counterpartyName: recommendation.counterpartyName,
+    counterpartyName: recommendation.counterpartyName ?? recommendation.newCounterpartyName!,
+    newCounterpartyName: recommendation.newCounterpartyName,
+    counterpartyType: recommendation.counterpartyType,
     confidence: recommendation.confidence,
     reasons: recommendation.reasons,
     source: "deepseek" as const,

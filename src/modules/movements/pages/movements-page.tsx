@@ -41,10 +41,12 @@ import {
   useEntityAttachmentsQuery,
   useCurrentUserEntitlementQuery,
   useUpdateMovementMutation,
+  usePersistLearningFeedbackMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 
-import { MovementEditorDialog } from "../components/movement-editor-dialog";
+import { MovementEditorDialog, type MovementCategoryFeedbackIntent } from "../components/movement-editor-dialog";
+import type { BudgetInsight, RiskInsight } from "../../../services/queries/movement-ai";
 import { MovementDateFilter } from "../components/movement-date-filter";
 import { MovementsTable } from "../components/movements-table";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
@@ -63,6 +65,7 @@ import {
   parseOptionalInteger,
   parseOptionalNumber,
 } from "../lib/movement-form";
+import { normalizeInsightText } from "../lib/movement-insights";
 import type {
   MovementEditorMode,
   MovementFormState,
@@ -136,6 +139,11 @@ export function MovementsPage() {
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<MovementCategoryFeedbackIntent | null>(null);
+  const [editorIntelligence, setEditorIntelligence] = useState<{
+    budget: BudgetInsight | null;
+    risk: RiskInsight | null;
+  }>({ budget: null, risk: null });
   // Filtros y página viven en la URL: enlaces compartibles y back/forward funcional.
   const {
     tableFilters,
@@ -156,6 +164,7 @@ export function MovementsPage() {
   const deleteMovementMutation = useDeleteMovementMutation(activeWorkspace?.id, user?.id);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(activeWorkspace?.id, user?.id);
   const deleteAttachmentRecordMutation = useDeleteAttachmentRecordMutation(activeWorkspace?.id, user?.id);
+  const persistLearningFeedbackMutation = usePersistLearningFeedbackMutation(activeWorkspace?.id, user?.id);
   useSuccessToast(feedbackMessage, {
     clear: () => setFeedbackMessage(""),
     title: "Cambios aplicados",
@@ -397,6 +406,8 @@ export function MovementsPage() {
     setPendingReceiptFile(null);
     setIsDirty(false);
     setInvalidFields(new Set());
+    setCategoryFeedbackIntent(null);
+    setEditorIntelligence({ budget: null, risk: null });
     setIsEditorOpen(true);
   }
 
@@ -409,6 +420,8 @@ export function MovementsPage() {
     setPendingReceiptFile(null);
     setIsDirty(false);
     setInvalidFields(new Set());
+    setCategoryFeedbackIntent(null);
+    setEditorIntelligence({ budget: null, risk: null });
     setIsEditorOpen(true);
   }
 
@@ -422,6 +435,8 @@ export function MovementsPage() {
     setPendingReceiptFile(null);
     setErrorMessage("");
     setIsDirty(false);
+    setCategoryFeedbackIntent(null);
+    setEditorIntelligence({ budget: null, risk: null });
   }
 
   function requestCloseEditor() {
@@ -626,6 +641,9 @@ export function MovementsPage() {
         ? destinationAmount / sourceAmount
         : null;
 
+    const metadataObject = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata
+      : {};
     const payload: MovementFormInput = {
       movementType: formState.movementType,
       status: formState.status,
@@ -641,7 +659,33 @@ export function MovementsPage() {
       counterpartyId,
       obligationId,
       subscriptionId,
-      metadata,
+      metadata: {
+        ...metadataObject,
+        riskAi: editorIntelligence.risk?.source === "deepseek" ? editorIntelligence.risk : null,
+        budgetAi: editorIntelligence.budget?.source === "deepseek" ? editorIntelligence.budget : null,
+      },
+    };
+
+    const persistCategoryLearning = (movementId: number, previousCategoryId: number | null) => {
+      if (categoryId === null) return;
+      const categoryChanged = categoryId !== previousCategoryId;
+      if (!categoryChanged && categoryFeedbackIntent?.kind !== "accepted_category_suggestion") return;
+      void persistLearningFeedbackMutation.mutateAsync({
+        movementId,
+        feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
+        normalizedDescription: normalizeInsightText(formState.description) || null,
+        previousCategoryId,
+        acceptedCategoryId: categoryId,
+        confidence: categoryFeedbackIntent?.confidence ?? null,
+        source: categoryFeedbackIntent?.source ?? "movement-form",
+        metadata: {
+          movementType: formState.movementType,
+          counterpartyId,
+          sourceAccountId,
+          destinationAccountId,
+          amount: destinationAmount ?? sourceAmount,
+        },
+      }).catch(() => undefined);
     };
 
     try {
@@ -651,6 +695,7 @@ export function MovementsPage() {
           userId: user.id,
           workspaceId: activeWorkspace.id,
         });
+        persistCategoryLearning(createdMovementId, null);
 
         if (pendingReceiptFile && canUploadReceipts) {
           try {
@@ -685,6 +730,7 @@ export function MovementsPage() {
         userId: user.id,
         workspaceId: activeWorkspace.id,
       });
+      persistCategoryLearning(selectedMovement.id, selectedMovement.categoryId ?? null);
 
       setFeedbackMessage("Movimiento actualizado correctamente.");
       setPendingReceiptFile(null);
@@ -969,6 +1015,9 @@ export function MovementsPage() {
           isSaving={isSaving}
           isUploadingReceipt={isUploadingReceipt}
           obligations={snapshot.obligations}
+          onErrorMessage={setErrorMessage}
+          onCategoryFeedback={setCategoryFeedbackIntent}
+          onIntelligenceChange={setEditorIntelligence}
           pendingReceiptFile={pendingReceiptFile}
           proAccessEnabled={entitlementQuery.data?.proAccessEnabled}
           recurringIncome={snapshot.recurringIncome}
@@ -978,6 +1027,7 @@ export function MovementsPage() {
           updatePendingReceiptFile={setPendingReceiptFile}
           updateFormState={updateFormState}
           workspaceId={activeWorkspace.id}
+          userId={user?.id ?? ""}
         />
       ) : null}
 

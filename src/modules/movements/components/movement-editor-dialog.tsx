@@ -72,6 +72,12 @@ import {
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { recurringFrequencyLabel } from "../lib/movement-insights";
+import type { BudgetInsight, RiskInsight } from "../../../services/queries/movement-ai";
+import {
+  getQueryErrorMessage,
+  useCreateCategoryMutation,
+  useCreateCounterpartyMutation,
+} from "../../../services/queries/workspace-data";
 
 const movementTextInputClassName = "field-dark";
 const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
@@ -136,6 +142,9 @@ export type MovementEditorDialogProps = {
   isSaving: boolean;
   isUploadingReceipt: boolean;
   obligations: ObligationSummary[];
+  onErrorMessage: (message: string) => void;
+  onCategoryFeedback: (intent: MovementCategoryFeedbackIntent | null) => void;
+  onIntelligenceChange: (value: { budget: BudgetInsight | null; risk: RiskInsight | null }) => void;
   pendingReceiptFile: File | null;
   proAccessEnabled?: boolean;
   recurringIncome: RecurringIncomeSummary[];
@@ -148,6 +157,13 @@ export type MovementEditorDialogProps = {
     value: MovementFormState[Field],
   ) => void;
   workspaceId: number;
+  userId: string;
+};
+
+export type MovementCategoryFeedbackIntent = {
+  confidence: number | null;
+  kind: "accepted_category_suggestion" | "manual_category_change";
+  source: string;
 };
 
 type MovementEditorPanel =
@@ -182,6 +198,9 @@ export function MovementEditorDialog({
   isSaving,
   isUploadingReceipt,
   obligations,
+  onErrorMessage,
+  onCategoryFeedback,
+  onIntelligenceChange,
   pendingReceiptFile,
   proAccessEnabled,
   recurringIncome,
@@ -191,9 +210,12 @@ export function MovementEditorDialog({
   updatePendingReceiptFile,
   updateFormState,
   workspaceId,
+  userId,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
+  const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
+  const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -360,6 +382,9 @@ export function MovementEditorDialog({
     : null;
 
   const suggestions = useMovementSuggestions({
+    accountId: primaryAccount?.id ?? null,
+    accounts,
+    actsAsIncome: primaryUsesDestination,
     enabled: activePanel === "details",
     workspaceId,
     proAccessEnabled,
@@ -396,6 +421,76 @@ export function MovementEditorDialog({
     subscriptions,
     workspaceId,
   });
+
+  useEffect(() => {
+    onIntelligenceChange({ budget: insights.budget, risk: insights.risk });
+  }, [insights.budget, insights.risk, onIntelligenceChange]);
+
+  async function applyCategorySuggestion() {
+    const suggestion = suggestions.category;
+    if (!suggestion) return;
+    if (suggestion.categoryId !== null) {
+      onCategoryFeedback({
+        confidence: suggestion.confidence,
+        kind: "accepted_category_suggestion",
+        source: suggestion.source === "deepseek" ? "movement-form-ai" : "movement-form",
+      });
+      updateFormState("categoryId", String(suggestion.categoryId));
+      return;
+    }
+    const name = suggestion.newCategoryName?.trim();
+    if (!name || formState.movementType === "transfer") return;
+    onErrorMessage("");
+    try {
+      const result = await createCategoryMutation.mutateAsync({
+        workspaceId,
+        userId,
+        name,
+        kind: incomeLikeMovementTypes.has(formState.movementType) ? "income" : "expense",
+        parentId: null,
+        color: incomeLikeMovementTypes.has(formState.movementType) ? "#58D6B3" : "#D4A574",
+        icon: null,
+        sortOrder: 0,
+        isActive: true,
+      });
+      onCategoryFeedback({
+        confidence: suggestion.confidence,
+        kind: "accepted_category_suggestion",
+        source: suggestion.source === "deepseek" ? "movement-form-ai" : "movement-form",
+      });
+      updateFormState("categoryId", String(result.id));
+    } catch (error) {
+      onErrorMessage(getQueryErrorMessage(error, "No pudimos crear la categoría sugerida."));
+    }
+  }
+
+  async function applyCounterpartySuggestion() {
+    const suggestion = suggestions.counterparty;
+    if (!suggestion) return;
+    if (suggestion.counterpartyId !== null) {
+      updateFormState("counterpartyId", String(suggestion.counterpartyId));
+      return;
+    }
+    const name = suggestion.newCounterpartyName?.trim();
+    if (!name) return;
+    onErrorMessage("");
+    try {
+      const result = await createCounterpartyMutation.mutateAsync({
+        workspaceId,
+        userId,
+        name,
+        type: suggestion.counterpartyType,
+        phone: null,
+        email: null,
+        documentNumber: null,
+        notes: "Creada desde una sugerencia de movimiento.",
+        roles: [],
+      });
+      updateFormState("counterpartyId", String(result.id));
+    } catch (error) {
+      onErrorMessage(getQueryErrorMessage(error, "No pudimos crear la contraparte sugerida."));
+    }
+  }
 
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
@@ -731,18 +826,31 @@ export function MovementEditorDialog({
                         ) : null}
                         {suggestions.category ? (
                           <MovementSuggestionRow
-                            label="Categoría sugerida"
-                            onAccept={() => updateFormState("categoryId", String(suggestions.category!.categoryId))}
+                            label={suggestions.category.type === "new_category" ? "Categoría nueva" : "Categoría sugerida"}
+                            onAccept={() => void applyCategorySuggestion()}
                             reason={suggestions.category.reasons[0]}
                             value={suggestions.category.categoryName}
                           />
                         ) : null}
                         {suggestions.counterparty ? (
                           <MovementSuggestionRow
-                            label="Contraparte sugerida"
-                            onAccept={() => updateFormState("counterpartyId", String(suggestions.counterparty!.counterpartyId))}
+                            label={suggestions.counterparty.type === "new_counterparty" ? "Contraparte nueva" : "Contraparte sugerida"}
+                            onAccept={() => void applyCounterpartySuggestion()}
                             reason={suggestions.counterparty.reasons[0]}
                             value={suggestions.counterparty.counterpartyName}
+                          />
+                        ) : null}
+                        {suggestions.account ? (
+                          <MovementSuggestionRow
+                            label="Cuenta sugerida"
+                            onAccept={() =>
+                              updateFormState(
+                                primaryUsesDestination ? "destinationAccountId" : "sourceAccountId",
+                                String(suggestions.account!.accountId),
+                              )
+                            }
+                            reason={suggestions.account.reasons[0]}
+                            value={suggestions.account.accountName}
                           />
                         ) : null}
                         {insights.recurring ? (
@@ -773,6 +881,7 @@ export function MovementEditorDialog({
                         !suggestions.description &&
                         !suggestions.category &&
                         !suggestions.counterparty &&
+                        !suggestions.account &&
                         !insights.recurring &&
                         !insights.risk &&
                         !insights.budget ? (
@@ -818,6 +927,11 @@ export function MovementEditorDialog({
                   <MovementDetailOptionsPanel
                     onChange={(value) => {
                       updateFormState("categoryId", value);
+                      onCategoryFeedback(
+                        value
+                          ? { confidence: null, kind: "manual_category_change", source: "movement-form" }
+                          : null,
+                      );
                       setActivePanel("details");
                     }}
                     options={[

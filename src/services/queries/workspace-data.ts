@@ -571,6 +571,17 @@ export type MovementFormInput = {
   metadata?: JsonValue | null;
 };
 
+export type PersistLearningFeedbackInput = {
+  movementId: number;
+  feedbackKind: "accepted_category_suggestion" | "manual_category_change";
+  normalizedDescription?: string | null;
+  previousCategoryId?: number | null;
+  acceptedCategoryId?: number | null;
+  confidence?: number | null;
+  source?: string;
+  metadata?: JsonValue | null;
+};
+
 export type ObligationFormInput = {
   direction: ObligationSummary["direction"];
   originType: ObligationOriginType;
@@ -4036,22 +4047,27 @@ export function useCreateCategoryMutation(workspaceId?: number, userId?: string)
           ? input.sortOrder
           : toNumber(categoryOrderRow?.sort_order ?? 0) + 10;
 
-      const { error } = await client.from("categories").insert({
-        workspace_id: input.workspaceId,
-        created_by_user_id: input.userId,
-        is_system: false,
-        ...buildCategoryMutationPayload(
-          {
-            ...input,
-            sortOrder: nextSortOrder,
-          },
-          input.userId,
-        ),
-      });
+      const { data, error } = await client
+        .from("categories")
+        .insert({
+          workspace_id: input.workspaceId,
+          created_by_user_id: input.userId,
+          is_system: false,
+          ...buildCategoryMutationPayload(
+            {
+              ...input,
+              sortOrder: nextSortOrder,
+            },
+            input.userId,
+          ),
+        })
+        .select("id")
+        .single();
 
       if (error) {
         throw error;
       }
+      return { id: data.id as number };
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -4925,6 +4941,29 @@ async function resolveNextObligationInstallmentNo(
   const highest = toNumber((data ?? [])[0]?.installment_no ?? 0);
 
   return highest > 0 ? highest + 1 : null;
+}
+
+export function usePersistLearningFeedbackMutation(workspaceId?: number, userId?: string) {
+  return useMutation({
+    mutationFn: async (input: PersistLearningFeedbackInput) => {
+      if (!workspaceId) return { persisted: false };
+      const client = getClient();
+      const { error } = await client.from("movement_learning_feedback").insert({
+        workspace_id: workspaceId,
+        user_id: userId ?? null,
+        movement_id: input.movementId,
+        feedback_kind: input.feedbackKind,
+        normalized_description: input.normalizedDescription ?? null,
+        previous_category_id: input.previousCategoryId ?? null,
+        accepted_category_id: input.acceptedCategoryId ?? null,
+        confidence: input.confidence ?? null,
+        source: input.source ?? "movement-form",
+        metadata: input.metadata ?? {},
+      });
+      if (error && !isMissingRelationError(error, "movement_learning_feedback")) throw error;
+      return { persisted: !error };
+    },
+  });
 }
 
 export function useCreateMovementMutation(workspaceId?: number, userId?: string) {
@@ -7251,15 +7290,20 @@ export function useCreateSubscriptionMutation(workspaceId?: number, userId?: str
   return useMutation({
     mutationFn: async (input: SubscriptionMutationInput) => {
       const client = getClient();
-      const { error } = await client.from("subscriptions").insert({
-        workspace_id: input.workspaceId,
-        created_by_user_id: input.userId,
-        ...buildSubscriptionMutationPayload(input, input.userId),
-      });
+      const { data, error } = await client
+        .from("subscriptions")
+        .insert({
+          workspace_id: input.workspaceId,
+          created_by_user_id: input.userId,
+          ...buildSubscriptionMutationPayload(input, input.userId),
+        })
+        .select("id")
+        .single();
 
       if (error) {
         throw error;
       }
+      return { id: data.id as number };
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -7351,15 +7395,20 @@ export function useCreateRecurringIncomeMutation(workspaceId?: number, userId?: 
   return useMutation({
     mutationFn: async (input: RecurringIncomeMutationInput) => {
       const client = getClient();
-      const { error } = await client.from("recurring_income").insert({
-        workspace_id: input.workspaceId,
-        created_by_user_id: input.userId,
-        ...buildRecurringIncomeMutationPayload(input, input.userId),
-      });
+      const { data, error } = await client
+        .from("recurring_income")
+        .insert({
+          workspace_id: input.workspaceId,
+          created_by_user_id: input.userId,
+          ...buildRecurringIncomeMutationPayload(input, input.userId),
+        })
+        .select("id")
+        .single();
 
       if (error) {
         throw error;
       }
+      return { id: data.id as number };
     },
     onSuccess: async () => {
       if (workspaceId) {

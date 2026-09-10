@@ -82,6 +82,11 @@ export function recurringFrequencyLabel(frequency: RecurringInsight["frequency"]
   }[frequency];
 }
 
+export function recurringFrequencyFields(frequency: RecurringInsight["frequency"]) {
+  if (frequency === "biweekly") return { frequency: "weekly" as const, intervalCount: 2 };
+  return { frequency, intervalCount: 1 };
+}
+
 export function suggestRecurringLocally(input: {
   current: InsightMovement;
   history: InsightMovement[];

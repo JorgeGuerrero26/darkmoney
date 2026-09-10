@@ -33,7 +33,7 @@ import {
 } from "./movement-details-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
-import { recurringFrequencyLabel } from "../lib/movement-insights";
+import { normalizeInsightText, recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
 import type {
   AccountSummary,
   CategorySummary,
@@ -42,6 +42,11 @@ import type {
 } from "../../../types/domain";
 import {
   useCreateAttachmentRecordMutation,
+  useCreateCategoryMutation,
+  useCreateCounterpartyMutation,
+  useCreateRecurringIncomeMutation,
+  useCreateSubscriptionMutation,
+  usePersistLearningFeedbackMutation,
   getQueryErrorMessage,
   type WorkspaceSnapshot,
   useCreateMovementMutation,
@@ -73,6 +78,12 @@ type QuickMovementFormState = {
 };
 
 type QuickMovementPanel = "main" | "details" | "category" | "counterparty";
+
+type CategoryFeedbackIntent = {
+  confidence: number | null;
+  kind: "accepted_category_suggestion" | "manual_category_change";
+  source: string;
+};
 
 type QuickFieldProps = {
   children: ReactNode;
@@ -309,8 +320,16 @@ export function QuickMovementDialog({
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [inlineCounterparties, setInlineCounterparties] = useState<CounterpartySummary[]>([]);
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
+  const [linkedSubscriptionId, setLinkedSubscriptionId] = useState<number | null>(null);
+  const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
+  const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
   const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(workspaceId, userId);
+  const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
+  const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
+  const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
+  const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
+  const persistLearningFeedbackMutation = usePersistLearningFeedbackMutation(workspaceId, userId);
   const visibleAccounts = useMemo(
     () => snapshot.accounts.filter((account) => !account.isArchived),
     [snapshot.accounts],
@@ -355,7 +374,13 @@ export function QuickMovementDialog({
       (counterparty) => counterparty.id === parseOptionalInteger(formState.counterpartyId),
     ) ?? null;
   const selectedMode = getQuickMovementMode(kind);
-  const isSaving = createMovementMutation.isPending || createAttachmentRecordMutation.isPending;
+  const isSaving =
+    createMovementMutation.isPending ||
+    createAttachmentRecordMutation.isPending ||
+    createCategoryMutation.isPending ||
+    createCounterpartyMutation.isPending ||
+    createSubscriptionMutation.isPending ||
+    createRecurringIncomeMutation.isPending;
   const isTransfer = kind === "transfer";
   const hasTransferCurrencyMismatch =
     Boolean(selectedSourceAccount && selectedDestinationAccount) &&
@@ -375,6 +400,9 @@ export function QuickMovementDialog({
     selectedDestinationAccount?.currencyCode ??
     snapshot.workspace.baseCurrencyCode;
   const suggestions = useMovementSuggestions({
+    accountId: selectedAccount?.id ?? null,
+    accounts: visibleAccounts,
+    actsAsIncome: kind === "income",
     enabled: activePanel === "details",
     workspaceId,
     proAccessEnabled,
@@ -416,7 +444,144 @@ export function QuickMovementDialog({
     setErrorMessage("");
     setInvalidFields(new Set());
     setPendingReceiptFile(null);
+    setLinkedSubscriptionId(null);
+    setLinkedRecurringIncomeId(null);
+    setCategoryFeedbackIntent(null);
   }, [initialKind]);
+
+  async function applyRecurringSuggestion() {
+    const suggestion = insights.recurring;
+    if (!suggestion || computedAmount <= 0) return;
+    const { frequency, intervalCount } = recurringFrequencyFields(suggestion.frequency);
+    const startDate = formState.occurredAt.slice(0, 10);
+    const parsedDate = new Date(`${startDate}T12:00:00`);
+    const dayOfMonth = Math.max(1, Math.min(31, Number(startDate.slice(8, 10)) || 1));
+    const dayOfWeek = Number.isNaN(parsedDate.getTime()) ? null : parsedDate.getDay();
+    setErrorMessage("");
+    try {
+      if (suggestion.type === "subscription") {
+        const result = await createSubscriptionMutation.mutateAsync({
+          workspaceId,
+          userId,
+          name: suggestion.name,
+          vendorPartyId: selectedCounterparty?.id ?? null,
+          accountId: selectedAccount?.id ?? null,
+          categoryId: selectedCategory?.id ?? null,
+          currencyCode: suggestionCurrencyCode,
+          amount: computedAmount,
+          frequency,
+          intervalCount,
+          dayOfMonth: ["monthly", "quarterly", "yearly"].includes(frequency) ? dayOfMonth : null,
+          dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
+          startDate,
+          nextDueDate: startDate,
+          endDate: null,
+          status: "active",
+          autoCreateMovement: false,
+          remindDaysBefore: 3,
+          description: formState.description.trim() || null,
+          notes: `Creada desde sugerencia recurrente (${Math.round(suggestion.confidence * 100)}%).`,
+        });
+        setLinkedSubscriptionId(result.id);
+      } else {
+        const result = await createRecurringIncomeMutation.mutateAsync({
+          workspaceId,
+          userId,
+          name: suggestion.name,
+          payerPartyId: selectedCounterparty?.id ?? null,
+          accountId: selectedAccount?.id ?? null,
+          categoryId: selectedCategory?.id ?? null,
+          currencyCode: suggestionCurrencyCode,
+          amount: computedAmount,
+          frequency,
+          intervalCount,
+          dayOfMonth: ["monthly", "quarterly", "yearly"].includes(frequency) ? dayOfMonth : null,
+          dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
+          startDate,
+          nextExpectedDate: startDate,
+          endDate: null,
+          status: "active",
+          remindDaysBefore: 3,
+          description: formState.description.trim() || null,
+          notes: `Creado desde sugerencia recurrente (${Math.round(suggestion.confidence * 100)}%).`,
+        });
+        setLinkedRecurringIncomeId(result.id);
+      }
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos crear el recurrente."));
+    }
+  }
+
+  async function applyCategorySuggestion() {
+    const suggestion = suggestions.category;
+    if (!suggestion) return;
+    if (suggestion.categoryId !== null) {
+      setCategoryFeedbackIntent({
+        confidence: suggestion.confidence,
+        kind: "accepted_category_suggestion",
+        source: suggestion.source === "deepseek" ? "movement-form-ai" : "movement-form",
+      });
+      updateFormState("categoryId", String(suggestion.categoryId));
+      return;
+    }
+    const name = suggestion.newCategoryName?.trim();
+    if (!name || kind === "transfer") return;
+    setErrorMessage("");
+    try {
+      const result = await createCategoryMutation.mutateAsync({
+        workspaceId,
+        userId,
+        name,
+        kind,
+        parentId: null,
+        color: kind === "income" ? "#58D6B3" : "#D4A574",
+        icon: null,
+        sortOrder: 0,
+        isActive: true,
+      });
+      setCategoryFeedbackIntent({
+        confidence: suggestion.confidence,
+        kind: "accepted_category_suggestion",
+        source: suggestion.source === "deepseek" ? "movement-form-ai" : "movement-form",
+      });
+      updateFormState("categoryId", String(result.id));
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos crear la categoría sugerida."));
+    }
+  }
+
+  async function applyCounterpartySuggestion() {
+    const suggestion = suggestions.counterparty;
+    if (!suggestion) return;
+    if (suggestion.counterpartyId !== null) {
+      updateFormState("counterpartyId", String(suggestion.counterpartyId));
+      return;
+    }
+    const name = suggestion.newCounterpartyName?.trim();
+    if (!name) return;
+    setErrorMessage("");
+    try {
+      const result = await createCounterpartyMutation.mutateAsync({
+        workspaceId,
+        userId,
+        name,
+        type: suggestion.counterpartyType,
+        phone: null,
+        email: null,
+        documentNumber: null,
+        notes: "Creada desde una sugerencia de movimiento.",
+        roles: [],
+      });
+      handleContactCreated({
+        id: result.id,
+        isArchived: false,
+        name,
+        type: suggestion.counterpartyType,
+      });
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos crear la contraparte sugerida."));
+    }
+  }
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -564,7 +729,13 @@ export function QuickMovementDialog({
           destinationAccountId: kind === "income" ? accountId : null,
           destinationAmount: kind === "income" ? amount : null,
           fxRate: null,
-          metadata: { channel: "quick-entry", entryKind: kind },
+          metadata: {
+            channel: "quick-entry",
+            entryKind: kind,
+            recurring_income_id: linkedRecurringIncomeId,
+            riskAi: insights.risk?.source === "deepseek" ? insights.risk : null,
+            budgetAi: insights.budget?.source === "deepseek" ? insights.budget : null,
+          },
           movementType: kind,
           notes: null,
           obligationId: null,
@@ -572,10 +743,28 @@ export function QuickMovementDialog({
           sourceAccountId: kind === "expense" ? accountId : null,
           sourceAmount: kind === "expense" ? amount : null,
           status: formState.status,
-          subscriptionId: null,
+          subscriptionId: linkedSubscriptionId,
           userId,
           workspaceId,
         });
+
+        if (categoryId !== null && Number.isFinite(categoryId)) {
+          void persistLearningFeedbackMutation.mutateAsync({
+            movementId: createdMovementId,
+            feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
+            normalizedDescription: normalizeInsightText(description) || null,
+            previousCategoryId: null,
+            acceptedCategoryId: categoryId,
+            confidence: categoryFeedbackIntent?.confidence ?? null,
+            source: categoryFeedbackIntent?.source ?? "movement-form",
+            metadata: {
+              movementType: kind,
+              counterpartyId: counterpartyId ?? null,
+              accountId,
+              amount,
+            },
+          }).catch(() => undefined);
+        }
 
         if (pendingReceiptFile && canUploadReceipts) {
           try {
@@ -826,6 +1015,9 @@ export function QuickMovementDialog({
                       key={mode.kind}
                       onClick={() => {
                         setKind(mode.kind);
+                        setLinkedSubscriptionId(null);
+                        setLinkedRecurringIncomeId(null);
+                        setCategoryFeedbackIntent(null);
                         setIsDirty(true);
                       }}
                       type="button"
@@ -1073,26 +1265,44 @@ export function QuickMovementDialog({
                         ) : null}
                         {suggestions.category ? (
                           <MovementSuggestionRow
-                            label="Categoría sugerida"
-                            onAccept={() => updateFormState("categoryId", String(suggestions.category!.categoryId))}
+                            label={suggestions.category.type === "new_category" ? "Categoría nueva" : "Categoría sugerida"}
+                            onAccept={() => void applyCategorySuggestion()}
                             reason={suggestions.category.reasons[0]}
                             value={suggestions.category.categoryName}
                           />
                         ) : null}
                         {suggestions.counterparty ? (
                           <MovementSuggestionRow
-                            label="Contraparte sugerida"
-                            onAccept={() => updateFormState("counterpartyId", String(suggestions.counterparty!.counterpartyId))}
+                            label={suggestions.counterparty.type === "new_counterparty" ? "Contraparte nueva" : "Contraparte sugerida"}
+                            onAccept={() => void applyCounterpartySuggestion()}
                             reason={suggestions.counterparty.reasons[0]}
                             value={suggestions.counterparty.counterpartyName}
                           />
                         ) : null}
-                        {insights.recurring ? (
+                        {suggestions.account ? (
+                          <MovementSuggestionRow
+                            label="Cuenta sugerida"
+                            onAccept={() => updateFormState("accountId", String(suggestions.account!.accountId))}
+                            reason={suggestions.account.reasons[0]}
+                            value={suggestions.account.accountName}
+                          />
+                        ) : null}
+                        {insights.recurring && !linkedSubscriptionId && !linkedRecurringIncomeId ? (
                           <MovementInsightRow
+                            actionLabel="Crear"
                             description={insights.recurring.reasons[0] ?? "Coincide con un patrón que ya aparece en tus movimientos."}
                             kind="recurring"
                             label="Posible recurrencia"
+                            onAction={() => void applyRecurringSuggestion()}
                             title={`${insights.recurring.name} · ${recurringFrequencyLabel(insights.recurring.frequency)}`}
+                          />
+                        ) : null}
+                        {linkedSubscriptionId || linkedRecurringIncomeId ? (
+                          <MovementInsightRow
+                            description="Se asociará cuando guardes este movimiento."
+                            kind="recurring"
+                            label="Recurrencia creada"
+                            title={linkedSubscriptionId ? "Suscripción vinculada" : "Ingreso fijo vinculado"}
                           />
                         ) : null}
                         {insights.risk ? (
@@ -1115,6 +1325,7 @@ export function QuickMovementDialog({
                         !suggestions.description &&
                         !suggestions.category &&
                         !suggestions.counterparty &&
+                        !suggestions.account &&
                         !insights.recurring &&
                         !insights.risk &&
                         !insights.budget ? (
@@ -1134,6 +1345,11 @@ export function QuickMovementDialog({
                 <MovementDetailOptionsPanel
                   onChange={(value) => {
                     updateFormState("categoryId", value);
+                    setCategoryFeedbackIntent(
+                      value
+                        ? { confidence: null, kind: "manual_category_change", source: "movement-form" }
+                        : null,
+                    );
                     setActivePanel("details");
                   }}
                   options={categoryOptions}
