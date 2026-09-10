@@ -768,13 +768,15 @@ export function MovementsPage() {
                   {movementColumns.map((column) => (
                     <button
                       aria-checked={colVis[column.key]}
-                      className="flex h-9 w-full items-center gap-3 px-4 text-left text-sm text-ink transition hover:bg-white/[0.04]"
+                      className={`flex h-9 w-full items-center gap-3 px-4 text-left text-sm transition hover:bg-white/[0.05] ${
+                        colVis[column.key] ? "bg-white/[0.035] text-ink" : "text-storm"
+                      }`}
                       key={column.key}
                       onClick={() => toggleCol(column.key)}
                       role="menuitemcheckbox"
                       type="button"
                     >
-                      <Check className={`h-3.5 w-3.5 ${colVis[column.key] ? "opacity-100" : "opacity-0"}`} />
+                      <Check className={`h-3.5 w-3.5 ${colVis[column.key] ? "text-[#d6b69b] opacity-100" : "opacity-0"}`} />
                       {column.label}
                     </button>
                   ))}

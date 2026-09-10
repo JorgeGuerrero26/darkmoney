@@ -1,5 +1,6 @@
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
+import { formatMovementStatusLabel } from "../../../lib/formatting/labels";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { MovementRecord } from "../../../types/domain";
 import { getMovementDisplayInfo } from "../lib/movement-form";
@@ -102,13 +103,7 @@ export function MovementsTable({
             const contextParts = [
               visibleColumns.categoria ? movement.category : null,
               visibleColumns.contraparte && movement.counterparty ? movement.counterparty : null,
-              visibleColumns.estado && movement.status !== "posted"
-                ? movement.status === "pending"
-                  ? "Pendiente"
-                  : movement.status === "planned"
-                    ? "Planificado"
-                    : "Anulado"
-                : null,
+              visibleColumns.estado ? formatMovementStatusLabel(movement.status) : null,
               new Date(movement.occurredAt).toLocaleTimeString("es-PE", {
                 hour: "2-digit",
                 minute: "2-digit",
