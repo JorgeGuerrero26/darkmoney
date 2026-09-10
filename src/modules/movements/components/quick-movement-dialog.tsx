@@ -2,8 +2,9 @@
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowUpCircle,
+  ChevronDown,
+  ChevronRight,
   LoaderCircle,
-  Sparkles,
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
@@ -13,11 +14,9 @@ import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { StatusBadge } from "../../../components/ui/status-badge";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SearchablePicker as QuickPicker } from "../../../components/ui/searchable-picker";
 import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
-import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
   deleteStoredReceipt,
@@ -26,7 +25,12 @@ import {
 } from "../../attachments/receipt-utils";
 import { useReceiptFeatureAccess } from "../../attachments/use-receipt-feature-access";
 import { ContactQuickCreateDialog } from "../../contacts/components/contact-quick-create-dialog";
-import type { AccountSummary, CategorySummary, CounterpartySummary } from "../../../types/domain";
+import type {
+  AccountSummary,
+  CategorySummary,
+  CounterpartySummary,
+  MovementStatus,
+} from "../../../types/domain";
 import {
   useCreateAttachmentRecordMutation,
   getQueryErrorMessage,
@@ -55,6 +59,7 @@ type QuickMovementFormState = {
   destinationAmount: string;
   occurredAt: string;
   sourceAccountId: string;
+  status: Exclude<MovementStatus, "voided">;
 };
 
 type QuickFieldProps = {
@@ -66,8 +71,8 @@ type QuickFieldProps = {
 };
 
 const quickFieldClassName =
-  "w-full rounded-[24px] border border-white/10 bg-[#0d1420]/95 px-4 text-sm text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] outline-none transition duration-200 placeholder:text-storm/70 hover:border-white/14 hover:bg-[#101928] focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-const quickInputClassName = `${quickFieldClassName} h-12 sm:h-16`;
+  "w-full rounded-xl border border-white/10 bg-[#141311] px-4 text-sm text-ink outline-none transition placeholder:text-storm/55 hover:border-white/20 focus:border-ink/55 focus:ring-2 focus:ring-ink/10";
+const quickInputClassName = `${quickFieldClassName} h-12`;
 const quickFieldLabelClassName =
   "text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80";
 const quickFieldHintClassName = "mt-1.5 sm:mt-2 break-words text-xs leading-6 text-storm/75";
@@ -82,7 +87,7 @@ const quickMovementModes: Array<{
 }> = [
   {
     kind: "expense",
-    label: "Nuevo gasto",
+    label: "Gasto",
     description: "Registra una salida de dinero desde una cuenta existente.",
     color: "#8f3e3e",
     icon: ArrowDownCircle,
@@ -90,16 +95,16 @@ const quickMovementModes: Array<{
   },
   {
     kind: "income",
-    label: "Nuevo ingreso",
-    description: "Registra una entrada de dinero a una cuenta del workspace.",
+    label: "Ingreso",
+    description: "Registra una entrada de dinero a una cuenta del espacio.",
     color: "#1b6a58",
     icon: ArrowUpCircle,
     cta: "Guardar ingreso",
   },
   {
     kind: "transfer",
-    label: "Transferencia",
-    description: "Mueve saldo entre dos cuentas sin pasar por el formulario completo.",
+    label: "Transferir",
+    description: "Mueve saldo entre dos cuentas del mismo espacio.",
     color: "#4566d6",
     icon: ArrowLeftRight,
     cta: "Guardar transferencia",
@@ -128,6 +133,7 @@ function createDefaultQuickMovementFormState(): QuickMovementFormState {
     destinationAmount: "",
     occurredAt: toDateTimeLocalValue(new Date().toISOString()),
     sourceAccountId: "",
+    status: "posted",
   };
 }
 
@@ -288,6 +294,7 @@ export function QuickMovementDialog({
   );
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
@@ -339,7 +346,6 @@ export function QuickMovementDialog({
       (counterparty) => counterparty.id === parseOptionalInteger(formState.counterpartyId),
     ) ?? null;
   const selectedMode = getQuickMovementMode(kind);
-  const QuickModeIcon = selectedMode.icon;
   const isSaving = createMovementMutation.isPending || createAttachmentRecordMutation.isPending;
   const isTransfer = kind === "transfer";
   const hasTransferCurrencyMismatch =
@@ -350,40 +356,6 @@ export function QuickMovementDialog({
   const computedDestinationAmount = hasTransferCurrencyMismatch
     ? parseOptionalNumber(formState.destinationAmount) ?? 0
     : computedAmount;
-  const previewCurrencyCode = isTransfer
-    ? selectedSourceAccount?.currencyCode ??
-      selectedDestinationAccount?.currencyCode ??
-      snapshot.workspace.baseCurrencyCode
-    : selectedAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode;
-  const previewTitle =
-    formState.description.trim() ||
-    buildQuickMovementDescription(
-      kind,
-      selectedAccount,
-      selectedSourceAccount,
-      selectedDestinationAccount,
-      selectedCategory,
-      selectedCounterparty,
-    );
-  const previewFlowLabel = isTransfer
-    ? selectedSourceAccount && selectedDestinationAccount
-      ? `${selectedSourceAccount.name} -> ${selectedDestinationAccount.name}`
-      : "Define las cuentas de origen y destino"
-    : kind === "expense"
-      ? selectedAccount
-        ? `Sale desde ${selectedAccount.name}`
-        : "Selecciona la cuenta desde donde sale"
-      : selectedAccount
-        ? `Entra a ${selectedAccount.name}`
-        : "Selecciona la cuenta que recibe";
-  const previewContextLabel = isTransfer
-    ? hasTransferCurrencyMismatch
-      ? "Transferencia con conversion"
-      : "Transferencia interna directa"
-    : selectedCounterparty?.name ?? selectedCategory?.name ?? "Sin contexto adicional";
-  const previewDateLabel = formState.occurredAt
-    ? formatDateTime(new Date(formState.occurredAt).toISOString())
-    : "Sin fecha definida";
   const transferFxRate =
     hasTransferCurrencyMismatch && computedAmount > 0 && computedDestinationAmount > 0
       ? computedDestinationAmount / computedAmount
@@ -548,7 +520,7 @@ export function QuickMovementDialog({
           occurredAt: occurredAt.toISOString(),
           sourceAccountId: kind === "expense" ? accountId : null,
           sourceAmount: kind === "expense" ? amount : null,
-          status: "posted",
+          status: formState.status,
           subscriptionId: null,
           userId,
           workspaceId,
@@ -629,7 +601,7 @@ export function QuickMovementDialog({
         occurredAt: occurredAt.toISOString(),
         sourceAccountId,
         sourceAmount,
-        status: "posted",
+        status: formState.status,
         subscriptionId: null,
         userId,
         workspaceId,
@@ -724,566 +696,353 @@ export function QuickMovementDialog({
   return (
     <div
       aria-modal="true"
-      className="animate-fade-in fixed inset-0 z-[80] isolate bg-black/68 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-32 before:bg-black/52 before:backdrop-blur-2xl before:content-['']"
-      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
-      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) requestClose(); }}
+      className="animate-fade-in fixed inset-0 z-[80] bg-black/75"
+      onMouseDown={(event) => {
+        (event.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now());
+      }}
+      onMouseUp={(event) => {
+        const startedAt = Number((event.currentTarget as HTMLDivElement).dataset.pressStart || "0");
+        delete (event.currentTarget as HTMLDivElement).dataset.pressStart;
+        if (startedAt) requestClose();
+      }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
-        <div className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[1040px] overflow-hidden rounded-[38px] [transform:translateZ(0)] border border-white/10 bg-[#050a12]/95 shadow-[0_40px_130px_rgba(0,0,0,0.62)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          <div className="pointer-events-none absolute inset-0">
-            <div
-              className="absolute -left-20 top-10 h-64 w-64 rounded-full blur-3xl"
-              style={{ backgroundColor: `${selectedMode.color}22` }}
-            />
-            <div className="absolute right-0 top-0 h-44 w-44 rounded-full bg-[#6f86ff]/10 blur-3xl" />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_20%,transparent_80%,rgba(255,255,255,0.03))]" />
-          </div>
+        <div
+          className="animate-rise-in flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[560px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917]"
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onMouseUp={(event) => event.stopPropagation()}
+        >
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5 sm:px-6">
+            <h2 className="font-display text-xl font-semibold text-ink">Nuevo movimiento</h2>
+            <button
+              aria-label="Cerrar formulario"
+              className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
+              disabled={isSaving}
+              onClick={requestClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </header>
 
-          <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="max-w-2xl space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/90">
-                    captura rapida
-                  </span>
-                  <StatusBadge
-                    status="aplicado directo"
-                    tone="success"
+          <form
+            className="flex min-h-0 flex-1 flex-col"
+            noValidate
+            onSubmit={(event) => void handleSubmit(event)}
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid grid-cols-3 gap-2">
+                {quickMovementModes.map((mode) => {
+                  const ModeIcon = mode.icon;
+                  const isActive = mode.kind === kind;
+
+                  return (
+                    <button
+                      className={`flex min-w-0 flex-col items-center gap-2 rounded-xl border px-2 py-3 text-center transition ${
+                        isActive
+                          ? "border-ink/80 bg-ink/[0.06] text-ink"
+                          : "border-white/10 text-storm hover:border-white/20 hover:text-ink"
+                      }`}
+                      key={mode.kind}
+                      onClick={() => {
+                        setKind(mode.kind);
+                        setIsDirty(true);
+                      }}
+                      type="button"
+                    >
+                      <ModeIcon className="h-4 w-4" />
+                      <span className="truncate text-xs font-semibold sm:text-sm">{mode.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {visibleAccounts.length < minimumAccountsRequired ? (
+                <div className="mt-5">
+                  <DataState
+                    action={
+                      <Button disabled={isSaving} onClick={requestClose} variant="secondary">
+                        Volver
+                      </Button>
+                    }
+                    description={
+                      isTransfer
+                        ? "Necesitas al menos dos cuentas activas para transferir saldo."
+                        : "Necesitas al menos una cuenta activa para registrar el movimiento."
+                    }
+                    title="Faltan cuentas para continuar"
+                    tone="error"
                   />
                 </div>
-                <div>
-                  <h2 className="font-display text-3xl font-semibold text-ink sm:text-[2.7rem]">
-                    {selectedMode.label}
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-storm">
-                    {selectedMode.description}
-                  </p>
-                </div>
-              </div>
-              <button
-                aria-label="Cerrar captura rapida"
-                className="rounded-full border border-white/10 bg-white/[0.04] p-3 text-storm transition hover:-translate-y-0.5 hover:bg-white/[0.08] hover:text-ink"
-                disabled={isSaving}
-                onClick={requestClose}
-                type="button"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              {quickMovementModes.map((mode) => {
-                const ModeIcon = mode.icon;
-                const isActive = mode.kind === kind;
-
-                return (
-                  <button
-                    className={`rounded-[22px] border px-4 py-3 text-left transition duration-200 ${
-                      isActive ? "text-ink shadow-[0_20px_60px_rgba(0,0,0,0.22)]" : "text-storm hover:text-ink"
-                    }`}
-                    key={mode.kind}
-                    onClick={() => setKind(mode.kind)}
-                    style={{
-                      borderColor: isActive ? `${mode.color}66` : "rgba(255,255,255,0.08)",
-                      background: isActive
-                        ? `linear-gradient(160deg, ${mode.color}2f, rgba(9, 14, 22, 0.96))`
-                        : "linear-gradient(180deg, rgba(11, 17, 27, 0.94), rgba(8, 12, 20, 0.94))",
-                    }}
-                    type="button"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 text-white"
-                        style={{ backgroundColor: `${mode.color}33` }}
-                      >
-                        <ModeIcon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">{mode.label}</p>
-                        <p className="mt-1 text-xs text-storm/85">
-                          {mode.kind === "transfer" ? "Entre cuentas" : "Formulario veloz"}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <form
-              className="mt-8 flex flex-1 flex-col"
-              noValidate
-              onSubmit={(event) => void handleSubmit(event)}
-            >
-              {visibleAccounts.length < minimumAccountsRequired ? (
-                <DataState
-                  action={
-                    <Button
-                      disabled={isSaving}
-                      onClick={requestClose}
-                      variant="secondary"
-                    >
-                      Volver
-                    </Button>
-                  }
-                  description={
-                    isTransfer
-                      ? "Necesitas al menos dos cuentas activas para mover saldo entre ellas."
-                      : "Necesitas al menos una cuenta activa para registrar este movimiento rapido."
-                  }
-                  title="Faltan cuentas para continuar"
-                  tone="error"
-                />
               ) : (
                 <>
                   {errorMessage ? (
-                    <FormFeedbackBanner
-                      description={errorMessage}
-                      title="Revisa este movimiento rapido"
-                    />
+                    <div className="mt-4">
+                      <FormFeedbackBanner description={errorMessage} title="Revisa el movimiento" />
+                    </div>
                   ) : null}
 
-                  <div className="mt-6 grid gap-4 sm:gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-                    <section className="glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6">
-                      <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
-                        <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-gold" />
-                        <div>
-                          <p className="text-[0.6rem] sm:text-xs uppercase tracking-[0.22em] text-storm">Datos base</p>
-                          <p className="mt-0.5 sm:mt-1 text-sm sm:text-lg font-medium text-ink">
-                            {isTransfer ? "Cuentas y montos" : "Cuenta, monto y contexto"}
-                          </p>
-                        </div>
+                  <div className="mt-5">
+                    <QuickField errorKey="amount" invalidFields={invalidFields} label="Monto">
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-storm">
+                          {isTransfer
+                            ? selectedSourceAccount?.currencyCode === "USD"
+                              ? "$"
+                              : "S/"
+                            : selectedAccount?.currencyCode === "USD"
+                              ? "$"
+                              : "S/"}
+                        </span>
+                        <QuickInput
+                          autoFocus
+                          className="h-16 pl-12 font-display text-[2rem] font-semibold"
+                          inputMode="decimal"
+                          onChange={(event) => {
+                            clearFieldError("amount");
+                            updateFormState("amount", event.target.value);
+                          }}
+                          placeholder="0.00"
+                          value={formState.amount}
+                        />
                       </div>
+                    </QuickField>
+                  </div>
 
-                      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
-                        {isTransfer ? (
+                  <div className="mt-5 rounded-xl border border-white/10 bg-[#141311]">
+                    {isTransfer ? (
+                      <>
+                        <div className="p-3" data-field="sourceAccountId">
+                          <QuickPicker
+                            appearance="compact"
+                            emptyMessage="No encontramos una cuenta con ese término."
+                            onChange={(nextValue) => {
+                              clearFieldError("sourceAccountId");
+                              updateFormState("sourceAccountId", nextValue);
+                            }}
+                            options={accountOptions}
+                            placeholderDescription="Cuenta desde donde sale el dinero."
+                            placeholderLabel="Cuenta de origen"
+                            queryPlaceholder="Buscar cuenta..."
+                            value={formState.sourceAccountId}
+                          />
+                        </div>
+                        {selectedSourceAccount ? (
+                          <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
+                            <span className="text-storm">Saldo después</span>
+                            <span className="font-semibold text-ink">
+                              {formatCurrency(
+                                selectedSourceAccount.currentBalance - computedAmount,
+                                selectedSourceAccount.currencyCode,
+                              )}
+                            </span>
+                          </div>
+                        ) : null}
+                        <div className="border-t border-white/10 p-3" data-field="destinationAccountId">
+                          <QuickPicker
+                            appearance="compact"
+                            emptyMessage="No encontramos una cuenta con ese término."
+                            onChange={(nextValue) => {
+                              clearFieldError("destinationAccountId");
+                              updateFormState("destinationAccountId", nextValue);
+                            }}
+                            options={accountOptions}
+                            placeholderDescription="Cuenta que recibe el dinero."
+                            placeholderLabel="Cuenta de destino"
+                            queryPlaceholder="Buscar cuenta..."
+                            value={formState.destinationAccountId}
+                          />
+                        </div>
+                        {selectedDestinationAccount ? (
+                          <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
+                            <span className="text-storm">Saldo después</span>
+                            <span className="font-semibold text-ink">
+                              {formatCurrency(
+                                selectedDestinationAccount.currentBalance + computedDestinationAmount,
+                                selectedDestinationAccount.currencyCode,
+                              )}
+                            </span>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-3" data-field="accountId">
+                          <QuickPicker
+                            appearance="compact"
+                            emptyMessage="No encontramos una cuenta con ese término."
+                            onChange={(nextValue) => {
+                              clearFieldError("accountId");
+                              updateFormState("accountId", nextValue);
+                            }}
+                            options={accountOptions}
+                            placeholderDescription="Elige la cuenta del movimiento."
+                            placeholderLabel="Selecciona una cuenta"
+                            queryPlaceholder="Buscar cuenta..."
+                            value={formState.accountId}
+                          />
+                        </div>
+                        {selectedAccount ? (
+                          <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
+                            <span className="text-storm">Saldo después</span>
+                            <span className="font-semibold text-ink">
+                              {formatCurrency(
+                                selectedAccount.currentBalance +
+                                  (kind === "expense" ? -computedAmount : computedAmount),
+                                selectedAccount.currencyCode,
+                              )}
+                            </span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-5">
+                    <p className={quickFieldLabelClassName}>Estado</p>
+                    <div className="mt-3 grid grid-cols-3 rounded-xl border border-white/10 bg-[#141311] p-1">
+                      {([
+                        ["posted", "Confirmado"],
+                        ["pending", "Pendiente"],
+                        ["planned", "Planificado"],
+                      ] as const).map(([status, label]) => (
+                        <button
+                          className={`rounded-lg px-2 py-2.5 text-xs font-semibold transition sm:text-sm ${
+                            formState.status === status
+                              ? "bg-ink text-[#11100f]"
+                              : "text-storm hover:text-ink"
+                          }`}
+                          key={status}
+                          onClick={() => updateFormState("status", status)}
+                          type="button"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-white/10 bg-[#141311]">
+                    <button
+                      className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-semibold text-ink"
+                      onClick={() => setShowDetails((current) => !current)}
+                      type="button"
+                    >
+                      Detalles
+                      {showDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+
+                    {showDetails ? (
+                      <div className="space-y-4 border-t border-white/10 p-4">
+                        {isTransfer && hasTransferCurrencyMismatch ? (
+                          <QuickField
+                            errorKey="destinationAmount"
+                            invalidFields={invalidFields}
+                            label={`Monto que llega · ${selectedDestinationAccount?.currencyCode ?? "destino"}`}
+                          >
+                            <QuickInput
+                              inputMode="decimal"
+                              onChange={(event) => {
+                                clearFieldError("destinationAmount");
+                                updateFormState("destinationAmount", event.target.value);
+                              }}
+                              placeholder="0.00"
+                              value={formState.destinationAmount}
+                            />
+                          </QuickField>
+                        ) : null}
+
+                        {!isTransfer ? (
                           <>
-                            <QuickField
-                              errorKey="sourceAccountId"
-                              hint="Cuenta desde donde sale el saldo."
-                              invalidFields={invalidFields}
-                              label="Cuenta origen"
-                            >
+                            <QuickField label="Categoría">
                               <QuickPicker
-                                emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => { clearFieldError("sourceAccountId"); updateFormState("sourceAccountId", nextValue); }}
-                                options={accountOptions}
-                                placeholderDescription="Selecciona la cuenta que envia."
-                                placeholderLabel="Selecciona origen"
-                                queryPlaceholder="Buscar cuenta origen..."
-                                value={formState.sourceAccountId}
-                              />
-                            </QuickField>
-
-                            <QuickField
-                              errorKey="destinationAccountId"
-                              hint="Cuenta que recibira el saldo."
-                              invalidFields={invalidFields}
-                              label="Cuenta destino"
-                            >
-                              <QuickPicker
-                                emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => { clearFieldError("destinationAccountId"); updateFormState("destinationAccountId", nextValue); }}
-                                options={accountOptions}
-                                placeholderDescription="Selecciona la cuenta que recibe."
-                                placeholderLabel="Selecciona destino"
-                                queryPlaceholder="Buscar cuenta destino..."
-                                value={formState.destinationAccountId}
-                              />
-                            </QuickField>
-
-                            <QuickField
-                              errorKey="amount"
-                              hint={selectedSourceAccount ? `Moneda ${selectedSourceAccount.currencyCode}.` : "Monto que sale."}
-                              invalidFields={invalidFields}
-                              label="Monto origen"
-                            >
-                              <QuickInput
-                                inputMode="decimal"
-                                onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }}
-                                placeholder="0.00"
-                                value={formState.amount}
-                              />
-                            </QuickField>
-
-                            {hasTransferCurrencyMismatch ? (
-                              <QuickField
-                                errorKey="destinationAmount"
-                                hint={selectedDestinationAccount ? `Moneda ${selectedDestinationAccount.currencyCode}.` : "Monto que entra."}
-                                invalidFields={invalidFields}
-                                label="Monto destino"
-                              >
-                                <QuickInput
-                                  inputMode="decimal"
-                                  onChange={(event) => { clearFieldError("destinationAmount"); updateFormState("destinationAmount", event.target.value); }}
-                                  placeholder="0.00"
-                                  value={formState.destinationAmount}
-                                />
-                              </QuickField>
-                            ) : (
-                              <QuickField
-                                hint="La descripcion es opcional. Si la dejas vacia la generamos por ti."
-                                label="Descripcion"
-                              >
-                                <QuickInput
-                                  onChange={(event) => updateFormState("description", event.target.value)}
-                                  placeholder="Ej. Transferencia a cuenta de ahorro"
-                                  value={formState.description}
-                                />
-                              </QuickField>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <QuickField
-                              errorKey="accountId"
-                              hint={
-                                kind === "expense"
-                                  ? "Cuenta desde donde sale el dinero."
-                                  : "Cuenta que recibe el dinero."
-                              }
-                              invalidFields={invalidFields}
-                              label="Cuenta"
-                            >
-                              <QuickPicker
-                                emptyMessage="No encontramos una cuenta con ese termino."
-                                onChange={(nextValue) => { clearFieldError("accountId"); updateFormState("accountId", nextValue); }}
-                                options={accountOptions}
-                                placeholderDescription={
-                                  kind === "expense"
-                                    ? "Selecciona la cuenta desde donde sale."
-                                    : "Selecciona la cuenta que recibe."
-                                }
-                                placeholderLabel="Selecciona una cuenta"
-                                queryPlaceholder="Buscar cuenta..."
-                                value={formState.accountId}
-                              />
-                            </QuickField>
-
-                            <QuickField
-                              errorKey="amount"
-                              hint={selectedAccount ? `Moneda ${selectedAccount.currencyCode}.` : "Monto principal del movimiento."}
-                              invalidFields={invalidFields}
-                              label="Monto"
-                            >
-                              <QuickInput
-                                inputMode="decimal"
-                                onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }}
-                                placeholder="0.00"
-                                value={formState.amount}
-                              />
-                            </QuickField>
-
-                            <QuickField
-                              hint="Opcional. Puedes dejarlo vacio y categorizar despues."
-                              label="Categoria"
-                            >
-                              <QuickPicker
-                                emptyMessage="No encontramos una categoria con ese termino."
+                                appearance="compact"
+                                emptyMessage="No encontramos una categoría con ese término."
                                 onChange={(nextValue) => updateFormState("categoryId", nextValue)}
                                 options={categoryOptions}
-                                placeholderDescription="Categoria contable opcional."
-                                placeholderLabel="Sin categoria"
-                                queryPlaceholder="Buscar categoria..."
+                                placeholderDescription="Opcional"
+                                placeholderLabel="Sin categoría"
+                                queryPlaceholder="Buscar categoría..."
                                 value={formState.categoryId}
                               />
                             </QuickField>
-
-                            <QuickField
-                              hint="Opcional. Persona, comercio, empresa o banco relacionado."
-                              label="Contraparte"
-                            >
+                            <QuickField label="Contraparte">
                               <QuickPicker
-                                actionDescription="Si aun no existe, registrala ahora y queda seleccionada."
+                                actionDescription="Regístrala y quedará seleccionada."
                                 actionLabel="Nuevo contacto"
                                 actionLeadingColor="#1b6a58"
                                 actionLeadingLabel="+"
-                                emptyMessage="No encontramos una contraparte con ese termino."
-                                onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
+                                appearance="compact"
+                                emptyMessage="No encontramos una contraparte con ese término."
                                 onAction={openContactDialog}
+                                onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
                                 options={counterpartyOptions}
-                                placeholderDescription="Contexto comercial o personal."
+                                placeholderDescription="Opcional"
                                 placeholderLabel="Sin contraparte"
                                 queryPlaceholder="Buscar contraparte..."
                                 value={formState.counterpartyId}
                               />
                             </QuickField>
                           </>
-                        )}
-                      </div>
-
-                      <div className="mt-3 sm:mt-5 grid gap-3 sm:gap-4 md:grid-cols-2">
-                        {isTransfer && hasTransferCurrencyMismatch ? (
-                          <QuickField
-                            hint="Opcional. Si la dejas vacia la descripcion se construye sola."
-                            label="Descripcion"
-                          >
-                            <QuickInput
-                              onChange={(event) => updateFormState("description", event.target.value)}
-                              placeholder="Ej. Cambio interno USD -> PEN"
-                              value={formState.description}
-                            />
-                          </QuickField>
                         ) : null}
 
-                        <QuickField
-                          errorKey="occurredAt"
-                          hint="Se guardara con esta fecha y hora."
-                          invalidFields={invalidFields}
-                          label="Fecha operativa"
-                        >
+                        <QuickField label="Descripción">
+                          <QuickInput
+                            onChange={(event) => updateFormState("description", event.target.value)}
+                            placeholder="Descripción opcional"
+                            value={formState.description}
+                          />
+                        </QuickField>
+
+                        <QuickField errorKey="occurredAt" invalidFields={invalidFields} label="Fecha">
                           <DatePickerField
                             mode="datetime-local"
-                            onChange={(nextValue) => { clearFieldError("occurredAt"); updateFormState("occurredAt", nextValue); }}
+                            onChange={(nextValue) => {
+                              clearFieldError("occurredAt");
+                              updateFormState("occurredAt", nextValue);
+                            }}
                             value={formState.occurredAt}
                           />
                         </QuickField>
 
-                        {!isTransfer ? (
-                          <QuickField
-                            hint="Opcional. Si la dejas vacia la descripcion se genera automaticamente."
-                            label="Descripcion"
-                          >
-                            <QuickInput
-                              onChange={(event) => updateFormState("description", event.target.value)}
-                              placeholder={
-                                kind === "expense"
-                                  ? "Ej. Cena con clientes"
-                                  : "Ej. Pago de cliente"
-                              }
-                              value={formState.description}
-                            />
-                          </QuickField>
-                        ) : null}
+                        <PendingReceiptField
+                          canUpload={canUploadReceipts}
+                          description="Opcional. Adjunta una foto del comprobante."
+                          file={pendingReceiptFile}
+                          lockedMessage={accessMessage}
+                          onChange={(file) => {
+                            setPendingReceiptFile(file);
+                            setIsDirty(true);
+                          }}
+                        />
                       </div>
-                    </section>
-
-                    <section className="glass-panel-soft relative min-w-0 overflow-hidden rounded-[24px] sm:rounded-[32px] border border-white/10 bg-white/[0.04] p-3 sm:p-6">
-                      <div
-                        className="absolute -right-10 top-0 h-36 w-36 rounded-full blur-3xl"
-                        style={{ backgroundColor: `${selectedMode.color}30` }}
-                      />
-
-                      <div className="relative">
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/85">
-                            Vista previa
-                          </span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-storm/80">
-                            {previewContextLabel}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 sm:mt-6 flex items-start gap-3 sm:gap-5">
-                          <div className="relative flex h-12 w-12 sm:h-20 sm:w-20 shrink-0 items-center justify-center">
-                            <div
-                              className="absolute inset-0 rounded-[16px] sm:rounded-[28px] opacity-80 blur-2xl"
-                              style={{ backgroundColor: `${selectedMode.color}5f` }}
-                            />
-                            <div
-                              className="relative flex h-full w-full items-center justify-center rounded-[16px] sm:rounded-[28px] border border-white/10 text-white shadow-[0_20px_45px_rgba(0,0,0,0.28)]"
-                              style={{
-                                background: `linear-gradient(160deg, ${selectedMode.color}, rgba(8, 13, 20, 0.72))`,
-                              }}
-                            >
-                              <QuickModeIcon className="h-5 w-5 sm:h-8 sm:w-8" />
-                            </div>
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Resumen
-                            </p>
-                            <h3 className="mt-1 sm:mt-2 break-words font-display text-2xl sm:text-4xl font-semibold text-ink">
-                              {previewTitle}
-                            </h3>
-                            <p className="mt-2 sm:mt-3 break-words text-xs sm:text-sm leading-6 sm:leading-7 text-storm">{previewFlowLabel}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 sm:mt-6 grid gap-2 sm:gap-3">
-                          <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Impacto principal
-                            </p>
-                            <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
-                              {formatCurrency(computedAmount > 0 ? computedAmount : 0, previewCurrencyCode)}
-                            </p>
-                            <p className="mt-1 sm:mt-2 text-xs leading-6 text-storm/75">{previewDateLabel}</p>
-                          </div>
-
-                          {isTransfer && hasTransferCurrencyMismatch ? (
-                            <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                              <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                                Monto destino
-                              </p>
-                              <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-ink">
-                                {formatCurrency(
-                                  computedDestinationAmount > 0 ? computedDestinationAmount : 0,
-                                  selectedDestinationAccount?.currencyCode ?? snapshot.workspace.baseCurrencyCode,
-                                )}
-                              </p>
-                              <p className="mt-1 sm:mt-2 text-xs leading-6 text-storm/75">
-                                {transferFxRate ? `FX ${transferFxRate.toFixed(6)}` : "Esperando montos para calcular FX"}
-                              </p>
-                            </div>
-                          ) : null}
-
-                          {isTransfer ? (
-                            <>
-                              {selectedSourceAccount ? (
-                                <div className={`rounded-[16px] sm:rounded-[24px] border bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur ${computedAmount > 0 && selectedSourceAccount.currentBalance - computedAmount < 0 ? "border-red-400/30 bg-red-400/5" : "border-white/10"}`}>
-                                  <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                                    Saldo proyectado · {selectedSourceAccount.name}
-                                  </p>
-                                  <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
-                                    {formatCurrency(selectedSourceAccount.currentBalance, selectedSourceAccount.currencyCode)}
-                                  </p>
-                                  <p className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${computedAmount > 0 ? "text-red-400" : "text-storm"}`}>
-                                    {formatCurrency(
-                                      computedAmount > 0
-                                        ? selectedSourceAccount.currentBalance - computedAmount
-                                        : selectedSourceAccount.currentBalance,
-                                      selectedSourceAccount.currencyCode,
-                                    )}
-                                  </p>
-                                  {computedAmount > 0 && selectedSourceAccount.currentBalance - computedAmount < 0 ? (
-                                    <p className="mt-2 text-[0.65rem] font-medium text-red-400/90">
-                                      Saldo insuficiente. Esta cuenta quedaria en negativo.
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {selectedDestinationAccount ? (
-                                <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                                  <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                                    Saldo proyectado · {selectedDestinationAccount.name}
-                                  </p>
-                                  <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
-                                    {formatCurrency(selectedDestinationAccount.currentBalance, selectedDestinationAccount.currencyCode)}
-                                  </p>
-                                  <p className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${computedDestinationAmount > 0 ? "text-emerald-400" : "text-storm"}`}>
-                                    {formatCurrency(
-                                      computedDestinationAmount > 0
-                                        ? selectedDestinationAccount.currentBalance + computedDestinationAmount
-                                        : selectedDestinationAccount.currentBalance,
-                                      selectedDestinationAccount.currencyCode,
-                                    )}
-                                  </p>
-                                </div>
-                              ) : null}
-                            </>
-                          ) : selectedAccount ? (
-                            <div className={`rounded-[16px] sm:rounded-[24px] border bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur ${computedAmount > 0 && kind === "expense" && selectedAccount.currentBalance - computedAmount < 0 ? "border-red-400/30 bg-red-400/5" : "border-white/10"}`}>
-                              <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                                Saldo proyectado · {selectedAccount.name}
-                              </p>
-                              <p className="mt-2 sm:mt-3 font-display text-xl sm:text-2xl font-semibold text-storm/60 line-through decoration-storm/40">
-                                {formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}
-                              </p>
-                              <p
-                                className={`mt-1 font-display text-xl sm:text-2xl font-semibold ${
-                                  computedAmount > 0
-                                    ? kind === "expense"
-                                      ? "text-red-400"
-                                      : "text-emerald-400"
-                                    : "text-storm"
-                                }`}
-                              >
-                                {formatCurrency(
-                                  computedAmount > 0
-                                    ? kind === "expense"
-                                      ? selectedAccount.currentBalance - computedAmount
-                                      : selectedAccount.currentBalance + computedAmount
-                                    : selectedAccount.currentBalance,
-                                  selectedAccount.currencyCode,
-                                )}
-                              </p>
-                              {computedAmount > 0 && kind === "expense" && selectedAccount.currentBalance - computedAmount < 0 ? (
-                                <p className="mt-2 text-[0.65rem] font-medium text-red-400/90">
-                                  Saldo insuficiente. Esta cuenta quedaria en negativo.
-                                </p>
-                              ) : null}
-                            </div>
-                          ) : null}
-
-                          <div className="rounded-[16px] sm:rounded-[24px] border border-white/10 bg-black/15 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur">
-                            <p className="text-[0.6rem] sm:text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                              Lectura rapida
-                            </p>
-                            <div className="mt-2 sm:mt-3 flex flex-wrap gap-2">
-                              <StatusBadge
-                                status={selectedMode.label}
-                                tone={kind === "expense" ? "danger" : kind === "income" ? "success" : "info"}
-                              />
-                              <StatusBadge
-                                status="aplicado"
-                                tone="success"
-                              />
-                              {!isTransfer && selectedCategory ? (
-                                <StatusBadge
-                                  status={selectedCategory.name}
-                                  tone="neutral"
-                                />
-                              ) : null}
-                            </div>
-                            <p className="mt-2 sm:mt-3 text-xs leading-6 text-storm/75">
-                              Se registrara usando el flujo rapido y quedara disponible de inmediato en tu historial.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
+                    ) : null}
                   </div>
 
-                  <div className="mt-6">
-                    <PendingReceiptField
-                      canUpload={canUploadReceipts}
-                      description="Opcional. Puedes guardar una foto del comprobante junto con este movimiento rapido."
-                      file={pendingReceiptFile}
-                      lockedMessage={accessMessage}
-                      onChange={setPendingReceiptFile}
-                    />
-                  </div>
-
-                  <div className="sticky bottom-0 z-[60] -mx-4 sm:-mx-6 mt-8 rounded-b-[38px] border-t border-white/10 bg-[#050a12]/95 px-4 py-5 sm:px-6 backdrop-blur-md">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <p className="max-w-xl text-sm leading-7 text-storm">
-                        Este formulario resume lo esencial. Si necesitas notas, metadata, FX manual o vinculos avanzados, luego puedes abrir el modulo completo de movimientos.
-                      </p>
-
-                      <div className="flex flex-col-reverse gap-3 sm:flex-row">
-                        <Button
-                          className="min-w-[140px] justify-center"
-                          disabled={isSaving}
-                          onClick={requestClose}
-                          type="button"
-                          variant="ghost"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          className="min-w-[210px] justify-center shadow-[0_18px_50px_rgba(245,247,251,0.12)]"
-                          disabled={isSaving}
-                          type="submit"
-                        >
-                          {isSaving ? (
-                            <>
-                              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                              Guardando...
-                            </>
-                          ) : (
-                            selectedMode.cta
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                  <p className="mt-4 text-xs leading-5 text-storm/70">
+                    Con el monto y la cuenta ya puedes guardar. Si dejas la descripción vacía, se genera con la categoría y la fecha.
+                  </p>
                 </>
               )}
-            </form>
-          </div>
+            </div>
+
+            {visibleAccounts.length >= minimumAccountsRequired ? (
+              <footer className="shrink-0 border-t border-white/10 px-5 py-4 sm:px-6">
+                <Button className="w-full justify-center" disabled={isSaving} type="submit">
+                  {isSaving ? (
+                    <>
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    selectedMode.cta
+                  )}
+                </Button>
+              </footer>
+            ) : null}
+          </form>
         </div>
       </div>
 
