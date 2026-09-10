@@ -208,7 +208,7 @@ export const router = createBrowserRouter([
       {
         path: "notifications",
         lazy: lazyRoute(
-          () => import("../../modules/notifications/pages/notifications-page"),
+          () => import("../../modules/notifications/pages/notifications-redesign-page"),
           "NotificationsPage",
         ),
       },

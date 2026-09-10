@@ -35,17 +35,25 @@ import { BrandLogo } from "../../components/ui/brand-logo";
 import { DataState } from "../../components/ui/data-state";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { useToast } from "../../components/ui/toast-provider";
+import { formatRelativeTime } from "../../lib/formatting/dates";
+import { formatNotificationKindLabel } from "../../lib/formatting/labels";
 import { useAuth } from "../../modules/auth/auth-context";
 import {
   QuickMovementDialog,
   type QuickMovementKind,
 } from "../../modules/movements/components/quick-movement-dialog";
-import { useNotificationInbox } from "../../modules/notifications/use-notification-inbox";
+import {
+  isActionRequiredNotificationKind,
+  useNotificationInbox,
+  type InboxNotification,
+} from "../../modules/notifications/use-notification-inbox";
 import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
 import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import {
   getQueryErrorMessage,
+  useMarkAllNotificationsReadMutation,
+  useMarkNotificationReadMutation,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
   usePendingNotificationInvitesQuery,
@@ -196,6 +204,39 @@ function getWorkspaceRoleLabel(role: Workspace["role"]) {
 
 function getWorkspaceAccentColor(kind: Workspace["kind"]) {
   return kind === "shared" ? "#4566d6" : "#1b6a58";
+}
+
+function NotificationPanelRow({
+  notification,
+  onOpen,
+}: {
+  notification: InboxNotification;
+  onOpen: (notification: InboxNotification) => void;
+}) {
+  const isUnread = notification.status !== "read";
+
+  return (
+    <button
+      className="group flex w-full gap-3 border-t border-white/[0.07] px-5 py-3.5 text-left transition hover:bg-white/[0.035]"
+      onClick={() => onOpen(notification)}
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+          isUnread ? "bg-[#d6b69b]" : "bg-white/20"
+        }`}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold leading-5 text-ink">{notification.title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-storm">{notification.body}</span>
+        <span className="mt-1.5 block text-[10px] uppercase tracking-[0.14em] text-storm/65">
+          {formatNotificationKindLabel(notification.kind)} · {formatRelativeTime(notification.scheduledFor)}
+        </span>
+      </span>
+      <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-storm/45 transition group-hover:translate-x-0.5 group-hover:text-ink" />
+    </button>
+  );
 }
 
 function WorkspacePicker({
@@ -359,6 +400,7 @@ function AppShellContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
+  const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
@@ -380,6 +422,13 @@ function AppShellContent() {
   const pendingNotificationInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
+  const markAllNotificationsReadMutation = useMarkAllNotificationsReadMutation(user?.id);
+  const markNotificationReadMutation = useMarkNotificationReadMutation(user?.id);
+  const notificationsPanelRef = useOutsidePointerClose(
+    isNotificationsPanelOpen,
+    () => setIsNotificationsPanelOpen(false),
+    true,
+  );
   const notificationInbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
     entitlement: entitlementQuery.data,
@@ -388,8 +437,28 @@ function AppShellContent() {
     snapshot: workspaceSnapshotQuery.data,
     workspaceName: activeWorkspace?.name,
   });
+  const visibleNotifications = useMemo(
+    () => notificationInbox.notifications.filter((notification) => !notification.isArchived),
+    [notificationInbox.notifications],
+  );
+  const actionRequiredNotifications = useMemo(
+    () =>
+      visibleNotifications.filter((notification) =>
+        isActionRequiredNotificationKind(notification.kind),
+      ),
+    [visibleNotifications],
+  );
+  const informativeNotifications = useMemo(
+    () =>
+      visibleNotifications.filter(
+        (notification) => !isActionRequiredNotificationKind(notification.kind),
+      ),
+    [visibleNotifications],
+  );
   const unreadNotificationsCount =
-    notificationPreferencesQuery.data?.inAppEnabled === false ? 0 : notificationInbox.unreadCount;
+    notificationPreferencesQuery.data?.inAppEnabled === false
+      ? 0
+      : actionRequiredNotifications.length;
   const currentUserName = profile?.fullName ?? user?.email?.split("@")[0] ?? "Usuario";
   const currentUserEmail = profile?.email ?? user?.email ?? "";
   const isAdminOverride = normalizeEmail(currentUserEmail) === normalizeEmail(PRO_ADMIN_EMAIL);
@@ -403,6 +472,40 @@ function AppShellContent() {
   async function handleSignOut() {
     await signOut();
     navigate("/auth/login", { replace: true });
+  }
+
+  async function handleOpenNotification(notification: InboxNotification) {
+    try {
+      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind)) {
+        if (notification.source === "database" && notification.databaseId) {
+          await markNotificationReadMutation.mutateAsync(notification.databaseId);
+        } else {
+          notificationInbox.markSmartNotificationsAsRead([notification.id]);
+        }
+      }
+    } catch {
+      // La navegación no debe quedar bloqueada si falla el estado de lectura.
+    }
+
+    setIsNotificationsPanelOpen(false);
+    navigate(notification.href);
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    try {
+      if (notificationInbox.unreadDatabaseCount > 0) {
+        await markAllNotificationsReadMutation.mutateAsync();
+      }
+      if (notificationInbox.unreadSmartCount > 0) {
+        notificationInbox.markSmartNotificationsAsRead();
+      }
+    } catch (readError) {
+      showToast({
+        title: "No pudimos marcar las notificaciones",
+        description: getQueryErrorMessage(readError, "Inténtalo de nuevo en unos segundos."),
+        tone: "error",
+      });
+    }
   }
 
   async function handleOpenProCheckout() {
@@ -963,7 +1066,7 @@ function AppShellContent() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col gap-0 lg:min-h-0 lg:overflow-y-auto" id="main-content" tabIndex={-1}>
-          <header aria-label="Encabezado del workspace" className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
+          <header aria-label="Encabezado del workspace" className="sticky top-0 z-[60] border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
             <div className="flex min-h-9 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -987,21 +1090,105 @@ function AppShellContent() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  aria-label="Ver alertas"
-                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink"
-                  onClick={() => navigate("/app/notifications")}
-                  title="Alertas"
-                  type="button"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="sm:sr-only">Alertas</span>
-                  {unreadNotificationsCount > 0 ? (
-                    <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#ff6b7a] px-1.5 text-[10px] font-bold text-white shadow-[0_8px_22px_rgba(255,107,122,0.4)]">
-                      {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-                    </span>
+                <div className="relative" ref={notificationsPanelRef}>
+                  <button
+                    aria-expanded={isNotificationsPanelOpen}
+                    aria-haspopup="dialog"
+                    aria-label="Abrir notificaciones"
+                    className="relative inline-flex h-9 w-9 items-center justify-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink"
+                    onClick={() => setIsNotificationsPanelOpen((isOpen) => !isOpen)}
+                    title="Notificaciones"
+                    type="button"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="sm:sr-only">Notificaciones</span>
+                    {unreadNotificationsCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#e8ded3] px-1 text-[9px] font-bold text-[#141312]">
+                        {unreadNotificationsCount}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {isNotificationsPanelOpen ? (
+                    <section
+                      aria-label="Panel de notificaciones"
+                      className="animate-rise-in fixed left-4 right-4 top-[7.25rem] z-[70] overflow-hidden rounded-[10px] border border-white/[0.1] bg-[#1a1917] shadow-[0_24px_70px_rgba(0,0,0,0.52)] lg:absolute lg:left-auto lg:right-0 lg:top-[calc(100%+0.65rem)] lg:w-[404px]"
+                      role="dialog"
+                    >
+                      <div className="flex items-center justify-between gap-4 px-5 py-4">
+                        <div>
+                          <h2 className="font-display text-lg font-semibold text-ink">Notificaciones</h2>
+                          <p className="mt-0.5 text-xs text-storm">
+                            {actionRequiredNotifications.length
+                              ? `${actionRequiredNotifications.length} piden algo tuyo`
+                              : "Nada requiere tu atención"}
+                          </p>
+                        </div>
+                        <button
+                          className="text-xs font-semibold text-storm transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={
+                            notificationInbox.unreadCount === 0 ||
+                            markAllNotificationsReadMutation.isPending
+                          }
+                          onClick={() => void handleMarkAllNotificationsRead()}
+                          type="button"
+                        >
+                          Marcar leídas
+                        </button>
+                      </div>
+
+                      <div className="max-h-[min(620px,calc(100vh-9rem))] overflow-y-auto">
+                        {actionRequiredNotifications.length ? (
+                          <div>
+                            <p className="px-5 pb-2 pt-1 font-public-mono text-[10px] uppercase tracking-[0.18em] text-[#d6b69b]">
+                              Piden algo
+                            </p>
+                            {actionRequiredNotifications.slice(0, 3).map((notification) => (
+                              <NotificationPanelRow
+                                key={notification.id}
+                                notification={notification}
+                                onOpen={(item) => void handleOpenNotification(item)}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {informativeNotifications.length ? (
+                          <div>
+                            <p className="px-5 pb-2 pt-4 font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm/70">
+                              Para saber
+                            </p>
+                            {informativeNotifications.slice(0, 3).map((notification) => (
+                              <NotificationPanelRow
+                                key={notification.id}
+                                notification={notification}
+                                onOpen={(item) => void handleOpenNotification(item)}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {!visibleNotifications.length ? (
+                          <p className="border-t border-white/[0.07] px-5 py-8 text-center text-sm text-storm">
+                            No tienes notificaciones por ahora.
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <button
+                        className="flex w-full items-center justify-between border-t border-white/[0.09] px-5 py-3.5 text-sm font-semibold text-ink transition hover:bg-white/[0.04]"
+                        onClick={() => {
+                          setIsNotificationsPanelOpen(false);
+                          navigate("/app/notifications");
+                        }}
+                        type="button"
+                      >
+                        Ver todas
+                        <ChevronRight className="h-4 w-4 text-storm" />
+                      </button>
+                    </section>
                   ) : null}
-                </button>
+                </div>
                 <button
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-[7px] bg-[#f4f1ec] px-3.5 text-[13px] font-semibold text-[#141312] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canUseQuickMovement}
