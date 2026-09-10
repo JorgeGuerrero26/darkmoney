@@ -355,7 +355,7 @@ export function MovementsPage() {
   const activeDateLabel = getMovementDateRangeLabel(tableFilters.dateFrom, tableFilters.dateTo);
   const filteredTotals = filteredMovements.reduce(
     (totals, movement) => {
-      if (movement.status === "voided") {
+      if (movement.status === "voided" || movement.movementType === "transfer") {
         return totals;
       }
 
@@ -363,17 +363,17 @@ export function MovementsPage() {
         movement.destinationAmountInBaseCurrency ?? movement.destinationAmount ?? 0;
       const outgoingAmount = movement.sourceAmountInBaseCurrency ?? movement.sourceAmount ?? 0;
 
-      totals.income += incomingAmount;
-      totals.outflow += outgoingAmount;
-
-      if (movement.movementType !== "transfer" && !movementActsAsIncome(movement)) {
-        totals.realExpense += outgoingAmount || incomingAmount;
+      if (movementActsAsIncome(movement)) {
+        totals.income += Math.abs(incomingAmount || outgoingAmount);
+      } else {
+        totals.expense += Math.abs(outgoingAmount || incomingAmount);
       }
 
       return totals;
     },
-    { income: 0, outflow: 0, realExpense: 0 },
+    { income: 0, expense: 0 },
   );
+  const filteredNet = filteredTotals.income - filteredTotals.expense;
   const hasActiveFilters = Boolean(
     tableFilters.description.trim() ||
       tableFilters.category.trim() ||
@@ -862,21 +862,21 @@ export function MovementsPage() {
           </p>
           <p
             className="text-storm"
-            title="Suma lo que llegó a tus cuentas en el período, incluidos los traspasos recibidos."
+            title="Suma los ingresos del período. Los traspasos entre tus cuentas no cuentan."
           >
             Entró <span className="font-medium text-ink">{formatCurrency(filteredTotals.income, snapshot.workspace.baseCurrencyCode)}</span>
           </p>
           <p
             className="text-storm"
-            title="Suma lo que salió de tus cuentas en el período, incluidos los traspasos enviados."
+            title="Suma los gastos del período. Los traspasos entre tus cuentas no cuentan."
           >
-            Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.outflow, snapshot.workspace.baseCurrencyCode)}</span>
+            Salió <span className="font-medium text-ink">{formatCurrency(filteredTotals.expense, snapshot.workspace.baseCurrencyCode)}</span>
           </p>
           <p
             className="text-right text-storm"
-            title="Suma solo las salidas que son gasto; no cuenta dinero movido entre tus cuentas."
+            title="Diferencia entre lo que entró y lo que salió en el período, sin contar traspasos."
           >
-            Gasto real, sin traspasos <span className="block font-medium text-ink sm:inline">{formatCurrency(filteredTotals.realExpense, snapshot.workspace.baseCurrencyCode)}</span>
+            Neto <span className="block font-medium text-ink sm:inline">{formatCurrency(filteredNet, snapshot.workspace.baseCurrencyCode)}</span>
           </p>
         </section>
 
