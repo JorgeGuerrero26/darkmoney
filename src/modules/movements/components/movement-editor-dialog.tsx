@@ -57,6 +57,13 @@ import type {
   MovementFieldProps,
   MovementFormState,
 } from "../lib/movement-form";
+import {
+  MovementDetailOptionsPanel,
+  MovementDetailsNavigationRow,
+  MovementDetailsPanel,
+  MovementDetailsReceiptRow,
+  PendingMovementReceiptControl,
+} from "./movement-details-panel";
 
 const movementTextInputClassName = "field-dark";
 const movementTextareaClassName = "field-dark min-h-[120px] resize-y py-3 leading-7";
@@ -129,6 +136,14 @@ export type MovementEditorDialogProps = {
   ) => void;
 };
 
+type MovementEditorPanel =
+  | "main"
+  | "details"
+  | "type"
+  | "destinationAccount"
+  | "category"
+  | "counterparty";
+
 
 export function MovementEditorDialog({
   accounts,
@@ -158,13 +173,13 @@ export function MovementEditorDialog({
   updateFormState,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
     const firstField = [...invalidFields][0];
     if (["description", "occurredAt"].includes(firstField)) {
-      setShowAdvanced(true);
+      setActivePanel("details");
     }
     setTimeout(() => {
       const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
@@ -326,7 +341,7 @@ export function MovementEditorDialog({
 
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
-    setShowAdvanced(false);
+    setActivePanel("main");
   }, [isCreateMode, selectedMovement?.id]);
 
   const movementTypePickerOptions = useMemo(
@@ -456,14 +471,28 @@ export function MovementEditorDialog({
         >
           <div className="relative flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-y-auto px-4 pt-4 sm:px-6 sm:pt-6">
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-              {showAdvanced ? (
+              {activePanel !== "main" ? (
                 <button
                   className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white"
-                  onClick={() => setShowAdvanced(false)}
+                  onClick={() =>
+                    setActivePanel(
+                      activePanel === "details" ? "main" : "details",
+                    )
+                  }
                   type="button"
                 >
                   <ArrowLeft className="h-4 w-4 shrink-0" />
-                  <span className="truncate font-display text-xl font-semibold">Detalles</span>
+                  <span className="truncate font-display text-xl font-semibold">
+                    {activePanel === "details"
+                      ? "Detalles"
+                      : activePanel === "type"
+                        ? "Tipo de movimiento"
+                        : activePanel === "destinationAccount"
+                          ? "Cuenta de destino"
+                        : activePanel === "category"
+                          ? "Categoría"
+                          : "Contraparte"}
+                  </span>
                 </button>
               ) : (
                 <h2 className="font-display text-xl font-semibold text-ink">
@@ -494,194 +523,202 @@ export function MovementEditorDialog({
               ) : null}
 
               <div className="space-y-5">
-                <div className={showAdvanced ? "hidden" : "contents"}>
-                <MovementField
-                  errorKey={primaryAmountField}
-                  invalidFields={invalidFields}
-                  label="Monto"
-                >
-                  <EditorInput
-                    autoFocus
-                    className="h-16 font-display text-[2rem] font-semibold"
-                    inputMode="decimal"
-                    onChange={(event) => {
-                      clearFieldError(primaryAmountField);
-                      updateFormState(primaryAmountField, event.target.value);
-                    }}
-                    placeholder="0.00"
-                    value={primaryAmount}
-                  />
-                </MovementField>
+                {activePanel === "main" ? (
+                  <>
+                    <MovementField
+                      errorKey={primaryAmountField}
+                      invalidFields={invalidFields}
+                      label="Monto"
+                    >
+                      <EditorInput
+                        autoFocus
+                        className="h-16 font-display text-[2rem] font-semibold"
+                        inputMode="decimal"
+                        onChange={(event) => {
+                          clearFieldError(primaryAmountField);
+                          updateFormState(primaryAmountField, event.target.value);
+                        }}
+                        placeholder="0.00"
+                        value={primaryAmount}
+                      />
+                    </MovementField>
 
-                <div className="rounded-xl border border-white/10 bg-[#141311]">
-                  <div className="p-3" data-field={primaryAccountField}>
-                    <SearchablePicker
-                      appearance="compact"
-                      emptyMessage="No encontramos una cuenta con ese término."
-                      onChange={(nextValue) => {
-                        clearFieldError(primaryAccountField);
-                        updateFormState(primaryAccountField, nextValue);
-                      }}
-                      options={accountPickerOptions}
-                      placeholderDescription="Cuenta principal del movimiento."
-                      placeholderLabel="Selecciona una cuenta"
-                      queryPlaceholder="Buscar cuenta..."
-                      value={primaryUsesDestination ? formState.destinationAccountId : formState.sourceAccountId}
-                    />
-                  </div>
-                  {primaryAccount && primaryProjectedBalance !== null ? (
-                    <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
-                      <span className="text-storm">Saldo después</span>
-                      <span className="font-semibold text-ink">
-                        {formatCurrency(primaryProjectedBalance, primaryAccount.currencyCode)}
-                      </span>
+                    <div className="rounded-xl border border-white/10 bg-[#141311]">
+                      <div className="p-3" data-field={primaryAccountField}>
+                        <SearchablePicker
+                          appearance="compact"
+                          emptyMessage="No encontramos una cuenta con ese término."
+                          onChange={(nextValue) => {
+                            clearFieldError(primaryAccountField);
+                            updateFormState(primaryAccountField, nextValue);
+                          }}
+                          options={accountPickerOptions}
+                          placeholderDescription="Cuenta principal del movimiento."
+                          placeholderLabel="Selecciona una cuenta"
+                          queryPlaceholder="Buscar cuenta..."
+                          value={primaryUsesDestination ? formState.destinationAccountId : formState.sourceAccountId}
+                        />
+                      </div>
+                      {primaryAccount && primaryProjectedBalance !== null ? (
+                        <div className="flex items-center justify-between border-t border-white/10 px-4 py-3 text-sm">
+                          <span className="text-storm">Saldo después</span>
+                          <span className="font-semibold text-ink">
+                            {formatCurrency(primaryProjectedBalance, primaryAccount.currencyCode)}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
 
-                <div>
-                  <p className={movementFieldLabelClassName}>Estado</p>
-                  <div className="mt-2 grid grid-cols-4 rounded-xl border border-white/10 bg-[#141311] p-1">
-                    {([
-                      { value: "posted", label: "Confirmado" },
-                      { value: "pending", label: "Pendiente" },
-                      { value: "planned", label: "Planificado" },
-                      { value: "voided", label: "Anulado" },
-                    ] as const).map((option) => (
+                    <div>
+                      <p className={movementFieldLabelClassName}>Estado</p>
+                      <div className="mt-2 grid grid-cols-4 rounded-xl border border-white/10 bg-[#141311] p-1">
+                        {([
+                          { value: "posted", label: "Confirmado" },
+                          { value: "pending", label: "Pendiente" },
+                          { value: "planned", label: "Planificado" },
+                          { value: "voided", label: "Anulado" },
+                        ] as const).map((option) => (
+                          <button
+                            className={`rounded-lg px-1 py-2.5 text-xs font-semibold transition ${
+                              formState.status === option.value
+                                ? "bg-ink text-void"
+                                : "text-storm hover:text-ink"
+                            }`}
+                            key={option.value}
+                            onClick={() => updateFormState("status", option.value)}
+                            type="button"
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-[#141311]">
                       <button
-                        className={`rounded-lg px-1 py-2.5 text-xs font-semibold transition ${
-                          formState.status === option.value
-                            ? "bg-ink text-void"
-                            : "text-storm hover:text-ink"
-                        }`}
-                        key={option.value}
-                        onClick={() => updateFormState("status", option.value)}
+                        className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink"
+                        onClick={() => setActivePanel("details")}
                         type="button"
                       >
-                        {option.label}
+                        Detalles
+                        <ChevronRight className="h-4 w-4 text-storm" />
                       </button>
-                    ))}
-                  </div>
-                </div>
-                </div>
+                    </div>
+                  </>
+                ) : null}
 
-                <div className={showAdvanced ? "" : "rounded-xl border border-white/10 bg-[#141311]"}>
-                  <button
-                    className={`h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink ${showAdvanced ? "hidden" : "flex"}`}
-                    onClick={() => setShowAdvanced(true)}
-                    type="button"
-                  >
-                    Detalles
-                    <ChevronRight className="h-4 w-4 text-storm" />
-                  </button>
-                  {showAdvanced ? (
-                    <div className="space-y-4">
-                      <MovementField label="Tipo de movimiento">
-                        <SearchablePicker
-                          appearance="compact"
-                          emptyMessage="No encontramos un tipo de movimiento con ese término."
-                          onChange={(nextValue) => updateFormState("movementType", nextValue as MovementType)}
-                          options={movementTypePickerOptions}
-                          placeholderDescription="Comportamiento del movimiento."
-                          placeholderLabel="Selecciona un tipo"
-                          queryPlaceholder="Buscar tipo..."
-                          value={formState.movementType}
+                {activePanel === "details" ? (
+                  <MovementDetailsPanel
+                    categoryLabel={selectedCategory?.name ?? "Sin categoría"}
+                    counterpartyLabel={selectedCounterparty?.name ?? "Sin asignar"}
+                    description={formState.description}
+                    destinationAmount={formState.destinationAmount}
+                    destinationCurrencyCode={selectedDestinationAccount?.currencyCode}
+                    helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
+                    invalidFields={invalidFields}
+                    isTransfer={formState.movementType === "transfer"}
+                    navigationRows={
+                      formState.movementType === "transfer" ? (
+                        <MovementDetailsNavigationRow
+                          label="Cuenta de destino"
+                          onClick={() => setActivePanel("destinationAccount")}
+                          value={selectedDestinationAccount?.name ?? "Selecciona destino"}
                         />
-                      </MovementField>
-
-                      <MovementField errorKey="description" invalidFields={invalidFields} label="Descripción">
-                        <EditorInput
-                          onChange={(event) => {
-                            clearFieldError("description");
-                            updateFormState("description", event.target.value);
-                          }}
-                          placeholder="Ej. Pago de internet"
-                          value={formState.description}
-                        />
-                      </MovementField>
-
-                      <MovementField errorKey="occurredAt" invalidFields={invalidFields} label="Fecha">
-                        <DatePickerField
-                          mode="datetime-local"
-                          onChange={(nextValue) => {
-                            clearFieldError("occurredAt");
-                            updateFormState("occurredAt", nextValue);
-                          }}
-                          value={formState.occurredAt}
-                        />
-                      </MovementField>
-
-                      <MovementField label="Categoría">
-                        <SearchablePicker
-                          appearance="compact"
-                          emptyMessage="No encontramos una categoría con ese término."
-                          onChange={(nextValue) => updateFormState("categoryId", nextValue)}
-                          options={categoryPickerOptions}
-                          placeholderDescription="Opcional"
-                          placeholderLabel="Sin categoría"
-                          queryPlaceholder="Buscar categoría..."
-                          value={formState.categoryId}
-                        />
-                      </MovementField>
-
-                      {formState.movementType === "transfer" ? (
-                        <>
-                          <MovementField label="Cuenta de destino">
-                            <SearchablePicker
-                              appearance="compact"
-                              emptyMessage="No encontramos una cuenta con ese término."
-                              onChange={(nextValue) => updateFormState("destinationAccountId", nextValue)}
-                              options={accountPickerOptions}
-                              placeholderDescription="Cuenta que recibe."
-                              placeholderLabel="Selecciona destino"
-                              queryPlaceholder="Buscar cuenta..."
-                              value={formState.destinationAccountId}
-                            />
-                          </MovementField>
-                          <MovementField label="Monto de destino">
-                            <EditorInput
-                              inputMode="decimal"
-                              onChange={(event) => updateFormState("destinationAmount", event.target.value)}
-                              placeholder="0.00"
-                              value={formState.destinationAmount}
-                            />
-                          </MovementField>
-                        </>
-                      ) : null}
-
-                      <MovementField label="Contraparte">
-                        <SearchablePicker
-                          appearance="compact"
-                          emptyMessage="No encontramos una contraparte con ese término."
-                          onChange={(nextValue) => updateFormState("counterpartyId", nextValue)}
-                          options={counterpartyPickerOptions}
-                          placeholderDescription="Opcional"
-                          placeholderLabel="Sin contraparte"
-                          queryPlaceholder="Buscar contraparte..."
-                          value={formState.counterpartyId}
-                        />
-                      </MovementField>
-
-                      {isCreateMode ? (
-                        <PendingReceiptField
-                          canUpload={canManageReceipts}
-                          file={pendingReceiptFile}
-                          lockedMessage={accessMessage}
-                          onChange={updatePendingReceiptFile}
-                        />
+                      ) : null
+                    }
+                    occurredAt={formState.occurredAt}
+                    onDescriptionChange={(value) => {
+                      clearFieldError("description");
+                      updateFormState("description", value);
+                    }}
+                    onDestinationAmountChange={(value) => updateFormState("destinationAmount", value)}
+                    onOccurredAtChange={(value) => {
+                      clearFieldError("occurredAt");
+                      updateFormState("occurredAt", value);
+                    }}
+                    onOpenCategory={() => setActivePanel("category")}
+                    onOpenCounterparty={() => setActivePanel("counterparty")}
+                    onOpenType={() => setActivePanel("type")}
+                    receiptRows={
+                      isCreateMode ? (
+                        <MovementDetailsReceiptRow>
+                          <PendingMovementReceiptControl
+                            canUpload={canManageReceipts}
+                            file={pendingReceiptFile}
+                            lockedMessage={accessMessage}
+                            onChange={updatePendingReceiptFile}
+                          />
+                        </MovementDetailsReceiptRow>
                       ) : selectedMovement ? (
                         <CompactAttachmentField
                           accessMessage={accessMessage}
                           attachments={attachments}
                           canManage={canManageReceipts}
+                          embedded
                           isUploading={isUploadingReceipt}
                           onDelete={(attachment) => void handleDeleteReceipt(attachment)}
                           onUpload={(file) => void handleUploadReceipt(file)}
                         />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                      ) : null
+                    }
+                    showDestinationAmount={
+                      formState.movementType === "transfer" &&
+                      Boolean(selectedSourceAccount && selectedDestinationAccount) &&
+                      selectedSourceAccount?.currencyCode !== selectedDestinationAccount?.currencyCode
+                    }
+                    typeLabel={movementTypeOption.label}
+                  />
+                ) : null}
+
+                {activePanel === "type" ? (
+                  <MovementDetailOptionsPanel
+                    onChange={(value) => {
+                      updateFormState("movementType", value as MovementType);
+                      setActivePanel("details");
+                    }}
+                    options={movementTypePickerOptions}
+                    value={formState.movementType}
+                  />
+                ) : null}
+
+                {activePanel === "destinationAccount" ? (
+                  <MovementDetailOptionsPanel
+                    onChange={(value) => {
+                      updateFormState("destinationAccountId", value);
+                      setActivePanel("details");
+                    }}
+                    options={accountPickerOptions}
+                    value={formState.destinationAccountId}
+                  />
+                ) : null}
+
+                {activePanel === "category" ? (
+                  <MovementDetailOptionsPanel
+                    onChange={(value) => {
+                      updateFormState("categoryId", value);
+                      setActivePanel("details");
+                    }}
+                    options={[
+                      { value: "", label: "Sin categoría" },
+                      ...categoryPickerOptions,
+                    ]}
+                    value={formState.categoryId}
+                  />
+                ) : null}
+
+                {activePanel === "counterparty" ? (
+                  <MovementDetailOptionsPanel
+                    onChange={(value) => {
+                      updateFormState("counterpartyId", value);
+                      setActivePanel("details");
+                    }}
+                    options={[
+                      { value: "", label: "Sin asignar" },
+                      ...counterpartyPickerOptions,
+                    ]}
+                    value={formState.counterpartyId}
+                  />
+                ) : null}
               </div>
 
               <section className="hidden">
@@ -1059,24 +1096,26 @@ export function MovementEditorDialog({
                 </section>
 
                 <button
-                  aria-expanded={showAdvanced}
+                  aria-expanded={activePanel === "details"}
                   className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition duration-200 ${
-                    showAdvanced
+                    activePanel === "details"
                       ? "border-pine/25 bg-pine/[0.06] text-ink"
                       : "border-white/10 bg-white/[0.03] text-storm hover:border-white/16 hover:text-ink"
                   }`}
-                  onClick={() => setShowAdvanced((open) => !open)}
+                  onClick={() =>
+                    setActivePanel((panel) => (panel === "details" ? "main" : "details"))
+                  }
                   type="button"
                 >
                   <span className="text-sm font-semibold">
                     Detalles
                   </span>
                   <ChevronDown
-                    className={`h-4 w-4 shrink-0 transition ${showAdvanced ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 shrink-0 transition ${activePanel === "details" ? "rotate-180" : ""}`}
                   />
                 </button>
 
-                {showAdvanced ? (
+                {activePanel === "details" ? (
                 <>
                 <section className={`${movementEditorPanelClassName} z-20`}>
                   <div className="mb-4 sm:mb-6 flex items-center gap-2 sm:gap-3">
@@ -1200,6 +1239,7 @@ export function MovementEditorDialog({
               </div>
               </div>
 
+              {activePanel === "main" || activePanel === "details" ? (
               <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                   {!isCreateMode && selectedMovement ? (
@@ -1232,6 +1272,7 @@ export function MovementEditorDialog({
                   </Button>
                 </div>
               </div>
+              ) : null}
           </form>
 
           {isDeleteConfirmOpen && selectedMovement ? (

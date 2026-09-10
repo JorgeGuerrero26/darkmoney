@@ -8,6 +8,7 @@ type CompactAttachmentFieldProps = {
   accessMessage: string;
   attachments: AttachmentSummary[];
   canManage: boolean;
+  embedded?: boolean;
   isUploading: boolean;
   onDelete: (attachment: AttachmentSummary) => void;
   onUpload: (file: File) => void;
@@ -27,6 +28,7 @@ export function CompactAttachmentField({
   accessMessage,
   attachments,
   canManage,
+  embedded = false,
   isUploading,
   onDelete,
   onUpload,
@@ -60,8 +62,12 @@ export function CompactAttachmentField({
   }, [attachments]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
-      <div className="flex min-h-[54px] items-center justify-between gap-4 px-4">
+    <div className={embedded ? "" : "overflow-hidden rounded-xl border border-white/10 bg-[#141311]"}>
+      <div
+        className={`flex min-h-[54px] items-center justify-between gap-4 px-4 ${
+          embedded ? "border-t border-white/10" : ""
+        }`}
+      >
         <span className="shrink-0 text-sm font-medium text-ink">Comprobante</span>
         <div className="flex min-w-0 items-center gap-3">
           {attachments.length ? (

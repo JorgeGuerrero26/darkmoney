@@ -3,10 +3,8 @@
   ArrowLeftRight,
   ArrowUpCircle,
   ArrowLeft,
-  Check,
   ChevronRight,
   LoaderCircle,
-  Paperclip,
   X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
@@ -25,6 +23,12 @@ import {
 } from "../../attachments/receipt-utils";
 import { useReceiptFeatureAccess } from "../../attachments/use-receipt-feature-access";
 import { ContactQuickCreateDialog } from "../../contacts/components/contact-quick-create-dialog";
+import {
+  MovementDetailOptionsPanel,
+  MovementDetailsPanel,
+  MovementDetailsReceiptRow,
+  PendingMovementReceiptControl,
+} from "./movement-details-panel";
 import type {
   AccountSummary,
   CategorySummary,
@@ -976,180 +980,67 @@ export function QuickMovementDialog({
                       <FormFeedbackBanner description={errorMessage} title="Revisa el movimiento" />
                     </div>
                   ) : null}
-
-                  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
-                    {isTransfer && hasTransferCurrencyMismatch ? (
-                      <label
-                        className={`flex h-[54px] items-center justify-between gap-4 px-4 ${
-                          invalidFields.has("destinationAmount") ? "field-error-ring" : ""
-                        }`}
-                        data-field="destinationAmount"
-                      >
-                        <span className="text-sm font-medium text-ink">Monto que llega</span>
-                        <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
-                          <span>{selectedDestinationAccount?.currencyCode ?? ""}</span>
-                          <input
-                            className="w-28 bg-transparent text-right font-semibold text-ink outline-none placeholder:text-storm/55"
-                            inputMode="decimal"
-                            onChange={(event) => {
-                              clearFieldError("destinationAmount");
-                              updateFormState("destinationAmount", event.target.value);
-                            }}
-                            placeholder="0.00"
-                            value={formState.destinationAmount}
-                          />
-                        </span>
-                      </label>
-                    ) : null}
-
-                    {!isTransfer ? (
-                      <>
-                        <button
-                          className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left first:border-t-0"
-                          onClick={() => setActivePanel("category")}
-                          type="button"
-                        >
-                          <span className="text-sm font-medium text-ink">Categoría</span>
-                          <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
-                            <span className="truncate">{selectedCategory?.name ?? "Sin categoría"}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0" />
-                          </span>
-                        </button>
-                        <button
-                          className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left"
-                          onClick={() => setActivePanel("counterparty")}
-                          type="button"
-                        >
-                          <span className="text-sm font-medium text-ink">Contraparte</span>
-                          <span className="flex min-w-0 items-center gap-2 text-sm text-storm">
-                            <span className="truncate">{selectedCounterparty?.name ?? "Sin asignar"}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0" />
-                          </span>
-                        </button>
-                      </>
-                    ) : null}
-
-                    <label className="flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4">
-                      <span className="shrink-0 text-sm font-medium text-ink">Descripción</span>
-                      <input
-                        className="min-w-0 flex-1 bg-transparent text-right text-sm text-ink outline-none placeholder:text-storm/55"
-                        onChange={(event) => updateFormState("description", event.target.value)}
-                        placeholder="Se genera automáticamente"
-                        value={formState.description}
-                      />
-                    </label>
-
-                    <label
-                      className={`flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4 ${
-                        invalidFields.has("occurredAt") ? "field-error-ring" : ""
-                      }`}
-                      data-field="occurredAt"
-                    >
-                      <span className="shrink-0 text-sm font-medium text-ink">Fecha</span>
-                      <input
-                        className="min-w-0 bg-transparent text-right text-sm text-storm outline-none [color-scheme:dark]"
-                        onChange={(event) => {
-                          clearFieldError("occurredAt");
-                          updateFormState("occurredAt", event.target.value);
-                        }}
-                        type="datetime-local"
-                        value={formState.occurredAt}
-                      />
-                    </label>
-
-                    <div className="flex min-h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4">
-                      <span className="shrink-0 text-sm font-medium text-ink">Comprobante</span>
-                      {canUploadReceipts ? (
-                        <div className="flex min-w-0 items-center gap-2">
-                          <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm text-storm transition hover:text-ink">
-                            <span className="max-w-48 truncate">
-                              {pendingReceiptFile?.name ?? "Adjuntar"}
-                            </span>
-                            <Paperclip className="h-4 w-4 shrink-0" />
-                            <input
-                              accept="image/jpeg,image/png,image/webp"
-                              className="sr-only"
-                              onChange={(event) => {
-                                setPendingReceiptFile(event.target.files?.[0] ?? null);
-                                setIsDirty(true);
-                              }}
-                              type="file"
-                            />
-                          </label>
-                          {pendingReceiptFile ? (
-                            <button
-                              aria-label="Quitar comprobante"
-                              className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-                              onClick={() => {
-                                setPendingReceiptFile(null);
-                                setIsDirty(true);
-                              }}
-                              type="button"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <span className="truncate text-right text-xs text-storm/70">{accessMessage}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="mt-4 text-xs leading-5 text-storm/70">
-                    Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha.
-                  </p>
+                  <MovementDetailsPanel
+                    categoryLabel={selectedCategory?.name ?? "Sin categoría"}
+                    counterpartyLabel={selectedCounterparty?.name ?? "Sin asignar"}
+                    description={formState.description}
+                    destinationAmount={formState.destinationAmount}
+                    destinationCurrencyCode={selectedDestinationAccount?.currencyCode}
+                    helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
+                    invalidFields={invalidFields}
+                    isTransfer={isTransfer}
+                    occurredAt={formState.occurredAt}
+                    onDescriptionChange={(value) => updateFormState("description", value)}
+                    onDestinationAmountChange={(value) => {
+                      clearFieldError("destinationAmount");
+                      updateFormState("destinationAmount", value);
+                    }}
+                    onOccurredAtChange={(value) => {
+                      clearFieldError("occurredAt");
+                      updateFormState("occurredAt", value);
+                    }}
+                    onOpenCategory={() => setActivePanel("category")}
+                    onOpenCounterparty={() => setActivePanel("counterparty")}
+                    receiptRows={
+                      <MovementDetailsReceiptRow>
+                        <PendingMovementReceiptControl
+                          canUpload={canUploadReceipts}
+                          file={pendingReceiptFile}
+                          lockedMessage={accessMessage}
+                          onChange={(file) => {
+                            setPendingReceiptFile(file);
+                            setIsDirty(true);
+                          }}
+                        />
+                      </MovementDetailsReceiptRow>
+                    }
+                    showDestinationAmount={isTransfer && hasTransferCurrencyMismatch}
+                  />
                 </div>
               ) : null}
 
               {activePanel === "category" ? (
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
-                  {categoryOptions.map((option) => (
-                    <button
-                      className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm first:border-t-0 hover:bg-white/[0.03]"
-                      key={option.value || "none"}
-                      onClick={() => {
-                        updateFormState("categoryId", option.value);
-                        setActivePanel("details");
-                      }}
-                      type="button"
-                    >
-                      <span className="truncate text-ink">{option.label}</span>
-                      {formState.categoryId === option.value ? (
-                        <Check className="h-4 w-4 shrink-0 text-ink" />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
+                <MovementDetailOptionsPanel
+                  onChange={(value) => {
+                    updateFormState("categoryId", value);
+                    setActivePanel("details");
+                  }}
+                  options={categoryOptions}
+                  value={formState.categoryId}
+                />
               ) : null}
 
               {activePanel === "counterparty" ? (
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
-                  {counterpartyOptions.map((option) => (
-                    <button
-                      className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm first:border-t-0 hover:bg-white/[0.03]"
-                      key={option.value || "none"}
-                      onClick={() => {
-                        updateFormState("counterpartyId", option.value);
-                        setActivePanel("details");
-                      }}
-                      type="button"
-                    >
-                      <span className="truncate text-ink">{option.label}</span>
-                      {formState.counterpartyId === option.value ? (
-                        <Check className="h-4 w-4 shrink-0 text-ink" />
-                      ) : null}
-                    </button>
-                  ))}
-                  <button
-                    className="flex h-[54px] w-full items-center justify-between gap-4 border-t border-white/10 px-4 text-left text-sm font-semibold text-ink hover:bg-white/[0.03]"
-                    onClick={openContactDialog}
-                    type="button"
-                  >
-                    Nuevo contacto
-                    <ChevronRight className="h-4 w-4 text-storm" />
-                  </button>
-                </div>
+                <MovementDetailOptionsPanel
+                  actionLabel="Nuevo contacto"
+                  onAction={openContactDialog}
+                  onChange={(value) => {
+                    updateFormState("counterpartyId", value);
+                    setActivePanel("details");
+                  }}
+                  options={counterpartyOptions}
+                  value={formState.counterpartyId}
+                />
               ) : null}
             </div>
 
