@@ -13,7 +13,6 @@ import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dia
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
-import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
 import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
@@ -820,16 +819,17 @@ export function MovementsPage() {
           tone="error"
         />
       ) : null}
-        <SurfaceCard
-          className="relative z-10"
-          title="Movimientos registrados"
-          titleAccessory={
+        <section className="relative z-10">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-lg font-semibold text-ink sm:text-xl">
+              Movimientos registrados
+            </h2>
             <InfoTip ariaLabel="Sobre la lista de movimientos">
               Abre cualquier movimiento para editarlo o revisarlo. Los filtros de la barra superior
               aplican a todas las vistas.
             </InfoTip>
-          }
-        >
+          </div>
+          <div className="mt-4">
           {filteredMovements.length === 0 ? (
             <DataState
               action={
@@ -896,7 +896,8 @@ export function MovementsPage() {
             pageSize={MOVEMENTS_PAGE_SIZE}
             totalItems={filteredMovements.length}
           />
-        </SurfaceCard>
+          </div>
+        </section>
 
       </div>
 

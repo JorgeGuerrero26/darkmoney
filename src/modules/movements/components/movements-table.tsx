@@ -79,8 +79,8 @@ export function MovementsTable({
   );
 
   return (
-    <div className="overflow-hidden rounded-[9px] border border-white/[0.08] bg-[#1a1917]">
-      <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5 text-xs text-storm">
+    <div className="border-t border-white/[0.08]">
+      <div className="flex items-center justify-between border-b border-white/[0.07] px-2 py-2.5 text-xs text-storm sm:px-0">
         <label className="flex items-center gap-2">
           <SelectionCheckbox ariaLabel="Seleccionar todos" checked={allSelected} indeterminate={someSelected} onChange={() => (allSelected ? onClearAll() : onSelectAll())} />
           Seleccionar todos
@@ -89,7 +89,7 @@ export function MovementsTable({
       </div>
       {groups.map((group) => (
         <section aria-label={group.label} key={group.key}>
-          <div className="flex h-8 items-center justify-between border-b border-white/[0.07] bg-[#171614] px-4 font-public-mono text-[10px] uppercase tracking-[0.14em] text-storm">
+          <div className="flex h-8 items-center justify-between border-b border-white/[0.07] px-2 font-public-mono text-[10px] uppercase tracking-[0.14em] text-storm sm:px-0">
             <span>{group.label}</span>
             <span>{formatCurrency(group.subtotal, baseCurrencyCode)}</span>
           </div>
@@ -99,7 +99,7 @@ export function MovementsTable({
             const isTransfer = movement.movementType === "transfer";
             return (
               <div
-                className="grid min-h-[54px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_minmax(120px,0.45fr)_auto] items-center gap-3 border-b border-white/[0.06] px-4 py-2 transition last:border-b-0 hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-2px] focus-visible:outline-white/30"
+                className="grid min-h-[54px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_minmax(120px,0.45fr)_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-2px] focus-visible:outline-white/30 sm:px-0"
                 key={movement.id}
                 onClick={() => onOpen(movement)}
                 onKeyDown={(event) => {
