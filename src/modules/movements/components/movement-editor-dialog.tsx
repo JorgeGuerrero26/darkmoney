@@ -792,7 +792,7 @@ export function MovementEditorDialog({
                           onClick={() => setActivePanel("destinationAccount")}
                           value={selectedDestinationAccount?.name ?? "Selecciona destino"}
                         />
-                      ) : formState.movementType === "expense" ? (
+                      ) : formState.movementType === "expense" || formState.movementType === "income" ? (
                         <MovementDetailsNavigationRow
                           label="Dividir en categorías"
                           onClick={() => {
@@ -939,7 +939,7 @@ export function MovementEditorDialog({
                   <MovementDetailOptionsPanel
                     onChange={(value) => {
                       updateFormState("movementType", value as MovementType);
-                      if (value !== "expense") setSplitLines(null);
+                      if (value !== "expense" && value !== "income") setSplitLines(null);
                       setActivePanel("details");
                     }}
                     options={movementTypePickerOptions}
@@ -1000,6 +1000,10 @@ export function MovementEditorDialog({
                       setSplitLines(lines);
                       onDirty();
                       onErrorMessage("");
+                    }}
+                    onDone={() => {
+                      onErrorMessage("");
+                      setActivePanel("details");
                     }}
                     onRemove={() => {
                       setSplitLines(null);
@@ -1529,7 +1533,7 @@ export function MovementEditorDialog({
               </div>
               </div>
 
-              {activePanel === "main" || activePanel === "details" || activePanel === "split" ? (
+              {activePanel === "main" || activePanel === "details" ? (
               <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                   {!isCreateMode && selectedMovement ? (

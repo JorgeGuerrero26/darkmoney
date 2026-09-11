@@ -23,6 +23,9 @@ export function getMovementSplitTotal(lines: MovementSplitLine[]) {
 }
 
 export function validateMovementSplit(lines: MovementSplitLine[], totalAmount: number): string | null {
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    return "Ingresa primero el monto total del movimiento.";
+  }
   if (lines.length < 2) return "Agrega al menos dos partes.";
   if (lines.some((line) => !line.categoryId)) return "Elige una categoría para cada parte.";
   if (lines.some((line) => !Number.isFinite(Number(line.amount)) || Number(line.amount) <= 0)) {

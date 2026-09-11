@@ -732,7 +732,7 @@ export function QuickMovementDialog({
             selectedCounterparty,
           );
 
-        if (splitLines && kind === "expense") {
+        if (splitLines && (kind === "expense" || kind === "income")) {
           const splitError = validateMovementSplit(splitLines, amount ?? 0);
           if (splitError) {
             setActivePanel("split");
@@ -750,8 +750,8 @@ export function QuickMovementDialog({
               counterpartyId:
                 counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
               description: buildSplitDescription(description, index, splitLines.length),
-              destinationAccountId: null,
-              destinationAmount: null,
+              destinationAccountId: kind === "income" ? accountId : null,
+              destinationAmount: kind === "income" ? lineAmount : null,
               fxRate: null,
               metadata: buildSplitMetadata({
                 channel: "quick-entry",
@@ -1093,7 +1093,7 @@ export function QuickMovementDialog({
                         setLinkedSubscriptionId(null);
                         setLinkedRecurringIncomeId(null);
                         setCategoryFeedbackIntent(null);
-                        if (mode.kind !== "expense") setSplitLines(null);
+                        if (mode.kind === "transfer") setSplitLines(null);
                         setIsDirty(true);
                       }}
                       type="button"
@@ -1304,7 +1304,7 @@ export function QuickMovementDialog({
                     helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
                     invalidFields={invalidFields}
                     isTransfer={isTransfer}
-                    navigationRows={kind === "expense" ? (
+                    navigationRows={!isTransfer ? (
                       <MovementDetailsNavigationRow
                         label="Dividir en categorías"
                         onClick={() => {
@@ -1482,6 +1482,10 @@ export function QuickMovementDialog({
                       setIsDirty(true);
                       setErrorMessage("");
                     }}
+                    onDone={() => {
+                      setErrorMessage("");
+                      setActivePanel("details");
+                    }}
                     onRemove={() => {
                       setSplitLines(null);
                       setActivePanel("details");
@@ -1494,7 +1498,7 @@ export function QuickMovementDialog({
             </div>
 
             {visibleAccounts.length >= minimumAccountsRequired &&
-            (activePanel === "main" || activePanel === "details" || activePanel === "split") ? (
+            (activePanel === "main" || activePanel === "details") ? (
               <footer className="shrink-0 border-t border-white/10 px-5 py-4 sm:px-6">
                 <Button className="w-full justify-center" disabled={isSaving} type="submit">
                   {isSaving ? (

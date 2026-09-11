@@ -573,11 +573,12 @@ export function MovementsPage() {
     const manualFxRate = parseOptionalNumber(formState.fxRate);
 
     if (splitLines) {
-      if (formState.movementType !== "expense") {
-        setErrorMessage("Solo los gastos se pueden dividir por categorías.");
+      if (formState.movementType !== "expense" && formState.movementType !== "income") {
+        setErrorMessage("Solo los gastos e ingresos se pueden dividir por categorías.");
         return;
       }
-      const splitError = validateMovementSplit(splitLines, sourceAmount ?? 0);
+      const splitAmount = formState.movementType === "income" ? destinationAmount : sourceAmount;
+      const splitError = validateMovementSplit(splitLines, splitAmount ?? 0);
       if (splitError) {
         setErrorMessage(splitError);
         return;

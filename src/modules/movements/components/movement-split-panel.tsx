@@ -1,10 +1,13 @@
 import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 
+import { Button } from "../../../components/ui/button";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { CategorySummary } from "../../../types/domain";
 import {
   createMovementSplitLine,
   getMovementSplitTotal,
+  validateMovementSplit,
   type MovementSplitLine,
 } from "../lib/split-movement";
 
@@ -13,6 +16,7 @@ type MovementSplitPanelProps = {
   currencyCode: string;
   lines: MovementSplitLine[];
   onChange: (lines: MovementSplitLine[]) => void;
+  onDone: () => void;
   onRemove: () => void;
   totalAmount: number;
 };
@@ -22,11 +26,20 @@ export function MovementSplitPanel({
   currencyCode,
   lines,
   onChange,
+  onDone,
   onRemove,
   totalAmount,
 }: MovementSplitPanelProps) {
+  const [triedToSave, setTriedToSave] = useState(false);
   const assigned = getMovementSplitTotal(lines);
   const remaining = totalAmount - assigned;
+  const emptyAmountIndexes = lines
+    .map((line, index) => (line.amount.trim() ? -1 : index))
+    .filter((index) => index >= 0);
+  const proposalIndex = emptyAmountIndexes.length > 0 && remaining > 0
+    ? emptyAmountIndexes[0]
+    : -1;
+  const blockingError = validateMovementSplit(lines, totalAmount);
   const currencySymbol = new Intl.NumberFormat("es-PE", {
     currency: currencyCode,
     style: "currency",
@@ -57,17 +70,28 @@ export function MovementSplitPanel({
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-1 text-sm text-storm">
-              <span>{currencySymbol}</span>
-              <input
-                aria-label={`Monto de la parte ${index + 1}`}
-                className="min-w-0 w-full bg-transparent text-right font-semibold text-ink outline-none placeholder:text-storm/45"
-                inputMode="decimal"
-                onChange={(event) => updateLine(line.id, { amount: event.target.value })}
-                placeholder="0.00"
-                value={line.amount}
-              />
-            </label>
+            {proposalIndex === index ? (
+              <button
+                aria-label={`Usar ${formatCurrency(remaining, currencyCode)} en la parte ${index + 1}`}
+                className="text-right text-sm font-semibold text-storm/60 hover:text-ink"
+                onClick={() => updateLine(line.id, { amount: remaining.toFixed(2) })}
+                type="button"
+              >
+                {formatCurrency(remaining, currencyCode)}
+              </button>
+            ) : (
+              <label className="flex items-center gap-1 text-sm text-storm">
+                <span>{currencySymbol}</span>
+                <input
+                  aria-label={`Monto de la parte ${index + 1}`}
+                  className="min-w-0 w-full bg-transparent text-right font-semibold text-ink outline-none placeholder:text-storm/45"
+                  inputMode="decimal"
+                  onChange={(event) => updateLine(line.id, { amount: event.target.value })}
+                  placeholder="0.00"
+                  value={line.amount}
+                />
+              </label>
+            )}
             <button
               aria-label={`Quitar parte ${index + 1}`}
               className="grid h-8 w-8 place-items-center text-storm transition hover:text-ink disabled:opacity-30"
@@ -106,9 +130,31 @@ export function MovementSplitPanel({
             : `${remaining > 0 ? "Falta" : "Excede"} ${formatCurrency(Math.abs(remaining), currencyCode)}`}
         </span>
       </div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full rounded-full bg-ink transition-[width]"
+          style={{ width: `${Math.min(100, Math.max(0, totalAmount > 0 ? assigned / totalAmount * 100 : 0))}%` }}
+        />
+      </div>
       <p className="mt-3 text-xs leading-5 text-storm/70">
-        Se guardará un movimiento por categoría y quedarán vinculados como una sola división.
+        El total impacta una sola vez en la cuenta; las partes separan las categorías para presupuestos e informes.
       </p>
+      {triedToSave && blockingError ? (
+        <p className="mt-3 text-center text-xs font-medium text-ember">{blockingError}</p>
+      ) : null}
+      <Button
+        className="mt-4 w-full justify-center"
+        onClick={() => {
+          if (blockingError) {
+            setTriedToSave(true);
+            return;
+          }
+          onDone();
+        }}
+        type="button"
+      >
+        Guardar división
+      </Button>
     </div>
   );
 }
