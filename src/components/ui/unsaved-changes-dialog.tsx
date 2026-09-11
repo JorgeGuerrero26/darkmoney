@@ -47,7 +47,7 @@ export function UnsavedChangesDialog({ onDiscard, onKeepEditing }: UnsavedChange
               ¿Salir sin guardar?
             </h2>
             <p className="text-sm leading-6 text-storm">
-              Tenés cambios que no fueron guardados. Si salís ahora, se perderán.
+              Tienes cambios que no fueron guardados. Si sales ahora, se perderán.
             </p>
           </div>
 
