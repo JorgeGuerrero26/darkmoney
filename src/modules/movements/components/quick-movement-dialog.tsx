@@ -26,14 +26,23 @@ import { ContactQuickCreateDialog } from "../../contacts/components/contact-quic
 import {
   MovementDetailOptionsPanel,
   MovementInsightRow,
+  MovementDetailsNavigationRow,
   MovementDetailsPanel,
   MovementDetailsReceiptRow,
   MovementSuggestionRow,
   PendingMovementReceiptControl,
 } from "./movement-details-panel";
+import { MovementSplitPanel } from "./movement-split-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { normalizeInsightText, recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
+import {
+  buildSplitDescription,
+  buildSplitMetadata,
+  createMovementSplitLines,
+  validateMovementSplit,
+  type MovementSplitLine,
+} from "../lib/split-movement";
 import type {
   AccountSummary,
   CategorySummary,
@@ -77,7 +86,7 @@ type QuickMovementFormState = {
   status: Exclude<MovementStatus, "voided">;
 };
 
-type QuickMovementPanel = "main" | "details" | "category" | "counterparty";
+type QuickMovementPanel = "main" | "details" | "category" | "counterparty" | "split";
 
 type CategoryFeedbackIntent = {
   confidence: number | null;
@@ -323,6 +332,7 @@ export function QuickMovementDialog({
   const [linkedSubscriptionId, setLinkedSubscriptionId] = useState<number | null>(null);
   const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
   const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
+  const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
   const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(workspaceId, userId);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
@@ -447,6 +457,7 @@ export function QuickMovementDialog({
     setLinkedSubscriptionId(null);
     setLinkedRecurringIncomeId(null);
     setCategoryFeedbackIntent(null);
+    setSplitLines(null);
   }, [initialKind]);
 
   async function applyRecurringSuggestion() {
@@ -721,6 +732,68 @@ export function QuickMovementDialog({
             selectedCounterparty,
           );
 
+        if (splitLines && kind === "expense") {
+          const splitError = validateMovementSplit(splitLines, amount ?? 0);
+          if (splitError) {
+            setActivePanel("split");
+            setErrorMessage(splitError);
+            return;
+          }
+
+          const splitGroupId = crypto.randomUUID();
+          let firstMovementId: number | null = null;
+          for (const [index, line] of splitLines.entries()) {
+            const lineAmount = Number(line.amount);
+            const lineCategoryId = Number(line.categoryId);
+            const movementId = await createMovementMutation.mutateAsync({
+              categoryId: lineCategoryId,
+              counterpartyId:
+                counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
+              description: buildSplitDescription(description, index, splitLines.length),
+              destinationAccountId: null,
+              destinationAmount: null,
+              fxRate: null,
+              metadata: buildSplitMetadata({
+                channel: "quick-entry",
+                entryKind: kind,
+                recurring_income_id: index === 0 ? linkedRecurringIncomeId : null,
+                riskAi: insights.risk?.source === "deepseek" ? insights.risk : null,
+                budgetAi: insights.budget?.source === "deepseek" ? insights.budget : null,
+              }, splitGroupId, index, splitLines.length),
+              movementType: kind,
+              notes: null,
+              obligationId: null,
+              occurredAt: occurredAt.toISOString(),
+              sourceAccountId: kind === "expense" ? accountId : null,
+              sourceAmount: kind === "expense" ? lineAmount : null,
+              status: formState.status,
+              subscriptionId: index === 0 ? linkedSubscriptionId : null,
+              userId,
+              workspaceId,
+            });
+            firstMovementId ??= movementId;
+          }
+
+          let receiptPending = false;
+          if (pendingReceiptFile && canUploadReceipts && firstMovementId !== null) {
+            try {
+              await uploadReceiptForMovement(firstMovementId, pendingReceiptFile);
+            } catch {
+              receiptPending = true;
+            }
+          }
+          onCreated(
+            selectedMode.label +
+              " dividido en " +
+              splitLines.length +
+              " movimientos" +
+              (receiptPending ? "; el comprobante quedó pendiente." : "."),
+          );
+          setPendingReceiptFile(null);
+          onClose();
+          return;
+        }
+
         const createdMovementId = await createMovementMutation.mutateAsync({
           categoryId: categoryId !== null && Number.isFinite(categoryId) ? categoryId : null,
           counterpartyId:
@@ -965,7 +1038,7 @@ export function QuickMovementDialog({
                 className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white"
                 onClick={() =>
                   setActivePanel(
-                    activePanel === "category" || activePanel === "counterparty"
+                    activePanel === "category" || activePanel === "counterparty" || activePanel === "split"
                       ? "details"
                       : "main",
                   )
@@ -978,7 +1051,9 @@ export function QuickMovementDialog({
                     ? "Detalles"
                     : activePanel === "category"
                       ? "Categoría"
-                      : "Contraparte"}
+                      : activePanel === "counterparty"
+                        ? "Contraparte"
+                        : "Dividir en categorías"}
                 </span>
               </button>
             )}
@@ -1018,6 +1093,7 @@ export function QuickMovementDialog({
                         setLinkedSubscriptionId(null);
                         setLinkedRecurringIncomeId(null);
                         setCategoryFeedbackIntent(null);
+                        if (mode.kind !== "expense") setSplitLines(null);
                         setIsDirty(true);
                       }}
                       type="button"
@@ -1220,7 +1296,7 @@ export function QuickMovementDialog({
                     </div>
                   ) : null}
                   <MovementDetailsPanel
-                    categoryLabel={selectedCategory?.name ?? "Sin categoría"}
+                    categoryLabel={splitLines ? undefined : selectedCategory?.name ?? "Sin categoría"}
                     counterpartyLabel={selectedCounterparty?.name ?? "Sin asignar"}
                     description={formState.description}
                     destinationAmount={formState.destinationAmount}
@@ -1228,6 +1304,17 @@ export function QuickMovementDialog({
                     helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
                     invalidFields={invalidFields}
                     isTransfer={isTransfer}
+                    navigationRows={kind === "expense" ? (
+                      <MovementDetailsNavigationRow
+                        label="Dividir en categorías"
+                        onClick={() => {
+                          setSplitLines((current) => current ?? createMovementSplitLines(formState.categoryId));
+                          setActivePanel("split");
+                          setIsDirty(true);
+                        }}
+                        value={splitLines ? `${splitLines.length} partes` : "No dividido"}
+                      />
+                    ) : null}
                     occurredAt={formState.occurredAt}
                     onDescriptionChange={(value) => updateFormState("description", value)}
                     onDestinationAmountChange={(value) => {
@@ -1238,7 +1325,7 @@ export function QuickMovementDialog({
                       clearFieldError("occurredAt");
                       updateFormState("occurredAt", value);
                     }}
-                    onOpenCategory={() => setActivePanel("category")}
+                    onOpenCategory={splitLines ? undefined : () => setActivePanel("category")}
                     onOpenCounterparty={() => setActivePanel("counterparty")}
                     receiptRows={
                       <MovementDetailsReceiptRow>
@@ -1378,10 +1465,36 @@ export function QuickMovementDialog({
                   value={formState.counterpartyId}
                 />
               ) : null}
+
+              {activePanel === "split" && splitLines ? (
+                <div>
+                  {errorMessage ? (
+                    <div className="mb-4">
+                      <FormFeedbackBanner description={errorMessage} title="Revisa la división" />
+                    </div>
+                  ) : null}
+                  <MovementSplitPanel
+                    categories={filteredCategories}
+                    currencyCode={suggestionCurrencyCode}
+                    lines={splitLines}
+                    onChange={(lines) => {
+                      setSplitLines(lines);
+                      setIsDirty(true);
+                      setErrorMessage("");
+                    }}
+                    onRemove={() => {
+                      setSplitLines(null);
+                      setActivePanel("details");
+                      setIsDirty(true);
+                    }}
+                    totalAmount={computedAmount}
+                  />
+                </div>
+              ) : null}
             </div>
 
             {visibleAccounts.length >= minimumAccountsRequired &&
-            (activePanel === "main" || activePanel === "details") ? (
+            (activePanel === "main" || activePanel === "details" || activePanel === "split") ? (
               <footer className="shrink-0 border-t border-white/10 px-5 py-4 sm:px-6">
                 <Button className="w-full justify-center" disabled={isSaving} type="submit">
                   {isSaving ? (

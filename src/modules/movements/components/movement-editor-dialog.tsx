@@ -73,6 +73,11 @@ import {
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { recurringFrequencyLabel } from "../lib/movement-insights";
+import { MovementSplitPanel } from "./movement-split-panel";
+import {
+  createMovementSplitLines,
+  type MovementSplitLine,
+} from "../lib/split-movement";
 import type { BudgetInsight, RiskInsight } from "../../../services/queries/movement-ai";
 import {
   getQueryErrorMessage,
@@ -139,12 +144,13 @@ export type MovementEditorDialogProps = {
   handleDuplicateMovement: () => void;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
-  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  handleSubmit: (event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null) => Promise<void>;
   isCreateMode: boolean;
   isSaving: boolean;
   isUploadingReceipt: boolean;
   obligations: ObligationSummary[];
   onErrorMessage: (message: string) => void;
+  onDirty: () => void;
   onCategoryFeedback: (intent: MovementCategoryFeedbackIntent | null) => void;
   onIntelligenceChange: (value: { budget: BudgetInsight | null; risk: RiskInsight | null }) => void;
   pendingReceiptFile: File | null;
@@ -174,7 +180,8 @@ type MovementEditorPanel =
   | "type"
   | "destinationAccount"
   | "category"
-  | "counterparty";
+  | "counterparty"
+  | "split";
 
 
 export function MovementEditorDialog({
@@ -202,6 +209,7 @@ export function MovementEditorDialog({
   isUploadingReceipt,
   obligations,
   onErrorMessage,
+  onDirty,
   onCategoryFeedback,
   onIntelligenceChange,
   pendingReceiptFile,
@@ -217,6 +225,7 @@ export function MovementEditorDialog({
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
+  const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
 
@@ -498,6 +507,7 @@ export function MovementEditorDialog({
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
     setActivePanel("main");
+    setSplitLines(null);
   }, [isCreateMode, selectedMovement?.id]);
 
   const movementTypePickerOptions = useMemo(
@@ -647,7 +657,9 @@ export function MovementEditorDialog({
                           ? "Cuenta de destino"
                         : activePanel === "category"
                           ? "Categoría"
-                          : "Contraparte"}
+                          : activePanel === "counterparty"
+                            ? "Contraparte"
+                            : "Dividir en categorías"}
                   </span>
                 </button>
               ) : (
@@ -668,7 +680,7 @@ export function MovementEditorDialog({
             <form
               className="mt-6 flex flex-1 flex-col"
               noValidate
-              onSubmit={(event) => void handleSubmit(event)}
+              onSubmit={(event) => void handleSubmit(event, splitLines)}
             >
               {errorMessage ? (
                 <FormFeedbackBanner
@@ -765,7 +777,7 @@ export function MovementEditorDialog({
 
                 {activePanel === "details" ? (
                   <MovementDetailsPanel
-                    categoryLabel={selectedCategory?.name ?? "Sin categoría"}
+                    categoryLabel={splitLines ? undefined : selectedCategory?.name ?? "Sin categoría"}
                     counterpartyLabel={selectedCounterparty?.name ?? "Sin asignar"}
                     description={formState.description}
                     destinationAmount={formState.destinationAmount}
@@ -780,6 +792,16 @@ export function MovementEditorDialog({
                           onClick={() => setActivePanel("destinationAccount")}
                           value={selectedDestinationAccount?.name ?? "Selecciona destino"}
                         />
+                      ) : formState.movementType === "expense" ? (
+                        <MovementDetailsNavigationRow
+                          label="Dividir en categorías"
+                          onClick={() => {
+                            setSplitLines((current) => current ?? createMovementSplitLines(formState.categoryId));
+                            setActivePanel("split");
+                            onDirty();
+                          }}
+                          value={splitLines ? `${splitLines.length} partes` : "No dividido"}
+                        />
                       ) : null
                     }
                     occurredAt={formState.occurredAt}
@@ -792,7 +814,7 @@ export function MovementEditorDialog({
                       clearFieldError("occurredAt");
                       updateFormState("occurredAt", value);
                     }}
-                    onOpenCategory={() => setActivePanel("category")}
+                    onOpenCategory={splitLines ? undefined : () => setActivePanel("category")}
                     onOpenCounterparty={() => setActivePanel("counterparty")}
                     onOpenType={() => setActivePanel("type")}
                     receiptRows={
@@ -917,6 +939,7 @@ export function MovementEditorDialog({
                   <MovementDetailOptionsPanel
                     onChange={(value) => {
                       updateFormState("movementType", value as MovementType);
+                      if (value !== "expense") setSplitLines(null);
                       setActivePanel("details");
                     }}
                     options={movementTypePickerOptions}
@@ -965,6 +988,25 @@ export function MovementEditorDialog({
                       ...counterpartyPickerOptions,
                     ]}
                     value={formState.counterpartyId}
+                  />
+                ) : null}
+
+                {activePanel === "split" && splitLines ? (
+                  <MovementSplitPanel
+                    categories={filteredCategories}
+                    currencyCode={displayCurrencyCode}
+                    lines={splitLines}
+                    onChange={(lines) => {
+                      setSplitLines(lines);
+                      onDirty();
+                      onErrorMessage("");
+                    }}
+                    onRemove={() => {
+                      setSplitLines(null);
+                      setActivePanel("details");
+                      onDirty();
+                    }}
+                    totalAmount={displayAmount}
                   />
                 ) : null}
               </div>
@@ -1487,7 +1529,7 @@ export function MovementEditorDialog({
               </div>
               </div>
 
-              {activePanel === "main" || activePanel === "details" ? (
+              {activePanel === "main" || activePanel === "details" || activePanel === "split" ? (
               <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                   {!isCreateMode && selectedMovement ? (

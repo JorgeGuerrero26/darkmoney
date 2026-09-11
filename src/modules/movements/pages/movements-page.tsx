@@ -66,6 +66,12 @@ import {
   parseOptionalNumber,
 } from "../lib/movement-form";
 import { normalizeInsightText } from "../lib/movement-insights";
+import {
+  buildSplitDescription,
+  buildSplitMetadata,
+  validateMovementSplit,
+  type MovementSplitLine,
+} from "../lib/split-movement";
 import type {
   MovementEditorMode,
   MovementFormState,
@@ -540,7 +546,7 @@ export function MovementsPage() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null) {
     event.preventDefault();
 
     if (!activeWorkspace || !user || !snapshot) {
@@ -565,6 +571,18 @@ export function MovementsPage() {
     const sourceAmount = parseOptionalNumber(formState.sourceAmount);
     const destinationAmount = parseOptionalNumber(formState.destinationAmount);
     const manualFxRate = parseOptionalNumber(formState.fxRate);
+
+    if (splitLines) {
+      if (formState.movementType !== "expense") {
+        setErrorMessage("Solo los gastos se pueden dividir por categorías.");
+        return;
+      }
+      const splitError = validateMovementSplit(splitLines, sourceAmount ?? 0);
+      if (splitError) {
+        setErrorMessage(splitError);
+        return;
+      }
+    }
 
     const numericFieldError =
       [sourceAccountId, destinationAccountId, categoryId, counterpartyId, obligationId, subscriptionId].some(
@@ -689,6 +707,64 @@ export function MovementsPage() {
     };
 
     try {
+      if (splitLines) {
+        const splitGroupId = crypto.randomUUID();
+        let firstMovementId: number | null = null;
+
+        for (const [index, line] of splitLines.entries()) {
+          const lineAmount = Number(line.amount);
+          const splitPayload: MovementFormInput = {
+            ...payload,
+            categoryId: Number(line.categoryId),
+            description: buildSplitDescription(payload.description, index, splitLines.length),
+            destinationAmount: formState.movementType === "income" ? lineAmount : null,
+            obligationId: index === 0 ? payload.obligationId : null,
+            sourceAmount: formState.movementType === "expense" ? lineAmount : null,
+            subscriptionId: index === 0 ? payload.subscriptionId : null,
+            metadata: buildSplitMetadata(payload.metadata, splitGroupId, index, splitLines.length),
+          };
+
+          if (editorMode === "edit" && index === 0) {
+            if (!selectedMovement) {
+              setErrorMessage("No encontramos el movimiento que quieres editar.");
+              return;
+            }
+            await updateMovementMutation.mutateAsync({
+              ...splitPayload,
+              movementId: selectedMovement.id,
+              userId: user.id,
+              workspaceId: activeWorkspace.id,
+            });
+            firstMovementId = selectedMovement.id;
+          } else {
+            const movementId = await createMovementMutation.mutateAsync({
+              ...splitPayload,
+              userId: user.id,
+              workspaceId: activeWorkspace.id,
+            });
+            firstMovementId ??= movementId;
+          }
+        }
+
+        let receiptPending = false;
+        if (editorMode === "create" && pendingReceiptFile && canUploadReceipts && firstMovementId !== null) {
+          try {
+            await uploadReceiptForMovement(firstMovementId, pendingReceiptFile);
+          } catch {
+            receiptPending = true;
+          }
+        }
+        setFeedbackMessage(
+          "Movimiento dividido en " +
+            splitLines.length +
+            " partes" +
+            (receiptPending ? "; el comprobante quedó pendiente." : " correctamente."),
+        );
+        setPendingReceiptFile(null);
+        setIsEditorOpen(false);
+        return;
+      }
+
       if (editorMode === "create") {
         const createdMovementId = await createMovementMutation.mutateAsync({
           ...payload,
@@ -1036,6 +1112,7 @@ export function MovementsPage() {
           isUploadingReceipt={isUploadingReceipt}
           obligations={snapshot.obligations}
           onErrorMessage={setErrorMessage}
+          onDirty={() => setIsDirty(true)}
           onCategoryFeedback={setCategoryFeedbackIntent}
           onIntelligenceChange={setEditorIntelligence}
           pendingReceiptFile={pendingReceiptFile}
