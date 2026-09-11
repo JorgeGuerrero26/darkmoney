@@ -760,6 +760,25 @@ export function MovementsPage() {
     });
   }
 
+  function handleDuplicateMovement() {
+    if (!selectedMovement) return;
+    const duplicated = buildFormStateFromMovement(selectedMovement);
+    setEditorMode("create");
+    setSelectedMovementId(null);
+    setFormState({
+      ...duplicated,
+      occurredAt: createDefaultMovementFormState().occurredAt,
+      metadata: "",
+      obligationId: "",
+      subscriptionId: "",
+    });
+    setPendingReceiptFile(null);
+    setCategoryFeedbackIntent(null);
+    setEditorIntelligence({ budget: null, risk: null });
+    setErrorMessage("");
+    setIsDirty(true);
+  }
+
   async function handleBulkDelete() {
     if (selectedCount === 0) return;
     setShowBulkDeleteConfirm(true);
@@ -1006,6 +1025,7 @@ export function MovementsPage() {
           exchangeRates={snapshot.exchangeRates}
           formState={formState}
           handleDeleteMovement={handleDeleteMovement}
+          handleDuplicateMovement={handleDuplicateMovement}
           handleDeleteReceipt={handleDeleteReceipt}
           handleUploadReceipt={handleUploadReceipt}
           handleSubmit={handleSubmit}

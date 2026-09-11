@@ -25,6 +25,7 @@ import type { AccountSuggestion } from "../lib/movement-suggestions";
 
 type MovementSuggestions = {
   account: AccountSuggestion | null;
+  aiUnavailable: boolean;
   category: CategorySuggestion | null;
   counterparty: CounterpartySuggestion | null;
   description: DescriptionSuggestion | null;
@@ -119,6 +120,7 @@ export function useMovementSuggestions(input: {
     description: null,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
 
   const requestKey = useMemo(
     () =>
@@ -147,12 +149,14 @@ export function useMovementSuggestions(input: {
     if (!input.enabled || description.length < 3 || input.movementType === "transfer") {
       setRemote({ category: null, counterparty: null, description: null });
       setIsLoading(false);
+      setAiUnavailable(false);
       return;
     }
 
     if (!input.proAccessEnabled) {
       setRemote({ category: null, counterparty: null, description: null });
       setIsLoading(false);
+      setAiUnavailable(false);
       return;
     }
 
@@ -217,6 +221,7 @@ export function useMovementSuggestions(input: {
           : Promise.resolve(null);
 
       setIsLoading(true);
+      setAiUnavailable(false);
       void Promise.allSettled([categoryPromise, counterpartyPromise, descriptionPromise]).then((results) => {
         if (cancelled) return;
         setRemote({
@@ -224,6 +229,7 @@ export function useMovementSuggestions(input: {
           counterparty: results[1].status === "fulfilled" ? results[1].value : null,
           description: results[2].status === "fulfilled" ? results[2].value : null,
         });
+        setAiUnavailable(results.some((result) => result.status === "rejected"));
         setIsLoading(false);
       });
     }, 700);
@@ -253,6 +259,7 @@ export function useMovementSuggestions(input: {
 
   return {
     account: localAccount,
+    aiUnavailable,
     category: input.categoryId === null ? remote.category ?? localCategory : null,
     counterparty: input.counterpartyId === null ? remote.counterparty ?? localCounterparty : null,
     description: remote.description ?? localDescription,

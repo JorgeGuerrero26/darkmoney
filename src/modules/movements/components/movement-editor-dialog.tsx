@@ -4,6 +4,7 @@
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  Copy,
   LoaderCircle,
   ReceiptText,
   Trash2,
@@ -135,6 +136,7 @@ export type MovementEditorDialogProps = {
   formState: MovementFormState;
   invalidFields: Set<string>;
   handleDeleteMovement: () => void;
+  handleDuplicateMovement: () => void;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -190,6 +192,7 @@ export function MovementEditorDialog({
   exchangeRates,
   formState,
   handleDeleteMovement,
+  handleDuplicateMovement,
   handleDeleteReceipt,
   handleUploadReceipt,
   handleSubmit,
@@ -877,6 +880,15 @@ export function MovementEditorDialog({
                             title={insights.budget.title}
                           />
                         ) : null}
+                        {suggestions.aiUnavailable || insights.aiUnavailable ? (
+                          <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4 py-2">
+                            <LoaderCircle className="h-4 w-4 shrink-0 text-storm" />
+                            <div>
+                              <p className="text-sm font-medium text-ink">Sugerencias locales activas</p>
+                              <p className="text-xs text-storm/70">DeepSeek no respondió o alcanzó su límite.</p>
+                            </div>
+                          </div>
+                        ) : null}
                         {(suggestions.isLoading || insights.isLoading) &&
                         !suggestions.description &&
                         !suggestions.category &&
@@ -1478,6 +1490,18 @@ export function MovementEditorDialog({
               {activePanel === "main" || activePanel === "details" ? (
               <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
                 <div className="flex items-center justify-end gap-3">
+                  {!isCreateMode && selectedMovement ? (
+                    <Button
+                      className="min-w-[150px] justify-center"
+                      disabled={isSaving}
+                      onClick={handleDuplicateMovement}
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Duplicar
+                    </Button>
+                  ) : null}
                   {!isCreateMode && selectedMovement ? (
                     <Button
                       className="min-w-[150px] justify-center"

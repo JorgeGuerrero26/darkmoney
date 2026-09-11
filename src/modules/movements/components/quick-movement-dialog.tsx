@@ -1321,6 +1321,15 @@ export function QuickMovementDialog({
                             title={insights.budget.title}
                           />
                         ) : null}
+                        {suggestions.aiUnavailable || insights.aiUnavailable ? (
+                          <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4 py-2">
+                            <LoaderCircle className="h-4 w-4 shrink-0 text-storm" />
+                            <div>
+                              <p className="text-sm font-medium text-ink">Sugerencias locales activas</p>
+                              <p className="text-xs text-storm/70">DeepSeek no respondió o alcanzó su límite.</p>
+                            </div>
+                          </div>
+                        ) : null}
                         {(suggestions.isLoading || insights.isLoading) &&
                         !suggestions.description &&
                         !suggestions.category &&

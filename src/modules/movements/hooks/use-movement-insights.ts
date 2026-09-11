@@ -27,6 +27,7 @@ import {
 type NamedEntity = { id: number; name: string } | null;
 
 type MovementInsights = {
+  aiUnavailable: boolean;
   budget: BudgetInsight | null;
   isLoading: boolean;
   recurring: RecurringInsight | null;
@@ -128,12 +129,13 @@ export function useMovementInsights(input: {
     }),
     [current, input.baseCurrencyCode, input.budgets, input.exchangeRates],
   );
-  const [remote, setRemote] = useState<Omit<MovementInsights, "isLoading">>({
+  const [remote, setRemote] = useState<Omit<MovementInsights, "isLoading" | "aiUnavailable">>({
     budget: null,
     recurring: null,
     risk: null,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
   const requestKey = useMemo(
     () =>
       JSON.stringify({
@@ -156,12 +158,14 @@ export function useMovementInsights(input: {
     ) {
       setRemote({ budget: null, recurring: null, risk: null });
       setIsLoading(false);
+      setAiUnavailable(false);
       return;
     }
 
     let cancelled = false;
     setRemote({ budget: null, recurring: null, risk: null });
     setIsLoading(false);
+    setAiUnavailable(false);
     const timer = window.setTimeout(() => {
       const recentMovements = history
         .filter((movement) => movement.id !== current.id)
@@ -261,6 +265,7 @@ export function useMovementInsights(input: {
           risk: results[1].status === "fulfilled" ? results[1].value : null,
           budget: results[2].status === "fulfilled" ? results[2].value : null,
         });
+        setAiUnavailable(results.some((result) => result.status === "rejected"));
         setIsLoading(false);
       });
     }, 700);
@@ -287,6 +292,7 @@ export function useMovementInsights(input: {
 
   return {
     recurring: remote.recurring ?? localRecurring,
+    aiUnavailable,
     risk: remote.risk ?? localRisk,
     budget: remote.budget ?? localBudget,
     isLoading,
