@@ -129,20 +129,26 @@ export function BulkActionBar({
   onSelectAll,
   onClearAll,
   onExport,
+  onArchive,
   onDelete,
+  archiveLabel = "Archivar",
   deleteLabel = "Eliminar",
   deletingLabel = "Eliminando...",
   isDeleting = false,
+  isArchiving = false,
 }: {
   selectedCount: number;
   totalCount: number;
   onSelectAll: () => void;
   onClearAll: () => void;
   onExport?: () => void;
+  onArchive?: () => void;
   onDelete?: () => void;
+  archiveLabel?: string;
   deleteLabel?: string;
   deletingLabel?: string;
   isDeleting?: boolean;
+  isArchiving?: boolean;
 }) {
   if (selectedCount === 0) return null;
 
@@ -181,6 +187,14 @@ export function BulkActionBar({
               type="button"
             >
               {isDeleting ? deletingLabel : deleteLabel}
+            </button>
+          </>
+        ) : null}
+        {onArchive ? (
+          <>
+            <div className="h-4 w-px bg-white/15" />
+            <button className="whitespace-nowrap text-sm text-storm transition hover:text-ink disabled:opacity-50" disabled={isArchiving} onClick={onArchive} type="button">
+              {isArchiving ? "Procesando..." : archiveLabel}
             </button>
           </>
         ) : null}

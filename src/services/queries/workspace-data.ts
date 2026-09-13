@@ -5221,6 +5221,26 @@ export function useUpdateObligationMutation(workspaceId?: number, userId?: strin
   });
 }
 
+export function useArchiveObligationMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ obligationId, archived }: { obligationId: number; archived: boolean }) => {
+      const client = getClient();
+      const { error } = await client
+        .from("obligations")
+        .update({ status: archived ? "cancelled" : "active", updated_by_user_id: userId })
+        .eq("id", obligationId)
+        .eq("workspace_id", workspaceId);
+
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+    },
+  });
+}
+
 export function useDeleteObligationMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 

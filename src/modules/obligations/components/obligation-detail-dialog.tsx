@@ -1,4 +1,4 @@
-import { BarChart3, Pencil, Plus, Share2, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, BarChart3, Pencil, Plus, Share2, Trash2, X } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { formatDate } from "../../../lib/formatting/dates";
@@ -18,6 +18,7 @@ type ObligationDetailDialogProps = {
   onAnalytics: (id: number) => void;
   onEdit: (obligation: ObligationSummary) => void;
   onDelete: (id: number) => void;
+  onArchive: (obligation: ObligationSummary, archived: boolean) => void;
   onEditEvent: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
   onDeleteEvent: (obligation: ObligationSummary, event: ObligationEventSummary) => void;
 };
@@ -32,6 +33,7 @@ export function ObligationDetailDialog({
   onAnalytics,
   onEdit,
   onDelete,
+  onArchive,
   onEditEvent,
   onDeleteEvent,
 }: ObligationDetailDialogProps) {
@@ -39,6 +41,7 @@ export function ObligationDetailDialog({
   const paidAmount = Math.max(0, currentPrincipal - obligation.pendingAmount);
   const status = getStatusOption(obligation.status);
   const origin = getOriginOption(obligation.originType, obligation.direction);
+  const canDelete = obligation.events.every((event) => event.eventType === "opening");
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm" role="presentation">
@@ -73,7 +76,7 @@ export function ObligationDetailDialog({
 
           <section className="py-5">
             <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Historial</h3><button className="text-sm text-storm underline-offset-4 hover:text-ink hover:underline" onClick={() => onAnalytics(obligation.id)} type="button">Ver análisis</button></div>
-            {obligation.events.length ? <div className="mt-3 divide-y divide-white/[0.07] border-y border-white/[0.08]">{obligation.events.slice(0, 6).map((event) => <div className="flex min-h-14 items-center gap-3 py-2" key={event.id}><div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{getEventLabel(event.eventType)}</p><p className="truncate text-xs text-storm">{formatDate(event.eventDate)}{event.description ? ` · ${event.description}` : ""}</p></div><p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(event.amount, obligation.currencyCode)}</p><button className="text-xs text-storm hover:text-ink" onClick={() => onEditEvent(obligation, event)} type="button">Editar</button><button aria-label="Eliminar evento" className="text-storm hover:text-ink" onClick={() => onDeleteEvent(obligation, event)} type="button"><Trash2 className="h-4 w-4" /></button></div>)}</div> : <p className="mt-3 text-sm text-storm">Todavía no hay movimientos registrados.</p>}
+            {obligation.events.length ? <div className="mt-3 divide-y divide-white/[0.07] border-y border-white/[0.08]">{obligation.events.slice(0, 6).map((event) => <div className="flex min-h-14 items-center gap-3 py-2" key={event.id}><div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{getEventLabel(event.eventType)}</p><p className="truncate text-xs text-storm">{formatDate(event.eventDate)}{event.description ? ` · ${event.description}` : ""}</p></div><p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(event.amount, obligation.currencyCode)}</p>{event.eventType === "payment" ? <><button className="text-xs text-storm hover:text-ink" onClick={() => onEditEvent(obligation, event)} type="button">Editar</button><button aria-label="Eliminar evento" className="text-storm hover:text-ink" onClick={() => onDeleteEvent(obligation, event)} type="button"><Trash2 className="h-4 w-4" /></button></> : null}</div>)}</div> : <p className="mt-3 text-sm text-storm">Todavía no hay movimientos registrados.</p>}
           </section>
         </div>
 
@@ -86,7 +89,7 @@ export function ObligationDetailDialog({
               {canShare ? <button aria-label="Compartir" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onShare(obligation)} type="button"><Share2 className="h-4 w-4" /></button> : null}
               <button aria-label="Análisis" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onAnalytics(obligation.id)} type="button"><BarChart3 className="h-4 w-4" /></button>
               <button aria-label="Editar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onEdit(obligation)} type="button"><Pencil className="h-4 w-4" /></button>
-              <button aria-label="Eliminar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onDelete(obligation.id)} type="button"><Trash2 className="h-4 w-4" /></button>
+              {canDelete ? <button aria-label="Eliminar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onDelete(obligation.id)} type="button"><Trash2 className="h-4 w-4" /></button> : obligation.status === "cancelled" ? <button aria-label="Restaurar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onArchive(obligation, false)} type="button"><ArchiveRestore className="h-4 w-4" /></button> : <button aria-label="Archivar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onArchive(obligation, true)} type="button"><Archive className="h-4 w-4" /></button>}
             </div>
           </div>
         </footer>

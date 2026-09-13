@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Archive,
   ArrowDownCircle,
   ArrowUpCircle,
   CircleDollarSign,
@@ -7,6 +8,7 @@ import {
   ChevronRight,
   Download,
   LoaderCircle,
+  Layers,
   MailPlus,
   MoreVertical,
   Minus,
@@ -54,6 +56,7 @@ import type {
   ObligationOriginType,
   ObligationStatus,
   ObligationSummary,
+  SharedObligationSummary,
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { ObligationAnalyticsModal } from "../components/obligation-analytics-modal";
@@ -77,6 +80,7 @@ import {
   type ObligationPrincipalAdjustmentFormInput,
   type ObligationPaymentFormInput,
   useAdjustObligationPrincipalMutation,
+  useArchiveObligationMutation,
   useCreateObligationMutation,
   useDeleteObligationMutation,
   useEntityAttachmentsQuery,
@@ -119,14 +123,6 @@ import {
 } from "../components/shared-obligation-detail-dialog";
 import { SharedObligationsSection } from "../components/shared-obligations-section";
 import { useObligationsFilters } from "../hooks/use-obligations-filters";
-import {
-  type DirectionFilterValue,
-  type StatusFilterValue,
-} from "../lib/obligations-filters";
-import {
-  directionFilterPickerOptions,
-  statusFilterPickerOptions as statusFilterPickerOptionsLib,
-} from "../lib/obligations-presenters";
 
 type EditorMode = "create" | "edit";
 type OpeningImpact = "none" | "outflow" | "inflow";
@@ -898,6 +894,19 @@ function getObligationAmountDisplay(
   return formatCurrency(amountInBaseCurrency, baseCurrencyCode);
 }
 
+function getPortfolioAmountDisplay(
+  own: ObligationSummary[],
+  shared: SharedObligationSummary[],
+  direction: ObligationDirection,
+  baseCurrencyCode: string,
+) {
+  const entries = [
+    ...own.filter((obligation) => obligation.direction === direction),
+    ...shared.filter((obligation) => obligation.direction !== direction),
+  ];
+  return getObligationAmountDisplay(entries, "pending", baseCurrencyCode);
+}
+
 function Picker({
   disabled = false,
   emptyMessage,
@@ -967,6 +976,22 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
       {...props}
     />
   );
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  values,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const display = values.length === 0 ? label : values.length === 1 ? options.find((option) => option.value === values[0])?.label ?? label : `${values.length} seleccionados`;
+  return <div className="relative"><button aria-expanded={open} className="flex h-full min-h-14 w-full items-center justify-between rounded-[10px] border border-white/[0.1] bg-[#181715] px-4 text-left text-sm font-semibold text-ink" onClick={() => setOpen((value) => !value)} type="button"><span>{display}</span><ChevronDown className={`h-4 w-4 text-storm transition ${open ? "rotate-180" : ""}`} /></button>{open ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[12px] border border-white/[0.12] bg-[#1b1a18] py-1">{options.map((option) => { const checked = values.includes(option.value); return <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 text-sm text-ink hover:bg-white/[0.04]" key={option.value}><input checked={checked} className="accent-[#d8d2c7]" onChange={() => onChange(checked ? values.filter((value) => value !== option.value) : [...values, option.value])} type="checkbox" /><span>{option.label}</span></label>; })}</div> : null}</div>;
 }
 
 
@@ -2847,6 +2872,10 @@ function downloadObligationsCSV(obligations: ObligationSummary[], filename: stri
   downloadCSV([headers.join(","), ...rows.map((r) => r.join(","))].join("\n"), filename);
 }
 
+function canDeleteObligation(obligation: ObligationSummary) {
+  return obligation.events.every((event) => event.eventType === "opening");
+}
+
 export function ObligationsPage() {
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
@@ -2859,12 +2888,14 @@ export function ObligationsPage() {
   const snapshot = snapshotQuery.data;
   const createMutation = useCreateObligationMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateObligationMutation(activeWorkspace?.id, user?.id);
+  const archiveMutation = useArchiveObligationMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteObligationMutation(activeWorkspace?.id, user?.id);
   const paymentMutation = useRegisterObligationPaymentMutation(activeWorkspace?.id, user?.id);
   const eventUpdateMutation = useUpdateObligationEventMutation(activeWorkspace?.id, user?.id);
   const unlinkShareMutation = useUnlinkObligationShareMutation(activeWorkspace?.id, user?.id);
   const pendingPaymentRequestsQuery = usePendingPaymentRequestsQuery(activeWorkspace?.id);
   const [sharedDetailId, setSharedDetailId] = useState<number | null>(null);
+  const [unlinkSharedTarget, setUnlinkSharedTarget] = useState<SharedObligationSummary | null>(null);
   const [sharedDetailFeedback, setSharedDetailFeedback] = useState<FeedbackState | null>(null);
   const [sharedRequestFormState, setSharedRequestFormState] =
     useState<SharedObligationRequestFormState>(createDefaultSharedRequestFormState());
@@ -2917,10 +2948,29 @@ export function ObligationsPage() {
     currentPage,
     setCurrentPage,
     updateFilter: updateObligationFilter,
-    clearFilters: clearObligationFilters,
+    clearFilters: clearBaseObligationFilters,
   } = useObligationsFilters("table");
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [detailObligationId, setDetailObligationId] = useState<number | null>(null);
+  const [directionFilters, setDirectionFilters] = useState<ObligationDirection[]>([]);
+  const [statusFilters, setStatusFilters] = useState<ObligationStatus[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [groupByDirection, setGroupByDirection] = useState(() => window.localStorage.getItem("obligations-group-by-direction") === "1");
+
+  function clearObligationFilters() {
+    clearBaseObligationFilters();
+    setDirectionFilters([]);
+    setStatusFilters([]);
+    setShowArchived(false);
+  }
+
+  function toggleGroupByDirection() {
+    setGroupByDirection((current) => {
+      const next = !current;
+      window.localStorage.setItem("obligations-group-by-direction", next ? "1" : "0");
+      return next;
+    });
+  }
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -3918,6 +3968,18 @@ export function ObligationsPage() {
     }
   }
 
+  async function handleUnlinkSharedObligation() {
+    if (!unlinkSharedTarget) return;
+    const target = unlinkSharedTarget;
+    try {
+      await unlinkShareMutation.mutateAsync({ shareId: target.share.id, obligationId: target.id });
+      setUnlinkSharedTarget(null);
+      setPageFeedback({ tone: "success", title: "Registro retirado", description: "Ya no aparecerá entre los compartidos contigo." });
+    } catch (error) {
+      setPageFeedback({ tone: "error", title: "No pudimos quitar el registro", description: getQueryErrorMessage(error, "Intenta nuevamente.") });
+    }
+  }
+
   async function handleConfirmDeleteEvent() {
     if (!activeWorkspace || !user?.id || !eventDeleteTarget) {
       return;
@@ -4010,18 +4072,10 @@ export function ObligationsPage() {
   const isRegisteringPayment = paymentMutation.isPending || eventUpdateMutation.isPending;
   const isAdjustingPrincipal = principalAdjustmentMutation.isPending;
   const isSendingShareInvite = shareInviteMutation.isPending;
-  const receivableObligations = obligations.filter((obligation) => obligation.direction === "receivable");
-  const payableObligations = obligations.filter((obligation) => obligation.direction === "payable");
-  const receivablePendingDisplay = getObligationAmountDisplay(
-    receivableObligations,
-    "pending",
-    baseCurrencyCode,
-  );
-  const payablePendingDisplay = getObligationAmountDisplay(
-    payableObligations,
-    "pending",
-    baseCurrencyCode,
-  );
+  const activeOwnObligations = obligations.filter((obligation) => obligation.status !== "cancelled");
+  const activeSharedObligations = sharedObligations.filter((obligation) => obligation.status !== "cancelled");
+  const receivablePendingDisplay = getPortfolioAmountDisplay(activeOwnObligations, activeSharedObligations, "receivable", baseCurrencyCode);
+  const payablePendingDisplay = getPortfolioAmountDisplay(activeOwnObligations, activeSharedObligations, "payable", baseCurrencyCode);
   const filteredObligations = useMemo(() => {
     const normalizedSearch = obligationFilters.title.trim().toLowerCase();
     const normalizedCounterparty = obligationFilters.counterparty.trim().toLowerCase();
@@ -4033,11 +4087,15 @@ export function ObligationsPage() {
         return false;
       }
 
-      if (obligationFilters.direction !== "all" && obligation.direction !== obligationFilters.direction) {
+      if (!showArchived && obligation.status === "cancelled") {
         return false;
       }
 
-      if (obligationFilters.status !== "all" && obligation.status !== obligationFilters.status) {
+      if (directionFilters.length > 0 && !directionFilters.includes(obligation.direction)) {
+        return false;
+      }
+
+      if (statusFilters.length > 0 && !statusFilters.includes(obligation.status)) {
         return false;
       }
 
@@ -4085,32 +4143,27 @@ export function ObligationsPage() {
 
       return true;
     });
-  }, [hiddenIds, obligationFilters, obligations]);
-
-  const filteredReceivableDisplay = getObligationAmountDisplay(
-    filteredObligations.filter((obligation) => obligation.direction === "receivable"),
-    "pending",
-    baseCurrencyCode,
-  );
-  const filteredPayableDisplay = getObligationAmountDisplay(
-    filteredObligations.filter((obligation) => obligation.direction === "payable"),
-    "pending",
-    baseCurrencyCode,
-  );
+  }, [directionFilters, hiddenIds, obligationFilters, obligations, showArchived, statusFilters]);
 
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredObligations);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const selectedDeletableCount = selectedItems.filter(canDeleteObligation).length;
 
   const filteredSharedObligations = useMemo(() => {
     const normalizedSearch = obligationFilters.title.trim().toLowerCase();
 
     return sharedObligations.filter((obligation) => {
-      if (obligationFilters.direction !== "all" && obligation.direction !== obligationFilters.direction) {
+      if (!showArchived && obligation.status === "cancelled") {
         return false;
       }
 
-      if (obligationFilters.status !== "all" && obligation.status !== obligationFilters.status) {
+      if (directionFilters.length > 0 && !directionFilters.includes(obligation.direction)) {
+        return false;
+      }
+
+      if (statusFilters.length > 0 && !statusFilters.includes(obligation.status)) {
         return false;
       }
 
@@ -4138,13 +4191,17 @@ export function ObligationsPage() {
 
       return searchableText.includes(normalizedSearch);
     });
-  }, [obligationFilters, sharedObligations]);
+  }, [directionFilters, obligationFilters, sharedObligations, showArchived, statusFilters]);
+
+  const filteredReceivableDisplay = getPortfolioAmountDisplay(filteredObligations, filteredSharedObligations, "receivable", baseCurrencyCode);
+  const filteredPayableDisplay = getPortfolioAmountDisplay(filteredObligations, filteredSharedObligations, "payable", baseCurrencyCode);
 
   const hasActiveFilters =
     obligationFilters.title.trim() !== "" ||
     obligationFilters.counterparty.trim() !== "" ||
-    obligationFilters.direction !== "all" ||
-    obligationFilters.status !== "all" ||
+    directionFilters.length > 0 ||
+    statusFilters.length > 0 ||
+    showArchived ||
     obligationFilters.principal.trim() !== "" ||
     obligationFilters.pending.trim() !== "";
 
@@ -4772,14 +4829,45 @@ export function ObligationsPage() {
     });
   }
 
+  async function handleArchiveObligation(obligation: ObligationSummary, archived: boolean) {
+    setDetailObligationId(null);
+    try {
+      await archiveMutation.mutateAsync({ obligationId: obligation.id, archived });
+      setPageFeedback({ tone: "success", title: archived ? "Registro archivado" : "Registro restaurado", description: archived ? "Puedes volver a verlo activando Archivadas." : "El registro volvió a la cartera activa." });
+    } catch (error) {
+      setPageFeedback({ tone: "error", title: archived ? "No pudimos archivar" : "No pudimos restaurar", description: getQueryErrorMessage(error, "Intenta nuevamente.") });
+    }
+  }
+
+  async function handleBulkArchive() {
+    if (!selectedItems.length) return;
+    const shouldArchive = !selectedItems.every((obligation) => obligation.status === "cancelled");
+    setIsBulkArchiving(true);
+    try {
+      for (const obligation of selectedItems) {
+        if ((obligation.status === "cancelled") === shouldArchive) continue;
+        await archiveMutation.mutateAsync({ obligationId: obligation.id, archived: shouldArchive });
+      }
+      clearAll();
+      setPageFeedback({ tone: "success", title: shouldArchive ? "Registros archivados" : "Registros restaurados", description: shouldArchive ? "Puedes verlos desde Archivadas." : "Volvieron a la cartera activa." });
+    } catch (error) {
+      setPageFeedback({ tone: "error", title: "No se completó la acción", description: getQueryErrorMessage(error, "Algunos registros no pudieron actualizarse.") });
+    } finally {
+      setIsBulkArchiving(false);
+    }
+  }
+
   async function confirmBulkDelete() {
     if (!activeWorkspace || selectedCount === 0) return;
     setIsBulkDeleting(true);
     try {
-      for (const id of Array.from(selectedIds)) {
-        await deleteMutation.mutateAsync({ obligationId: id, workspaceId: activeWorkspace.id });
+      const deletable = selectedItems.filter(canDeleteObligation);
+      const skipped = selectedItems.length - deletable.length;
+      for (const obligation of deletable) {
+        await deleteMutation.mutateAsync({ obligationId: obligation.id, workspaceId: activeWorkspace.id });
       }
       clearAll();
+      if (skipped > 0) setPageFeedback({ tone: "error", title: `${skipped} registro${skipped === 1 ? "" : "s"} no se eliminaron`, description: "Tienen eventos: archívalos o elimina antes sus movimientos." });
     } catch (err) {
       setPageFeedback({ tone: "error", title: "Error al eliminar", description: getQueryErrorMessage(err, "Algunos registros no pudieron eliminarse.") });
     } finally {
@@ -4869,7 +4957,7 @@ export function ObligationsPage() {
       <section className="flex min-w-0 items-start gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Créditos y deudas</h2>
-          <p className="mt-1 text-sm text-storm">{obligations.length} registros · te deben <span className="font-medium text-ink">{receivablePendingDisplay}</span> · debes <span className="font-medium text-ink">{payablePendingDisplay}</span>.</p>
+          <p className="mt-1 text-sm text-storm">{activeOwnObligations.length + activeSharedObligations.length} registros activos · te deben <span className="font-medium text-ink">{receivablePendingDisplay}</span> · debes <span className="font-medium text-ink">{payablePendingDisplay}</span>.</p>
         </div>
         <Button data-tour="create-obligation" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo registro</Button>
         <div className="relative">
@@ -4882,7 +4970,7 @@ export function ObligationsPage() {
       </section>
 
       <section className="sticky top-[64px] z-30 bg-[#0e0d0c]/95 py-2 backdrop-blur-xl">
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <input
             className="field-dark"
             onChange={(event) => updateObligationFilter("title", event.target.value)}
@@ -4890,30 +4978,15 @@ export function ObligationsPage() {
             type="text"
             value={obligationFilters.title}
           />
-          <SearchablePicker
-            emptyMessage="No hay opciones para mostrar."
-            onChange={(value) => updateObligationFilter("direction", value as DirectionFilterValue)}
-            options={directionFilterPickerOptions}
-            placeholderDescription="Filtra por tipo de cartera."
-            placeholderLabel="Cartera"
-            queryPlaceholder="Buscar..."
-            value={obligationFilters.direction}
-          />
-          <SearchablePicker
-            emptyMessage="No hay estados para mostrar."
-            onChange={(value) => updateObligationFilter("status", value as StatusFilterValue)}
-            options={statusFilterPickerOptionsLib}
-            placeholderDescription="Filtra por estado."
-            placeholderLabel="Estado"
-            queryPlaceholder="Buscar estado..."
-            value={obligationFilters.status}
-          />
+          <MultiSelectFilter label="Toda la cartera" onChange={(values) => setDirectionFilters(values as ObligationDirection[])} options={[{ value: "receivable", label: "Me deben" }, { value: "payable", label: "Debo" }]} values={directionFilters} />
+          <MultiSelectFilter label="Todos los estados" onChange={(values) => setStatusFilters(values as ObligationStatus[])} options={[{ value: "active", label: "Activa" }, { value: "defaulted", label: "Incumplida" }, { value: "draft", label: "Borrador" }, { value: "paid", label: "Liquidada" }]} values={statusFilters} />
+          <div className="flex gap-2"><button aria-label={groupByDirection ? "No agrupar" : "Agrupar por tipo"} className={`flex h-14 w-14 items-center justify-center rounded-[10px] border transition ${groupByDirection ? "border-[#d8d2c7]/55 bg-white/[0.07] text-ink" : "border-white/[0.1] text-storm hover:text-ink"}`} onClick={toggleGroupByDirection} type="button"><Layers className="h-4 w-4" /></button><button aria-label={showArchived ? "Ocultar archivadas" : "Mostrar archivadas"} className={`flex h-14 w-14 items-center justify-center rounded-[10px] border transition ${showArchived ? "border-[#d8d2c7]/55 bg-white/[0.07] text-ink" : "border-white/[0.1] text-storm hover:text-ink"}`} onClick={() => setShowArchived((value) => !value)} type="button"><Archive className="h-4 w-4" /></button></div>
         </div>
-        {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearObligationFilters} type="button">Limpiar filtros</button> : null}
+        {(hasActiveFilters || groupByDirection) ? <div className="mt-2 flex flex-wrap items-center gap-2">{directionFilters.map((value) => <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" key={value} onClick={() => setDirectionFilters((current) => current.filter((item) => item !== value))} type="button">{value === "receivable" ? "Me deben" : "Debo"} ×</button>)}{statusFilters.map((value) => <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" key={value} onClick={() => setStatusFilters((current) => current.filter((item) => item !== value))} type="button">{getStatusOption(value).label} ×</button>)}{showArchived ? <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" onClick={() => setShowArchived(false)} type="button">Archivadas ×</button> : null}{groupByDirection ? <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" onClick={toggleGroupByDirection} type="button">Agrupado por tipo ×</button> : null}{hasActiveFilters ? <button className="text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearObligationFilters} type="button">Limpiar filtros</button> : null}</div> : null}
       </section>
 
       <section className="grid min-h-14 grid-cols-1 items-center gap-2 border-y border-white/[0.08] px-1 py-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:gap-8">
-        <p className="text-storm">Los <span className="font-semibold text-ink">{filteredObligations.length}</span> del filtro</p>
+        <p className="text-storm">Los <span className="font-semibold text-ink">{filteredObligations.length + filteredSharedObligations.length}</span> del filtro</p>
         <p className="text-storm">Por cobrar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredReceivableDisplay}</span></p>
         <p className="text-storm">Por pagar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredPayableDisplay}</span></p>
       </section>
@@ -4953,17 +5026,13 @@ export function ObligationsPage() {
           title="Sin resultados"
         />
       ) : (
-        <ObligationTable
-          allSelected={allSelected}
-          obligations={paginatedObligations}
-          onAnalytics={setAnalyticsObligationId}
-          onClearAll={clearAll}
-          onOpen={(obligation) => setDetailObligationId(obligation.id)}
-          onSelectAll={selectAll}
-          onToggleSelect={toggleSelect}
-          selectedIds={selectedIds}
-          someSelected={someSelected}
-        />
+        <div className="space-y-6">
+          {(groupByDirection ? (["receivable", "payable"] as ObligationDirection[]) : [null]).map((direction) => {
+            const sectionObligations = direction ? paginatedObligations.filter((obligation) => obligation.direction === direction) : paginatedObligations;
+            if (!sectionObligations.length) return null;
+            return <section key={direction ?? "all"}>{direction ? <h3 className="mb-2 font-public-mono text-[11px] uppercase tracking-[0.16em] text-storm">{direction === "receivable" ? "Me deben" : "Yo debo"}</h3> : null}<ObligationTable allSelected={allSelected} obligations={sectionObligations} onAnalytics={setAnalyticsObligationId} onClearAll={clearAll} onOpen={(obligation) => setDetailObligationId(obligation.id)} onSelectAll={selectAll} onToggleSelect={toggleSelect} selectedIds={selectedIds} someSelected={someSelected} /></section>;
+          })}
+        </div>
       )}
 
       {filteredObligations.length > 0 ? (
@@ -4979,6 +5048,7 @@ export function ObligationsPage() {
         <ObligationDetailDialog
           canShare={canAccessProFeatures}
           obligation={detailObligation}
+          onArchive={(obligation, archived) => void handleArchiveObligation(obligation, archived)}
           onAdjust={(obligation, mode) => {
             setDetailObligationId(null);
             openPrincipalAdjustmentDialog(obligation, mode);
@@ -5046,7 +5116,10 @@ export function ObligationsPage() {
       })() : null}
 
       <BulkActionBar
+        archiveLabel={selectedItems.length > 0 && selectedItems.every((obligation) => obligation.status === "cancelled") ? "Restaurar" : "Archivar"}
+        isArchiving={isBulkArchiving}
         isDeleting={isBulkDeleting}
+        onArchive={() => void handleBulkArchive()}
         onClearAll={clearAll}
         onDelete={() => setShowBulkDeleteConfirm(true)}
         onExport={() => downloadObligationsCSV(selectedItems, `creditos-deudas-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
@@ -5084,6 +5157,7 @@ export function ObligationsPage() {
           obligations={filteredSharedObligations}
           onAnalytics={setAnalyticsSharedObligationId}
           onOpenDetail={openSharedDetail}
+          onRemove={setUnlinkSharedTarget}
           viewMode="table"
         />
       ) : null}
@@ -5113,6 +5187,8 @@ export function ObligationsPage() {
           viewerLinks={viewerEventLinksQuery.data ?? []}
         />
       ) : null}
+
+      {unlinkSharedTarget ? <DeleteConfirmDialog badge="Quitar de mi lista" description={`Dejarás de ver “${unlinkSharedTarget.title}”. El registro sigue perteneciendo a ${unlinkSharedTarget.share.ownerDisplayName ?? "la otra persona"}.`} isDeleting={unlinkShareMutation.isPending} onCancel={() => { if (!unlinkShareMutation.isPending) setUnlinkSharedTarget(null); }} onConfirm={() => void handleUnlinkSharedObligation()}><p className="font-semibold text-ink">Esta acción no elimina el crédito ni su historial.</p></DeleteConfirmDialog> : null}
 
       {isEditorOpen ? (
         <EditorDialog
@@ -5335,11 +5411,11 @@ export function ObligationsPage() {
               Eliminar {selectedCount} registro{selectedCount !== 1 ? "s" : ""}?
             </h2>
             <p className="mt-3 text-sm leading-7 text-storm">
-              Esta accion eliminara permanentemente los registros seleccionados. No se puede deshacer.
+              Se eliminarán {selectedDeletableCount} sin movimientos. {selectedCount - selectedDeletableCount > 0 ? `${selectedCount - selectedDeletableCount} con eventos se conservarán y puedes archivarlos.` : "Esta acción no se puede deshacer."}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
-                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
+              <Button disabled={isBulkDeleting || selectedDeletableCount === 0} onClick={() => void confirmBulkDelete()}>
+                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedDeletableCount}`}
               </Button>
               <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
                 Cancelar
