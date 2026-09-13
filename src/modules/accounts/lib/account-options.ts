@@ -48,21 +48,21 @@ export const accountTypeOptions = [
   },
   {
     value: "credit_card",
-    label: "Tarjeta de credito",
+    label: "Tarjeta de crédito",
     icon: "credit-card",
     color: "#8f3e3e",
     description: "Lineas de consumo y tarjetas activas.",
   },
   {
     value: "investment",
-    label: "Inversion",
+    label: "Inversión",
     icon: "trending-up",
     color: "#8366f2",
     description: "Brokers, portafolios y activos invertidos.",
   },
   {
-    value: "loan_wallet",
-    label: "Prestamos",
+    value: "loan",
+    label: "Préstamo",
     icon: "briefcase",
     color: "#c46a31",
     description: "Creditos, deudas o cartera prestada.",
@@ -158,7 +158,7 @@ export type CurrencyOption = (typeof currencyOptions)[number];
 export type IconOption = (typeof iconOptions)[number];
 
 export function isKnownAccountType(type: string) {
-  return accountTypeOptions.some((option) => option.value === type);
+  return type === "loan_wallet" || accountTypeOptions.some((option) => option.value === type);
 }
 
 export function isKnownAccountIcon(icon: string) {
@@ -170,7 +170,8 @@ export function isKnownAccountColor(color: string) {
 }
 
 export function getTypePreset(type: string) {
-  return accountTypeOptions.find((option) => option.value === type) ?? accountTypeOptions[0];
+  const normalizedType = type === "loan_wallet" ? "loan" : type;
+  return accountTypeOptions.find((option) => option.value === normalizedType) ?? accountTypeOptions[0];
 }
 
 export function getIconOption(icon: string): IconOption {

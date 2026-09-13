@@ -43,7 +43,7 @@ export function createDefaultFormState(currencyCode: string): AccountFormState {
 export function buildFormStateFromAccount(account: AccountSummary): AccountFormState {
   return {
     name: account.name,
-    type: account.type,
+    type: account.type === "loan_wallet" ? "loan" : account.type,
     currencyCode: account.currencyCode,
     openingBalance: String(account.openingBalance),
     includeInNetWorth: account.includeInNetWorth,

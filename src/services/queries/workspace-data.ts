@@ -994,6 +994,7 @@ const defaultAccountColors: Record<string, string> = {
   savings: "#b48b34",
   credit_card: "#8f3e3e",
   investment: "#8366f2",
+  loan: "#c46a31",
   loan_wallet: "#c46a31",
   other: "#6b7280",
 };
