@@ -1,8 +1,10 @@
 import {
+  ArrowLeft,
   ArrowDownCircle,
   ArrowUpCircle,
   CircleDollarSign,
   ChevronDown,
+  ChevronRight,
   Download,
   LoaderCircle,
   MailPlus,
@@ -968,7 +970,7 @@ function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextA
 }
 
 
-function PaymentDialog({
+function LegacyPaymentDialog({
   accessMessage,
   accounts,
   attachments,
@@ -1320,7 +1322,7 @@ function PaymentDialog({
   );
 }
 
-function PrincipalAdjustmentDialog({
+function LegacyPrincipalAdjustmentDialog({
   accounts,
   feedback,
   formState,
@@ -1611,6 +1613,42 @@ function PrincipalAdjustmentDialog({
   );
 }
 
+function PaymentDialog(props: Parameters<typeof LegacyPaymentDialog>[0]) {
+  const { accessMessage, accounts, attachments, canManageReceipts, editEventAmount, feedback, formState, isEditMode, isSaving, isUploadingReceipt, obligation, onCancel, onDeleteReceipt, onSubmit, onUploadReceipt, pendingReceiptFile, updateFormState, updatePendingReceiptFile } = props;
+  const [panel, setPanel] = useState<"main" | "details">("main");
+  const amount = parseOptionalNumber(formState.amount) ?? 0;
+  const pendingBefore = obligation.pendingAmount + (editEventAmount ?? 0);
+  const pendingAfter = Math.max(0, pendingBefore - amount);
+  const isReceivable = obligation.direction === "receivable";
+  const accountOptions = accounts.filter((account) => (!account.isArchived || String(account.id) === formState.accountId) && account.currencyCode === obligation.currencyCode).map<PickerOption>((account) => ({ value: String(account.id), label: account.name, description: `${account.type} · ${account.currencyCode}`, leadingLabel: account.currencyCode, leadingColor: "#6b6459" }));
+  const selectedAccount = accounts.find((account) => String(account.id) === formState.accountId) ?? null;
+  const balanceAfter = selectedAccount ? selectedAccount.currentBalance + (isReceivable ? amount : -amount) : null;
+
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm"><form className="flex max-h-[calc(100dvh-24px)] w-full max-w-[620px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" noValidate onSubmit={onSubmit}>
+    <header className="flex items-center gap-3 border-b border-white/[0.08] px-5 py-4 sm:px-7">{panel === "details" ? <button aria-label="Volver" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => setPanel("main")} type="button"><ArrowLeft className="h-5 w-5" /></button> : null}<div className="min-w-0 flex-1"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{obligation.title}</p><h2 className="mt-1 font-display text-xl font-semibold text-ink">{panel === "main" ? (isEditMode ? "Editar abono" : "Registrar abono") : "Detalles del abono"}</h2></div><button aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={onCancel} type="button"><X className="h-5 w-5" /></button></header>
+    <div className="overflow-y-auto px-5 py-5 sm:px-7">{feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}{panel === "main" ? <div className="space-y-5">
+      <div><label className={labelClassName} htmlFor="payment-amount">Monto abonado</label><div className="mt-2 flex items-end gap-3 border-b border-white/[0.12] pb-3"><span className="pb-1 text-lg text-storm">{getCurrencyLabel(obligation.currencyCode).symbol}</span><input className="min-w-0 flex-1 bg-transparent font-display text-4xl font-semibold tracking-[-0.03em] text-ink outline-none placeholder:text-storm/35" id="payment-amount" inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} /></div></div>
+      <div className="flex min-h-14 items-center justify-between border-y border-white/[0.09] text-sm"><span className="text-storm">Pendiente después</span><strong className="text-lg tabular-nums text-ink">{formatCurrency(pendingAfter, obligation.currencyCode)}</strong></div>
+      <Field label="Fecha"><DatePickerField onChange={(value) => updateFormState("eventDate", value)} value={formState.eventDate} /></Field>
+      <div className="flex min-h-14 items-center justify-between gap-4 border-y border-white/[0.09]"><div><p className="font-semibold text-ink">Movimiento en cuenta</p><p className="mt-1 text-xs text-storm">{isReceivable ? "Suma el cobro al saldo." : "Descuenta el pago del saldo."}</p></div><button aria-pressed={formState.registerAccountMovement} className={`relative h-7 w-12 rounded-full border transition ${formState.registerAccountMovement ? "border-[#d8d2c7]/60 bg-white/[0.12]" : "border-white/[0.12] bg-white/[0.03]"}`} onClick={() => updateFormState("registerAccountMovement", !formState.registerAccountMovement)} type="button"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition ${formState.registerAccountMovement ? "left-[25px]" : "left-1"}`} /></button></div>
+      {formState.registerAccountMovement ? <><Field label={isReceivable ? "Cuenta de abono" : "Cuenta de débito"}><Picker disabled={!accountOptions.length} emptyMessage={`No hay cuentas en ${obligation.currencyCode}.`} onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta afectada." placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>{selectedAccount && balanceAfter !== null ? <div className="flex min-h-12 items-center justify-between border-b border-white/[0.09] text-sm"><span className="text-storm">Saldo después</span><strong className="tabular-nums text-ink">{formatCurrency(balanceAfter, selectedAccount.currencyCode)}</strong></div> : null}</> : null}
+      <button className="flex min-h-14 w-full items-center justify-between border-y border-white/[0.09] px-1" onClick={() => setPanel("details")} type="button"><span className="font-semibold text-ink">Detalles</span><span className="flex items-center gap-2 text-sm text-storm">Cuota, notas y comprobante <ChevronRight className="h-4 w-4" /></span></button>
+    </div> : <div className="space-y-5"><Field label="Número de cuota"><Input inputMode="numeric" min="1" onChange={(event) => updateFormState("installmentNo", event.target.value)} placeholder="Ej. 3" step="1" type="number" value={formState.installmentNo} /></Field><Field label="Descripción"><Input maxLength={120} onChange={(event) => updateFormState("description", event.target.value)} placeholder="Pago de cuota" value={formState.description} /></Field><Field label="Notas"><Textarea className="min-h-24" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Contexto opcional" value={formState.notes} /></Field><section className="border-t border-white/[0.09] pt-5">{isEditMode ? <AttachmentGallery accessMessage={accessMessage} attachments={attachments} canManage={canManageReceipts} entityLabel="abono" isUploading={isUploadingReceipt} onDelete={(attachment) => void onDeleteReceipt(attachment)} onUpload={(file) => void onUploadReceipt(file)} /> : <PendingReceiptField canUpload={canManageReceipts} description="Voucher o constancia." file={pendingReceiptFile} lockedMessage={accessMessage} onChange={updatePendingReceiptFile} />}</section></div>}</div>
+    <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isEditMode ? "Guardar cambios" : "Registrar abono"}</Button></footer>
+  </form></div>;
+}
+
+function PrincipalAdjustmentDialog(props: Parameters<typeof LegacyPrincipalAdjustmentDialog>[0]) {
+  const { accounts, feedback, formState, isSaving, mode, obligation, onCancel, onSubmit, updateFormState } = props;
+  const amount = parseOptionalNumber(formState.amount) ?? 0;
+  const delta = mode === "increase" ? amount : -amount;
+  const projectedPrincipal = Math.max(0, (obligation.currentPrincipalAmount ?? obligation.principalAmount) + delta);
+  const projectedPending = Math.max(0, obligation.pendingAmount + delta);
+  const meta = getPrincipalAdjustmentMeta(mode, obligation.direction);
+  const accountOptions = accounts.filter((account) => (!account.isArchived || String(account.id) === formState.accountId) && account.currencyCode === obligation.currencyCode).map<PickerOption>((account) => ({ value: String(account.id), label: account.name, description: `${account.type} · ${account.currencyCode}`, leadingLabel: account.currencyCode, leadingColor: "#6b6459" }));
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm"><form className="flex max-h-[calc(100dvh-24px)] w-full max-w-[620px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" noValidate onSubmit={onSubmit}><header className="flex items-center gap-3 border-b border-white/[0.08] px-5 py-4 sm:px-7"><div className="min-w-0 flex-1"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{obligation.title}</p><h2 className="mt-1 font-display text-xl font-semibold text-ink">{meta.title}</h2></div><button aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={onCancel} type="button"><X className="h-5 w-5" /></button></header><div className="overflow-y-auto px-5 py-5 sm:px-7">{feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}<div className="space-y-5"><div><label className={labelClassName} htmlFor="adjustment-amount">Monto del ajuste</label><div className="mt-2 flex items-end gap-3 border-b border-white/[0.12] pb-3"><span className="pb-1 text-lg text-storm">{getCurrencyLabel(obligation.currencyCode).symbol}</span><input className="min-w-0 flex-1 bg-transparent font-display text-4xl font-semibold tracking-[-0.03em] text-ink outline-none placeholder:text-storm/35" id="adjustment-amount" inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} /></div></div><div className="grid grid-cols-2 gap-4 border-y border-white/[0.09] py-3 text-sm"><div><p className="text-storm">Principal después</p><p className="mt-1 font-semibold tabular-nums text-ink">{formatCurrency(projectedPrincipal, obligation.currencyCode)}</p></div><div><p className="text-storm">Pendiente después</p><p className="mt-1 font-semibold tabular-nums text-ink">{formatCurrency(projectedPending, obligation.currencyCode)}</p></div></div><Field label="Fecha"><DatePickerField onChange={(value) => updateFormState("eventDate", value)} value={formState.eventDate} /></Field><Field label="Motivo"><Textarea className="min-h-24" onChange={(event) => updateFormState("reason", event.target.value)} placeholder="Explica por qué cambia el monto" value={formState.reason} /></Field><div className="flex min-h-14 items-center justify-between gap-4 border-y border-white/[0.09]"><div><p className="font-semibold text-ink">Movimiento en cuenta</p><p className="mt-1 text-xs text-storm">{meta.movementHint}</p></div><button aria-pressed={formState.registerAccountMovement} className={`relative h-7 w-12 shrink-0 rounded-full border transition ${formState.registerAccountMovement ? "border-[#d8d2c7]/60 bg-white/[0.12]" : "border-white/[0.12] bg-white/[0.03]"}`} onClick={() => updateFormState("registerAccountMovement", !formState.registerAccountMovement)} type="button"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition ${formState.registerAccountMovement ? "left-[25px]" : "left-1"}`} /></button></div>{formState.registerAccountMovement ? <Field label={meta.movementLabel}><Picker disabled={!accountOptions.length} emptyMessage={`No hay cuentas en ${obligation.currencyCode}.`} onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta afectada." placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field> : null}<Field label="Notas"><Textarea className="min-h-20" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Contexto opcional" value={formState.notes} /></Field></div></div><footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : mode === "increase" ? "Agregar monto" : "Reducir monto"}</Button></footer></form></div>;
+}
+
 function ShareInviteDialog({
   currentShare,
   feedback,
@@ -1849,7 +1887,7 @@ function ShareInviteDialog({
   );
 }
 
-function EditorDialog({
+function LegacyEditorDialog({
   accounts,
   accessMessage,
   attachments,
@@ -2651,6 +2689,105 @@ function EditorDialog({
           </form>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
+  const {
+    accounts,
+    accessMessage,
+    attachments,
+    baseCurrencyCode,
+    canManageReceipts,
+    canShareObligations,
+    clearFieldError,
+    closeEditor,
+    counterparties,
+    currentShare,
+    feedback,
+    formState,
+    handleDeleteReceipt,
+    handleUploadReceipt,
+    invalidFields,
+    isCreateMode,
+    isSaving,
+    isUploadingReceipt,
+    onSubmit,
+    pendingReceiptFile,
+    shareAccessMessage,
+    shareFormState,
+    selectedObligation,
+    updatePendingReceiptFile,
+    updateShareFormState,
+    updateFormState,
+  } = props;
+  const [panel, setPanel] = useState<"main" | "details">("main");
+  const currencyCode = formState.currencyCode || baseCurrencyCode;
+  const openingImpact = getOpeningImpactMeta(formState.direction, formState.originType, formState.manualOpeningImpact);
+  const originOptions = getOriginTypeOptions(formState.direction);
+  const counterpartyOptions = counterparties.filter((item) => !item.isArchived || String(item.id) === formState.counterpartyId).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: item.type, leadingLabel: item.name.slice(0, 2).toUpperCase(), leadingColor: "#6b6459" }));
+  const accountOptions = accounts.filter((item) => !item.isArchived || String(item.id) === formState.settlementAccountId).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: `${item.type} · ${item.currencyCode}`, leadingLabel: item.currencyCode, leadingColor: "#6b6459" }));
+  const openingAccountOptions = accounts.filter((item) => (!item.isArchived || String(item.id) === formState.openingAccountId) && item.currencyCode === currencyCode).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: `${item.type} · ${item.currencyCode}`, leadingLabel: item.currencyCode, leadingColor: "#6b6459" }));
+  const neutralize = (options: ReadonlyArray<{ value: string; label: string; description: string; leadingLabel: string }>): PickerOption[] => options.map((item) => ({ ...item, leadingColor: "#6b6459" }));
+
+  useEffect(() => {
+    if (!invalidFields.size) return;
+    const detailFields = ["startDate", "openingAccountId"];
+    if ([...invalidFields].some((field) => detailFields.includes(field))) setPanel("details");
+  }, [invalidFields]);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm" role="presentation">
+      <form className="flex max-h-[calc(100dvh-24px)] w-full max-w-[700px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" noValidate onSubmit={onSubmit}>
+        <header className="flex items-center gap-3 border-b border-white/[0.08] px-5 py-4 sm:px-7">
+          {panel === "details" ? <button aria-label="Volver" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => setPanel("main")} type="button"><ArrowLeft className="h-5 w-5" /></button> : null}
+          <div className="min-w-0 flex-1"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{isCreateMode ? "Nuevo registro" : "Editar registro"}</p><h2 className="mt-1 font-display text-xl font-semibold text-ink">{panel === "main" ? "Crédito o deuda" : "Detalles"}</h2></div>
+          <button aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={closeEditor} type="button"><X className="h-5 w-5" /></button>
+        </header>
+
+        <div className="overflow-y-auto px-5 py-5 sm:px-7">
+          {feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
+
+          {panel === "main" ? <div className="space-y-5">
+            <div data-field="principalAmount">
+              <label className={labelClassName} htmlFor="obligation-principal">Monto</label>
+              <div className="mt-2 flex items-end gap-3 border-b border-white/[0.12] pb-3"><span className="pb-1 text-lg text-storm">{getCurrencyLabel(currencyCode).symbol}</span><input className="min-w-0 flex-1 bg-transparent font-display text-4xl font-semibold tracking-[-0.03em] text-ink outline-none placeholder:text-storm/35 disabled:opacity-60" disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></div>
+              {invalidFields.has("principalAmount") ? <p className="mt-2 text-xs text-rose-300">Ingresa un monto válido.</p> : null}
+            </div>
+
+            <div data-field="title"><Field errorKey="title" invalidFields={invalidFields} label="Título"><Input maxLength={120} onChange={(event) => { clearFieldError("title"); updateFormState("title", event.target.value); }} placeholder="Préstamo familiar" value={formState.title} /></Field></div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button className={`min-h-14 rounded-xl border px-4 text-left transition ${formState.direction === "receivable" ? "border-[#d8d2c7]/70 bg-white/[0.06] text-ink" : "border-white/[0.09] text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "receivable")} type="button"><span className="block text-sm font-semibold">Crédito</span><span className="text-xs">Me deben</span></button>
+              <button className={`min-h-14 rounded-xl border px-4 text-left transition ${formState.direction === "payable" ? "border-[#d8d2c7]/70 bg-white/[0.06] text-ink" : "border-white/[0.09] text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "payable")} type="button"><span className="block text-sm font-semibold">Deuda</span><span className="text-xs">Yo debo</span></button>
+            </div>
+
+            <div data-field="counterpartyId"><Field errorKey="counterpartyId" invalidFields={invalidFields} label="Contraparte"><Picker disabled={!counterpartyOptions.length} emptyMessage="No tienes contrapartes disponibles." onChange={(value) => { clearFieldError("counterpartyId"); updateFormState("counterpartyId", value); }} options={counterpartyOptions} placeholderDescription="Persona o entidad relacionada." placeholderLabel="Selecciona una contraparte" queryPlaceholder="Buscar contraparte..." value={formState.counterpartyId} /></Field></div>
+
+            <button className="flex min-h-14 w-full items-center justify-between gap-4 border-y border-white/[0.09] px-1 text-left" onClick={() => setPanel("details")} type="button"><span className="font-semibold text-ink">Detalles</span><span className="flex items-center gap-2 text-sm text-storm">Plan, cuentas y notas <ChevronRight className="h-4 w-4" /></span></button>
+            <p className="text-xs leading-5 text-storm">Con monto, título, tipo y contraparte ya puedes guardar. El resto es opcional salvo que el origen mueva una cuenta.</p>
+          </div> : <div className="space-y-5">
+            <Field label="Origen"><Picker disabled={!isCreateMode} emptyMessage="No hay orígenes." onChange={(value) => updateFormState("originType", value as ObligationOriginType)} options={neutralize(originOptions)} placeholderDescription="Cómo nació el registro." placeholderLabel="Selecciona el origen" queryPlaceholder="Buscar origen..." value={formState.originType} /></Field>
+            <Field label="Moneda"><Picker disabled={!isCreateMode} emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyOptions.map((item) => ({ value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol, leadingColor: "#6b6459" }))} placeholderDescription="Moneda principal." placeholderLabel="Selecciona moneda" queryPlaceholder="Buscar moneda..." value={currencyCode} /></Field>
+            <div className="grid gap-4 sm:grid-cols-2"><div data-field="startDate"><Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField disabled={!isCreateMode} onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field></div><Field label="Vencimiento"><DatePickerField onChange={(value) => updateFormState("dueDate", value)} value={formState.dueDate} /></Field></div>
+            {isCreateMode && formState.originType === "manual" ? <Field label="Impacto inicial"><Picker emptyMessage="No hay opciones." onChange={(value) => updateFormState("manualOpeningImpact", value as OpeningImpact)} options={neutralize(manualOpeningImpactOptions)} placeholderDescription="Movimiento al crear." placeholderLabel="Selecciona impacto" queryPlaceholder="Buscar..." value={formState.manualOpeningImpact} /></Field> : null}
+            {isCreateMode && openingImpact.requiresAccount ? <div data-field="openingAccountId"><Field errorKey="openingAccountId" invalidFields={invalidFields} label="Cuenta de apertura"><Picker emptyMessage="No hay cuentas compatibles." onChange={(value) => { clearFieldError("openingAccountId"); updateFormState("openingAccountId", value); }} options={openingAccountOptions} placeholderDescription={openingImpact.description} placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.openingAccountId} /></Field></div> : null}
+            <Field label="Cuenta de abonos"><Picker emptyMessage="No hay cuentas." onChange={(value) => updateFormState("settlementAccountId", value)} options={accountOptions} placeholderDescription="Cuenta usada por defecto." placeholderLabel="Sin asignar" queryPlaceholder="Buscar cuenta..." value={formState.settlementAccountId} /></Field>
+            <Field label="Estado"><Picker emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as ObligationStatus)} options={neutralize(statusOptions)} placeholderDescription="Estado del registro." placeholderLabel="Selecciona estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
+
+            <section className="border-y border-white/[0.09] py-4"><p className={labelClassName}>Plan de pago</p><div className="mt-4 grid gap-4 sm:grid-cols-3"><Field label="Cuota"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("installmentAmount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.installmentAmount} /></Field><Field label="N.º cuotas"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("installmentCount", event.target.value)} placeholder="12" step="1" type="number" value={formState.installmentCount} /></Field><Field label="Interés %"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("interestRate", event.target.value)} placeholder="0" step="0.0001" type="number" value={formState.interestRate} /></Field></div></section>
+            <Field label="Descripción"><Textarea className="min-h-20" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible del registro" value={formState.description} /></Field>
+            <Field label="Notas"><Textarea className="min-h-20" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Notas internas" value={formState.notes} /></Field>
+
+            <section className="border-t border-white/[0.09] pt-5">{isCreateMode ? <PendingReceiptField canUpload={canManageReceipts} description="Contrato, pagaré o comprobante." file={pendingReceiptFile} lockedMessage={accessMessage} onChange={updatePendingReceiptFile} /> : selectedObligation ? <AttachmentGallery accessMessage={accessMessage} attachments={attachments} canManage={canManageReceipts} entityLabel="crédito o deuda" isUploading={isUploadingReceipt} onDelete={(attachment) => void handleDeleteReceipt(attachment)} onUpload={(file) => void handleUploadReceipt(file)} /> : null}</section>
+
+            <section className="border-t border-white/[0.09] pt-5"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-ink">Compartir</p><p className="mt-1 text-xs text-storm">{currentShare ? `Asociado a ${currentShare.invitedDisplayName ?? currentShare.invitedEmail}` : "Asocia a otra persona en modo lectura."}</p></div></div>{canShareObligations ? <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Correo"><Input autoComplete="email" onChange={(event) => updateShareFormState("invitedEmail", event.target.value)} placeholder="persona@correo.com" type="email" value={shareFormState.invitedEmail} /></Field><Field label="Mensaje"><Input onChange={(event) => updateShareFormState("message", event.target.value)} placeholder="Mensaje opcional" value={shareFormState.message} /></Field></div> : <p className="mt-3 text-sm text-storm">{shareAccessMessage}</p>}</section>
+          </div>}
+        </div>
+
+        <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear registro" : "Guardar cambios"}</Button></footer>
+      </form>
     </div>
   );
 }
