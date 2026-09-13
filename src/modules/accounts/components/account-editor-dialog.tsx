@@ -1,12 +1,12 @@
-import { Archive, Check, Save, Trash2, WalletCards } from "lucide-react";
+import { Archive, ArrowLeft, Check, ChevronRight, Save, Trash2, X } from "lucide-react";
 import type { FormEvent } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { FormField } from "../../../components/ui/form-field";
 import { Input, Textarea } from "../../../components/ui/fields";
-import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
+import { Modal, ModalFooter } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
@@ -18,15 +18,10 @@ import {
   buildCurrencyPickerOptions,
   buildIconPickerOptions,
   editorColorSwatches,
-  getAccountIcon,
   getIconOption,
   getTypePreset,
 } from "../lib/account-options";
-import type {
-  AccountFormErrors,
-  AccountFormField,
-  AccountFormState,
-} from "../lib/account-validation";
+import type { AccountFormErrors, AccountFormField, AccountFormState } from "../lib/account-validation";
 
 type AccountEditorDialogProps = {
   baseCurrencyCode: string;
@@ -38,36 +33,23 @@ type AccountEditorDialogProps = {
   onArchiveToggle: (account: AccountSummary) => void;
   onClose: () => void;
   onDelete: () => void;
-  onFieldChange: <Field extends AccountFormField>(
-    field: Field,
-    value: AccountFormState[Field],
-  ) => void;
+  onFieldChange: <Field extends AccountFormField>(field: Field, value: AccountFormState[Field]) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTypeChange: (type: string) => void;
   selectedAccount: AccountSummary | null;
 };
 
 function ensureCurrencyOption(options: PickerOption[], currencyCode: string): PickerOption[] {
-  if (!currencyCode || options.some((option) => option.value === currencyCode)) {
-    return options;
-  }
-
+  if (!currencyCode || options.some((option) => option.value === currencyCode)) return options;
   const currency = buildCurrencyLabel(currencyCode);
-
-  if (!currency) {
-    return options;
-  }
-
-  return [
-    ...options,
-    {
-      value: currency.code,
-      label: currency.code,
-      description: `${currency.label} - ${currency.region}`,
-      leadingLabel: currency.symbol,
-      searchText: `${currency.code} ${currency.label} ${currency.region} ${currency.symbol}`,
-    },
-  ];
+  if (!currency) return options;
+  return [...options, {
+    value: currency.code,
+    label: currency.code,
+    description: `${currency.label} - ${currency.region}`,
+    leadingLabel: currency.symbol,
+    searchText: `${currency.code} ${currency.label} ${currency.region} ${currency.symbol}`,
+  }];
 }
 
 export function AccountEditorDialog({
@@ -85,283 +67,143 @@ export function AccountEditorDialog({
   onTypeChange,
   selectedAccount,
 }: AccountEditorDialogProps) {
+  const [activePanel, setActivePanel] = useState<"main" | "details">("main");
   const typeOptions = useMemo(() => buildAccountTypePickerOptions(), []);
   const currencyOptions = useMemo(
     () => ensureCurrencyOption(buildCurrencyPickerOptions(), formState.currencyCode),
     [formState.currencyCode],
   );
-  const iconOptions = useMemo(
-    () => buildIconPickerOptions(formState.color),
-    [formState.color],
-  );
+  const iconOptions = useMemo(() => buildIconPickerOptions(formState.color), [formState.color]);
   const typePreset = getTypePreset(formState.type);
   const iconOption = getIconOption(formState.icon || typePreset.icon);
-  const PreviewIcon = getAccountIcon(iconOption.value, formState.type);
   const parsedOpeningBalance = Number(formState.openingBalance);
-  const previewOpeningBalance = Number.isFinite(parsedOpeningBalance) ? parsedOpeningBalance : 0;
-  const previewName = formState.name.trim() || "Cuenta sin nombre";
+  const openingBalance = Number.isFinite(parsedOpeningBalance) ? parsedOpeningBalance : 0;
+  const projectedBalance = selectedAccount
+    ? selectedAccount.currentBalance - selectedAccount.openingBalance + openingBalance
+    : openingBalance;
+
+  useEffect(() => setActivePanel("main"), [isCreateMode, selectedAccount?.id]);
 
   return (
     <Modal
-      className="!rounded-[14px] !bg-shell !shadow-none !backdrop-blur-none"
+      className="!max-w-[560px] !rounded-[14px] !bg-[#1a1917] !shadow-none !backdrop-blur-none"
       disableOutsideClose={isSaving}
       labelledBy="account-editor-title"
       onClose={onClose}
       size="md"
     >
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
-        <ModalHeader
-          accessory={
-            selectedAccount?.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null
-          }
-          onClose={isSaving ? undefined : onClose}
-          title={isCreateMode ? "Nueva cuenta" : "Editar cuenta"}
-          titleId="account-editor-title"
-        />
+      <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5 sm:px-6">
+          {activePanel === "main" ? (
+            <div className="flex min-w-0 items-center gap-3">
+              <h2 className="truncate font-display text-xl font-semibold text-ink" id="account-editor-title">
+                {isCreateMode ? "Nueva cuenta" : "Editar cuenta"}
+              </h2>
+              {selectedAccount?.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null}
+            </div>
+          ) : (
+            <button className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white" onClick={() => setActivePanel("main")} type="button">
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <span className="truncate font-display text-xl font-semibold">Detalles</span>
+            </button>
+          )}
+          <button aria-label="Cerrar formulario de cuenta" className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink" disabled={isSaving} onClick={onClose} type="button">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
 
-        <ModalBody className="space-y-5">
+        <ModalBody className="!px-5 !py-5 sm:!px-6">
           {errorMessage ? (
-            <FormFeedbackBanner
-              description={errorMessage}
-              title="No pudimos guardar la cuenta"
-              tone="error"
-            />
+            <FormFeedbackBanner className="mb-5" description={errorMessage} title="Revisa la cuenta antes de guardarla" tone="error" />
           ) : null}
 
-          <section className="grid gap-4">
-            <div className="space-y-4">
-              <div className="grid gap-4 [&>*:nth-child(4)]:order-first">
-                <FormField
-                  error={formErrors.name}
-                  errorKey="name"
-                  label="Nombre"
-                  required
-                >
-                  <Input
-                    onChange={(event) => onFieldChange("name", event.target.value)}
-                    placeholder="Ej. Cuenta Principal"
-                    value={formState.name}
-                  />
-                </FormField>
+          {activePanel === "main" ? (
+            <div className="space-y-5">
+              <FormField error={formErrors.openingBalance} errorKey="openingBalance" label="Saldo inicial" required>
+                <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" inputMode="decimal" onChange={(event) => onFieldChange("openingBalance", event.target.value)} placeholder="0.00" type="number" value={formState.openingBalance} />
+              </FormField>
 
-                <FormField
-                  error={formErrors.type}
-                  errorKey="type"
-                  hint="Define como se agrupa y reconoce esta cuenta."
-                  label="Tipo"
-                  required
-                >
-                  <SearchablePicker
-                    emptyMessage="No hay tipos disponibles."
-                    onChange={onTypeChange}
-                    options={typeOptions}
-                    placeholderDescription="Selecciona un tipo."
-                    placeholderLabel="Tipo de cuenta"
-                    queryPlaceholder="Buscar tipo..."
-                    value={formState.type}
-                  />
-                </FormField>
-
-                <FormField
-                  error={formErrors.currencyCode}
-                  errorKey="currencyCode"
-                  hint={`Moneda base del espacio: ${baseCurrencyCode}.`}
-                  label="Moneda"
-                  required
-                >
-                  <SearchablePicker
-                    emptyMessage="No hay monedas disponibles."
-                    onChange={(value) => onFieldChange("currencyCode", value)}
-                    options={currencyOptions}
-                    placeholderDescription="Selecciona una moneda."
-                    placeholderLabel="Moneda"
-                    queryPlaceholder="Buscar moneda..."
-                    value={formState.currencyCode}
-                  />
-                </FormField>
-
-                <FormField
-                  error={formErrors.openingBalance}
-                  errorKey="openingBalance"
-                  hint="Saldo con el que empieza el historial de esta cuenta."
-                  label="Saldo inicial"
-                  required
-                >
-                  <Input
-                    autoFocus
-                    inputMode="decimal"
-                    onChange={(event) => onFieldChange("openingBalance", event.target.value)}
-                    placeholder="0.00"
-                    type="number"
-                    value={formState.openingBalance}
-                  />
-                </FormField>
-
-                <FormField
-                  error={formErrors.icon}
-                  errorKey="icon"
-                  hint="Icono visible en listados, cards y selectores."
-                  label="Icono"
-                  required
-                >
-                  <SearchablePicker
-                    emptyMessage="No hay iconos disponibles."
-                    onChange={(value) => onFieldChange("icon", value)}
-                    options={iconOptions}
-                    placeholderDescription="Selecciona un icono."
-                    placeholderLabel="Icono"
-                    queryPlaceholder="Buscar icono..."
-                    value={formState.icon}
-                  />
-                </FormField>
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm">
+                <span className="text-storm">Saldo después</span>
+                <span className="font-semibold text-ink">{formatCurrency(projectedBalance, formState.currencyCode || baseCurrencyCode)}</span>
               </div>
 
-              <FormField
-                error={formErrors.color}
-                errorKey="color"
-                hint="Usa colores con significado estable para reconocer la cuenta rapido."
-                label="Color"
-                required
-              >
+              <FormField error={formErrors.name} errorKey="name" label="Nombre" required>
+                <Input onChange={(event) => onFieldChange("name", event.target.value)} placeholder="Ej. Cuenta Principal" value={formState.name} />
+              </FormField>
+
+              <FormField error={formErrors.type} errorKey="type" label="Tipo" required>
+                <SearchablePicker appearance="compact" emptyMessage="No hay tipos disponibles." onChange={onTypeChange} options={typeOptions} placeholderDescription="Selecciona un tipo." placeholderLabel="Tipo de cuenta" queryPlaceholder="Buscar tipo..." value={formState.type} />
+              </FormField>
+
+              <div className="rounded-xl border border-white/10 bg-[#141311]">
+                <button className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink transition hover:bg-white/[0.03]" onClick={() => setActivePanel("details")} type="button">
+                  <span>Detalles</span>
+                  <span className="flex items-center gap-2 font-normal text-storm">
+                    {formState.currencyCode} · {iconOption.label}
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </button>
+              </div>
+
+              <p className="text-xs leading-5 text-storm/70">
+                Con el saldo, el nombre y el tipo ya puedes guardar. La moneda usa {baseCurrencyCode} por defecto.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <FormField error={formErrors.currencyCode} errorKey="currencyCode" label="Moneda" required>
+                <SearchablePicker appearance="compact" emptyMessage="No hay monedas disponibles." onChange={(value) => onFieldChange("currencyCode", value)} options={currencyOptions} placeholderDescription="Selecciona una moneda." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} />
+              </FormField>
+
+              <FormField error={formErrors.icon} errorKey="icon" label="Ícono" required>
+                <SearchablePicker appearance="compact" emptyMessage="No hay íconos disponibles." onChange={(value) => onFieldChange("icon", value)} options={iconOptions} placeholderDescription="Selecciona un ícono." placeholderLabel="Ícono" queryPlaceholder="Buscar ícono..." value={formState.icon} />
+              </FormField>
+
+              <FormField error={formErrors.color} errorKey="color" label="Color" required>
                 <div className="grid grid-cols-6 gap-2 sm:grid-cols-12">
                   {editorColorSwatches.map((swatch) => {
                     const isSelected = swatch.toLowerCase() === formState.color.toLowerCase();
-
                     return (
-                      <button
-                        aria-label={`Usar color ${swatch}`}
-                        aria-pressed={isSelected}
-                        className={`h-11 rounded-2xl border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine ${
-                          isSelected
-                            ? "border-white/70 ring-2 ring-pine/30"
-                            : "border-white/10 hover:border-white/30"
-                        }`}
-                        key={swatch}
-                        onClick={() => onFieldChange("color", swatch)}
-                        style={{ backgroundColor: swatch }}
-                        type="button"
-                      />
+                      <button aria-label={`Usar color ${swatch}`} aria-pressed={isSelected} className={`h-9 rounded-[9px] border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${isSelected ? "border-ink ring-1 ring-ink/25" : "border-white/10 hover:border-white/30"}`} key={swatch} onClick={() => onFieldChange("color", swatch)} style={{ backgroundColor: swatch }} type="button" />
                     );
                   })}
                 </div>
               </FormField>
 
-              <label className="flex min-h-14 cursor-pointer items-start gap-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-white/16">
-                <span className="relative mt-0.5 inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                  <input
-                    checked={formState.includeInNetWorth}
-                    className="peer sr-only"
-                    onChange={(event) => onFieldChange("includeInNetWorth", event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border border-white/20 bg-white/[0.04] text-transparent transition duration-150 peer-checked:border-pine peer-checked:bg-pine peer-checked:text-void peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40"
-                  >
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                </span>
+              <label className="flex min-h-[54px] cursor-pointer items-center justify-between border-y border-white/10 py-3">
                 <span>
-                  <span className="block text-sm font-semibold text-ink">
-                    Incluir en patrimonio
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-storm">
-                    Si está activo, el saldo suma al resumen patrimonial del espacio.
+                  <span className="block text-sm font-semibold text-ink">Incluir en patrimonio</span>
+                  <span className="mt-0.5 block text-xs text-storm">Suma este saldo al patrimonio del espacio.</span>
+                </span>
+                <span className="relative inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                  <input checked={formState.includeInNetWorth} className="peer sr-only" onChange={(event) => onFieldChange("includeInNetWorth", event.target.checked)} type="checkbox" />
+                  <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-white/20 text-transparent transition peer-checked:border-pine peer-checked:bg-pine peer-checked:text-void peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40">
+                    <Check className="h-3 w-3" strokeWidth={3} />
                   </span>
                 </span>
               </label>
 
-              <details className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-ink">
-                  Detalles
-                </summary>
-                <div className="mt-4 space-y-4">
-                  <FormField
-                    error={formErrors.notes}
-                    errorKey="notes"
-                    hint="Notas internas visibles solo dentro del espacio."
-                    label="Notas"
-                  >
-                    <Textarea
-                      onChange={(event) => onFieldChange("notes", event.target.value)}
-                      placeholder="Ej. Cuenta para pagos recurrentes o fondo de emergencia."
-                      value={formState.notes}
-                    />
-                  </FormField>
-                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-storm/80">
-                      Impacto
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-storm">
-                      Cambiar el saldo inicial ajusta el punto de partida del historial. Los movimientos
-                      registrados siguen calculando el saldo actual desde ese inicio.
-                    </p>
-                  </div>
-                </div>
-              </details>
-            </div>
+              <FormField error={formErrors.notes} errorKey="notes" label="Notas">
+                <Textarea className="min-h-[96px]" onChange={(event) => onFieldChange("notes", event.target.value)} placeholder="Uso de la cuenta o recordatorios internos." value={formState.notes} />
+              </FormField>
 
-            <aside className="hidden">
-              <div className="glass-panel-soft rounded-[24px] p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] border border-white/10 text-white"
-                    style={{ backgroundColor: formState.color }}
-                  >
-                    <PreviewIcon className="h-6 w-6" />
-                  </div>
-                  <StatusBadge
-                    status={formState.includeInNetWorth ? "Patrimonio" : "Fuera"}
-                    tone={formState.includeInNetWorth ? "success" : "warning"}
-                  />
-                </div>
-                <p className="mt-5 break-words font-display text-3xl font-semibold leading-tight text-ink">
-                  {previewName}
-                </p>
-                <p className="mt-2 text-sm text-storm">
-                  {typePreset.label} - {formState.currencyCode || baseCurrencyCode}
-                </p>
-                <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-[0.65rem] uppercase tracking-[0.18em] text-storm">
-                    Saldo inicial
-                  </p>
-                  <p className="mt-2 break-words font-display text-3xl font-semibold leading-tight text-ink">
-                    {formatCurrency(previewOpeningBalance, formState.currencyCode || baseCurrencyCode)}
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs leading-5 text-storm/70">
+                Cambiar el saldo inicial ajusta el punto de partida; los movimientos registrados se conservan.
+              </p>
 
               {!isCreateMode && selectedAccount ? (
-                <div className="rounded-[28px] border border-rosewood/18 bg-rosewood/8 p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-rosewood/20 bg-rosewood/12 text-rosewood">
-                      <WalletCards className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-ink">Zona sensible</p>
-                      <p className="mt-1 text-sm leading-6 text-storm">
-                        Archivar es reversible. Eliminar intenta borrar la cuenta de forma permanente.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      disabled={isSaving}
-                      onClick={() => onArchiveToggle(selectedAccount)}
-                      variant="ghost"
-                    >
-                      <Archive className="h-4 w-4" />
-                      {selectedAccount.isArchived ? "Reactivar" : "Archivar"}
-                    </Button>
-                    <Button disabled={isSaving} onClick={onDelete} variant="ghost">
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </Button>
-                  </div>
+                <div className="flex items-center gap-5 border-t border-white/10 pt-4 text-sm">
+                  <button className="inline-flex items-center gap-2 text-storm transition hover:text-ink" disabled={isSaving} onClick={() => onArchiveToggle(selectedAccount)} type="button">
+                    <Archive className="h-4 w-4" />{selectedAccount.isArchived ? "Reactivar" : "Archivar"}
+                  </button>
+                  <button className="inline-flex items-center gap-2 text-storm transition hover:text-rosewood" disabled={isSaving} onClick={onDelete} type="button">
+                    <Trash2 className="h-4 w-4" />Eliminar
+                  </button>
                 </div>
               ) : null}
-            </aside>
-          </section>
+            </div>
+          )}
         </ModalBody>
 
         <ModalFooter>
