@@ -156,6 +156,7 @@ export function AccountsPage() {
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [groupByType, setGroupByType] = useState(() => window.localStorage.getItem("darkmoney-accounts-group-by-type") === "true");
   const { schedule } = useUndoQueue();
 
   const accounts = useMemo(
@@ -180,9 +181,15 @@ export function AccountsPage() {
     baseCurrencyCode,
   );
   const filteredExcludedCount = filteredActiveAccounts.filter((account) => !account.includeInNetWorth).length;
+  const orderedFilteredAccounts = useMemo(
+    () => groupByType
+      ? [...filteredAccounts].sort((left, right) => getTypePreset(left.type).label.localeCompare(getTypePreset(right.type).label, "es") || left.name.localeCompare(right.name, "es"))
+      : filteredAccounts,
+    [filteredAccounts, groupByType],
+  );
   const paginatedAccounts = useMemo(
-    () => paginateAccounts(filteredAccounts, filters.page, ACCOUNT_PAGE_SIZE),
-    [filteredAccounts, filters.page],
+    () => paginateAccounts(orderedFilteredAccounts, filters.page, ACCOUNT_PAGE_SIZE),
+    [filters.page, orderedFilteredAccounts],
   );
   const archiveTarget =
     archiveTargetId !== null
@@ -533,6 +540,9 @@ export function AccountsPage() {
                       <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { void snapshotQuery.refetch(); setIsActionsMenuOpen(false); }} type="button">
                         <RefreshCw className={`h-4 w-4 ${snapshotQuery.isFetching ? "animate-spin" : ""}`} />Actualizar
                       </button>
+                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setGroupByType((current) => { const next = !current; window.localStorage.setItem("darkmoney-accounts-group-by-type", String(next)); return next; }); setIsActionsMenuOpen(false); }} type="button">
+                        <Check className={`h-3.5 w-3.5 ${groupByType ? "opacity-100" : "opacity-0"}`} />Agrupar por tipo
+                      </button>
                       {hasActiveFilters ? (
                         <button className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { resetFilters(); setIsActionsMenuOpen(false); }} type="button">Limpiar filtros</button>
                       ) : null}
@@ -587,6 +597,7 @@ export function AccountsPage() {
             <AccountsTable
                 accounts={paginatedAccounts.items}
                 allSelected={allSelected}
+                groupByType={groupByType}
                 onArchive={handleArchiveToggle}
                 onEdit={openEditEditor}
                 onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}

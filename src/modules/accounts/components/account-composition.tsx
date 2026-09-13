@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, ExchangeRateSummary } from "../../../types/domain";
@@ -29,9 +29,12 @@ export function AccountComposition({ accounts, baseCurrencyCode, exchangeRates }
     }
     return [...currencies].slice(0, 4);
   }, [baseCurrencyCode, exchangeRates]);
-  const [displayCurrency, setDisplayCurrency] = useState(baseCurrencyCode);
+  const [displayCurrency, setDisplayCurrency] = useState(() => window.localStorage.getItem("darkmoney-accounts-display-currency") || baseCurrencyCode);
   const effectiveCurrency = availableCurrencies.includes(displayCurrency) ? displayCurrency : baseCurrencyCode;
   const factor = conversionRate(exchangeRates, baseCurrencyCode, effectiveCurrency) ?? 1;
+  useEffect(() => {
+    window.localStorage.setItem("darkmoney-accounts-display-currency", effectiveCurrency);
+  }, [effectiveCurrency]);
   const composition = useMemo(() => {
     const groups = new Map<string, number>();
     let debts = 0;

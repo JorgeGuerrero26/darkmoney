@@ -215,9 +215,11 @@ export function AccountEditorDialog({
                   <button className="inline-flex items-center gap-2 text-storm transition hover:text-ink" disabled={isSaving} onClick={() => onArchiveToggle(selectedAccount)} type="button">
                     <Archive className="h-4 w-4" />{selectedAccount.isArchived ? "Reactivar" : "Archivar"}
                   </button>
-                  <button className="inline-flex items-center gap-2 text-storm transition hover:text-rosewood" disabled={isSaving} onClick={onDelete} type="button">
-                    <Trash2 className="h-4 w-4" />Eliminar
-                  </button>
+                  {selectedAccount.isArchived ? (
+                    <button className="inline-flex items-center gap-2 text-storm transition hover:text-rosewood" disabled={isSaving} onClick={onDelete} type="button">
+                      <Trash2 className="h-4 w-4" />Eliminar permanentemente
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -9,6 +9,7 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, MovementRecord } from "../../../types/domain";
 import { requestQuickMovement } from "../../movements/lib/quick-movement-event";
 import { findAccountInstitution } from "../lib/account-institutions";
+import { buildAccountBalanceEvolution } from "../lib/account-balance-evolution";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
 
 type Props = {
@@ -40,6 +41,25 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
       .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime()),
     [account.id, movements],
   );
+  const balancePoints = useMemo(
+    () => buildAccountBalanceEvolution({ accountId: account.id, currentBalance: account.currentBalance, movements: accountMovements }),
+    [account.currentBalance, account.id, accountMovements],
+  );
+  const balanceChart = useMemo(() => {
+    const width = 620;
+    const height = 110;
+    const values = balancePoints.map((point) => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = Math.max(1, max - min);
+    const start = balancePoints[0]?.timestamp ?? Date.now();
+    const end = balancePoints[balancePoints.length - 1]?.timestamp ?? start + 1;
+    const duration = Math.max(1, end - start);
+    return balancePoints.map((point) => ({
+      x: 4 + ((point.timestamp - start) / duration) * (width - 8),
+      y: 4 + ((max - point.value) / range) * (height - 8),
+    }));
+  }, [balancePoints]);
   const subtitle = [institution?.label, getTypePreset(account.type).label, account.currencyCode].filter(Boolean).join(" · ");
 
   function openMovement(kind: "expense" | "transfer") {
@@ -74,6 +94,24 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
               <Button onClick={() => openMovement("transfer")} variant="secondary"><ArrowLeftRight className="h-4 w-4" />Transferir</Button>
             </div>
           ) : null}
+        </section>
+
+        <section className="border-b border-white/[0.08] py-5">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-ink">Evolución del saldo</h3>
+              <p className="mt-0.5 text-xs text-storm">Últimos 90 días · movimientos confirmados</p>
+            </div>
+            <button className="text-sm font-medium text-ink hover:text-white" onClick={onAnalyze} type="button">Analizar</button>
+          </div>
+          <svg aria-label="Evolución del saldo durante los últimos 90 días" className="mt-4 h-[110px] w-full" preserveAspectRatio="none" role="img" viewBox="0 0 620 110">
+            <line stroke="rgba(255,255,255,0.08)" x1="4" x2="616" y1="106" y2="106" />
+            <polyline fill="none" points={balanceChart.map((point) => `${point.x},${point.y}`).join(" ")} stroke="#d6b69b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          </svg>
+          <div className="mt-2 flex justify-between text-xs text-storm">
+            <span>{formatCurrency(balancePoints[0]?.value ?? account.currentBalance, account.currencyCode)}</span>
+            <span>{formatCurrency(account.currentBalance, account.currencyCode)}</span>
+          </div>
         </section>
 
         <section className="pt-5">

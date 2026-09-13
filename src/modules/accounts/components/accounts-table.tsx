@@ -1,5 +1,5 @@
 import { Archive, BarChart3, MoreHorizontal, PencilLine } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { formatDateTime } from "../../../lib/formatting/dates";
@@ -10,6 +10,7 @@ import { getAccountIcon, getTypePreset } from "../lib/account-options";
 type AccountsTableProps = {
   accounts: AccountSummary[];
   allSelected: boolean;
+  groupByType: boolean;
   onArchive: (account: AccountSummary) => void;
   onEdit: (account: AccountSummary) => void;
   onOpen: (account: AccountSummary) => void;
@@ -24,6 +25,7 @@ type AccountsTableProps = {
 export function AccountsTable({
   accounts,
   allSelected,
+  groupByType,
   onArchive,
   onEdit,
   onOpen,
@@ -46,7 +48,7 @@ export function AccountsTable({
         <span>{accounts.length} cuentas</span>
       </div>
 
-      {accounts.map((account) => {
+      {accounts.map((account, index) => {
         const AccountIcon = getAccountIcon(account.icon, account.type);
         const context = [
           visibleColumns.type === false ? null : getTypePreset(account.type).label,
@@ -55,10 +57,17 @@ export function AccountsTable({
           visibleColumns.activity ? formatDateTime(account.lastActivity) : null,
         ].filter(Boolean).join(" · ");
 
+        const showGroup = groupByType && (index === 0 || accounts[index - 1]?.type !== account.type);
+
         return (
+          <Fragment key={account.id}>
+          {showGroup ? (
+            <div className="border-b border-white/[0.07] px-2 py-2 font-public-mono text-[10px] uppercase tracking-[0.16em] text-storm sm:px-0">
+              {getTypePreset(account.type).label}
+            </div>
+          ) : null}
           <div
             className="grid min-h-[60px] cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] sm:px-0"
-            key={account.id}
             onClick={() => onOpen(account)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -98,6 +107,7 @@ export function AccountsTable({
               ) : null}
             </div>
           </div>
+          </Fragment>
         );
       })}
     </div>
