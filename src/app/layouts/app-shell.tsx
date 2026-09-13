@@ -154,6 +154,17 @@ function IdentityAvatar({
   const textClassName =
     size === "compact" ? "text-[1.05rem]" : "text-[1.12rem]";
 
+  if (imageUrl) {
+    return (
+      <img
+        alt={title ?? initials}
+        className={`shrink-0 object-cover ${shellClassName}`}
+        src={imageUrl}
+        title={title}
+      />
+    );
+  }
+
   return (
     <div
       className={`group relative isolate flex shrink-0 items-center justify-center ${shellClassName}`}
@@ -168,19 +179,11 @@ function IdentityAvatar({
       <span
         className={`absolute inset-[4px] ${innerClassName} border border-white/18 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.24)]`}
       />
-      {imageUrl ? (
-        <img
-          alt={title ?? initials}
-          className={`relative z-10 h-full w-full object-cover ${shellClassName}`}
-          src={imageUrl}
-        />
-      ) : (
-        <span
-          className={`relative z-10 font-display font-semibold tracking-[-0.04em] text-void drop-shadow-[0_1px_0_rgba(255,255,255,0.14)] transition duration-300 ease-out group-hover:scale-[1.05] ${textClassName}`}
-        >
-          {initials}
-        </span>
-      )}
+      <span
+        className={`relative z-10 font-display font-semibold tracking-[-0.04em] text-void drop-shadow-[0_1px_0_rgba(255,255,255,0.14)] transition duration-300 ease-out group-hover:scale-[1.05] ${textClassName}`}
+      >
+        {initials}
+      </span>
     </div>
   );
 }
