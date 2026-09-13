@@ -6,6 +6,7 @@ import {
   Download,
   LoaderCircle,
   MailPlus,
+  MoreVertical,
   Minus,
   Plus,
   RefreshCw,
@@ -27,15 +28,12 @@ import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
 import { Pagination } from "../../../components/ui/pagination";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
-import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -109,8 +107,7 @@ import {
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import { ObligationTable } from "../components/obligation-table";
-import { ObligationList } from "../components/obligation-list";
-import { ObligationGrid } from "../components/obligation-grid";
+import { ObligationDetailDialog } from "../components/obligation-detail-dialog";
 import { PendingEventRequestsSection } from "../components/pending-event-requests-section";
 import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
 import {
@@ -2778,26 +2775,15 @@ export function ObligationsPage() {
   const [principalAdjustmentFeedback, setPrincipalAdjustmentFeedback] =
     useState<FeedbackState | null>(null);
   const [shareDialogFeedback, setShareDialogFeedback] = useState<FeedbackState | null>(null);
-  const obligationColumns: ColumnDef[] = [
-    { key: "contraparte", label: "Contraparte" },
-    { key: "direccion", label: "Direccion" },
-    { key: "principal", label: "Principal" },
-  ];
-  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-obligations", obligationColumns);
-  const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useViewMode("obligations", "table");
   const {
     filters: obligationFilters,
     currentPage,
     setCurrentPage,
-    openTableFilter,
     updateFilter: updateObligationFilter,
     clearFilters: clearObligationFilters,
-    toggleTableFilterMenu,
-    closeTableFilterMenu,
-    clearSingleTableFilter,
-    applyFilterAndClose: applyObligationFilterAndClose,
-  } = useObligationsFilters(viewMode);
+  } = useObligationsFilters("table");
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [detailObligationId, setDetailObligationId] = useState<number | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -2886,6 +2872,10 @@ export function ObligationsPage() {
     selectedObligationId === null
       ? null
       : obligations.find((obligation) => obligation.id === selectedObligationId) ?? null;
+  const detailObligation =
+    detailObligationId === null
+      ? null
+      : obligations.find((obligation) => obligation.id === detailObligationId) ?? null;
   const attachmentsQuery = useEntityAttachmentsQuery(
     activeWorkspace?.id,
     "obligation",
@@ -3960,6 +3950,17 @@ export function ObligationsPage() {
     });
   }, [hiddenIds, obligationFilters, obligations]);
 
+  const filteredReceivableDisplay = getObligationAmountDisplay(
+    filteredObligations.filter((obligation) => obligation.direction === "receivable"),
+    "pending",
+    baseCurrencyCode,
+  );
+  const filteredPayableDisplay = getObligationAmountDisplay(
+    filteredObligations.filter((obligation) => obligation.direction === "payable"),
+    "pending",
+    baseCurrencyCode,
+  );
+
   const { selectedIds, toggle: toggleSelect, selectAll, clearAll, selectedCount, allSelected, someSelected, selectedItems } = useSelection(filteredObligations);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -4728,85 +4729,23 @@ export function ObligationsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      {/* Header compacto (estándar) */}
-      <section className="min-w-0">
-        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Cartera</p>
-        <div className="mt-1 flex items-center gap-2.5">
+      <section className="flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1">
           <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Créditos y deudas</h2>
-          <InfoTip ariaLabel="Sobre creditos y deudas">
-            Lleva lo que te deben y lo que debes, con abonos, ajustes de monto e historial. Los filtros de la barra
-            superior aplican a todas las vistas.
-          </InfoTip>
+          <p className="mt-1 text-sm text-storm">{obligations.length} registros · te deben <span className="font-medium text-ink">{receivablePendingDisplay}</span> · debes <span className="font-medium text-ink">{payablePendingDisplay}</span>.</p>
         </div>
-        <p className="mt-1 text-sm text-storm">
-          {obligations.length} registros. Te deben <span className="text-pine">{receivablePendingDisplay}</span> y debes <span className="text-ink">{payablePendingDisplay}</span>.
-        </p>
+        <Button data-tour="create-obligation" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo registro</Button>
+        <div className="relative">
+          <button aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
+          {isActionsMenuOpen ? <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
+            <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04]" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />Actualizar</button>
+            <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredObligations.length} onClick={() => { setIsActionsMenuOpen(false); downloadObligationsCSV(filteredObligations, `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`); }} type="button"><Download className="h-4 w-4" />Exportar los {filteredObligations.length}</button>
+          </div> : null}
+        </div>
       </section>
 
-      <PendingPaymentRequestsSection
-        accounts={accounts}
-        isResolving={acceptPaymentRequestMutation.isPending || rejectPaymentRequestMutation.isPending}
-        obligations={obligations}
-        onAccept={handleAcceptPaymentRequest}
-        onReject={handleRejectPaymentRequest}
-        requests={pendingPaymentRequests}
-      />
-
-      <PendingEventRequestsSection
-        deleteRequests={eventRequestsQuery.data?.deleteRequests ?? []}
-        editRequests={eventRequestsQuery.data?.editRequests ?? []}
-        isResolving={
-          acceptEventDeleteRequestMutation.isPending ||
-          rejectEventDeleteRequestMutation.isPending ||
-          acceptEventEditRequestMutation.isPending ||
-          rejectEventEditRequestMutation.isPending
-        }
-        obligations={obligations}
-        onAcceptDelete={handleAcceptEventDeleteRequest}
-        onAcceptEdit={handleAcceptEventEditRequest}
-        onRejectDelete={handleRejectEventDeleteRequest}
-        onRejectEdit={handleRejectEventEditRequest}
-      />
-
-      {/* Toolbar sticky (estándar) */}
-      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
-          {viewMode === "table" ? <ColumnPicker columns={obligationColumns} visible={colVis} onToggle={toggleCol} /> : null}
-          <StatusBadge status={`${filteredObligations.length} visibles`} tone="neutral" />
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-              disabled={snapshotQuery.isFetching}
-              onClick={() => snapshotQuery.refetch()}
-              title="Actualizar"
-              type="button"
-            >
-              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-            </button>
-            {hasActiveFilters ? (
-              <Button onClick={clearObligationFilters} variant="ghost">
-                <X className="mr-2 h-4 w-4" />
-                Limpiar
-              </Button>
-            ) : null}
-            <Button
-              disabled={!filteredObligations.length}
-              onClick={() => downloadObligationsCSV(filteredObligations, `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`)}
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
-            </Button>
-            <Button data-tour="create-obligation" onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo registro
-            </Button>
-          </div>
-        </div>
-
-        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <section className="sticky top-[64px] z-30 bg-[#0e0d0c]/95 py-2 backdrop-blur-xl">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <input
             className="field-dark"
             onChange={(event) => updateObligationFilter("title", event.target.value)}
@@ -4833,7 +4772,17 @@ export function ObligationsPage() {
             value={obligationFilters.status}
           />
         </div>
+        {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearObligationFilters} type="button">Limpiar filtros</button> : null}
       </section>
+
+      <section className="grid min-h-14 grid-cols-1 items-center gap-2 border-y border-white/[0.08] px-1 py-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:gap-8">
+        <p className="text-storm">Los <span className="font-semibold text-ink">{filteredObligations.length}</span> del filtro</p>
+        <p className="text-storm">Por cobrar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredReceivableDisplay}</span></p>
+        <p className="text-storm">Por pagar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredPayableDisplay}</span></p>
+      </section>
+
+      <PendingPaymentRequestsSection accounts={accounts} isResolving={acceptPaymentRequestMutation.isPending || rejectPaymentRequestMutation.isPending} obligations={obligations} onAccept={handleAcceptPaymentRequest} onReject={handleRejectPaymentRequest} requests={pendingPaymentRequests} />
+      <PendingEventRequestsSection deleteRequests={eventRequestsQuery.data?.deleteRequests ?? []} editRequests={eventRequestsQuery.data?.editRequests ?? []} isResolving={acceptEventDeleteRequestMutation.isPending || rejectEventDeleteRequestMutation.isPending || acceptEventEditRequestMutation.isPending || rejectEventEditRequestMutation.isPending} obligations={obligations} onAcceptDelete={handleAcceptEventDeleteRequest} onAcceptEdit={handleAcceptEventEditRequest} onRejectDelete={handleRejectEventDeleteRequest} onRejectEdit={handleRejectEventEditRequest} />
 
       {pageFeedback?.tone === "error" ? (
         <DataState
@@ -4866,54 +4815,17 @@ export function ObligationsPage() {
           description="No hay registros que coincidan con los filtros activos."
           title="Sin resultados"
         />
-      ) : viewMode === "list" ? (
-        <ObligationList
-          obligations={paginatedObligations}
-          onAnalytics={setAnalyticsObligationId}
-          onEdit={openEditEditor}
-          onToggleSelect={toggleSelect}
-          selectedIds={selectedIds}
-        />
-      ) : viewMode === "table" ? (
+      ) : (
         <ObligationTable
           allSelected={allSelected}
-          cv={cv}
-          filters={obligationFilters}
           obligations={paginatedObligations}
           onAnalytics={setAnalyticsObligationId}
-          onApplyFilterAndClose={applyObligationFilterAndClose}
           onClearAll={clearAll}
-          onClearSingleFilter={clearSingleTableFilter}
-          onCloseFilterMenu={closeTableFilterMenu}
-          onEdit={openEditEditor}
+          onOpen={(obligation) => setDetailObligationId(obligation.id)}
           onSelectAll={selectAll}
-          onToggleFilterMenu={toggleTableFilterMenu}
           onToggleSelect={toggleSelect}
-          onUpdateFilter={updateObligationFilter}
-          openFilter={openTableFilter}
           selectedIds={selectedIds}
           someSelected={someSelected}
-        />
-      ) : (
-        <ObligationGrid
-          canAccessProFeatures={canAccessProFeatures}
-          expandedHistoryId={expandedHistoryId}
-          obligations={paginatedObligations}
-          onAdjustPrincipal={openPrincipalAdjustmentDialog}
-          onAnalytics={setAnalyticsObligationId}
-          onDelete={setDeleteTargetId}
-          onDeleteEvent={(obligation, event) =>
-            setEventDeleteTarget({ obligationId: obligation.id, event })
-          }
-          onEdit={openEditEditor}
-          onEditEvent={openPaymentEditDialog}
-          onPayment={openPaymentDialog}
-          onShare={openShareDialog}
-          onToggleHistory={(id) => setExpandedHistoryId(expandedHistoryId === id ? null : id)}
-          onToggleSelect={toggleSelect}
-          selectedCount={selectedCount}
-          selectedIds={selectedIds}
-          shareByObligationId={shareByObligationId}
         />
       )}
 
@@ -4923,6 +4835,46 @@ export function ObligationsPage() {
           page={safePage}
           pageSize={OBLIGATIONS_PAGE_SIZE}
           totalItems={filteredObligations.length}
+        />
+      ) : null}
+
+      {detailObligation ? (
+        <ObligationDetailDialog
+          canShare={canAccessProFeatures}
+          obligation={detailObligation}
+          onAdjust={(obligation, mode) => {
+            setDetailObligationId(null);
+            openPrincipalAdjustmentDialog(obligation, mode);
+          }}
+          onAnalytics={(id) => {
+            setDetailObligationId(null);
+            setAnalyticsObligationId(id);
+          }}
+          onClose={() => setDetailObligationId(null)}
+          onDelete={(id) => {
+            setDetailObligationId(null);
+            setDeleteTargetId(id);
+          }}
+          onDeleteEvent={(obligation, event) => {
+            setDetailObligationId(null);
+            setEventDeleteTarget({ obligationId: obligation.id, event });
+          }}
+          onEdit={(obligation) => {
+            setDetailObligationId(null);
+            openEditEditor(obligation);
+          }}
+          onEditEvent={(obligation, event) => {
+            setDetailObligationId(null);
+            openPaymentEditDialog(obligation, event);
+          }}
+          onPayment={(obligation) => {
+            setDetailObligationId(null);
+            openPaymentDialog(obligation);
+          }}
+          onShare={(obligation) => {
+            setDetailObligationId(null);
+            openShareDialog(obligation);
+          }}
         />
       ) : null}
 
@@ -4995,7 +4947,7 @@ export function ObligationsPage() {
           obligations={filteredSharedObligations}
           onAnalytics={setAnalyticsSharedObligationId}
           onOpenDetail={openSharedDetail}
-          viewMode={viewMode}
+          viewMode="table"
         />
       ) : null}
 
