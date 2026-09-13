@@ -1663,13 +1663,15 @@ function PaymentDialog(props: Parameters<typeof LegacyPaymentDialog>[0]) {
   </form></div>;
 }
 
-function PrincipalAdjustmentDialog(props: Parameters<typeof LegacyPrincipalAdjustmentDialog>[0]) {
-  const { accounts, feedback, formState, isSaving, mode, obligation, onCancel, onSubmit, updateFormState } = props;
+function PrincipalAdjustmentDialog(props: Parameters<typeof LegacyPrincipalAdjustmentDialog>[0] & { editEventAmount?: number; isEditMode?: boolean }) {
+  const { accounts, editEventAmount = 0, feedback, formState, isEditMode = false, isSaving, mode, obligation, onCancel, onSubmit, updateFormState } = props;
   const amount = parseOptionalNumber(formState.amount) ?? 0;
   const delta = mode === "increase" ? amount : -amount;
-  const projectedPrincipal = Math.max(0, (obligation.currentPrincipalAmount ?? obligation.principalAmount) + delta);
-  const projectedPending = Math.max(0, obligation.pendingAmount + delta);
-  const meta = getPrincipalAdjustmentMeta(mode, obligation.direction);
+  const oldDelta = isEditMode ? (mode === "increase" ? editEventAmount : -editEventAmount) : 0;
+  const projectedPrincipal = Math.max(0, (obligation.currentPrincipalAmount ?? obligation.principalAmount) - oldDelta + delta);
+  const projectedPending = Math.max(0, obligation.pendingAmount - oldDelta + delta);
+  const baseMeta = getPrincipalAdjustmentMeta(mode, obligation.direction);
+  const meta = isEditMode ? { ...baseMeta, title: "Editar ajuste" } : baseMeta;
   const accountOptions = accounts.filter((account) => (!account.isArchived || String(account.id) === formState.accountId) && account.currencyCode === obligation.currencyCode).map<PickerOption>((account) => ({ value: String(account.id), label: account.name, description: `${account.type} · ${account.currencyCode}`, leadingLabel: account.currencyCode, leadingColor: "#6b6459" }));
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm"><form className="flex max-h-[calc(100dvh-24px)] w-full max-w-[620px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" noValidate onSubmit={onSubmit}><header className="flex items-center gap-3 border-b border-white/[0.08] px-5 py-4 sm:px-7"><div className="min-w-0 flex-1"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{obligation.title}</p><h2 className="mt-1 font-display text-xl font-semibold text-ink">{meta.title}</h2></div><button aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={onCancel} type="button"><X className="h-5 w-5" /></button></header><div className="overflow-y-auto px-5 py-5 sm:px-7">{feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}<div className="space-y-5"><div><label className={labelClassName} htmlFor="adjustment-amount">Monto del ajuste</label><div className="mt-2 flex items-end gap-3 border-b border-white/[0.12] pb-3"><span className="pb-1 text-lg text-storm">{getCurrencyLabel(obligation.currencyCode).symbol}</span><input className="min-w-0 flex-1 bg-transparent font-display text-4xl font-semibold tracking-[-0.03em] text-ink outline-none placeholder:text-storm/35" id="adjustment-amount" inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} /></div></div><div className="grid grid-cols-2 gap-4 border-y border-white/[0.09] py-3 text-sm"><div><p className="text-storm">Principal después</p><p className="mt-1 font-semibold tabular-nums text-ink">{formatCurrency(projectedPrincipal, obligation.currencyCode)}</p></div><div><p className="text-storm">Pendiente después</p><p className="mt-1 font-semibold tabular-nums text-ink">{formatCurrency(projectedPending, obligation.currencyCode)}</p></div></div><Field label="Fecha"><DatePickerField onChange={(value) => updateFormState("eventDate", value)} value={formState.eventDate} /></Field><Field label="Motivo"><Textarea className="min-h-24" onChange={(event) => updateFormState("reason", event.target.value)} placeholder="Explica por qué cambia el monto" value={formState.reason} /></Field><div className="flex min-h-14 items-center justify-between gap-4 border-y border-white/[0.09]"><div><p className="font-semibold text-ink">Movimiento en cuenta</p><p className="mt-1 text-xs text-storm">{meta.movementHint}</p></div><button aria-pressed={formState.registerAccountMovement} className={`relative h-7 w-12 shrink-0 rounded-full border transition ${formState.registerAccountMovement ? "border-[#d8d2c7]/60 bg-white/[0.12]" : "border-white/[0.12] bg-white/[0.03]"}`} onClick={() => updateFormState("registerAccountMovement", !formState.registerAccountMovement)} type="button"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition ${formState.registerAccountMovement ? "left-[25px]" : "left-1"}`} /></button></div>{formState.registerAccountMovement ? <Field label={meta.movementLabel}><Picker disabled={!accountOptions.length} emptyMessage={`No hay cuentas en ${obligation.currencyCode}.`} onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta afectada." placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field> : null}<Field label="Notas"><Textarea className="min-h-20" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Contexto opcional" value={formState.notes} /></Field></div></div><footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : mode === "increase" ? "Agregar monto" : "Reducir monto"}</Button></footer></form></div>;
 }
@@ -2994,6 +2996,7 @@ export function ObligationsPage() {
     event: ObligationEventSummary;
   } | null>(null);
   const [principalAdjustmentTargetId, setPrincipalAdjustmentTargetId] = useState<number | null>(null);
+  const [principalAdjustmentEditEventId, setPrincipalAdjustmentEditEventId] = useState<number | null>(null);
   const [principalAdjustmentMode, setPrincipalAdjustmentMode] = useState<PrincipalAdjustmentMode>("increase");
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [analyticsObligationId, setAnalyticsObligationId] = useState<number | null>(null);
@@ -3991,8 +3994,9 @@ export function ObligationsPage() {
       return;
     }
 
-    // Al borrar el abono su monto vuelve al pendiente, asi que puede dejar de estar liquidado.
-    const pendingAfterDelete = obligation.pendingAmount + eventDeleteTarget.event.amount;
+    const deletedEvent = eventDeleteTarget.event;
+    const pendingDelta = deletedEvent.eventType === "principal_increase" ? -deletedEvent.amount : deletedEvent.amount;
+    const pendingAfterDelete = Math.max(0, obligation.pendingAmount + pendingDelta);
     const nextStatus: ObligationStatus =
       pendingAfterDelete > 0 && obligation.status === "paid" ? "active" : obligation.status;
 
@@ -4008,16 +4012,16 @@ export function ObligationsPage() {
       setEventDeleteTarget(null);
       setPageFeedback({
         tone: "success",
-        title: "Abono eliminado",
+        title: deletedEvent.eventType === "payment" ? "Abono eliminado" : "Ajuste eliminado",
         description: eventDeleteTarget.event.movementId
-          ? "Tambien borramos el movimiento que lo acompanaba."
-          : "El saldo pendiente ya se actualizo.",
+          ? "También borramos el movimiento que lo acompañaba."
+          : "El principal y el saldo pendiente ya se actualizaron.",
       });
     } catch (error) {
       setEventDeleteTarget(null);
       setPageFeedback({
         tone: "error",
-        title: "No pudimos eliminar el abono",
+        title: "No pudimos eliminar el evento",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
     }
@@ -4031,7 +4035,18 @@ export function ObligationsPage() {
     setPrincipalAdjustmentFeedback(null);
     setPrincipalAdjustmentMode(mode);
     setPrincipalAdjustmentTargetId(obligation.id);
+    setPrincipalAdjustmentEditEventId(null);
     setPrincipalAdjustmentFormState(createDefaultPrincipalAdjustmentFormState(obligation, mode));
+  }
+
+  function openPrincipalAdjustmentEditDialog(obligation: ObligationSummary, event: ObligationEventSummary) {
+    const accountId = resolveEventAccountId(event);
+    setPageFeedback(null);
+    setPrincipalAdjustmentFeedback(null);
+    setPrincipalAdjustmentTargetId(obligation.id);
+    setPrincipalAdjustmentEditEventId(event.id);
+    setPrincipalAdjustmentMode(event.eventType === "principal_decrease" ? "decrease" : "increase");
+    setPrincipalAdjustmentFormState({ amount: String(event.amount), eventDate: event.eventDate, reason: event.reason ?? "", notes: event.notes ?? "", registerAccountMovement: event.movementId != null, accountId: accountId != null ? String(accountId) : "" });
   }
 
   async function sendShareInvite(
@@ -4070,7 +4085,7 @@ export function ObligationsPage() {
     shareInviteMutation.isPending;
   const isDeleting = deleteMutation.isPending;
   const isRegisteringPayment = paymentMutation.isPending || eventUpdateMutation.isPending;
-  const isAdjustingPrincipal = principalAdjustmentMutation.isPending;
+  const isAdjustingPrincipal = principalAdjustmentMutation.isPending || (principalAdjustmentEditEventId !== null && eventUpdateMutation.isPending);
   const isSendingShareInvite = shareInviteMutation.isPending;
   const activeOwnObligations = obligations.filter((obligation) => obligation.status !== "cancelled");
   const activeSharedObligations = sharedObligations.filter((obligation) => obligation.status !== "cancelled");
@@ -4772,6 +4787,24 @@ export function ObligationsPage() {
           ? "active"
           : principalAdjustmentTarget.status;
 
+    const editingAdjustmentEvent = principalAdjustmentEditEventId === null ? null : principalAdjustmentTarget.events.find((event) => event.id === principalAdjustmentEditEventId) ?? null;
+
+    if (editingAdjustmentEvent) {
+      const oldDelta = editingAdjustmentEvent.eventType === "principal_increase" ? editingAdjustmentEvent.amount : -editingAdjustmentEvent.amount;
+      const newDelta = principalAdjustmentMode === "increase" ? amount : -amount;
+      const editedPending = Math.max(0, principalAdjustmentTarget.pendingAmount - oldDelta + newDelta);
+      const editedStatus: ObligationStatus = editedPending <= 0 ? "paid" : principalAdjustmentTarget.status === "paid" || principalAdjustmentTarget.status === "draft" ? "active" : principalAdjustmentTarget.status;
+      try {
+        await eventUpdateMutation.mutateAsync({ workspaceId: activeWorkspace.id, userId: user.id, eventId: editingAdjustmentEvent.id, obligationId: principalAdjustmentTarget.id, eventType: principalAdjustmentMode === "increase" ? "principal_increase" : "principal_decrease", eventDate: principalAdjustmentFormState.eventDate, amount, reason: principalAdjustmentFormState.reason, description: principalAdjustmentMode === "increase" ? "Aumento de principal" : "Reducción de principal", notes: principalAdjustmentFormState.notes, movementId: editingAdjustmentEvent.movementId ?? null, registerAccountMovement: principalAdjustmentFormState.registerAccountMovement, accountId: principalAdjustmentFormState.registerAccountMovement ? accountId : null, nextStatus: editedStatus });
+        setPageFeedback({ tone: "success", title: "Ajuste actualizado", description: "El principal, el pendiente y el movimiento vinculado quedaron sincronizados." });
+        setPrincipalAdjustmentTargetId(null);
+        setPrincipalAdjustmentEditEventId(null);
+      } catch (error) {
+        setPrincipalAdjustmentFeedback({ tone: "error", title: "No pudimos actualizar el ajuste", description: getQueryErrorMessage(error, "Intenta nuevamente.") });
+      }
+      return;
+    }
+
     try {
       await principalAdjustmentMutation.mutateAsync({
         workspaceId: activeWorkspace.id,
@@ -4801,6 +4834,7 @@ export function ObligationsPage() {
             : "El principal se redujo y el historial ya dejo registrado el motivo del cambio.",
       });
       setPrincipalAdjustmentTargetId(null);
+      setPrincipalAdjustmentEditEventId(null);
     } catch (error) {
       setPrincipalAdjustmentFeedback({
         tone: "error",
@@ -5072,7 +5106,8 @@ export function ObligationsPage() {
           }}
           onEditEvent={(obligation, event) => {
             setDetailObligationId(null);
-            openPaymentEditDialog(obligation, event);
+            if (event.eventType === "principal_increase" || event.eventType === "principal_decrease") openPrincipalAdjustmentEditDialog(obligation, event);
+            else openPaymentEditDialog(obligation, event);
           }}
           onPayment={(obligation) => {
             setDetailObligationId(null);
@@ -5098,7 +5133,8 @@ export function ObligationsPage() {
             }}
             onEditEvent={(obligation, event) => {
               setAnalyticsObligationId(null);
-              openPaymentEditDialog(obligation, event);
+              if (event.eventType === "principal_increase" || event.eventType === "principal_decrease") openPrincipalAdjustmentEditDialog(obligation, event);
+              else openPaymentEditDialog(obligation, event);
             }}
           />
         ) : null;
@@ -5277,12 +5313,15 @@ export function ObligationsPage() {
           accounts={accounts}
           feedback={principalAdjustmentFeedback}
           formState={principalAdjustmentFormState}
+          editEventAmount={principalAdjustmentEditEventId === null ? 0 : principalAdjustmentTarget.events.find((event) => event.id === principalAdjustmentEditEventId)?.amount ?? 0}
+          isEditMode={principalAdjustmentEditEventId !== null}
           isSaving={isAdjustingPrincipal}
           mode={principalAdjustmentMode}
           obligation={principalAdjustmentTarget}
           onCancel={() => {
             if (!isAdjustingPrincipal) {
               setPrincipalAdjustmentTargetId(null);
+              setPrincipalAdjustmentEditEventId(null);
             }
           }}
           onSubmit={handleSubmitPrincipalAdjustment}
@@ -5338,11 +5377,11 @@ export function ObligationsPage() {
 
       {eventDeleteTarget ? (
         <DeleteConfirmDialog
-          badge="Eliminar abono"
+          badge={eventDeleteTarget.event.eventType === "payment" ? "Eliminar abono" : "Eliminar ajuste"}
           description={
             eventDeleteTarget.event.movementId
-              ? "El abono vuelve al saldo pendiente y tambien se borra el movimiento que creo en tu cuenta."
-              : "El abono vuelve al saldo pendiente del registro."
+              ? "Se recalculará el registro y también se borrará el movimiento asociado."
+              : "Se recalcularán el principal y el saldo pendiente del registro."
           }
           isDeleting={eventDeleteMutation.isPending}
           onCancel={() => {

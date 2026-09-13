@@ -620,10 +620,12 @@ export type ObligationPaymentFormInput = {
 export type ObligationEventUpdateFormInput = {
   eventId: number;
   obligationId: number;
+  eventType?: "payment" | "principal_increase" | "principal_decrease";
   eventDate: string;
   amount: number;
   installmentNo?: number | null;
   description?: string | null;
+  reason?: string | null;
   notes?: string | null;
   movementId?: number | null;
   registerAccountMovement?: boolean;
@@ -5514,6 +5516,7 @@ export function useUpdateObligationEventMutation(workspaceId?: number, userId?: 
           amount: input.amount,
           installment_no: input.installmentNo ?? null,
           description: normalizeOptionalText(input.description),
+          reason: normalizeOptionalText(input.reason),
           notes: normalizeOptionalText(input.notes),
           metadata: {
             registerAccountMovement: shouldRegisterMovement,
@@ -5527,18 +5530,9 @@ export function useUpdateObligationEventMutation(workspaceId?: number, userId?: 
         throw updateError;
       }
 
-      const movementPayload = buildObligationPaymentMovement(
-        {
-          obligationId: input.obligationId,
-          eventDate: input.eventDate,
-          amount: input.amount,
-          description: input.description,
-          notes: input.notes,
-          accountId: input.accountId,
-        },
-        obligationRow,
-        input.eventId,
-      );
+      const movementPayload = input.eventType === "principal_increase" || input.eventType === "principal_decrease"
+        ? buildObligationPrincipalAdjustmentMovement({ obligationId: input.obligationId, eventType: input.eventType, eventDate: input.eventDate, amount: input.amount, reason: input.reason ?? "Ajuste de principal", notes: input.notes, accountId: input.accountId, currentPrincipalAmount: 0, currentPendingAmount: 0 }, obligationRow)
+        : buildObligationPaymentMovement({ obligationId: input.obligationId, eventDate: input.eventDate, amount: input.amount, description: input.description, notes: input.notes, accountId: input.accountId }, obligationRow, input.eventId);
 
       if (shouldRegisterMovement && currentMovementId) {
         const { error: movementUpdateError } = await client

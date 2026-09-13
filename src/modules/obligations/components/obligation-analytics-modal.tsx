@@ -325,9 +325,9 @@ export function ObligationAnalyticsModal({
                         </p>
                       )}
                     </div>
-                    {/* Solo los abonos: los ajustes de principal llevan motivo
-                        obligatorio y su propio historial. */}
-                    {e.eventType === "payment" && (onEditEvent || onDeleteEvent) ? (
+                    {/* Los eventos que cambian saldos se pueden corregir sin
+                        perder su movimiento de cuenta vinculado. */}
+                    {(e.eventType === "payment" || e.eventType === "principal_increase" || e.eventType === "principal_decrease") && (onEditEvent || onDeleteEvent) ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {onEditEvent ? (
                           <button
