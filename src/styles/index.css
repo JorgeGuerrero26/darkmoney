@@ -470,6 +470,25 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+.app-v39 .account-editor-field,
+.app-v39 .account-editor-field:hover,
+.app-v39 .account-editor-field:focus {
+  border-color: rgba(244, 241, 236, 0.12) !important;
+  background: #141311 !important;
+  box-shadow: none !important;
+}
+
+.app-v39 .account-editor-field:focus,
+.app-v39 .account-editor-field:focus-visible {
+  border-color: rgba(244, 241, 236, 0.34) !important;
+  outline: 2px solid rgba(244, 241, 236, 0.08);
+  outline-offset: 2px;
+}
+
+.app-v39 .account-editor-required > span > span {
+  color: #d6b69b !important;
+}
+
 /* Skip to content link */
 .skip-to-content {
   position: absolute;

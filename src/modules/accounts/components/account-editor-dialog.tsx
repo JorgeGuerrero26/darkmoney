@@ -39,6 +39,9 @@ type AccountEditorDialogProps = {
   selectedAccount: AccountSummary | null;
 };
 
+const neutralFieldClassName = "account-editor-field";
+const neutralRequiredClassName = "account-editor-required";
+
 function ensureCurrencyOption(options: PickerOption[], currencyCode: string): PickerOption[] {
   if (!currencyCode || options.some((option) => option.value === currencyCode)) return options;
   const currency = buildCurrencyLabel(currencyCode);
@@ -119,8 +122,8 @@ export function AccountEditorDialog({
 
           {activePanel === "main" ? (
             <div className="space-y-5">
-              <FormField error={formErrors.openingBalance} errorKey="openingBalance" label="Saldo inicial" required>
-                <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" inputMode="decimal" onChange={(event) => onFieldChange("openingBalance", event.target.value)} placeholder="0.00" type="number" value={formState.openingBalance} />
+              <FormField className={neutralRequiredClassName} error={formErrors.openingBalance} errorKey="openingBalance" label="Saldo inicial" required>
+                <Input autoFocus className={`h-16 font-display text-[2rem] font-semibold ${neutralFieldClassName}`} inputMode="decimal" onChange={(event) => onFieldChange("openingBalance", event.target.value)} placeholder="0.00" type="number" value={formState.openingBalance} />
               </FormField>
 
               <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm">
@@ -128,11 +131,11 @@ export function AccountEditorDialog({
                 <span className="font-semibold text-ink">{formatCurrency(projectedBalance, formState.currencyCode || baseCurrencyCode)}</span>
               </div>
 
-              <FormField error={formErrors.name} errorKey="name" label="Nombre" required>
-                <Input onChange={(event) => onFieldChange("name", event.target.value)} placeholder="Ej. Cuenta Principal" value={formState.name} />
+              <FormField className={neutralRequiredClassName} error={formErrors.name} errorKey="name" label="Nombre" required>
+                <Input className={neutralFieldClassName} onChange={(event) => onFieldChange("name", event.target.value)} placeholder="Ej. Cuenta Principal" value={formState.name} />
               </FormField>
 
-              <FormField error={formErrors.type} errorKey="type" label="Tipo" required>
+              <FormField className={neutralRequiredClassName} error={formErrors.type} errorKey="type" label="Tipo" required>
                 <SearchablePicker appearance="compact" emptyMessage="No hay tipos disponibles." onChange={onTypeChange} options={typeOptions} placeholderDescription="Selecciona un tipo." placeholderLabel="Tipo de cuenta" queryPlaceholder="Buscar tipo..." value={formState.type} />
               </FormField>
 
@@ -152,15 +155,15 @@ export function AccountEditorDialog({
             </div>
           ) : (
             <div className="space-y-5">
-              <FormField error={formErrors.currencyCode} errorKey="currencyCode" label="Moneda" required>
+              <FormField className={neutralRequiredClassName} error={formErrors.currencyCode} errorKey="currencyCode" label="Moneda" required>
                 <SearchablePicker appearance="compact" emptyMessage="No hay monedas disponibles." onChange={(value) => onFieldChange("currencyCode", value)} options={currencyOptions} placeholderDescription="Selecciona una moneda." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} />
               </FormField>
 
-              <FormField error={formErrors.icon} errorKey="icon" label="Ícono" required>
+              <FormField className={neutralRequiredClassName} error={formErrors.icon} errorKey="icon" label="Ícono" required>
                 <SearchablePicker appearance="compact" emptyMessage="No hay íconos disponibles." onChange={(value) => onFieldChange("icon", value)} options={iconOptions} placeholderDescription="Selecciona un ícono." placeholderLabel="Ícono" queryPlaceholder="Buscar ícono..." value={formState.icon} />
               </FormField>
 
-              <FormField error={formErrors.color} errorKey="color" label="Color" required>
+              <FormField className={neutralRequiredClassName} error={formErrors.color} errorKey="color" label="Color" required>
                 <div className="grid grid-cols-6 gap-2 sm:grid-cols-12">
                   {editorColorSwatches.map((swatch) => {
                     const isSelected = swatch.toLowerCase() === formState.color.toLowerCase();
@@ -178,14 +181,14 @@ export function AccountEditorDialog({
                 </span>
                 <span className="relative inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
                   <input checked={formState.includeInNetWorth} className="peer sr-only" onChange={(event) => onFieldChange("includeInNetWorth", event.target.checked)} type="checkbox" />
-                  <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-white/20 text-transparent transition peer-checked:border-pine peer-checked:bg-pine peer-checked:text-void peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40">
+                  <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border border-white/20 text-transparent transition peer-checked:border-ink peer-checked:bg-ink peer-checked:text-void peer-focus-visible:ring-2 peer-focus-visible:ring-ink/25">
                     <Check className="h-3 w-3" strokeWidth={3} />
                   </span>
                 </span>
               </label>
 
               <FormField error={formErrors.notes} errorKey="notes" label="Notas">
-                <Textarea className="min-h-[96px]" onChange={(event) => onFieldChange("notes", event.target.value)} placeholder="Uso de la cuenta o recordatorios internos." value={formState.notes} />
+                <Textarea className={`min-h-[96px] ${neutralFieldClassName}`} onChange={(event) => onFieldChange("notes", event.target.value)} placeholder="Uso de la cuenta o recordatorios internos." value={formState.notes} />
               </FormField>
 
               <p className="text-xs leading-5 text-storm/70">
