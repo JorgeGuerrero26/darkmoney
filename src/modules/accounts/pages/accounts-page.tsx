@@ -1,5 +1,5 @@
-import { Archive } from "lucide-react";
-import type { FormEvent } from "react";
+import { Archive, Check, Download, MoreVertical, Plus, RefreshCw } from "lucide-react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
@@ -11,14 +11,13 @@ import { type ColumnDef, useColumnVisibility } from "../../../components/ui/colu
 import { DataState } from "../../../components/ui/data-state";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
-import { InfoTip } from "../../../components/ui/info-tip";
 import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { Pagination } from "../../../components/ui/pagination";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
-import { formatCurrency } from "../../../lib/formatting/money";
+import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
 import {
   getQueryErrorMessage,
   useArchiveAccountMutation,
@@ -33,8 +32,6 @@ import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import { AccountArchiveDialog } from "../components/account-archive-dialog";
 import { AccountEditorDialog } from "../components/account-editor-dialog";
-import { AccountsGrid } from "../components/accounts-grid";
-import { AccountsList } from "../components/accounts-list";
 import { AccountsTable } from "../components/accounts-table";
 import { AccountsToolbar } from "../components/accounts-toolbar";
 import { useAccountEditor } from "../hooks/use-account-editor";
@@ -62,7 +59,7 @@ const accountColumns: ColumnDef[] = [
   { key: "balance", label: "Saldo actual" },
   { key: "currency", label: "Moneda" },
   { key: "status", label: "Estado" },
-  { key: "activity", label: "Ultima actividad", defaultVisible: false },
+  { key: "activity", label: "Última actividad", defaultVisible: false },
 ];
 
 function AccountsLoadingSkeleton() {
@@ -75,23 +72,17 @@ function AccountsLoadingSkeleton() {
   );
 }
 
-function AccountsModuleHeader({ totalCount }: { totalCount?: number }) {
+function AccountsModuleHeader({ actions, totalCount, visibleCount }: { actions?: ReactNode; totalCount?: number; visibleCount?: number }) {
   return (
-    <section className="min-w-0">
-      <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Dinero</p>
-      <div className="mt-1 flex items-center gap-2.5">
-        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
-          Cuentas
-        </h1>
-        <InfoTip title="Objetivo del modulo">
-          Inventario operativo para saber donde esta tu dinero, que suma al patrimonio y que
-          requiere orden antes de tomar decisiones. Administra saldos, monedas, archivo e impacto
-          patrimonial desde una vista pensada para operar rapido y revisar con contexto.
-        </InfoTip>
+    <section className="relative z-40 flex min-w-0 items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Cuentas</h1>
+        <p className="mt-1 text-sm text-storm">
+          {typeof visibleCount === "number" ? <><span className="text-ink">{visibleCount}</span> cuentas en esta vista</> : "Consulta tus saldos y disponibilidad."}
+          {typeof totalCount === "number" && visibleCount !== totalCount ? <> · {totalCount} registradas</> : null}
+        </p>
       </div>
-      <p className="mt-1 text-sm text-storm">
-        {typeof totalCount === "number" ? `${totalCount} cuentas registradas. ` : ""}Consulta saldos y disponibilidad sin repetir el mismo conteo en tarjetas.
-      </p>
+      {actions}
     </section>
   );
 }
@@ -157,7 +148,7 @@ export function AccountsPage() {
   const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
-  const [openTableFilter, setOpenTableFilter] = useState<"q" | "type" | "currency" | "status" | null>(null);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const { schedule } = useUndoQueue();
 
   const accounts = useMemo(
@@ -173,6 +164,15 @@ export function AccountsPage() {
     () => filterAccounts(accounts, filters),
     [accounts, filters],
   );
+  const hasActiveFilters = Boolean(
+    filters.q.trim() || filters.type || filters.currency || filters.status !== "active",
+  );
+  const filteredActiveAccounts = filteredAccounts.filter((account) => !account.isArchived);
+  const filteredPatrimony = resolveAggregateBalanceDisplay(
+    filteredActiveAccounts.filter((account) => account.includeInNetWorth),
+    baseCurrencyCode,
+  );
+  const filteredExcludedCount = filteredActiveAccounts.filter((account) => !account.includeInNetWorth).length;
   const paginatedAccounts = useMemo(
     () => paginateAccounts(filteredAccounts, filters.page, ACCOUNT_PAGE_SIZE),
     [filteredAccounts, filters.page],
@@ -484,30 +484,73 @@ export function AccountsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <AccountsModuleHeader totalCount={accounts.length} />
+        <AccountsModuleHeader
+          actions={
+            <div className="flex shrink-0 items-center gap-2">
+              <Button onClick={openCreateEditor}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva cuenta
+              </Button>
+              <div className="relative">
+                <button
+                  aria-expanded={isActionsMenuOpen}
+                  aria-label="Más opciones de cuentas"
+                  className="grid h-9 w-9 place-items-center rounded-[7px] border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink"
+                  onClick={() => setIsActionsMenuOpen((current) => !current)}
+                  type="button"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {isActionsMenuOpen ? (
+                  <>
+                    <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
+                    <div className="absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
+                      <p className="px-4 pb-2 pt-4 font-public-mono text-[10px] uppercase tracking-[0.16em] text-storm">Columnas visibles</p>
+                      {accountColumns.map((column) => (
+                        <button
+                          aria-checked={visibleColumns[column.key]}
+                          className={`flex h-9 w-full items-center gap-3 px-4 text-left text-sm transition hover:bg-white/[0.05] ${visibleColumns[column.key] ? "bg-white/[0.035] text-ink" : "text-storm"}`}
+                          key={column.key}
+                          onClick={() => toggleColumn(column.key)}
+                          role="menuitemcheckbox"
+                          type="button"
+                        >
+                          <Check className={`h-3.5 w-3.5 ${visibleColumns[column.key] ? "text-[#d6b69b] opacity-100" : "opacity-0"}`} />
+                          {column.label}
+                        </button>
+                      ))}
+                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { void snapshotQuery.refetch(); setIsActionsMenuOpen(false); }} type="button">
+                        <RefreshCw className={`h-4 w-4 ${snapshotQuery.isFetching ? "animate-spin" : ""}`} />Actualizar
+                      </button>
+                      {hasActiveFilters ? (
+                        <button className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { resetFilters(); setIsActionsMenuOpen(false); }} type="button">Limpiar filtros</button>
+                      ) : null}
+                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm font-medium text-ink hover:bg-white/[0.04] disabled:text-storm/45" disabled={!filteredAccounts.length} onClick={() => { downloadAccountsCSV(filteredAccounts, `cuentas-${new Date().toISOString().slice(0, 10)}.csv`); setIsActionsMenuOpen(false); }} type="button">
+                        <Download className="h-4 w-4" />Exportar las {filteredAccounts.length}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          }
+          totalCount={accounts.length}
+          visibleCount={filteredAccounts.length}
+        />
 
         <AccountsToolbar
           availableCurrencyCodes={availableCurrencyCodes}
           availableTypes={availableTypes}
-          canExport={filteredAccounts.length > 0}
-          columns={accountColumns}
-          filteredCount={filteredAccounts.length}
           filters={filters}
-          isFetching={snapshotQuery.isFetching}
-          onCreate={openCreateEditor}
-          onExport={() =>
-            downloadAccountsCSV(
-              filteredAccounts,
-              `cuentas-${new Date().toISOString().slice(0, 10)}.csv`,
-            )
-          }
-          onRefresh={() => void snapshotQuery.refetch()}
-          onResetFilters={resetFilters}
-          onToggleColumn={toggleColumn}
           onUpdateFilters={writeFilters}
-          totalCount={accounts.length}
-          visibleColumns={visibleColumns}
         />
+
+        <section className="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-4 py-3 text-sm">
+          <p className="mr-auto text-storm">Las <span className="font-medium text-ink">{filteredAccounts.length}</span> del filtro</p>
+          <p className="text-storm">Patrimonio <span className="font-medium text-ink">{formatCurrency(filteredPatrimony.amount, filteredPatrimony.currencyCode)}</span></p>
+          <p className="text-storm">Activas <span className="font-medium text-ink">{filteredActiveAccounts.length}</span></p>
+          <p className="text-storm">Fuera de patrimonio <span className="font-medium text-ink">{filteredExcludedCount}</span></p>
+        </section>
 
         {errorMessage && !editor.isEditorOpen ? (
           <FormFeedbackBanner
@@ -524,50 +567,21 @@ export function AccountsPage() {
           <NoFilteredAccountsState onReset={resetFilters} status={filters.status} />
         ) : (
           <div className="space-y-4">
-            {filters.view === "table" ? (
-              <AccountsTable
+            <AccountsTable
                 accounts={paginatedAccounts.items}
                 allSelected={allSelected}
-                availableCurrencyCodes={availableCurrencyCodes}
-                availableTypes={availableTypes}
-                filters={filters}
                 onArchive={handleArchiveToggle}
-                onCloseFilterMenu={() => setOpenTableFilter(null)}
                 onEdit={openEditEditor}
                 onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
                 onSelectAll={() => (allSelected ? clearAll() : selectAll())}
-                onToggleFilterMenu={(field) => setOpenTableFilter((current) => (current === field ? null : field))}
                 onToggleSelect={toggleSelect}
-                onUpdateFilters={writeFilters}
-                openFilter={openTableFilter}
                 selectedIds={selectedIds}
                 someSelected={someSelected}
                 visibleColumns={visibleColumns}
               />
-            ) : filters.view === "list" ? (
-              <AccountsList
-                accounts={paginatedAccounts.items}
-                onArchive={handleArchiveToggle}
-                onEdit={openEditEditor}
-                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
-                onToggleSelect={toggleSelect}
-                selectedCount={selectedCount}
-                selectedIds={selectedIds}
-              />
-            ) : (
-              <AccountsGrid
-                accounts={paginatedAccounts.items}
-                onArchive={handleArchiveToggle}
-                onEdit={openEditEditor}
-                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
-                onToggleSelect={toggleSelect}
-                selectedCount={selectedCount}
-                selectedIds={selectedIds}
-              />
-            )}
 
             <Pagination
-              className="glass-panel-soft rounded-[24px] px-4 py-3"
+              className="mt-5"
               onPageChange={(page) => writeFilters({ page })}
               page={paginatedAccounts.page}
               pageSize={ACCOUNT_PAGE_SIZE}
