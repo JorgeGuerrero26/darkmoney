@@ -12,6 +12,7 @@ type AccountsTableProps = {
   allSelected: boolean;
   onArchive: (account: AccountSummary) => void;
   onEdit: (account: AccountSummary) => void;
+  onOpen: (account: AccountSummary) => void;
   onOpenAnalytics: (account: AccountSummary) => void;
   onSelectAll: () => void;
   onToggleSelect: (id: number) => void;
@@ -25,6 +26,7 @@ export function AccountsTable({
   allSelected,
   onArchive,
   onEdit,
+  onOpen,
   onOpenAnalytics,
   onSelectAll,
   onToggleSelect,
@@ -57,11 +59,11 @@ export function AccountsTable({
           <div
             className="grid min-h-[60px] cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] sm:px-0"
             key={account.id}
-            onClick={() => onEdit(account)}
+            onClick={() => onOpen(account)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onEdit(account);
+                onOpen(account);
               }
             }}
             role="button"

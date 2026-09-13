@@ -64,6 +64,7 @@ import {
 export type QuickMovementKind = "expense" | "income" | "transfer";
 
 type QuickMovementDialogProps = {
+  initialAccountId?: number | null;
   initialKind: QuickMovementKind;
   onClose: () => void;
   onCreated: (message: string) => void;
@@ -150,9 +151,13 @@ function toDateTimeLocalValue(value: string) {
   return new Date(parsedDate.getTime() - timezoneOffsetInMs).toISOString().slice(0, 16);
 }
 
-function createDefaultQuickMovementFormState(): QuickMovementFormState {
+function createDefaultQuickMovementFormState(
+  initialKind: QuickMovementKind = "expense",
+  initialAccountId?: number | null,
+): QuickMovementFormState {
+  const accountValue = initialAccountId ? String(initialAccountId) : "";
   return {
-    accountId: "",
+    accountId: initialKind === "transfer" ? "" : accountValue,
     amount: "",
     categoryId: "",
     counterpartyId: "",
@@ -160,7 +165,7 @@ function createDefaultQuickMovementFormState(): QuickMovementFormState {
     destinationAccountId: "",
     destinationAmount: "",
     occurredAt: toDateTimeLocalValue(new Date().toISOString()),
-    sourceAccountId: "",
+    sourceAccountId: initialKind === "transfer" ? accountValue : "",
     status: "posted",
   };
 }
@@ -308,6 +313,7 @@ function QuickInput({ className = "", ...props }: InputHTMLAttributes<HTMLInputE
 
 
 export function QuickMovementDialog({
+  initialAccountId,
   initialKind,
   onClose,
   onCreated,
@@ -319,7 +325,7 @@ export function QuickMovementDialog({
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const [kind, setKind] = useState<QuickMovementKind>(initialKind);
   const [formState, setFormState] = useState<QuickMovementFormState>(() =>
-    createDefaultQuickMovementFormState(),
+    createDefaultQuickMovementFormState(initialKind, initialAccountId),
   );
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);

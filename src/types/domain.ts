@@ -139,6 +139,7 @@ export type AccountSummary = {
   color: string;
   icon: string;
   isArchived: boolean;
+  institutionCode?: string | null;
   notes?: string | null;
 };
 

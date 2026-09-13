@@ -1,6 +1,7 @@
 import { Archive, Check, Download, MoreVertical, Plus, RefreshCw } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -32,10 +33,13 @@ import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import { AccountArchiveDialog } from "../components/account-archive-dialog";
 import { AccountEditorDialog } from "../components/account-editor-dialog";
+import { AccountDetailDialog } from "../components/account-detail-dialog";
+import { AccountComposition } from "../components/account-composition";
 import { AccountsTable } from "../components/accounts-table";
 import { AccountsToolbar } from "../components/accounts-toolbar";
 import { useAccountEditor } from "../hooks/use-account-editor";
 import { useAccountFilters } from "../hooks/use-account-filters";
+import { useAccountsRealtimeSync } from "../hooks/use-accounts-realtime-sync";
 import {
   ACCOUNT_PAGE_SIZE,
   filterAccounts,
@@ -120,6 +124,7 @@ function NoFilteredAccountsState({
 }
 
 export function AccountsPage() {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const {
     activeWorkspace,
@@ -127,6 +132,7 @@ export function AccountsPage() {
     isLoading: isWorkspacesLoading,
   } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  useAccountsRealtimeSync(activeWorkspace?.id);
   const snapshot = snapshotQuery.data;
   const baseCurrencyCode =
     snapshot?.workspace.baseCurrencyCode ??
@@ -146,6 +152,7 @@ export function AccountsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
+  const [detailAccountId, setDetailAccountId] = useState<number | null>(null);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
@@ -184,6 +191,10 @@ export function AccountsPage() {
   const analyticsAccount =
     analyticsAccountId !== null
       ? accounts.find((account) => account.id === analyticsAccountId) ?? null
+      : null;
+  const detailAccount =
+    detailAccountId !== null
+      ? accounts.find((account) => account.id === detailAccountId) ?? null
       : null;
   const editor = useAccountEditor({
     accounts,
@@ -552,6 +563,12 @@ export function AccountsPage() {
           <p className="text-storm">Fuera de patrimonio <span className="font-medium text-ink">{filteredExcludedCount}</span></p>
         </section>
 
+        <AccountComposition
+          accounts={accounts}
+          baseCurrencyCode={baseCurrencyCode}
+          exchangeRates={snapshot.exchangeRates}
+        />
+
         {errorMessage && !editor.isEditorOpen ? (
           <FormFeedbackBanner
             description={errorMessage}
@@ -573,6 +590,7 @@ export function AccountsPage() {
                 onArchive={handleArchiveToggle}
                 onEdit={openEditEditor}
                 onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
+                onOpen={(account) => setDetailAccountId(account.id)}
                 onSelectAll={() => (allSelected ? clearAll() : selectAll())}
                 onToggleSelect={toggleSelect}
                 selectedIds={selectedIds}
@@ -606,6 +624,27 @@ export function AccountsPage() {
           onSubmit={handleSubmit}
           onTypeChange={handleTypeChange}
           selectedAccount={editor.selectedAccount}
+        />
+      ) : null}
+
+      {detailAccount ? (
+        <AccountDetailDialog
+          account={detailAccount}
+          movements={snapshot.movements}
+          onAnalyze={() => {
+            setDetailAccountId(null);
+            setAnalyticsAccountId(detailAccount.id);
+          }}
+          onArchive={() => {
+            setDetailAccountId(null);
+            handleArchiveToggle(detailAccount);
+          }}
+          onClose={() => setDetailAccountId(null)}
+          onEdit={() => {
+            setDetailAccountId(null);
+            openEditEditor(detailAccount);
+          }}
+          onViewMovements={() => navigate(`/app/movements?account=${encodeURIComponent(detailAccount.name)}&period=all`)}
         />
       ) : null}
 

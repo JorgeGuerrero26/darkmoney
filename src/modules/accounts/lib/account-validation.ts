@@ -16,6 +16,7 @@ export type AccountFormState = {
   includeInNetWorth: boolean;
   color: string;
   icon: string;
+  institutionCode: string;
   notes: string;
 };
 
@@ -34,6 +35,7 @@ export function createDefaultFormState(currencyCode: string): AccountFormState {
     includeInNetWorth: true,
     color: preset.color,
     icon: preset.icon,
+    institutionCode: "",
     notes: "",
   };
 }
@@ -47,6 +49,7 @@ export function buildFormStateFromAccount(account: AccountSummary): AccountFormS
     includeInNetWorth: account.includeInNetWorth,
     color: account.color,
     icon: account.icon || getTypePreset(account.type).icon,
+    institutionCode: account.institutionCode ?? "",
     notes: account.notes ?? "",
   };
 }
@@ -97,6 +100,7 @@ export function toAccountInput(formState: AccountFormState): AccountFormInput {
     includeInNetWorth: formState.includeInNetWorth,
     color: formState.color,
     icon: formState.icon,
+    institutionCode: formState.institutionCode.trim() || null,
     notes: formState.notes.trim() || null,
   };
 }

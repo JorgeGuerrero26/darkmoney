@@ -22,6 +22,7 @@ import {
   getTypePreset,
 } from "../lib/account-options";
 import type { AccountFormErrors, AccountFormField, AccountFormState } from "../lib/account-validation";
+import { buildAccountInstitutionPickerOptions } from "../lib/account-institutions";
 
 type AccountEditorDialogProps = {
   baseCurrencyCode: string;
@@ -77,6 +78,7 @@ export function AccountEditorDialog({
     [formState.currencyCode],
   );
   const iconOptions = useMemo(() => buildIconPickerOptions(formState.color), [formState.color]);
+  const institutionOptions = useMemo(() => buildAccountInstitutionPickerOptions(), []);
   const typePreset = getTypePreset(formState.type);
   const iconOption = getIconOption(formState.icon || typePreset.icon);
   const parsedOpeningBalance = Number(formState.openingBalance);
@@ -155,6 +157,19 @@ export function AccountEditorDialog({
             </div>
           ) : (
             <div className="space-y-5">
+              <FormField label="Institución">
+                <SearchablePicker
+                  appearance="compact"
+                  emptyMessage="No hay instituciones disponibles."
+                  onChange={(value) => onFieldChange("institutionCode", value === "none" ? "" : value)}
+                  options={institutionOptions}
+                  placeholderDescription="Banco, billetera o plataforma."
+                  placeholderLabel="Sin institución"
+                  queryPlaceholder="Buscar institución..."
+                  value={formState.institutionCode || "none"}
+                />
+              </FormField>
+
               <FormField className={neutralRequiredClassName} error={formErrors.currencyCode} errorKey="currencyCode" label="Moneda" required>
                 <SearchablePicker appearance="compact" emptyMessage="No hay monedas disponibles." onChange={(value) => onFieldChange("currencyCode", value)} options={currencyOptions} placeholderDescription="Selecciona una moneda." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} />
               </FormField>

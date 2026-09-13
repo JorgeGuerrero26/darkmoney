@@ -85,6 +85,7 @@ type AccountRow = {
   include_in_net_worth: boolean;
   color: string | null;
   icon: string | null;
+  institution_code: string | null;
   notes: string | null;
   is_archived: boolean;
   sort_order: number;
@@ -550,6 +551,7 @@ export type AccountFormInput = {
   includeInNetWorth: boolean;
   color: string;
   icon: string;
+  institutionCode?: string | null;
   notes?: string | null;
 };
 
@@ -1613,7 +1615,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("accounts")
       .select(
-        "id, workspace_id, name, type, currency_code, opening_balance, include_in_net_worth, color, icon, notes, is_archived, sort_order, created_at, updated_at",
+        "id, workspace_id, name, type, currency_code, opening_balance, include_in_net_worth, color, icon, institution_code, notes, is_archived, sort_order, created_at, updated_at",
       )
       .eq("workspace_id", workspace.id)
       .order("sort_order", { ascending: true })
@@ -1870,6 +1872,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
         color: row.color ?? defaultAccountColors[row.type] ?? defaultAccountColors.other,
         icon: row.icon ?? row.type,
         isArchived: row.is_archived,
+        institutionCode: row.institution_code,
         notes: row.notes,
       };
     });
@@ -3922,6 +3925,7 @@ export function useCreateAccountMutation(workspaceId?: number, userId?: string) 
         include_in_net_worth: input.includeInNetWorth,
         color: input.color,
         icon: input.icon,
+        institution_code: input.institutionCode?.trim() || null,
         notes: input.notes?.trim() || null,
         sort_order: input.sortOrder,
         is_archived: false,
@@ -3956,6 +3960,7 @@ export function useUpdateAccountMutation(workspaceId?: number, userId?: string) 
           include_in_net_worth: input.includeInNetWorth,
           color: input.color,
           icon: input.icon,
+          institution_code: input.institutionCode?.trim() || null,
           notes: input.notes?.trim() || null,
         })
         .eq("id", input.accountId)

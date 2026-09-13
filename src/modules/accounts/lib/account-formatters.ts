@@ -1,4 +1,5 @@
 import type { AccountSummary } from "../../../types/domain";
+import { findAccountInstitution } from "./account-institutions";
 
 function escapeCsv(value: string | number | boolean | null | undefined): string {
   const rawValue = value ?? "";
@@ -10,6 +11,7 @@ export function buildAccountsCsv(accounts: AccountSummary[]) {
   const header = [
     "Nombre",
     "Tipo",
+    "Institución",
     "Moneda",
     "Saldo inicial",
     "Saldo actual",
@@ -20,6 +22,7 @@ export function buildAccountsCsv(accounts: AccountSummary[]) {
   const rows = accounts.map((account) => [
     account.name,
     account.type,
+    findAccountInstitution(account.institutionCode)?.label ?? "",
     account.currencyCode,
     account.openingBalance,
     account.currentBalance,

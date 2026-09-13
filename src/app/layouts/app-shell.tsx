@@ -43,6 +43,10 @@ import {
   type QuickMovementKind,
 } from "../../modules/movements/components/quick-movement-dialog";
 import {
+  QUICK_MOVEMENT_EVENT,
+  type QuickMovementEventDetail,
+} from "../../modules/movements/lib/quick-movement-event";
+import {
   isActionRequiredNotificationKind,
   useNotificationInbox,
   type InboxNotification,
@@ -405,6 +409,7 @@ function AppShellContent() {
   const [isQuickMovementOpen, setIsQuickMovementOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
   const [quickMovementKind, setQuickMovementKind] = useState<QuickMovementKind>("expense");
+  const [quickMovementAccountId, setQuickMovementAccountId] = useState<number | null>(null);
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -579,14 +584,26 @@ function AppShellContent() {
     }
   }
 
-  function openQuickMovement(kind: QuickMovementKind) {
+  function openQuickMovement(kind: QuickMovementKind, accountId: number | null = null) {
     if (!activeWorkspace || !user?.id || !workspaceSnapshotQuery.data) {
       return;
     }
 
     setQuickMovementKind(kind);
+    setQuickMovementAccountId(accountId);
     setIsQuickMovementOpen(true);
   }
+
+  useEffect(() => {
+    function handleQuickMovement(event: Event) {
+      const detail = (event as CustomEvent<QuickMovementEventDetail>).detail;
+      if (!detail?.kind) return;
+      openQuickMovement(detail.kind, detail.accountId ?? null);
+    }
+
+    window.addEventListener(QUICK_MOVEMENT_EVENT, handleQuickMovement);
+    return () => window.removeEventListener(QUICK_MOVEMENT_EVENT, handleQuickMovement);
+  }, [activeWorkspace, user?.id, workspaceSnapshotQuery.data]);
 
   const canUseQuickMovement =
     Boolean(activeWorkspace && user?.id && workspaceSnapshotQuery.data) &&
@@ -1270,10 +1287,12 @@ function AppShellContent() {
 
       {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data ? (
         <QuickMovementDialog
+          initialAccountId={quickMovementAccountId}
           initialKind={quickMovementKind}
-          onClose={() => setIsQuickMovementOpen(false)}
+          onClose={() => { setIsQuickMovementOpen(false); setQuickMovementAccountId(null); }}
           onCreated={(message) => {
             setIsQuickMovementOpen(false);
+            setQuickMovementAccountId(null);
             showToast({ title: "Movimiento registrado", description: message, tone: "success" });
           }}
           snapshot={workspaceSnapshotQuery.data}
