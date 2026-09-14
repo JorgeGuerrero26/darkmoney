@@ -1,6 +1,7 @@
-import { AlertTriangle, Check, ChevronRight, Gauge, Paperclip, Repeat2, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Gauge, Repeat2, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
-import { useId } from "react";
+
+import { PendingAttachmentControl } from "../../attachments/components/compact-attachment-field";
 
 type MovementDetailsPanelProps = {
   categoryLabel?: string;
@@ -58,43 +59,7 @@ export function PendingMovementReceiptControl({
   lockedMessage: string;
   onChange: (file: File | null) => void;
 }) {
-  const inputId = useId();
-
-  if (!canUpload) {
-    return <span className="truncate text-right text-xs text-storm/70">{lockedMessage}</span>;
-  }
-
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <input
-        accept="image/jpeg,image/png,image/webp"
-        className="sr-only"
-        id={inputId}
-        onChange={(event) => {
-          onChange(event.target.files?.[0] ?? null);
-          event.currentTarget.value = "";
-        }}
-        type="file"
-      />
-      <label
-        className="flex min-w-0 cursor-pointer items-center gap-2 text-sm text-storm transition hover:text-ink"
-        htmlFor={inputId}
-      >
-        <span className="max-w-48 truncate">{file?.name ?? "Adjuntar"}</span>
-        <Paperclip className="h-4 w-4 shrink-0" />
-      </label>
-      {file ? (
-        <button
-          aria-label="Quitar comprobante"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-          onClick={() => onChange(null)}
-          type="button"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
-    </div>
-  );
+  return <PendingAttachmentControl canUpload={canUpload} file={file} lockedMessage={lockedMessage} onChange={onChange} />;
 }
 
 export function MovementDetailsNavigationRow({

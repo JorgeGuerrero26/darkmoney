@@ -1,4 +1,4 @@
-import { ExternalLink, LoaderCircle, Paperclip, Trash2 } from "lucide-react";
+import { ExternalLink, LoaderCircle, Paperclip, Trash2, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 
 import type { AttachmentSummary } from "../../../types/domain";
@@ -14,6 +14,13 @@ type CompactAttachmentFieldProps = {
   onUpload: (file: File) => void;
 };
 
+type PendingAttachmentControlProps = {
+  canUpload: boolean;
+  file: File | null;
+  lockedMessage: string;
+  onChange: (file: File | null) => void;
+};
+
 function formatFileSize(sizeBytes: number) {
   if (sizeBytes >= 1024 * 1024) {
     return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -22,6 +29,36 @@ function formatFileSize(sizeBytes: number) {
     return `${(sizeBytes / 1024).toFixed(0)} KB`;
   }
   return `${sizeBytes} B`;
+}
+
+export function PendingAttachmentControl({ canUpload, file, lockedMessage, onChange }: PendingAttachmentControlProps) {
+  const inputId = useId();
+
+  if (!canUpload) {
+    return <span className="max-w-48 truncate text-right text-xs text-storm/65" title={lockedMessage}>Disponible con Pro</span>;
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <input accept="image/*" className="sr-only" id={inputId} onChange={(event) => { onChange(event.target.files?.[0] ?? null); event.currentTarget.value = ""; }} type="file" />
+      <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm font-medium text-storm transition hover:text-ink" htmlFor={inputId}>
+        <span className="max-w-48 truncate">{file?.name ?? "Adjuntar"}</span>
+        <Paperclip className="h-4 w-4 shrink-0" />
+      </label>
+      {file ? <button aria-label="Quitar comprobante" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink" onClick={() => onChange(null)} type="button"><X className="h-3.5 w-3.5" /></button> : null}
+    </div>
+  );
+}
+
+export function CompactPendingAttachmentField(props: PendingAttachmentControlProps) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
+      <div className="flex min-h-[54px] items-center justify-between gap-4 px-4">
+        <span className="shrink-0 text-sm font-medium text-ink">Comprobante</span>
+        <PendingAttachmentControl {...props} />
+      </div>
+    </div>
+  );
 }
 
 export function CompactAttachmentField({
