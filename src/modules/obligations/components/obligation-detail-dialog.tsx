@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, BarChart3, Pencil, Plus, Share2, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, BarChart3, Pencil, Share2, Trash2, X } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { formatDate } from "../../../lib/formatting/dates";
@@ -82,9 +82,8 @@ export function ObligationDetailDialog({
 
         <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7">
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => onPayment(obligation)}><Plus className="mr-2 h-4 w-4" />Registrar abono</Button>
-            <Button onClick={() => onAdjust(obligation, "increase")} variant="secondary">Agregar monto</Button>
-            <button className="px-2 text-sm text-storm underline-offset-4 hover:text-ink hover:underline" onClick={() => onAdjust(obligation, "decrease")} type="button">Reducir monto</button>
+            <Button onClick={() => onPayment(obligation)}>{obligation.direction === "receivable" ? "Registrar cobro" : "Registrar pago"}</Button>
+            <Button onClick={() => onAdjust(obligation, "increase")} variant="secondary">Ajustar monto</Button>
             <div className="ml-auto flex items-center gap-1">
               {canShare ? <button aria-label="Compartir" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onShare(obligation)} type="button"><Share2 className="h-4 w-4" /></button> : null}
               <button aria-label="Análisis" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onAnalytics(obligation.id)} type="button"><BarChart3 className="h-4 w-4" /></button>

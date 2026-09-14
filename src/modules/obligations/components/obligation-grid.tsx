@@ -1,4 +1,4 @@
-import { BarChart3, CircleDollarSign, MailPlus, Minus, PencilLine, Plus, Trash2 } from "lucide-react";
+import { BarChart3, CircleDollarSign, MailPlus, PencilLine, Trash2 } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
 import { ProgressBar } from "../../../components/ui/progress-bar";
@@ -246,15 +246,10 @@ export function ObligationGrid({
               <div className="flex flex-wrap gap-3 border-t border-white/10 pt-4">
                 <Button disabled={obligation.status === "cancelled" || obligation.pendingAmount <= 0} onClick={() => onPayment(obligation)}>
                   <CircleDollarSign className="mr-2 h-4 w-4" />
-                  Registrar abono
+                  {obligation.direction === "receivable" ? "Registrar cobro" : "Registrar pago"}
                 </Button>
                 <Button disabled={obligation.status === "cancelled"} onClick={() => onAdjustPrincipal(obligation, "increase")} variant="secondary">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Agregar monto
-                </Button>
-                <Button disabled={obligation.status === "cancelled" || obligation.pendingAmount <= 0} onClick={() => onAdjustPrincipal(obligation, "decrease")} variant="secondary">
-                  <Minus className="mr-2 h-4 w-4" />
-                  Reducir monto
+                  Ajustar monto
                 </Button>
                 {canAccessProFeatures ? (
                   <Button onClick={() => onShare(obligation)} variant="secondary">
