@@ -3,7 +3,6 @@
   BriefcaseBusiness,
   CalendarClock,
   ChevronDown,
-  ChevronRight,
   Copy,
   LoaderCircle,
   ReceiptText,
@@ -23,6 +22,7 @@ import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
+import { ResourceEditorDestination } from "../../../components/ui/resource-editor";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -630,7 +630,7 @@ export function MovementEditorDialog({
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]"
+          className="resource-editor animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none [transform:translateZ(0)]"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -762,16 +762,7 @@ export function MovementEditorDialog({
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-[#141311]">
-                      <button
-                        className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink"
-                        onClick={() => setActivePanel("details")}
-                        type="button"
-                      >
-                        Detalles
-                        <ChevronRight className="h-4 w-4 text-storm" />
-                      </button>
-                    </div>
+                    <ResourceEditorDestination onClick={() => setActivePanel("details")} summary="Categoría, contraparte, fecha y comprobante" />
                   </>
                 ) : null}
 
@@ -1534,7 +1525,7 @@ export function MovementEditorDialog({
               </div>
 
               {activePanel === "main" || activePanel === "details" ? (
-              <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-shell px-4 py-4 sm:-mx-6 sm:px-6">
+              <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-[#1a1917] px-4 py-4 sm:-mx-6 sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                   {!isCreateMode && selectedMovement ? (
                     <Button
@@ -1561,7 +1552,7 @@ export function MovementEditorDialog({
                     </Button>
                   ) : null}
                   <Button
-                    className="min-w-[190px] justify-center"
+                    className={isCreateMode ? "w-full justify-center" : "min-w-[190px] justify-center"}
                     disabled={isSaving}
                     type="submit"
                   >

@@ -18,6 +18,7 @@ type DatePickerFieldProps = {
   mode?: DatePickerFieldMode;
   disabled?: boolean;
   placeholder?: string;
+  appearance?: "default" | "compact";
 };
 
 const weekdayLabels = ["DO", "LU", "MA", "MI", "JU", "VI", "SA"] as const;
@@ -109,6 +110,7 @@ function sameDay(left: Date | null, right: Date | null) {
 }
 
 export function DatePickerField({
+  appearance = "default",
   disabled = false,
   mode = "date",
   onChange,
@@ -272,7 +274,7 @@ export function DatePickerField({
       <button
         ref={triggerRef}
         aria-expanded={isOpen}
-        className={`flex h-14 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-left text-sm text-ink outline-none transition duration-200 hover:border-white/14 hover:bg-white/[0.06] focus-visible:border-pine/25 focus-visible:bg-white/[0.07] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)] ${
+        className={`flex w-full items-center justify-between gap-3 border text-left text-sm text-ink outline-none transition duration-200 ${appearance === "compact" ? "h-11 rounded-[7px] border-white/[0.08] bg-[#141311] px-3 hover:border-white/[0.14] focus-visible:border-white/20" : "h-14 rounded-2xl border-white/10 bg-white/[0.05] px-4 hover:border-white/14 hover:bg-white/[0.06] focus-visible:border-pine/25 focus-visible:bg-white/[0.07] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"} ${
           disabled ? "cursor-not-allowed opacity-60" : ""
         }`}
         disabled={disabled}
@@ -280,9 +282,9 @@ export function DatePickerField({
         type="button"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          {appearance === "compact" ? null : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
             {mode === "datetime-local" ? <Clock3 className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />}
-          </span>
+          </span>}
           <span className={`truncate ${selectedDate ? "text-ink" : "text-storm/72"}`}>
             {formatTriggerLabel(selectedDate, mode, resolvedPlaceholder)}
           </span>

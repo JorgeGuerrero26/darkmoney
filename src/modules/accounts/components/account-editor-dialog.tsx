@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, Check, ChevronRight, Save, Trash2, X } from "lucide-react";
+import { Archive, Check, Save, Trash2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,6 +8,7 @@ import { FormField } from "../../../components/ui/form-field";
 import { Input, Textarea } from "../../../components/ui/fields";
 import { Modal, ModalFooter } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
+import { ResourceEditorDestination, ResourceEditorHeader, resourceEditorSurfaceClassName } from "../../../components/ui/resource-editor";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -91,31 +92,14 @@ export function AccountEditorDialog({
 
   return (
     <Modal
-      className="!max-w-[560px] !rounded-[14px] !bg-[#1a1917] !shadow-none !backdrop-blur-none"
+      className={resourceEditorSurfaceClassName}
       disableOutsideClose={isSaving}
       labelledBy="account-editor-title"
       onClose={onClose}
       size="md"
     >
       <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5 sm:px-6">
-          {activePanel === "main" ? (
-            <div className="flex min-w-0 items-center gap-3">
-              <h2 className="truncate font-display text-xl font-semibold text-ink" id="account-editor-title">
-                {isCreateMode ? "Nueva cuenta" : "Editar cuenta"}
-              </h2>
-              {selectedAccount?.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null}
-            </div>
-          ) : (
-            <button className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white" onClick={() => setActivePanel("main")} type="button">
-              <ArrowLeft className="h-4 w-4 shrink-0" />
-              <span className="truncate font-display text-xl font-semibold">Detalles</span>
-            </button>
-          )}
-          <button aria-label="Cerrar formulario de cuenta" className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink" disabled={isSaving} onClick={onClose} type="button">
-            <X className="h-4 w-4" />
-          </button>
-        </header>
+        <ResourceEditorHeader accessory={activePanel === "main" && selectedAccount?.isArchived ? <StatusBadge status="Archivada" tone="neutral" /> : null} disabled={isSaving} onBack={activePanel === "details" ? () => setActivePanel("main") : undefined} onClose={onClose} title={activePanel === "main" ? (isCreateMode ? "Nueva cuenta" : "Editar cuenta") : "Detalles"} titleId="account-editor-title" />
 
         <ModalBody className="!px-5 !py-5 sm:!px-6">
           {errorMessage ? (
@@ -141,15 +125,7 @@ export function AccountEditorDialog({
                 <SearchablePicker appearance="compact" emptyMessage="No hay tipos disponibles." onChange={onTypeChange} options={typeOptions} placeholderDescription="Selecciona un tipo." placeholderLabel="Tipo de cuenta" queryPlaceholder="Buscar tipo..." value={formState.type} />
               </FormField>
 
-              <div className="rounded-xl border border-white/10 bg-[#141311]">
-                <button className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink transition hover:bg-white/[0.03]" onClick={() => setActivePanel("details")} type="button">
-                  <span>Detalles</span>
-                  <span className="flex items-center gap-2 font-normal text-storm">
-                    {formState.currencyCode} · {iconOption.label}
-                    <ChevronRight className="h-4 w-4" />
-                  </span>
-                </button>
-              </div>
+              <ResourceEditorDestination onClick={() => setActivePanel("details")} summary={`${formState.currencyCode} · ${iconOption.label}`} />
 
               <p className="text-xs leading-5 text-storm/70">
                 Con el saldo, el nombre y el tipo ya puedes guardar. La moneda usa {baseCurrencyCode} por defecto.
@@ -227,7 +203,7 @@ export function AccountEditorDialog({
         </ModalBody>
 
         <ModalFooter>
-          <Button disabled={isSaving} type="submit">
+          <Button className="w-full" disabled={isSaving} type="submit">
             <Save className="h-4 w-4" />
             {isSaving ? "Guardando..." : isCreateMode ? "Crear cuenta" : "Guardar cambios"}
           </Button>

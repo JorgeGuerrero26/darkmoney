@@ -2,10 +2,7 @@
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowUpCircle,
-  ArrowLeft,
-  ChevronRight,
   LoaderCircle,
-  X,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +12,7 @@ import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SearchablePicker as QuickPicker } from "../../../components/ui/searchable-picker";
+import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
   deleteStoredReceipt,
@@ -1031,48 +1029,12 @@ export function QuickMovementDialog({
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
-          className="animate-rise-in flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[560px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917]"
+          className="resource-editor animate-rise-in flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none"
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           onMouseUp={(event) => event.stopPropagation()}
         >
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5 sm:px-6">
-            {activePanel === "main" ? (
-              <h2 className="font-display text-xl font-semibold text-ink">Nuevo movimiento</h2>
-            ) : (
-              <button
-                className="flex min-w-0 items-center gap-3 text-left text-ink transition hover:text-white"
-                onClick={() =>
-                  setActivePanel(
-                    activePanel === "category" || activePanel === "counterparty" || activePanel === "split"
-                      ? "details"
-                      : "main",
-                  )
-                }
-                type="button"
-              >
-                <ArrowLeft className="h-4 w-4 shrink-0" />
-                <span className="truncate font-display text-xl font-semibold">
-                  {activePanel === "details"
-                    ? "Detalles"
-                    : activePanel === "category"
-                      ? "Categoría"
-                      : activePanel === "counterparty"
-                        ? "Contraparte"
-                        : "Dividir en categorías"}
-                </span>
-              </button>
-            )}
-            <button
-              aria-label="Cerrar formulario"
-              className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-              disabled={isSaving}
-              onClick={requestClose}
-              type="button"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </header>
+          <ResourceEditorHeader disabled={isSaving} onBack={activePanel === "main" ? undefined : () => setActivePanel(activePanel === "category" || activePanel === "counterparty" || activePanel === "split" ? "details" : "main")} onClose={requestClose} title={activePanel === "main" ? "Nuevo movimiento" : activePanel === "details" ? "Detalles" : activePanel === "category" ? "Categoría" : activePanel === "counterparty" ? "Contraparte" : "Dividir en categorías"} />
 
           <form
             className="flex min-h-0 flex-1 flex-col"
@@ -1276,16 +1238,7 @@ export function QuickMovementDialog({
                     </div>
                   </div>
 
-                  <div className="mt-5 rounded-xl border border-white/10 bg-[#141311]">
-                    <button
-                      className="flex h-[54px] w-full items-center justify-between px-4 text-left text-sm font-semibold text-ink transition hover:bg-white/[0.03]"
-                      onClick={() => setActivePanel("details")}
-                      type="button"
-                    >
-                      Detalles
-                      <ChevronRight className="h-4 w-4 text-storm" />
-                    </button>
-                  </div>
+                  <div className="mt-5"><ResourceEditorDestination onClick={() => setActivePanel("details")} summary="Categoría, contraparte, fecha y comprobante" /></div>
 
                   <p className="mt-4 text-xs leading-5 text-storm/70">
                     Con el monto y la cuenta ya puedes guardar. Si dejas la descripción vacía, se genera con la categoría y la fecha.

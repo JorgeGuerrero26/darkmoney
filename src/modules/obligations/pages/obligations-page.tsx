@@ -35,6 +35,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { Pagination } from "../../../components/ui/pagination";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
+import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
@@ -2765,39 +2766,34 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
   }, [invalidFields]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm" role="presentation">
-      <form className="flex max-h-[calc(100dvh-24px)] w-full max-w-[700px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" noValidate onSubmit={onSubmit}>
-        <header className="flex items-center gap-3 border-b border-white/[0.08] px-5 py-4 sm:px-7">
-          {panel === "details" ? <button aria-label="Volver" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => setPanel("main")} type="button"><ArrowLeft className="h-5 w-5" /></button> : null}
-          <div className="min-w-0 flex-1"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{isCreateMode ? "Nuevo registro" : "Editar registro"}</p><h2 className="mt-1 font-display text-xl font-semibold text-ink">{panel === "main" ? "Crédito o deuda" : "Detalles"}</h2></div>
-          <button aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full text-storm hover:bg-white/[0.05] hover:text-ink" onClick={closeEditor} type="button"><X className="h-5 w-5" /></button>
-        </header>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3" role="presentation">
+      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={onSubmit}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda") : "Detalles"} />
 
         <div className="overflow-y-auto px-5 py-5 sm:px-7">
           {feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
           {panel === "main" ? <div className="space-y-5">
             <div data-field="principalAmount">
-              <label className={labelClassName} htmlFor="obligation-principal">Monto</label>
-              <div className="mt-2 flex items-end gap-3 border-b border-white/[0.12] pb-3"><span className="pb-1 text-lg text-storm">{getCurrencyLabel(currencyCode).symbol}</span><input className="min-w-0 flex-1 bg-transparent font-display text-4xl font-semibold tracking-[-0.03em] text-ink outline-none placeholder:text-storm/35 disabled:opacity-60" disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></div>
+              <Field errorKey="principalAmount" invalidFields={invalidFields} label={`Monto (${getCurrencyLabel(currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></Field>
               {invalidFields.has("principalAmount") ? <p className="mt-2 text-xs text-rose-300">Ingresa un monto válido.</p> : null}
             </div>
 
             <div data-field="title"><Field errorKey="title" invalidFields={invalidFields} label="Título"><Input maxLength={120} onChange={(event) => { clearFieldError("title"); updateFormState("title", event.target.value); }} placeholder="Préstamo familiar" value={formState.title} /></Field></div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button className={`min-h-14 rounded-xl border px-4 text-left transition ${formState.direction === "receivable" ? "border-[#d8d2c7]/70 bg-white/[0.06] text-ink" : "border-white/[0.09] text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "receivable")} type="button"><span className="block text-sm font-semibold">Crédito</span><span className="text-xs">Me deben</span></button>
-              <button className={`min-h-14 rounded-xl border px-4 text-left transition ${formState.direction === "payable" ? "border-[#d8d2c7]/70 bg-white/[0.06] text-ink" : "border-white/[0.09] text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "payable")} type="button"><span className="block text-sm font-semibold">Deuda</span><span className="text-xs">Yo debo</span></button>
+            <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#141311] p-1">
+              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "receivable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "receivable")} type="button"><span className="block text-sm font-semibold">Crédito</span><span className="text-xs opacity-75">Me deben</span></button>
+              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "payable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "payable")} type="button"><span className="block text-sm font-semibold">Deuda</span><span className="text-xs opacity-75">Yo debo</span></button>
             </div>
 
             <div data-field="counterpartyId"><Field errorKey="counterpartyId" invalidFields={invalidFields} label="Contraparte"><Picker disabled={!counterpartyOptions.length} emptyMessage="No tienes contrapartes disponibles." onChange={(value) => { clearFieldError("counterpartyId"); updateFormState("counterpartyId", value); }} options={counterpartyOptions} placeholderDescription="Persona o entidad relacionada." placeholderLabel="Selecciona una contraparte" queryPlaceholder="Buscar contraparte..." value={formState.counterpartyId} /></Field></div>
 
-            <button className="flex min-h-14 w-full items-center justify-between gap-4 border-y border-white/[0.09] px-1 text-left" onClick={() => setPanel("details")} type="button"><span className="font-semibold text-ink">Detalles</span><span className="flex items-center gap-2 text-sm text-storm">Plan, cuentas y notas <ChevronRight className="h-4 w-4" /></span></button>
+            <ResourceEditorDestination onClick={() => setPanel("details")} summary="Plan, cuentas, notas y comprobante" />
             <p className="text-xs leading-5 text-storm">Con monto, título, tipo y contraparte ya puedes guardar. El resto es opcional salvo que el origen mueva una cuenta.</p>
           </div> : <div className="space-y-5">
             <Field label="Origen"><Picker disabled={!isCreateMode} emptyMessage="No hay orígenes." onChange={(value) => updateFormState("originType", value as ObligationOriginType)} options={neutralize(originOptions)} placeholderDescription="Cómo nació el registro." placeholderLabel="Selecciona el origen" queryPlaceholder="Buscar origen..." value={formState.originType} /></Field>
             <Field label="Moneda"><Picker disabled={!isCreateMode} emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyOptions.map((item) => ({ value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol, leadingColor: "#6b6459" }))} placeholderDescription="Moneda principal." placeholderLabel="Selecciona moneda" queryPlaceholder="Buscar moneda..." value={currencyCode} /></Field>
-            <div className="grid gap-4 sm:grid-cols-2"><div data-field="startDate"><Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField disabled={!isCreateMode} onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field></div><Field label="Vencimiento"><DatePickerField onChange={(value) => updateFormState("dueDate", value)} value={formState.dueDate} /></Field></div>
+            <div className="grid gap-4 sm:grid-cols-2"><div data-field="startDate"><Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField appearance="compact" disabled={!isCreateMode} onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field></div><Field label="Vencimiento"><DatePickerField appearance="compact" onChange={(value) => updateFormState("dueDate", value)} value={formState.dueDate} /></Field></div>
             {isCreateMode && formState.originType === "manual" ? <Field label="Impacto inicial"><Picker emptyMessage="No hay opciones." onChange={(value) => updateFormState("manualOpeningImpact", value as OpeningImpact)} options={neutralize(manualOpeningImpactOptions)} placeholderDescription="Movimiento al crear." placeholderLabel="Selecciona impacto" queryPlaceholder="Buscar..." value={formState.manualOpeningImpact} /></Field> : null}
             {isCreateMode && openingImpact.requiresAccount ? <div data-field="openingAccountId"><Field errorKey="openingAccountId" invalidFields={invalidFields} label="Cuenta de apertura"><Picker emptyMessage="No hay cuentas compatibles." onChange={(value) => { clearFieldError("openingAccountId"); updateFormState("openingAccountId", value); }} options={openingAccountOptions} placeholderDescription={openingImpact.description} placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.openingAccountId} /></Field></div> : null}
             <Field label="Cuenta de abonos"><Picker emptyMessage="No hay cuentas." onChange={(value) => updateFormState("settlementAccountId", value)} options={accountOptions} placeholderDescription="Cuenta usada por defecto." placeholderLabel="Sin asignar" queryPlaceholder="Buscar cuenta..." value={formState.settlementAccountId} /></Field>
@@ -2813,7 +2809,7 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
           </div>}
         </div>
 
-        <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear registro" : "Guardar cambios"}</Button></footer>
+        <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer>
       </form>
     </div>
   );

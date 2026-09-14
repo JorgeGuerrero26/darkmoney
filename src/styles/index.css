@@ -489,6 +489,29 @@ select:focus-visible {
   color: #d6b69b !important;
 }
 
+/* Los editores de recursos comparten una superficie neutra. Ningún módulo
+   recupera los focos azules o verdes del sistema anterior. */
+.app-v39 .resource-editor .field-dark,
+.app-v39 .resource-editor .field-dark:hover,
+.app-v39 .resource-editor .field-dark:focus {
+  border-color: rgba(244, 241, 236, 0.12) !important;
+  background: #141311 !important;
+  box-shadow: none !important;
+}
+
+.app-v39 .resource-editor .field-dark:focus,
+.app-v39 .resource-editor .field-dark:focus-visible,
+.app-v39 .resource-editor input:focus,
+.app-v39 .resource-editor input:focus-visible,
+.app-v39 .resource-editor textarea:focus,
+.app-v39 .resource-editor textarea:focus-visible,
+.app-v39 .resource-editor button:focus-visible {
+  border-color: rgba(244, 241, 236, 0.34) !important;
+  outline: 2px solid rgba(244, 241, 236, 0.14) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
 /* Skip to content link */
 .skip-to-content {
   position: absolute;
