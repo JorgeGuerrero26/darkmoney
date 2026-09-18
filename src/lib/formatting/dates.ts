@@ -1,9 +1,14 @@
 export function formatDate(value: string, locale = "es-PE") {
+  // Una fecha YYYY-MM-DD es un día de calendario, no un instante UTC.
+  // Parsearla como medianoche UTC la mostraría un día antes en Perú.
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T12:00:00`)
+    : new Date(value);
   return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function formatDateTime(value: string, locale = "es-PE") {
