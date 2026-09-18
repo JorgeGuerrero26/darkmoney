@@ -1,11 +1,10 @@
 ﻿import {
   Download,
   LoaderCircle,
+  MoreVertical,
   Plus,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  X,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   FormEvent,
@@ -17,19 +16,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
-import { InfoTip } from "../../../components/ui/info-tip";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { PageHeader } from "../../../components/ui/page-header";
-import { StatusBadge } from "../../../components/ui/status-badge";
-import { SurfaceCard } from "../../../components/ui/surface-card";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
-import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -53,8 +48,6 @@ import {
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import { Pagination } from "../../../components/ui/pagination";
-import { SubscriptionGrid } from "../components/subscription-grid";
-import { SubscriptionList } from "../components/subscription-list";
 import { SubscriptionTable } from "../components/subscription-table";
 import { useSubscriptionsFilters } from "../hooks/use-subscriptions-filters";
 import {
@@ -122,33 +115,35 @@ type FeedbackState = {
 
 
 const currencyOptions = [
-  { code: "PEN", label: "Sol peruano", region: "Peru", symbol: "S/" },
-  { code: "USD", label: "Dolar estadounidense", region: "Estados Unidos", symbol: "$" },
-  { code: "EUR", label: "Euro", region: "Union Europea", symbol: "EUR" },
-  { code: "BRL", label: "Real brasileno", region: "Brasil", symbol: "R$" },
+  { code: "PEN", label: "Sol peruano", region: "Perú", symbol: "S/" },
+  { code: "USD", label: "Dólar estadounidense", region: "Estados Unidos", symbol: "$" },
+  { code: "EUR", label: "Euro", region: "Unión Europea", symbol: "EUR" },
+  { code: "BRL", label: "Real brasileño", region: "Brasil", symbol: "R$" },
   { code: "MXN", label: "Peso mexicano", region: "Mexico", symbol: "MXN" },
   { code: "CLP", label: "Peso chileno", region: "Chile", symbol: "CLP" },
 ] as const;
 
 const weekdayOptions = [
-  { value: "0", label: "Domingo", description: "Inicio de semana clasica.", leadingLabel: "DO" },
-  { value: "1", label: "Lunes", description: "Buen dia para cargos fijos.", leadingLabel: "LU" },
-  { value: "2", label: "Martes", description: "Repeticion semanal en martes.", leadingLabel: "MA" },
-  { value: "3", label: "Miercoles", description: "Repeticion semanal en miercoles.", leadingLabel: "MI" },
-  { value: "4", label: "Jueves", description: "Repeticion semanal en jueves.", leadingLabel: "JU" },
-  { value: "5", label: "Viernes", description: "Repeticion semanal en viernes.", leadingLabel: "VI" },
-  { value: "6", label: "Sabado", description: "Repeticion semanal en sabado.", leadingLabel: "SA" },
+  { value: "0", label: "Domingo", description: "Inicio de semana clásica.", leadingLabel: "DO" },
+  { value: "1", label: "Lunes", description: "Buen día para cargos fijos.", leadingLabel: "LU" },
+  { value: "2", label: "Martes", description: "Repetición semanal en martes.", leadingLabel: "MA" },
+  { value: "3", label: "Miércoles", description: "Repetición semanal en miércoles.", leadingLabel: "MI" },
+  { value: "4", label: "Jueves", description: "Repetición semanal en jueves.", leadingLabel: "JU" },
+  { value: "5", label: "Viernes", description: "Repetición semanal en viernes.", leadingLabel: "VI" },
+  { value: "6", label: "Sábado", description: "Repetición semanal en sábado.", leadingLabel: "SA" },
 ] as const;
 
 const inputClassName = "field-dark";
 const textareaClassName = "field-dark min-h-[100px] resize-y py-3 leading-7";
-const panelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
 const labelClassName =
   "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
 
 function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
+}
+
+function localDateKey(date: Date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
 function parseOptionalInteger(value: string) {
@@ -192,8 +187,8 @@ function createDefaultFormState(baseCurrencyCode: string): SubscriptionFormState
     intervalCount: "1",
     dayOfMonth: "",
     dayOfWeek: "",
-    startDate: toDateInputValue(new Date().toISOString()),
-    nextDueDate: toDateInputValue(new Date().toISOString()),
+    startDate: localDateKey(new Date()),
+    nextDueDate: localDateKey(new Date()),
     endDate: "",
     status: "active",
     autoCreateMovement: false,
@@ -286,17 +281,13 @@ function ToggleRow({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <button
-      className="flex w-full items-center justify-between gap-4 rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition duration-200 hover:border-white/16"
-      onClick={() => onChange(!checked)}
-      type="button"
-    >
+    <button aria-pressed={checked} className="flex min-h-[54px] w-full items-center justify-between gap-4 border-y border-white/[0.09] py-3 text-left" onClick={() => onChange(!checked)} type="button">
       <span className="min-w-0">
-        <span className="block text-sm font-medium text-ink">{label}</span>
-        <span className="mt-1 block text-sm leading-7 text-storm">{description}</span>
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        <span className="mt-0.5 block text-xs text-storm">{description}</span>
       </span>
-      <span className={`relative inline-flex h-8 w-16 shrink-0 rounded-full border transition duration-200 ${checked ? "border-pine/30 bg-pine/20" : "border-white/10 bg-white/[0.05]"}`}>
-        <span className={`absolute top-1 h-6 w-6 rounded-full bg-white transition duration-200 ${checked ? "left-9" : "left-1"}`} />
+      <span className={"relative h-7 w-12 shrink-0 rounded-full border transition " + (checked ? "border-white/40 bg-white/[0.1]" : "border-white/15 bg-white/[0.03]")}>
+        <span className={"absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition " + (checked ? "left-[25px]" : "left-1")} />
       </span>
     </button>
   );
@@ -335,313 +326,112 @@ function EditorDialog({
     value: SubscriptionFormState[Field],
   ) => void;
 }) {
-  const title = formState.name.trim() || "Nueva suscripcion";
-  // Divulgación progresiva: al crear, lo avanzado (estado, recordatorio, notas)
-  // arranca plegado; al editar se muestra todo para revisar de un vistazo.
-  const [showAdvanced, setShowAdvanced] = useState(!isCreateMode);
-
-  useEffect(() => {
-    if (invalidFields.size === 0) return;
-    const firstField = [...invalidFields][0];
-    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
-    if (firstEl) {
-      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
-      }, 300);
-    }
-    invalidFields.forEach((field) => {
-      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
-      if (!el) return;
-      el.classList.remove("field-error-shake");
-      void el.offsetWidth;
-      el.classList.add("field-error-shake");
-    });
-  }, [invalidFields]);
-  const amount = parseOptionalNumber(formState.amount) ?? 0;
-  const selectedVendor = counterparties.find(
-    (counterparty) => String(counterparty.id) === formState.vendorPartyId,
-  );
-  const selectedAccount = accounts.find((account) => String(account.id) === formState.accountId);
-  const frequencyOption = getFrequencyOption(formState.frequency);
-  const statusOption = getStatusOption(formState.status);
-  const currencyLabel = getCurrencyLabel(formState.currencyCode || baseCurrencyCode);
-  const counterpartyOptions = counterparties
-    .filter((counterparty) => !counterparty.isArchived || String(counterparty.id) === formState.vendorPartyId)
-    .map<PickerOption>((counterparty) => ({
-      value: String(counterparty.id),
-      label: counterparty.name,
-      description: counterparty.isArchived
-        ? "Archivada, pero disponible para esta suscripcion."
-        : `Tipo ${counterparty.type}.`,
-      leadingLabel: counterparty.name.slice(0, 2).toUpperCase(),
-      leadingColor:
-        counterparty.type === "service"
-          ? "#b48b34"
-          : counterparty.type === "company"
-            ? "#4566d6"
-            : counterparty.type === "merchant"
-              ? "#c46a31"
-              : "#6b7280",
-      searchText: `${counterparty.name} ${counterparty.type}`,
-    }));
-  const accountOptions = accounts
-    .filter((account) => !account.isArchived || String(account.id) === formState.accountId)
-    .map<PickerOption>((account) => ({
-      value: String(account.id),
-      label: account.name,
-      description: `${account.type} - ${account.currencyCode}`,
-      leadingLabel: account.currencyCode,
-      leadingColor: account.color,
-      searchText: `${account.name} ${account.type} ${account.currencyCode}`,
-    }));
-  const categoryOptions = categories
-    .filter((category) => (category.isActive || String(category.id) === formState.categoryId) && (category.kind === "expense" || category.kind === "both"))
-    .map<PickerOption>((category) => ({
-      value: String(category.id),
-      label: category.name,
-      description:
-        category.kind === "both"
-          ? "Disponible para varios tipos de movimientos."
-          : "Categoria pensada para gastos recurrentes.",
-      leadingLabel: category.name.slice(0, 2).toUpperCase(),
-      leadingColor: category.kind === "both" ? "#4566d6" : "#8f3e3e",
-      searchText: `${category.name} ${category.kind}`,
-    }));
-  const frequencyPickerOptions = frequencyOptions.map<PickerOption>((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
+  const [panel, setPanel] = useState<"main" | "optional">("main");
+  const counterpartyOptions: PickerOption[] = [
+    { value: "", label: "Sin proveedor", description: "No asociado.", leadingLabel: "—" },
+    ...counterparties.filter((item) => !item.isArchived || String(item.id) === formState.vendorPartyId)
+      .map((item) => ({ value: String(item.id), label: item.name, description: item.type, leadingLabel: item.name.slice(0, 2).toUpperCase() })),
+  ];
+  const categoryOptions: PickerOption[] = [
+    { value: "", label: "Sin categoría", description: "No asignada.", leadingLabel: "—" },
+    ...categories.filter((item) => (item.isActive || String(item.id) === formState.categoryId) && (item.kind === "expense" || item.kind === "both"))
+      .map((item) => ({ value: String(item.id), label: item.name, description: "Categoría de gasto.", leadingLabel: item.name.slice(0, 2).toUpperCase() })),
+  ];
+  const accountOptions: PickerOption[] = [
+    { value: "", label: "Sin cuenta fija", description: "Se elige al registrar el pago.", leadingLabel: "—" },
+    ...accounts.filter((item) => !item.isArchived || String(item.id) === formState.accountId)
+      .map((item) => ({ value: String(item.id), label: item.name, description: item.currencyCode, leadingLabel: item.currencyCode })),
+  ];
+  const currencyPickerOptions: PickerOption[] = currencyOptions.map((item) => ({
+    value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol,
   }));
-  const statusPickerOptions = statusOptions.map<PickerOption>((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
+  if (!currencyPickerOptions.some((item) => item.value === formState.currencyCode)) {
+    currencyPickerOptions.push({ value: formState.currencyCode, label: formState.currencyCode, description: "Moneda registrada.", leadingLabel: formState.currencyCode });
+  }
+  const frequencyPickerOptions: PickerOption[] = frequencyOptions.map((item) => ({
+    value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel,
   }));
-  const currencyPickerOptions = currencyOptions.map<PickerOption>((option) => ({
-    value: option.code,
-    label: option.code,
-    description: `${option.label} - ${option.region}`,
-    leadingLabel: option.symbol,
-    leadingColor: "#4566d6",
-    searchText: `${option.code} ${option.label} ${option.region}`,
+  const statusPickerOptions: PickerOption[] = statusOptions.map((item) => ({
+    value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel,
   }));
   const needsDayOfWeek = formState.frequency === "weekly";
-  const needsDayOfMonth =
-    formState.frequency === "monthly" ||
-    formState.frequency === "quarterly" ||
-    formState.frequency === "yearly";
+  const needsDayOfMonth = ["monthly", "quarterly", "yearly"].includes(formState.frequency);
+
+  useEffect(() => {
+    if (!invalidFields.size) return;
+    setPanel("main");
+    const firstField = [...invalidFields][0];
+    const timer = window.setTimeout(() => {
+      const field = document.querySelector<HTMLElement>('[data-field="' + firstField + '"]');
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+      field?.querySelector<HTMLElement>("input,button")?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [invalidFields]);
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
-      <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          <form className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
-            <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
-              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-                <h2 className="font-display text-xl font-semibold text-ink">
-                  {isCreateMode ? "Nueva suscripción" : "Editar suscripción"}
-                </h2>
-
-                <button
-                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-                  onClick={closeEditor}
-                  type="button"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }} role="presentation">
+      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={onSubmit}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "optional" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nueva suscripción" : "Editar suscripción") : "Opcionales"} />
+        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
+          {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
+          {panel === "main" ? (
+            <div className="space-y-5">
+              <div data-field="amount">
+                <Field errorKey="amount" invalidFields={invalidFields} label={"Monto (" + getCurrencyLabel(formState.currencyCode || baseCurrencyCode).symbol + ")"}>
+                  <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" inputMode="decimal" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" type="number" value={formState.amount} />
+                </Field>
               </div>
-
-              {feedback?.tone === "error" ? (
-                <FormFeedbackBanner
-                  className="mt-6"
-                  description={feedback.description}
-                  title={feedback.title}
-                />
-              ) : null}
-
-              <div className="hidden">
-                <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
-                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-white/10 bg-[linear-gradient(160deg,#4566d6,rgba(8,13,20,0.72))] text-white">
-                        <Sparkles className="h-7 w-7" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Vista previa</p>
-                        <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">{title}</h3>
-                        <p className="mt-3 text-base leading-8 text-storm">
-                          {selectedVendor?.name ?? "Selecciona un proveedor o servicio"}
-                        </p>
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{frequencyOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{statusOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{currencyLabel.code}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4">
-                    <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Monto configurado</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(amount, currencyLabel.code)}
-                      </p>
-                    </div>
-                    <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Siguiente cobro</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formState.nextDueDate ? formatDate(formState.nextDueDate) : "Sin fecha"}
-                      </p>
-                      <p className="mt-2 text-sm text-storm">{selectedAccount?.name ?? "Sin cuenta sugerida"}</p>
-                    </div>
-                  </div>
-                </div>
+              <div data-field="name">
+                <Field errorKey="name" invalidFields={invalidFields} label="Nombre">
+                  <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Internet de casa" value={formState.name} />
+                </Field>
               </div>
-
-              <div className="mt-5 grid gap-4 [&>*:nth-child(2)]:order-first">
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Identidad</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Base de la suscripcion</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field errorKey="name" hint="Nombre visible para reconocerla en la app." invalidFields={invalidFields} label="Nombre">
-                      <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Netflix familiar" type="text" value={formState.name} />
-                    </Field>
-                    <Field hint="Proveedor o servicio relacionado." label="Proveedor">
-                      <SearchablePicker disabled={counterpartyOptions.length === 0} emptyMessage="No tienes contrapartes disponibles aun." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Puedes dejarlo libre si aun no lo registras." placeholderLabel="Sin proveedor fijo" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
-                    </Field>
-                    <Field hint="Categoria contable sugerida." label="Categoria">
-                      <SearchablePicker disabled={categoryOptions.length === 0} emptyMessage="No tienes categorias disponibles aun." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Puedes dejarla vacia por ahora." placeholderLabel="Sin categoria" queryPlaceholder="Buscar categoria..." value={formState.categoryId} />
-                    </Field>
-                    <Field hint="Cuenta recomendada para registrar el pago." label="Cuenta sugerida">
-                      <SearchablePicker disabled={accountOptions.length === 0} emptyMessage="No tienes cuentas disponibles aun." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Puedes definirla mas adelante." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Monto</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Monto y moneda</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field errorKey="amount" hint="Monto esperado en cada cobro." invalidFields={invalidFields} label="Monto">
-                      <Input inputMode="decimal" min="0" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
-                    </Field>
-                    <Field hint="Moneda principal de la suscripcion." label="Moneda">
-                      <SearchablePicker emptyMessage="No hay monedas configuradas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Selecciona la moneda principal." placeholderLabel="Selecciona una moneda" queryPlaceholder="Buscar PEN, USD, EUR..." value={formState.currencyCode} />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Ritmo</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field hint="Define cada cuanto esperas el cobro." label="Frecuencia">
-                      <SearchablePicker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as SubscriptionFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
-                    </Field>
-                    <Field hint="Usa 1 para la frecuencia normal, 2 para cada dos ciclos, etc." label="Intervalo">
-                      <Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" step="1" type="number" value={formState.intervalCount} />
-                    </Field>
-                    <Field errorKey="startDate" hint="Fecha desde la que empieza a considerarse activa." invalidFields={invalidFields} label="Inicio">
-                      <DatePickerField
-                        onChange={(nextValue) => { clearFieldError("startDate"); updateFormState("startDate", nextValue); }}
-                        value={formState.startDate}
-                      />
-                    </Field>
-                    <Field errorKey="nextDueDate" hint="Siguiente fecha esperada de cobro." invalidFields={invalidFields} label="Proximo cobro">
-                      <DatePickerField
-                        onChange={(nextValue) => { clearFieldError("nextDueDate"); updateFormState("nextDueDate", nextValue); }}
-                        value={formState.nextDueDate}
-                      />
-                    </Field>
-                    {needsDayOfMonth ? (
-                      <Field hint="Opcional. Dia del mes en el que suele cobrar." label="Dia del mes">
-                        <Input inputMode="numeric" max="31" min="1" onChange={(event) => updateFormState("dayOfMonth", event.target.value)} placeholder="Ej. 15" step="1" type="number" value={formState.dayOfMonth} />
-                      </Field>
-                    ) : null}
-                    {needsDayOfWeek ? (
-                      <Field hint="Opcional. Dia semanal habitual." label="Dia de la semana">
-                        <SearchablePicker emptyMessage="No hay dias disponibles." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((option) => ({ value: option.value, label: option.label, description: option.description, leadingLabel: option.leadingLabel, leadingColor: "#4566d6" }))} placeholderDescription="Selecciona el dia mas comun." placeholderLabel="Sin dia fijo" queryPlaceholder="Buscar dia..." value={formState.dayOfWeek} />
-                      </Field>
-                    ) : null}
-                    <Field hint="Opcional. Si termina en una fecha puntual." label="Fin">
-                      <DatePickerField
-                        onChange={(nextValue) => updateFormState("endDate", nextValue)}
-                        value={formState.endDate}
-                      />
-                    </Field>
-                  </div>
-                </div>
-
-                {!showAdvanced ? (
-                  <button
-                    className="flex w-full items-center justify-center gap-2 rounded-[24px] border border-dashed border-white/15 bg-white/[0.02] px-4 py-3.5 text-sm font-medium text-storm transition hover:border-white/25 hover:text-ink lg:col-span-2"
-                    onClick={() => setShowAdvanced(true)}
-                    type="button"
-                  >
-                    Detalles
-                  </button>
-                ) : null}
-
-                <div className={`${panelClassName} ${showAdvanced ? "" : "hidden"}`}>
-                  <p className={labelClassName}>Seguimiento</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Estado y recordatorios</h3>
-                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5">
-                    <Field hint="Controla si sigue activa, pausada o cerrada." label="Estado">
-                      <SearchablePicker emptyMessage="No hay estados disponibles." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Selecciona el estado actual." placeholderLabel="Selecciona un estado" queryPlaceholder="Buscar estado..." value={formState.status} />
-                    </Field>
-                    <Field hint="Cuantos dias antes quieres ver el aviso." label="Recordatorio">
-                      <Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" step="1" type="number" value={formState.remindDaysBefore} />
-                    </Field>
-                    <ToggleRow checked={formState.autoCreateMovement} description="Cuando este activo, el sistema podra apoyarse en esta configuracion para automatizar el movimiento correspondiente." label="Crear movimiento automaticamente" onChange={(checked) => updateFormState("autoCreateMovement", checked)} />
-                  </div>
-                </div>
-
-                <div className={`${panelClassName} lg:col-span-2 ${showAdvanced ? "" : "hidden"}`}>
-                  <p className={labelClassName}>Contexto</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Descripcion y notas</h3>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                    <Field hint="Se usa como resumen dentro de la tarjeta." label="Descripcion">
-                      <Textarea className="min-h-[120px]" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Ej. Plan familiar de streaming compartido en casa." value={formState.description} />
-                    </Field>
-                    <Field hint="Solo para contexto interno." label="Notas">
-                      <Textarea className="min-h-[120px]" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Ej. Se cobra desde la tarjeta de viajes." value={formState.notes} />
-                    </Field>
-                  </div>
-                </div>
+              <Field label="Frecuencia">
+                <SearchablePicker appearance="compact" emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as SubscriptionFrequency)} options={frequencyPickerOptions} placeholderDescription="Cada cuánto se cobra." placeholderLabel="Selecciona frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
+              </Field>
+              <div data-field="nextDueDate">
+                <Field errorKey="nextDueDate" invalidFields={invalidFields} label="Próximo cobro">
+                  <DatePickerField appearance="compact" onChange={(value) => { clearFieldError("nextDueDate"); updateFormState("nextDueDate", value); }} value={formState.nextDueDate} />
+                </Field>
               </div>
+              <ResourceEditorDestination label="Opcionales" onClick={() => setPanel("optional")} summary="Proveedor, cuenta y calendario" />
             </div>
-
-            <div className="relative z-[60] border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
-              <div className="flex justify-end">
-                  <Button disabled={isSaving} type="submit">
-                    {isSaving ? (
-                      <>
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : isCreateMode ? (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Crear suscripcion
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Guardar cambios
-                      </>
-                    )}
-                  </Button>
+          ) : (
+            <div className="space-y-5">
+              <Field label="Proveedor">
+                <SearchablePicker appearance="compact" emptyMessage="No hay proveedores." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Proveedor asociado." placeholderLabel="Sin proveedor" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
+              </Field>
+              <Field label="Categoría">
+                <SearchablePicker appearance="compact" emptyMessage="No hay categorías." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Categoría de gasto." placeholderLabel="Sin categoría" queryPlaceholder="Buscar categoría..." value={formState.categoryId} />
+              </Field>
+              <Field label="Cuenta sugerida">
+                <SearchablePicker appearance="compact" emptyMessage="No hay cuentas." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta recomendada para el pago." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Moneda"><SearchablePicker appearance="compact" emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda del cobro." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} /></Field>
+                <Field label="Cada cuántos ciclos"><Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" type="number" value={formState.intervalCount} /></Field>
               </div>
+              <div data-field="startDate">
+                <Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField appearance="compact" onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field>
+              </div>
+              {needsDayOfMonth ? <Field label="Día del mes"><Input inputMode="numeric" max="31" min="1" onChange={(event) => updateFormState("dayOfMonth", event.target.value)} placeholder="Sin día fijo" type="number" value={formState.dayOfMonth} /></Field> : null}
+              {needsDayOfWeek ? <Field label="Día de la semana"><SearchablePicker appearance="compact" emptyMessage="No hay días." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((item) => ({ value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel }))} placeholderDescription="Día habitual." placeholderLabel="Sin día fijo" queryPlaceholder="Buscar día..." value={formState.dayOfWeek} /></Field> : null}
+              <Field label="Fin"><DatePickerField appearance="compact" onChange={(value) => updateFormState("endDate", value)} value={formState.endDate} /></Field>
+              <Field label="Estado"><SearchablePicker appearance="compact" emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Estado actual." placeholderLabel="Estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
+              <Field label="Recordar días antes"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" type="number" value={formState.remindDaysBefore} /></Field>
+              <ToggleRow checked={formState.autoCreateMovement} description="Usa esta suscripción para automatizar el movimiento cuando corresponda." label="Crear movimiento automáticamente" onChange={(checked) => updateFormState("autoCreateMovement", checked)} />
+              <Field label="Descripción"><Textarea onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible" value={formState.description} /></Field>
+              <Field label="Notas"><Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Solo para este espacio" value={formState.notes} /></Field>
             </div>
-          </form>
+          )}
         </div>
-      </div>
+        <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7">
+          <Button className="w-full" disabled={isSaving} type="submit">
+            {isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear suscripción" : "Guardar cambios"}
+          </Button>
+        </footer>
+      </form>
     </div>
   );
 }
@@ -675,20 +465,20 @@ function escapeCSV(v: string | number | boolean | null | undefined): string {
 }
 
 function downloadSubscriptionsCSV(subscriptions: SubscriptionSummary[], filename: string) {
-  const headers = ["Nombre", "Proveedor", "Estado", "Monto", "Moneda", "Frecuencia", "Categoria", "Cuenta", "Inicio", "Proximo vencimiento", "Fin", "Auto movimiento", "Descripcion", "Notas"];
+  const headers = ["Nombre", "Proveedor", "Estado", "Monto", "Moneda", "Frecuencia", "Categoría", "Cuenta", "Inicio", "Próximo vencimiento", "Fin", "Auto movimiento", "Descripción", "Notas"];
   const rows = subscriptions.map((s) => [
     escapeCSV(s.name),
     escapeCSV(s.vendor),
-    escapeCSV(s.status),
+    escapeCSV(getStatusOption(s.status).label),
     escapeCSV(s.amount),
     escapeCSV(s.currencyCode),
-    escapeCSV(s.frequencyLabel),
+    escapeCSV(getFrequencyOption(s.frequency).label),
     escapeCSV(s.categoryName ?? ""),
     escapeCSV(s.accountName ?? ""),
     escapeCSV(s.startDate),
     escapeCSV(s.nextDueDate),
     escapeCSV(s.endDate ?? ""),
-    escapeCSV(s.autoCreateMovement ? "Si" : "No"),
+    escapeCSV(s.autoCreateMovement ? "Sí" : "No"),
     escapeCSV(s.description ?? ""),
     escapeCSV(s.notes ?? ""),
   ]);
@@ -707,16 +497,9 @@ export function SubscriptionsPage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
-  const subscriptionColumns: ColumnDef[] = [
-    { key: "proveedor", label: "Proveedor" },
-    { key: "frecuencia", label: "Frecuencia" },
-    { key: "categoria", label: "Categoria" },
-    { key: "cuenta", label: "Cuenta" },
-    { key: "proximo_cobro", label: "PrÃ³ximo cobro" },
-  ];
-  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-subscriptions", subscriptionColumns);
-  const [viewMode, setViewMode] = useViewMode("subscriptions", "table");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
@@ -739,14 +522,9 @@ export function SubscriptionsPage() {
     filters: subscriptionFilters,
     currentPage,
     setCurrentPage,
-    openTableFilter,
     updateFilter: updateSubscriptionFilter,
     clearFilters: clearSubscriptionFilters,
-    toggleTableFilterMenu,
-    closeTableFilterMenu,
-    clearSingleTableFilter,
-    applyFilterAndClose: applySubscriptionFilterAndClose,
-  } = useSubscriptionsFilters(viewMode);
+  } = useSubscriptionsFilters("table");
   const [formState, setFormState] = useState<SubscriptionFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -882,14 +660,14 @@ export function SubscriptionsPage() {
   const isDeleting = deleteMutation.isPending;
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const dueSoonCount = subscriptions.filter((subscription) => {
-    const differenceInMs =
-      new Date(subscription.nextDueDate).getTime() - new Date().setHours(0, 0, 0, 0);
-    const differenceInDays = differenceInMs / 86_400_000;
-    return differenceInDays >= 0 && differenceInDays <= 7;
-  }).length;
-  const autoCreatedCount = subscriptions.filter((subscription) => subscription.autoCreateMovement).length;
-  const nextVisibleSubscription = filteredSubscriptions[0] ?? null;
+  const today = new Date();
+  const todayKey = localDateKey(today);
+  const inSevenDays = new Date(today);
+  inSevenDays.setDate(today.getDate() + 7);
+  const inSevenDaysKey = localDateKey(inSevenDays);
+  const dueSoonCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey && subscription.nextDueDate <= inSevenDaysKey).length;
+  const overdueCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate < todayKey).length;
+  const nextUpcoming = subscriptions.find((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey);
   const subscriptionVendors = useMemo(
     () =>
       Array.from(
@@ -930,8 +708,8 @@ export function SubscriptionsPage() {
     if (!activeWorkspace || !user?.id) {
       setFeedback({
         tone: "error",
-        title: "No encontramos el workspace activo",
-        description: "Recarga la pagina e intenta nuevamente.",
+        title: "No encontramos el espacio activo",
+        description: "Recarga la página e intenta nuevamente.",
       });
       return;
     }
@@ -964,7 +742,7 @@ export function SubscriptionsPage() {
     if (intervalCount === null || Number.isNaN(intervalCount) || intervalCount <= 0) {
       setFeedback({
         tone: "error",
-        title: "Intervalo invalido",
+        title: "Intervalo inválido",
         description: "Indica un intervalo mayor que cero.",
       });
       return;
@@ -974,7 +752,7 @@ export function SubscriptionsPage() {
       setFeedback({
         tone: "error",
         title: "Faltan fechas clave",
-        description: "Completa la fecha de inicio y el proximo cobro.",
+        description: "Completa la fecha de inicio y el próximo cobro.",
       });
       return;
     }
@@ -983,7 +761,7 @@ export function SubscriptionsPage() {
       setFeedback({
         tone: "error",
         title: "La fecha no cuadra",
-        description: "El proximo cobro no puede ser anterior al inicio.",
+        description: "El próximo cobro no puede ser anterior al inicio.",
       });
       return;
     }
@@ -1000,7 +778,7 @@ export function SubscriptionsPage() {
     if (dayOfMonth !== null && (Number.isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31)) {
       setFeedback({
         tone: "error",
-        title: "Dia del mes invalido",
+        title: "Día del mes inválido",
         description: "Si lo completas, debe estar entre 1 y 31.",
       });
       return;
@@ -1009,7 +787,7 @@ export function SubscriptionsPage() {
     if (dayOfWeek !== null && (Number.isNaN(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
       setFeedback({
         tone: "error",
-        title: "Dia de la semana invalido",
+        title: "Día de la semana inválido",
         description: "Si lo completas, debe estar entre 0 y 6.",
       });
       return;
@@ -1018,8 +796,8 @@ export function SubscriptionsPage() {
     if (remindDaysBefore === null || Number.isNaN(remindDaysBefore) || remindDaysBefore < 0) {
       setFeedback({
         tone: "error",
-        title: "Recordatorio invalido",
-        description: "Indica cero o un numero positivo de dias.",
+        title: "Recordatorio inválido",
+        description: "Indica cero o un número positivo de días.",
       });
       return;
     }
@@ -1027,7 +805,7 @@ export function SubscriptionsPage() {
     if (vendorPartyId !== null && Number.isNaN(vendorPartyId)) {
       setFeedback({
         tone: "error",
-        title: "Proveedor invalido",
+        title: "Proveedor inválido",
         description: "Vuelve a seleccionar el proveedor si deseas asociarlo.",
       });
       return;
@@ -1046,7 +824,7 @@ export function SubscriptionsPage() {
       setFeedback({
         tone: "error",
         title: "Categoria invalida",
-        description: "Vuelve a seleccionar la categoria contable.",
+        description: "Vuelve a seleccionar la categoría contable.",
       });
       return;
     }
@@ -1064,7 +842,7 @@ export function SubscriptionsPage() {
           formState.nextDueDate,
           formState.frequency,
           intervalCount,
-          toDateInputValue(new Date().toISOString()),
+          localDateKey(new Date()),
         )
       : formState.nextDueDate;
 
@@ -1111,7 +889,7 @@ export function SubscriptionsPage() {
         setFeedback({
           tone: "success",
           title: "Cambios guardados",
-          description: "La suscripcion se actualizo correctamente.",
+          description: "La suscripción se actualizó correctamente.",
         });
       }
 
@@ -1120,7 +898,7 @@ export function SubscriptionsPage() {
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "No pudimos guardar la suscripcion",
+        title: "No pudimos guardar la suscripción",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
     }
@@ -1168,7 +946,7 @@ export function SubscriptionsPage() {
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Estamos preparando los pagos recurrentes del workspace activo." eyebrow="suscripciones" title="Cargando suscripciones" />
+        <PageHeader description="Estamos preparando los pagos recurrentes del espacio activo." eyebrow="suscripciones" title="Cargando suscripciones" />
         <SubscriptionsLoadingSkeleton />
       </div>
     );
@@ -1177,8 +955,8 @@ export function SubscriptionsPage() {
   if (workspaceError) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Necesitamos acceder correctamente al workspace activo." eyebrow="suscripciones" title="Suscripciones no disponibles" />
-        <DataState description={getQueryErrorMessage(workspaceError, "No pudimos abrir tu workspace actual.")} title="No hay acceso al workspace" tone="error" />
+        <PageHeader description="Necesitamos acceder correctamente al espacio activo." eyebrow="suscripciones" title="Suscripciones no disponibles" />
+        <DataState description={getQueryErrorMessage(workspaceError, "No pudimos abrir tu espacio actual.")} title="No hay acceso al espacio" tone="error" />
       </div>
     );
   }
@@ -1186,8 +964,8 @@ export function SubscriptionsPage() {
   if (!activeWorkspace) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Cuando tengas un workspace activo, aqui veras tus pagos recurrentes." eyebrow="suscripciones" title="Aun no hay un workspace activo" />
-        <DataState description="Activa o crea un workspace para comenzar a registrar suscripciones." title="Sin suscripciones para mostrar" />
+        <PageHeader description="Cuando tengas un espacio activo, aquí verás tus pagos recurrentes." eyebrow="suscripciones" title="Aún no hay un espacio activo" />
+        <DataState description="Activa o crea un espacio para comenzar a registrar suscripciones." title="Sin suscripciones para mostrar" />
       </div>
     );
   }
@@ -1195,7 +973,7 @@ export function SubscriptionsPage() {
   if (snapshotQuery.isLoading || !snapshot) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Estamos cargando tus pagos recurrentes y sus proximos vencimientos." eyebrow="suscripciones" title="Cargando suscripciones" />
+        <PageHeader description="Estamos cargando tus pagos recurrentes y sus próximos vencimientos." eyebrow="suscripciones" title="Cargando suscripciones" />
         <SubscriptionsLoadingSkeleton />
       </div>
     );
@@ -1204,7 +982,7 @@ export function SubscriptionsPage() {
   if (snapshotQuery.error) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Intentamos reconstruir el estado actual de tus suscripciones." eyebrow="suscripciones" title="No fue posible cargar la informacion" />
+        <PageHeader description="Intentamos reconstruir el estado actual de tus suscripciones." eyebrow="suscripciones" title="No fue posible cargar la información" />
         <DataState description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer tus suscripciones actuales.")} title="Error al cargar suscripciones" tone="error" />
       </div>
     );
@@ -1212,199 +990,76 @@ export function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      {/* Header compacto (estÃ¡ndar) */}
-      <section className="min-w-0">
-        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Compromisos</p>
-        <div className="mt-1 flex items-center gap-2.5">
-          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
-            Pagos recurrentes
-          </h2>
-          <InfoTip ariaLabel="Sobre las suscripciones">
-            Controla tus cobros recurrentes (servicios, membresÃ­as) para anticipar cuÃ¡ndo y cuÃ¡nto sale.
-            Los filtros de la barra superior aplican a todas las vistas.
-          </InfoTip>
+      <section className="relative z-40 flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Suscripciones</h2>
+          <p className="mt-1 text-sm text-storm">
+            {subscriptions.length} registradas · {overdueCount > 0 ? `${overdueCount} con cobro vencido` : dueSoonCount > 0 ? `${dueSoonCount} vencen en los próximos 7 días` : nextUpcoming ? `siguiente cobro el ${formatDate(nextUpcoming.nextDueDate)}` : "sin cobros próximos"}.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-storm">
-          {subscriptions.length} registradas; {dueSoonCount} vencen en los próximos 7 días. La lista está ordenada por el siguiente cobro.
-        </p>
+        <Button data-tour="create-subscription" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nueva</span><span className="hidden sm:inline">Nueva suscripción</span></Button>
+        <div className="relative">
+          <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
+          {isActionsMenuOpen ? (
+            <>
+              <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
+              <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
+                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
+                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredSubscriptions.length} onClick={() => { setIsActionsMenuOpen(false); downloadSubscriptionsCSV(filteredSubscriptions, "suscripciones-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar las {filteredSubscriptions.length}</button>
+              </div>
+            </>
+          ) : null}
+        </div>
       </section>
 
-      {/* Toolbar sticky (estÃ¡ndar) */}
-      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
-          {viewMode === "table" ? (
-            <ColumnPicker columns={subscriptionColumns} visible={colVis} onToggle={toggleCol} />
-          ) : null}
-          <StatusBadge status={`${filteredSubscriptions.length} visibles`} tone="neutral" />
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-              disabled={snapshotQuery.isFetching}
-              onClick={() => snapshotQuery.refetch()}
-              title="Actualizar"
-              type="button"
-            >
-              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-            </button>
-            {hasActiveFilters ? (
-              <Button onClick={clearSubscriptionFilters} variant="ghost">
-                <X className="mr-2 h-4 w-4" />
-                Limpiar
-              </Button>
-            ) : null}
-            <Button
-              disabled={!filteredSubscriptions.length}
-              onClick={() =>
-                downloadSubscriptionsCSV(
-                  filteredSubscriptions,
-                  `suscripciones-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
-            </Button>
-            <Button data-tour="create-subscription" onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva suscripcion
-            </Button>
+      <section>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,0.75fr)_auto]">
+          <input className="field-dark !h-14" onChange={(event) => updateSubscriptionFilter("name", event.target.value)} placeholder="Buscar por nombre, proveedor o categoría..." type="search" value={subscriptionFilters.name} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay estados." onChange={(value) => updateSubscriptionFilter("status", value as "all" | SubscriptionStatus)} options={statusFilterPickerOptions} placeholderDescription="Estado" placeholderLabel="Todos los estados" queryPlaceholder="Buscar estado..." value={subscriptionFilters.status} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay frecuencias." onChange={(value) => updateSubscriptionFilter("frequency", value as "all" | SubscriptionFrequency)} options={frequencyFilterPickerOptions} placeholderDescription="Frecuencia" placeholderLabel="Todas las frecuencias" queryPlaceholder="Buscar frecuencia..." value={subscriptionFilters.frequency} />
+          <button aria-expanded={showMoreFilters} className="flex h-14 items-center justify-center gap-2 rounded-xl border border-white/[0.1] px-4 text-sm text-storm transition hover:text-ink" onClick={() => setShowMoreFilters((value) => !value)} type="button"><SlidersHorizontal className="h-4 w-4" />Más filtros</button>
+        </div>
+        {showMoreFilters ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay proveedores." onChange={(value) => updateSubscriptionFilter("vendor", value)} options={[{ value: "", label: "Todos los proveedores", description: "", leadingLabel: "—" }, ...subscriptionVendors.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Proveedor" placeholderLabel="Todos los proveedores" queryPlaceholder="Buscar proveedor..." value={subscriptionFilters.vendor} />
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay categorías." onChange={(value) => updateSubscriptionFilter("category", value)} options={[{ value: "", label: "Todas las categorías", description: "", leadingLabel: "—" }, ...subscriptionCategories.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Categoría" placeholderLabel="Todas las categorías" queryPlaceholder="Buscar categoría..." value={subscriptionFilters.category} />
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay cuentas." onChange={(value) => updateSubscriptionFilter("account", value)} options={[{ value: "", label: "Todas las cuentas", description: "", leadingLabel: "—" }, ...subscriptionAccounts.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Cuenta" placeholderLabel="Todas las cuentas" queryPlaceholder="Buscar cuenta..." value={subscriptionFilters.account} />
+            <input aria-label="Filtrar por monto" className="field-dark !h-14" onChange={(event) => updateSubscriptionFilter("amount", event.target.value)} placeholder="Monto" type="search" value={subscriptionFilters.amount} />
+            <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
+              <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro desde</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateFrom", value)} value={subscriptionFilters.nextDueDateFrom} /></div>
+              <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro hasta</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateTo", value)} value={subscriptionFilters.nextDueDateTo} /></div>
+            </div>
           </div>
-        </div>
+        ) : null}
+        {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearSubscriptionFilters} type="button">Limpiar filtros</button> : null}
+      </section>
 
-        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <input
-            className="field-dark"
-            onChange={(event) => updateSubscriptionFilter("name", event.target.value)}
-            placeholder="Buscar por nombre, proveedor o categoria..."
-            type="text"
-            value={subscriptionFilters.name}
-          />
-          <SearchablePicker
-            emptyMessage="No hay estados para mostrar."
-            onChange={(value) => updateSubscriptionFilter("status", value as "all" | SubscriptionStatus)}
-            options={statusFilterPickerOptions}
-            placeholderDescription="Filtra por estado."
-            placeholderLabel="Estado"
-            queryPlaceholder="Buscar estado..."
-            value={subscriptionFilters.status}
-          />
-          <SearchablePicker
-            emptyMessage="No hay frecuencias para mostrar."
-            onChange={(value) => updateSubscriptionFilter("frequency", value as "all" | SubscriptionFrequency)}
-            options={frequencyFilterPickerOptions}
-            placeholderDescription="Filtra por frecuencia."
-            placeholderLabel="Frecuencia"
-            queryPlaceholder="Buscar frecuencia..."
-            value={subscriptionFilters.frequency}
-          />
-        </div>
+      <section className="border-y border-white/[0.08] px-1 py-3 text-sm text-storm">
+        Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? (
         <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} />
       ) : null}
 
-      {viewMode === "list" ? (
-        subscriptions.length === 0 ? (
-          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
-        ) : filteredSubscriptions.length === 0 ? (
-          <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
-        ) : (
-          <SubscriptionList
-            onAnalytics={setAnalyticsSubscriptionId}
-            onEdit={openEditEditor}
-            onToggleSelect={toggleSelect}
-            selectedIds={selectedIds}
-            subscriptions={paginatedSubscriptions}
-          />
-        )
-      ) : viewMode === "table" ? (
-        subscriptions.length === 0 ? (
-          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
-        ) : filteredSubscriptions.length === 0 ? (
-          <DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" />
-        ) : (
-          <SubscriptionTable
-            accounts={subscriptionAccounts}
-            allSelected={allSelected}
-            categories={subscriptionCategories}
-            cv={cv}
-            filters={subscriptionFilters}
-            onAnalytics={setAnalyticsSubscriptionId}
-            onApplyFilterAndClose={applySubscriptionFilterAndClose}
-            onClearAll={clearAll}
-            onClearSingleFilter={clearSingleTableFilter}
-            onCloseFilterMenu={closeTableFilterMenu}
-            onEdit={openEditEditor}
-            onSelectAll={selectAll}
-            onToggleFilterMenu={toggleTableFilterMenu}
-            onToggleSelect={toggleSelect}
-            onUpdateFilter={updateSubscriptionFilter}
-            openFilter={openTableFilter}
-            someSelected={someSelected}
-            selectedIds={selectedIds}
-            subscriptions={paginatedSubscriptions}
-            vendors={subscriptionVendors}
-          />
-        )
-      ) : null}
-      {viewMode === "grid" ? (
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceCard action={<StatusBadge status={`${filteredSubscriptions.length} de ${subscriptions.length} registradas`} tone="success" />} description="Cada tarjeta representa una suscripcion real con sus datos principales y sus acciones." title="Pagos recurrentes">
-          {subscriptions.length === 0 ? (
-            <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripcion</Button>} description="Todavia no hay pagos recurrentes registrados para este workspace." title="Sin suscripciones" />
-          ) : filteredSubscriptions.length === 0 ? (
-            <DataState description="Prueba cambiando los filtros activos o vuelve a la vista tabla para revisar cada columna." title="Sin resultados" />
-          ) : (
-            <SubscriptionGrid
-              onAnalytics={setAnalyticsSubscriptionId}
-              onDelete={setDeleteTargetId}
-              onEdit={openEditEditor}
-              onToggleSelect={toggleSelect}
-              selectedCount={selectedCount}
-              selectedIds={selectedIds}
-              subscriptions={paginatedSubscriptions}
-            />
-          )}
-        </SurfaceCard>
-
-        <SurfaceCard action={<Sparkles className="h-5 w-5 text-gold" />} description="Orden cronologico con lo que viene mas pronto y una lectura rapida de la configuracion." title="Proximos vencimientos">
-          {subscriptions.length === 0 ? (
-            <DataState description="Cuando registres una suscripcion, aqui veras el siguiente cobro en orden cronologico." title="Sin calendario todavia" />
-          ) : filteredSubscriptions.length === 0 ? (
-            <DataState description="Los filtros actuales no dejan suscripciones visibles para el calendario." title="Sin vencimientos por mostrar" />
-          ) : (
-            <>
-              <div className="space-y-3">
-                {filteredSubscriptions.map((subscription) => (
-                  <div className="glass-panel-soft flex items-center justify-between gap-3 rounded-[26px] p-4" key={subscription.id}>
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">{subscription.name}</p>
-                      <p className="mt-1 text-sm text-storm">{formatDate(subscription.nextDueDate)} - {subscription.frequencyLabel}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-storm">{getStatusOption(subscription.status).label}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 rounded-[26px] border border-pine/15 bg-pine/10 p-5">
-                <p className="font-medium text-ink">Resumen rapido</p>
-                <p className="mt-2 text-sm leading-7 text-storm">
-                  {dueSoonCount} vencen en los proximos 7 dias, {autoCreatedCount} tienen auto-creacion habilitada y el siguiente cargo es{" "}
-                  {nextVisibleSubscription ? `${nextVisibleSubscription.name} el ${formatDate(nextVisibleSubscription.nextDueDate)}` : "sin fecha registrada"}.
-                </p>
-              </div>
-            </>
-          )}
-        </SurfaceCard>
-      </section>
-      ) : null}
+      {subscriptions.length === 0 ? (
+        <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripción</Button>} description="Todavía no hay pagos recurrentes registrados en este espacio." title="Sin suscripciones" />
+      ) : filteredSubscriptions.length === 0 ? (
+        <DataState action={hasActiveFilters ? <Button onClick={clearSubscriptionFilters} variant="secondary">Quitar filtros</Button> : undefined} description="No hay suscripciones que coincidan con los filtros." title="Sin resultados" />
+      ) : (
+        <SubscriptionTable
+          allSelected={allSelected}
+          onAnalytics={setAnalyticsSubscriptionId}
+          onClearAll={clearAll}
+          onDelete={setDeleteTargetId}
+          onEdit={openEditEditor}
+          onSelectAll={selectAll}
+          onToggleSelect={toggleSelect}
+          selectedIds={selectedIds}
+          someSelected={someSelected}
+          subscriptions={paginatedSubscriptions}
+        />
+      )}
 
       {filteredSubscriptions.length > 0 ? (
         <Pagination
@@ -1443,7 +1098,7 @@ export function SubscriptionsPage() {
       {deleteTarget ? (
         <DeleteConfirmDialog
           badge="Eliminar suscripciÃ³n"
-          description="Esto elimina la suscripcion y su calendario asociado. Si ya tiene movimientos vinculados, primero tendras que resolverlos."
+          description="Esto elimina la suscripción y su calendario asociado. Si ya tiene movimientos vinculados, primero tendrás que resolverlos."
           isDeleting={isDeleting}
           onCancel={() => {
             if (!isDeleting) {
@@ -1462,7 +1117,7 @@ export function SubscriptionsPage() {
                 {formatCurrency(deleteTarget.amount, deleteTarget.currencyCode)}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                {deleteTarget.frequencyLabel}
+                {getFrequencyOption(deleteTarget.frequency).label}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
                 {formatDate(deleteTarget.nextDueDate)}
@@ -1494,13 +1149,13 @@ export function SubscriptionsPage() {
         totalCount={filteredSubscriptions.length}
       />
       {showBulkDeleteConfirm ? (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="sub-bulk-title">
-          <div className="glass-panel-strong w-full max-w-md rounded-[28px] p-6">
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/75 p-3" role="dialog" aria-modal="true" aria-labelledby="sub-bulk-title">
+          <div className="w-full max-w-md rounded-[14px] border border-white/10 bg-[#1a1917] p-6 shadow-none">
             <h2 id="sub-bulk-title" className="font-display text-xl font-semibold text-ink">
-              Eliminar {selectedCount} suscripcion{selectedCount !== 1 ? "es" : ""}?
+              Eliminar {selectedCount} suscripción{selectedCount !== 1 ? "es" : ""}?
             </h2>
             <p className="mt-3 text-sm leading-7 text-storm">
-              Esta accion eliminara permanentemente las suscripciones seleccionadas. No se puede deshacer.
+              Esta acción eliminará permanentemente las suscripciones seleccionadas. No se puede deshacer.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>

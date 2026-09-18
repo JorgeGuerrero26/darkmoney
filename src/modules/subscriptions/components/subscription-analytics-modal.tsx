@@ -1,11 +1,11 @@
 import { BarChart3, X } from "lucide-react";
 import { useMemo, useRef } from "react";
 
-import { Button } from "../../../components/ui/button";
 import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { formatDate } from "../../../lib/formatting/dates";
 import type { MovementRecord, SubscriptionSummary } from "../../../types/domain";
+import { getFrequencyOption } from "../lib/subscriptions-presenters";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -38,8 +38,8 @@ function getAnnualCost(subscription: SubscriptionSummary): number {
     case "monthly":   return (amount / count) * 12;
     case "quarterly": return (amount / count) * 4;
     case "yearly":    return amount / count;
-    // custom cae aqui y se trata como mensual, igual que en la app.
-    default:          return amount * 12;
+    // La frecuencia personalizada avanza por días, igual que el calendario.
+    default:          return (amount / count) * 365;
   }
 }
 
@@ -64,7 +64,7 @@ function PaymentsBarChart({
               className="w-full rounded-t-[3px] transition-all"
               style={{
                 height: `${(m.amount / maxVal) * 100}%`,
-                background: "#f27a86",
+                background: "#d8d2c7",
                 opacity: m.amount > 0 ? 0.75 : 0.12,
                 minHeight: 3,
               }}
@@ -135,7 +135,6 @@ export function SubscriptionAnalyticsModal({
   );
 
   const annualCost = getAnnualCost(subscription);
-  const monthlyCost = annualCost / 12;
 
   const recentMovements = useMemo(
     () =>
@@ -148,13 +147,13 @@ export function SubscriptionAnalyticsModal({
   // days until next due
   const daysUntilNext = useMemo(() => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const next = new Date(subscription.nextDueDate);
+    today.setHours(12, 0, 0, 0);
+    const next = new Date(`${subscription.nextDueDate}T12:00:00`);
     next.setHours(0, 0, 0, 0);
     return Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   }, [subscription.nextDueDate]);
 
-  const metrics = [
+  const metrics = subMovements.length > 0 ? [
     {
       label: "Pagos registrados",
       value: subMovements.length.toString(),
@@ -164,36 +163,33 @@ export function SubscriptionAnalyticsModal({
       label: "Total gastado",
       value: formatCurrency(totalSpent, baseCurrencyCode),
       sub: "acumulado",
-      color: "#f27a86",
-    },
-    {
-      label: "Costo mensual",
-      value: formatCurrency(monthlyCost, currencyCode),
-      sub: "estimado",
     },
     {
       label: "Costo anual",
       value: formatCurrency(annualCost, currencyCode),
       sub: "estimado",
     },
+  ] : [
+    { label: "Monto por cobro", value: formatCurrency(subscription.amount, currencyCode), sub: getFrequencyOption(subscription.frequency).label.toLowerCase() },
+    { label: "Costo anual", value: formatCurrency(annualCost, currencyCode), sub: "estimado" },
   ];
 
   return (
     <div
-      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/75 p-3"
       role="dialog"
       aria-modal="true"
       aria-labelledby="subscription-analytics-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[#0a1220] shadow-2xl"
+        className="flex max-h-[calc(100dvh-24px)] w-full max-w-[720px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none"
         ref={dialogRef}
       >
         {/* header */}
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-white/10 bg-white/[0.04] text-[#f27a86]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 text-storm">
               <BarChart3 className="h-5 w-5" />
             </div>
             <div>
@@ -201,24 +197,24 @@ export function SubscriptionAnalyticsModal({
                 {subscription.name}
               </h2>
               <p className="text-xs text-storm">
-                {subscription.vendor} · {subscription.frequencyLabel}
+                {subscription.vendor} · {getFrequencyOption(subscription.frequency).label}
               </p>
             </div>
           </div>
-          <Button className="p-2" onClick={onClose} variant="ghost">
+          <button aria-label="Cerrar análisis" className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={onClose} type="button">
             <X className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {/* scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
 
           {/* metrics */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className={"grid grid-cols-2 border-y border-white/[0.08] " + (subMovements.length > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
             {metrics.map((m) => (
-              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" key={m.label}>
+              <div className="px-3 py-4" key={m.label}>
                 <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">{m.label}</p>
-                <p className="mt-2 font-display text-xl font-semibold" style={{ color: m.color ?? "#e8eaf6" }}>
+                <p className="mt-2 font-display text-xl font-semibold text-ink">
                   {m.value}
                 </p>
                 <p className="mt-0.5 text-[0.65rem] text-storm/70">{m.sub}</p>
@@ -228,7 +224,7 @@ export function SubscriptionAnalyticsModal({
 
           {/* next due + config */}
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+            <div className="border-b border-white/[0.08] px-1 py-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Próximo cobro</p>
               <p className="mt-3 font-display text-2xl font-semibold text-ink">{formatDate(subscription.nextDueDate)}</p>
               <p className="mt-1 text-xs text-storm">
@@ -239,7 +235,7 @@ export function SubscriptionAnalyticsModal({
                   : `En ${daysUntilNext} día${daysUntilNext !== 1 ? "s" : ""}`}
               </p>
             </div>
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+            <div className="border-b border-white/[0.08] px-1 py-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Configuración</p>
               <div className="mt-3 space-y-1.5 text-sm">
                 {subscription.accountName && (
@@ -255,14 +251,14 @@ export function SubscriptionAnalyticsModal({
           </div>
 
           {/* payments chart */}
-          <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+          {subMovements.length > 0 ? <div className="border-y border-white/[0.08] px-1 py-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos por mes (12 meses)</p>
             <PaymentsBarChart months={monthlySpend} currencyCode={baseCurrencyCode} />
-          </div>
+          </div> : null}
 
           {/* recent movements */}
           {recentMovements.length > 0 && (
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+            <div className="border-t border-white/[0.08] py-4">
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos recientes</p>
               <div className="mt-3 space-y-2">
                 {recentMovements.map((m) => {
@@ -273,7 +269,7 @@ export function SubscriptionAnalyticsModal({
                     0;
                   return (
                     <div
-                      className="flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-1 py-3"
                       key={m.id}
                     >
                       <div className="min-w-0 flex-1">
@@ -283,7 +279,7 @@ export function SubscriptionAnalyticsModal({
                           {m.sourceAccountName ? ` · ${m.sourceAccountName}` : ""}
                         </p>
                       </div>
-                      <p className="shrink-0 font-semibold text-[#f27a86]">
+                      <p className="shrink-0 font-semibold text-ink">
                         -{formatCurrency(amount, baseCurrencyCode)}
                       </p>
                     </div>
@@ -294,14 +290,14 @@ export function SubscriptionAnalyticsModal({
           )}
 
           {subMovements.length === 0 && (
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-storm">
+            <div className="border-y border-white/[0.08] py-6 text-sm text-storm">
               No hay pagos registrados para esta suscripción aún.
             </div>
           )}
 
           {/* notes */}
           {subscription.notes && (
-            <div className="rounded-[22px] border border-white/10 bg-black/15 p-4">
+            <div className="border-t border-white/[0.08] py-4">
               <p className="text-[0.68rem] uppercase tracking-[0.2em] text-storm/75">Notas</p>
               <p className="mt-2 text-sm leading-7 text-storm">{subscription.notes}</p>
             </div>

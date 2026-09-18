@@ -1,11 +1,11 @@
 import type { SubscriptionFrequency, SubscriptionStatus } from "../../../types/domain";
 
 export const frequencyOptions = [
-  { value: "daily" as const, label: "Diaria", description: "Se repite cada dia.", leadingLabel: "D", leadingColor: "#1b6a58" },
+  { value: "daily" as const, label: "Diaria", description: "Se repite cada día.", leadingLabel: "D", leadingColor: "#1b6a58" },
   { value: "weekly" as const, label: "Semanal", description: "Se repite por semanas.", leadingLabel: "S", leadingColor: "#4566d6" },
   { value: "monthly" as const, label: "Mensual", description: "Se repite cada mes.", leadingLabel: "M", leadingColor: "#8366f2" },
   { value: "quarterly" as const, label: "Trimestral", description: "Se repite cada trimestre.", leadingLabel: "T", leadingColor: "#b48b34" },
-  { value: "yearly" as const, label: "Anual", description: "Se repite una vez por ano.", leadingLabel: "A", leadingColor: "#c46a31" },
+  { value: "yearly" as const, label: "Anual", description: "Se repite una vez por año.", leadingLabel: "A", leadingColor: "#c46a31" },
   { value: "custom" as const, label: "Personalizada", description: "Tienes una frecuencia especial.", leadingLabel: "P", leadingColor: "#64748b" },
 ] as const;
 

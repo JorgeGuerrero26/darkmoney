@@ -1,38 +1,14 @@
-import { BarChart3, PencilLine } from "lucide-react";
+import { BarChart3, ChevronRight, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
-import { RowActionButton, RowActions } from "../../../components/ui/row-action-button";
-import { InlineDateRangePicker } from "../../../components/ui/inline-date-range-picker";
-import { StatusBadge } from "../../../components/ui/status-badge";
-import { TableColumnFilterMenu, TableFilterOptionButton } from "../../../components/ui/table-column-filter-menu";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { SubscriptionSummary } from "../../../types/domain";
-import {
-  isSubscriptionTableFilterActive,
-  type SubscriptionTableFilterField,
-  type SubscriptionTableFilters,
-} from "../lib/subscriptions-filters";
-import {
-  frequencyOptions,
-  getStatusOption,
-  getStatusTone,
-  statusOptions,
-} from "../lib/subscriptions-presenters";
-
-const filterInputClassName =
-  "w-full rounded-[16px] border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-pine/25 focus:bg-[#111b2a] focus:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]";
-
-const headerCellClassName =
-  "relative px-5 py-3 text-left text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-storm/55";
-
-type ColumnVisibilityFn = (key: string, hiddenClassName: string) => string;
+import { getFrequencyOption, getStatusOption } from "../lib/subscriptions-presenters";
 
 type SubscriptionTableProps = {
   subscriptions: SubscriptionSummary[];
-  vendors: string[];
-  categories: string[];
-  accounts: string[];
   selectedIds: Set<number>;
   allSelected: boolean;
   someSelected: boolean;
@@ -41,21 +17,11 @@ type SubscriptionTableProps = {
   onClearAll: () => void;
   onEdit: (subscription: SubscriptionSummary) => void;
   onAnalytics: (id: number) => void;
-  cv: ColumnVisibilityFn;
-  filters: SubscriptionTableFilters;
-  openFilter: SubscriptionTableFilterField | null;
-  onUpdateFilter: <Field extends keyof SubscriptionTableFilters>(field: Field, value: SubscriptionTableFilters[Field]) => void;
-  onClearSingleFilter: (field: SubscriptionTableFilterField) => void;
-  onToggleFilterMenu: (field: SubscriptionTableFilterField) => void;
-  onCloseFilterMenu: () => void;
-  onApplyFilterAndClose: <Field extends SubscriptionTableFilterField>(field: Field, value: SubscriptionTableFilters[Field]) => void;
+  onDelete: (id: number) => void;
 };
 
 export function SubscriptionTable({
   subscriptions,
-  vendors,
-  categories,
-  accounts,
   selectedIds,
   allSelected,
   someSelected,
@@ -64,243 +30,50 @@ export function SubscriptionTable({
   onClearAll,
   onEdit,
   onAnalytics,
-  cv,
-  filters,
-  openFilter,
-  onUpdateFilter,
-  onClearSingleFilter,
-  onToggleFilterMenu,
-  onCloseFilterMenu,
-  onApplyFilterAndClose,
+  onDelete,
 }: SubscriptionTableProps) {
+  const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   return (
-    <div className="overflow-x-auto rounded-[24px] border border-white/10">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-white/10 bg-white/[0.02]">
-            <th className="w-10 px-4 py-3.5">
-              <SelectionCheckbox
-                ariaLabel="Seleccionar todas"
-                checked={allSelected}
-                indeterminate={someSelected}
-                onChange={() => (allSelected ? onClearAll() : onSelectAll())}
-              />
-            </th>
-            <th className={headerCellClassName}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "name")}
-                isOpen={openFilter === "name"}
-                label="Nombre"
-                onClear={() => onClearSingleFilter("name")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("name")}
-              >
-                <div className="space-y-3">
-                  <input
-                    className={filterInputClassName}
-                    onChange={(event) => onUpdateFilter("name", event.target.value)}
-                    placeholder="Buscar por nombre"
-                    type="text"
-                    value={filters.name}
-                  />
+    <section aria-label="Suscripciones" className="border-y border-white/[0.08]">
+      <div className="flex h-12 items-center gap-3 border-b border-white/[0.08] px-1 text-sm text-storm">
+        <SelectionCheckbox ariaLabel="Seleccionar todas" checked={allSelected} indeterminate={someSelected} onChange={() => (allSelected ? onClearAll() : onSelectAll())} />
+        <span>Seleccionar todas</span>
+        <span className="ml-auto font-public-mono text-[11px] uppercase tracking-[0.12em]">{subscriptions.length} en esta página</span>
+      </div>
+      {subscriptions.map((subscription) => (
+        <article
+          className="group grid min-h-[68px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/[0.06] px-1 transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[auto_minmax(0,1.3fr)_minmax(130px,0.6fr)_auto]"
+          key={subscription.id}
+          onClick={() => onEdit(subscription)}
+        >
+          <span onClick={(event) => event.stopPropagation()}>
+            <SelectionCheckbox ariaLabel={"Seleccionar " + subscription.name} checked={selectedIds.has(subscription.id)} onChange={() => onToggleSelect(subscription.id)} />
+          </span>
+          <div className="min-w-0 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate font-semibold text-ink">{subscription.name}</p>
+              <span className="shrink-0 font-public-mono text-[9px] uppercase tracking-[0.12em] text-storm/70">{getStatusOption(subscription.status).label}</span>
+            </div>
+            <p className="mt-0.5 truncate text-sm text-storm">{subscription.vendor} · {getFrequencyOption(subscription.frequency).label} · {formatDate(subscription.nextDueDate)}</p>
+          </div>
+          <p className="hidden text-right text-xs text-storm sm:block">{subscription.accountName ?? subscription.categoryName ?? ""}</p>
+          <div className="flex items-center gap-1 py-3 text-right">
+            <p className="mr-1 whitespace-nowrap font-semibold tabular-nums text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
+            <div className="relative" onClick={(event) => event.stopPropagation()}>
+              <button aria-expanded={openActionsId === subscription.id} aria-label={"Opciones de " + subscription.name} className="grid h-9 w-9 place-items-center rounded-lg text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={() => setOpenActionsId((current) => current === subscription.id ? null : subscription.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>
+              {openActionsId === subscription.id ? <>
+                <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenActionsId(null)} type="button" />
+                <div className="absolute right-0 top-10 z-50 w-44 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
+                  <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onAnalytics(subscription.id); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
+                  <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onEdit(subscription); }} type="button"><PencilLine className="h-4 w-4" />Editar</button>
+                  <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setOpenActionsId(null); onDelete(subscription.id); }} type="button"><Trash2 className="h-4 w-4" />Eliminar</button>
                 </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} ${cv("proveedor", "hidden sm:table-cell")}`}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "vendor")}
-                isOpen={openFilter === "vendor"}
-                label="Proveedor"
-                onClear={() => onClearSingleFilter("vendor")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("vendor")}
-              >
-                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                  <TableFilterOptionButton onClick={() => onApplyFilterAndClose("vendor", "")} selected={!filters.vendor}>
-                    Todos
-                  </TableFilterOptionButton>
-                  {vendors.map((vendor) => (
-                    <TableFilterOptionButton key={vendor} onClick={() => onApplyFilterAndClose("vendor", vendor)} selected={filters.vendor === vendor}>
-                      {vendor}
-                    </TableFilterOptionButton>
-                  ))}
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} ${cv("frecuencia", "hidden md:table-cell")}`}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "frequency")}
-                isOpen={openFilter === "frequency"}
-                label="Frecuencia"
-                onClear={() => onClearSingleFilter("frequency")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("frequency")}
-              >
-                <div className="space-y-1">
-                  <TableFilterOptionButton onClick={() => onApplyFilterAndClose("frequency", "all")} selected={filters.frequency === "all"}>
-                    Todas
-                  </TableFilterOptionButton>
-                  {frequencyOptions.map((option) => (
-                    <TableFilterOptionButton key={option.value} onClick={() => onApplyFilterAndClose("frequency", option.value)} selected={filters.frequency === option.value}>
-                      {option.label}
-                    </TableFilterOptionButton>
-                  ))}
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} ${cv("categoria", "hidden lg:table-cell")}`}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "category")}
-                isOpen={openFilter === "category"}
-                label="Categoria"
-                onClear={() => onClearSingleFilter("category")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("category")}
-              >
-                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                  <TableFilterOptionButton onClick={() => onApplyFilterAndClose("category", "")} selected={!filters.category}>
-                    Todas
-                  </TableFilterOptionButton>
-                  {categories.map((category) => (
-                    <TableFilterOptionButton key={category} onClick={() => onApplyFilterAndClose("category", category)} selected={filters.category === category}>
-                      {category}
-                    </TableFilterOptionButton>
-                  ))}
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} ${cv("cuenta", "hidden xl:table-cell")}`}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "account")}
-                isOpen={openFilter === "account"}
-                label="Cuenta"
-                onClear={() => onClearSingleFilter("account")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("account")}
-              >
-                <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                  <TableFilterOptionButton onClick={() => onApplyFilterAndClose("account", "")} selected={!filters.account}>
-                    Todas
-                  </TableFilterOptionButton>
-                  {accounts.map((accountName) => (
-                    <TableFilterOptionButton key={accountName} onClick={() => onApplyFilterAndClose("account", accountName)} selected={filters.account === accountName}>
-                      {accountName}
-                    </TableFilterOptionButton>
-                  ))}
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} text-right`}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "amount")}
-                align="right"
-                isOpen={openFilter === "amount"}
-                label="Monto"
-                onClear={() => onClearSingleFilter("amount")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("amount")}
-                triggerClassName="justify-end text-right"
-              >
-                <div className="space-y-3">
-                  <input
-                    className={`${filterInputClassName} text-right`}
-                    onChange={(event) => onUpdateFilter("amount", event.target.value)}
-                    placeholder="Ej. 19.9"
-                    type="text"
-                    value={filters.amount}
-                  />
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} text-right ${cv("proximo_cobro", "hidden md:table-cell")}`}>
-              <TableColumnFilterMenu
-                active={
-                  isSubscriptionTableFilterActive(filters, "nextDueDateFrom") ||
-                  isSubscriptionTableFilterActive(filters, "nextDueDateTo")
-                }
-                align="right"
-                isOpen={openFilter === "nextDueDateFrom" || openFilter === "nextDueDateTo"}
-                label="Próximo cobro"
-                minWidthClassName="min-w-[320px]"
-                onClear={() => {
-                  onClearSingleFilter("nextDueDateFrom");
-                  onClearSingleFilter("nextDueDateTo");
-                }}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("nextDueDateFrom")}
-                triggerClassName="justify-end text-right"
-              >
-                <div className="space-y-3">
-                  <InlineDateRangePicker
-                    endDate={filters.nextDueDateTo}
-                    onEndDateChange={(value) => onUpdateFilter("nextDueDateTo", value)}
-                    onStartDateChange={(value) => onUpdateFilter("nextDueDateFrom", value)}
-                    startDate={filters.nextDueDateFrom}
-                  />
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={headerCellClassName}>
-              <TableColumnFilterMenu
-                active={isSubscriptionTableFilterActive(filters, "status")}
-                isOpen={openFilter === "status"}
-                label="Estado"
-                onClear={() => onClearSingleFilter("status")}
-                onClose={onCloseFilterMenu}
-                onToggle={() => onToggleFilterMenu("status")}
-              >
-                <div className="space-y-1">
-                  <TableFilterOptionButton onClick={() => onApplyFilterAndClose("status", "all")} selected={filters.status === "all"}>
-                    Todos
-                  </TableFilterOptionButton>
-                  {statusOptions.map((option) => (
-                    <TableFilterOptionButton key={option.value} onClick={() => onApplyFilterAndClose("status", option.value)} selected={filters.status === option.value}>
-                      {option.label}
-                    </TableFilterOptionButton>
-                  ))}
-                </div>
-              </TableColumnFilterMenu>
-            </th>
-            <th className={`${headerCellClassName} text-right`}>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {subscriptions.map((subscription, index) => {
-            const statusOption = getStatusOption(subscription.status);
-
-            return (
-              <tr
-                className={`border-b border-white/[0.05] transition hover:bg-white/[0.02] ${index === subscriptions.length - 1 ? "border-b-0" : ""}`}
-                key={subscription.id}
-              >
-                <td className="w-10 px-4 py-4">
-                  <SelectionCheckbox
-                    ariaLabel={`Seleccionar ${subscription.name}`}
-                    checked={selectedIds.has(subscription.id)}
-                    onChange={() => onToggleSelect(subscription.id)}
-                  />
-                </td>
-                <td className="px-5 py-3.5 font-medium text-ink">{subscription.name}</td>
-                <td className={`px-5 py-3.5 text-storm ${cv("proveedor", "hidden sm:table-cell")}`}>{subscription.vendor}</td>
-                <td className={`px-5 py-3.5 text-storm ${cv("frecuencia", "hidden md:table-cell")}`}>{subscription.frequencyLabel}</td>
-                <td className={`px-5 py-3.5 text-storm ${cv("categoria", "hidden lg:table-cell")}`}>{subscription.categoryName ?? "-"}</td>
-                <td className={`px-5 py-3.5 text-storm ${cv("cuenta", "hidden xl:table-cell")}`}>{subscription.accountName ?? "-"}</td>
-                <td className="px-5 py-3.5 text-right font-medium text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</td>
-                <td className={`px-5 py-3.5 text-right text-storm ${cv("proximo_cobro", "hidden md:table-cell")}`}>{formatDate(subscription.nextDueDate)}</td>
-                <td className="px-5 py-3.5">
-                  <StatusBadge status={statusOption.label} tone={getStatusTone(subscription.status)} />
-                </td>
-                <td className="px-5 py-3.5 text-right">
-                  <RowActions>
-                    <RowActionButton icon={BarChart3} label="Análisis" onClick={() => onAnalytics(subscription.id)} />
-                    <RowActionButton icon={PencilLine} label="Editar" onClick={() => onEdit(subscription)} />
-                  </RowActions>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+              </> : null}
+            </div>
+            <button aria-label={"Editar " + subscription.name} className="grid h-9 w-6 place-items-center text-storm/70 transition hover:text-ink" onClick={(event) => { event.stopPropagation(); onEdit(subscription); }} type="button"><ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></button>
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
