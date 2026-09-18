@@ -33,6 +33,7 @@ import {
   getStatusOption,
   getStatusTone,
 } from "../lib/obligations-presenters";
+import { coverPlan, describePlan, parsePaymentPlan } from "../lib/payment-plan";
 
 /**
  * Desde la perspectiva del invitado la direccion se invierte: si el propietario
@@ -114,6 +115,7 @@ export function SharedObligationDetailDialog({
   viewerLinks,
 }: SharedObligationDetailDialogProps) {
   const [activeTab, setActiveTab] = useState<"history" | "requests">("requests");
+  const [showFullPlan, setShowFullPlan] = useState(false);
   const [linkingEventId, setLinkingEventId] = useState<number | null>(null);
   const [linkAccountId, setLinkAccountId] = useState("");
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
@@ -140,6 +142,19 @@ export function SharedObligationDetailDialog({
       searchText: `${account.name} ${account.type} ${account.currencyCode}`,
     }));
   const pendingRequests = requests.filter((request) => request.status === "pending");
+  const plan = parsePaymentPlan(obligation.paymentPlan)
+    ?? (obligation.installmentCount ? { mode: "equal" as const, count: obligation.installmentCount } : null);
+  const planLabel = describePlan(plan, obligation.principalAmount, obligation.startDate, (amount) => formatCurrency(amount, obligation.currencyCode));
+  const coverage = plan ? coverPlan(
+    plan,
+    obligation.principalAmount,
+    obligation.currentPrincipalAmount ?? obligation.principalAmount,
+    obligation.startDate,
+    obligation.events.filter((event) => event.eventType === "payment").map((event) => ({ amount: event.amount, date: event.eventDate })),
+  ) : [];
+  const coveredCount = coverage.filter((row) => row.status === "covered").length;
+  const nextIndex = coverage.findIndex((row) => row.status !== "covered");
+  const visiblePlan = showFullPlan ? coverage : nextIndex < 0 ? [] : coverage.slice(nextIndex, nextIndex + 3);
 
   return (
     <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-void/70 p-3 backdrop-blur-sm sm:p-6">
@@ -217,9 +232,11 @@ export function SharedObligationDetailDialog({
                   <p className="mt-3 text-sm font-medium text-ink">
                     {obligation.dueDate ? formatDate(obligation.dueDate) : "Sin fecha"}
                   </p>
-                  <p className="mt-2 text-xs text-storm">{obligation.installmentLabel}</p>
+                  <p className="mt-2 text-xs text-storm">{planLabel ?? obligation.installmentLabel}</p>
                 </div>
               </div>
+
+              {coverage.length > 0 ? <section className="mt-5 border-y border-white/10 py-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-ink">Plan y pagos</h3><span className="text-xs text-storm">{coveredCount} de {coverage.length} cubiertas</span></div>{!showFullPlan && coveredCount > 0 ? <button className="mt-2 flex min-h-11 w-full items-center justify-between text-left text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan(true)} type="button"><span>{coveredCount} {coveredCount === 1 ? "cuota cubierta" : "cuotas cubiertas"}</span><span>{formatCurrency(coverage.filter((row) => row.status === "covered").reduce((sum, row) => sum + row.covered, 0), obligation.currencyCode)}</span></button> : null}{visiblePlan.map((row) => <div className="flex min-h-11 items-center justify-between gap-3 border-t border-white/[0.08] text-sm" key={row.seq}><span className="text-ink">Cuota {row.seq} <span className="text-xs text-storm">· {formatDate(row.dueDate)}</span></span><span className="tabular-nums text-storm">{row.status === "covered" ? "Cubierta" : row.status === "partial" ? `${formatCurrency(row.remaining, obligation.currencyCode)} pendiente` : formatCurrency(row.amount, obligation.currencyCode)}</span></div>)}{coverage.length > visiblePlan.length || showFullPlan ? <button className="min-h-10 text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan((value) => !value)} type="button">{showFullPlan ? "Ver menos" : `Ver el plan completo (${coverage.length} pagos)`}</button> : null}</section> : null}
 
               <div className="mt-6 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
                 <button

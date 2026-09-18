@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "check:dashboard-help": "node scripts/check-dashboard-help-keys.mjs",
     "test:parity": "tsc -p tsconfig.parity-tests.json && node scripts/run-parity-smoke.mjs",
+    "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -42,6 +42,7 @@ type ObligationSummaryRow = {
   due_date: string | null;
   installment_amount: number | string | null;
   installment_count: number | null;
+  payment_plan: unknown;
   interest_rate: number | string | null;
   description: string | null;
   notes: string | null;
@@ -121,7 +122,7 @@ Deno.serve(async (request) => {
     const { data: obligationData, error: obligationError } = await adminClient
       .from("v_obligation_summary")
       .select(
-        "id, workspace_id, direction, origin_type, status, title, counterparty_id, settlement_account_id, currency_code, principal_initial_amount, principal_current_amount, pending_amount, progress_percent, start_date, due_date, installment_amount, installment_count, interest_rate, description, notes, payment_count, last_payment_date",
+        "id, workspace_id, direction, origin_type, status, title, counterparty_id, settlement_account_id, currency_code, principal_initial_amount, principal_current_amount, pending_amount, progress_percent, start_date, due_date, installment_amount, installment_count, payment_plan, interest_rate, description, notes, payment_count, last_payment_date",
       )
       .in("id", obligationIds);
 
@@ -250,6 +251,7 @@ Deno.serve(async (request) => {
               ? null
               : toNumber(obligation.installment_amount),
           installmentCount: obligation.installment_count,
+          paymentPlan: obligation.payment_plan ?? null,
           interestRate:
             obligation.interest_rate === null ? null : toNumber(obligation.interest_rate),
           description: obligation.description,

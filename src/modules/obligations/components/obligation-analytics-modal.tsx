@@ -1,16 +1,16 @@
 import {
   BarChart3,
   CheckCircle2,
-  Circle,
   X,
 } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { formatDate } from "../../../lib/formatting/dates";
 import type { ObligationEventSummary, ObligationSummary } from "../../../types/domain";
+import { coverPlan, describePlan, parsePaymentPlan } from "../lib/payment-plan";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -134,6 +134,7 @@ export function ObligationAnalyticsModal({
   const isReceivable = obligation.direction === "receivable";
   const color = isReceivable ? "#6be4c5" : "#f27a86";
   const currencyCode = obligation.currencyCode;
+  const [showFullPlan, setShowFullPlan] = useState(false);
 
   // ── payment events ─────────────────────────────────────────────────────────
   const paymentEvents = useMemo(
@@ -197,19 +198,20 @@ export function ObligationAnalyticsModal({
     [obligation.events],
   );
 
-  // ── installment grid ───────────────────────────────────────────────────────
-  const paidInstallmentNos = useMemo(
-    () => new Set(paymentEvents.map((e) => e.installmentNo).filter((n): n is number => n != null)),
-    [paymentEvents],
-  );
-
-  const paymentByInstallmentNo = useMemo(() => {
-    const map = new Map<number, typeof paymentEvents[number]>();
-    for (const e of paymentEvents) {
-      if (e.installmentNo != null) map.set(e.installmentNo, e);
-    }
-    return map;
-  }, [paymentEvents]);
+  const plan = parsePaymentPlan(obligation.paymentPlan)
+    ?? (obligation.installmentCount ? { mode: "equal" as const, count: obligation.installmentCount } : null);
+  const coverage = plan ? coverPlan(
+    plan,
+    obligation.principalAmount,
+    principal,
+    obligation.startDate,
+    paymentEvents.map((event) => ({ amount: event.amount, date: event.eventDate })),
+  ) : [];
+  const planLabel = describePlan(plan, obligation.principalAmount, obligation.startDate, (amount) => formatCurrency(amount, currencyCode));
+  const coveredCount = coverage.filter((row) => row.status === "covered").length;
+  const nextIndex = coverage.findIndex((row) => row.status !== "covered");
+  const nextRow = nextIndex < 0 ? null : coverage[nextIndex];
+  const visibleCoverage = showFullPlan ? coverage : nextIndex < 0 ? [] : coverage.slice(nextIndex, nextIndex + 3);
 
   return (
     <div
@@ -282,10 +284,10 @@ export function ObligationAnalyticsModal({
                   <p className="mt-1 font-medium text-ink">{formatDate(obligation.lastPaymentDate)}</p>
                 </div>
               )}
-              {obligation.installmentAmount && (
+              {nextRow && (
                 <div>
-                  <p className="text-storm/70 uppercase tracking-[0.15em]">Cuota</p>
-                  <p className="mt-1 font-medium text-ink">{formatCurrency(obligation.installmentAmount, currencyCode)}</p>
+                  <p className="text-storm/70 uppercase tracking-[0.15em]">Próxima cuota</p>
+                  <p className="mt-1 font-medium text-ink">{formatCurrency(nextRow.remaining, currencyCode)}</p>
                 </div>
               )}
             </div>
@@ -364,45 +366,11 @@ export function ObligationAnalyticsModal({
             </div>
           )}
 
-          {/* installment detail */}
-          {(obligation.installmentCount != null && obligation.installmentCount > 1) || paymentEvents.length > 0 ? (
+          {/* El dinero cubre cuotas en cascada; installment_no no representa esta cobertura. */}
+          {coverage.length > 0 || paymentEvents.length > 0 ? (
             <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Detalle de cuotas</p>
-
-              {obligation.installmentCount != null && obligation.installmentCount > 1 ? (
-                <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6">
-                  {Array.from({ length: obligation.installmentCount }, (_, i) => i + 1).map((n) => {
-                    const paid = paidInstallmentNos.has(n);
-                    const ev = paymentByInstallmentNo.get(n);
-                    return (
-                      <div
-                        className="group relative flex flex-col items-center gap-1.5 rounded-[14px] border p-2.5 transition"
-                        key={n}
-                        style={{
-                          borderColor: paid ? `${color}33` : "rgba(255,255,255,0.06)",
-                          background: paid ? `${color}0d` : "rgba(255,255,255,0.015)",
-                        }}
-                        title={ev ? `${formatDate(ev.eventDate)} · ${formatCurrency(ev.amount, currencyCode)}` : `Cuota ${n} pendiente`}
-                      >
-                        {paid ? (
-                          <CheckCircle2 className="h-4 w-4" style={{ color }} />
-                        ) : (
-                          <Circle className="h-4 w-4 text-storm/30" />
-                        )}
-                        <span
-                          className="text-[0.6rem] font-semibold"
-                          style={{ color: paid ? color : "rgba(255,255,255,0.3)" }}
-                        >
-                          #{n}
-                        </span>
-                        {ev ? (
-                          <span className="text-[0.55rem] text-storm/60">{formatDate(ev.eventDate)}</span>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.18em] text-storm">Plan y pagos</p>{planLabel ? <p className="mt-1 text-sm text-storm">{planLabel}</p> : null}</div>{coverage.length ? <span className="text-xs text-storm">{coveredCount} de {coverage.length} cubiertas</span> : null}</div>
+              {coverage.length > 0 ? <div className="mt-4 border-y border-white/[0.08]">{!showFullPlan && coveredCount > 0 ? <button className="flex min-h-12 w-full items-center justify-between text-left text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan(true)} type="button"><span>{coveredCount} {coveredCount === 1 ? "cuota cubierta" : "cuotas cubiertas"}</span><span>{formatCurrency(coverage.filter((row) => row.status === "covered").reduce((sum, row) => sum + row.covered, 0), currencyCode)}</span></button> : null}{visibleCoverage.map((row) => <div className="flex min-h-12 items-center justify-between gap-3 border-t border-white/[0.08] text-sm" key={row.seq}><div><span className="font-medium text-ink">Cuota {row.seq}</span><span className="ml-2 text-xs text-storm">{formatDate(row.dueDate)} · {row.source === "agreed" ? "Acordada" : "Calculada"}</span></div><span className="shrink-0 tabular-nums text-storm">{row.status === "covered" ? "Cubierta" : row.status === "partial" ? `${formatCurrency(row.remaining, currencyCode)} pendiente` : formatCurrency(row.amount, currencyCode)}</span></div>)}{coverage.length > visibleCoverage.length || showFullPlan ? <button className="min-h-11 text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan((value) => !value)} type="button">{showFullPlan ? "Ver menos" : `Ver el plan completo (${coverage.length} pagos)`}</button> : null}</div> : null}
 
               {paymentEvents.length > 0 ? (
                 <div className="mt-4 space-y-2">
@@ -420,7 +388,7 @@ export function ObligationAnalyticsModal({
                           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color }} />
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-ink">
-                              {e.installmentNo != null ? `Cuota #${e.installmentNo}` : "Pago"}
+                              {isReceivable ? "Cobro" : "Pago"}
                             </p>
                             <p className="text-[0.65rem] text-storm">
                               {formatDate(e.eventDate)}
