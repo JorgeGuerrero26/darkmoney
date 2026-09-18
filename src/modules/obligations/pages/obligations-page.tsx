@@ -5085,7 +5085,7 @@ export function ObligationsPage() {
         </div>
       </section>
 
-      <section className="sticky top-[64px] z-30 bg-[#0e0d0c]/95 py-2 backdrop-blur-xl">
+      <section>
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <input
             className="field-dark"
