@@ -1,10 +1,12 @@
 import { Archive, ArchiveRestore, BarChart3, Pencil, Share2, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { ObligationEventSummary, ObligationSummary } from "../../../types/domain";
 import { getDirectionLabel, getEventLabel, getOriginOption, getStatusOption } from "../lib/obligations-presenters";
+import { coverPlan, describePlan, parsePaymentPlan } from "../lib/payment-plan";
 
 type PrincipalAdjustmentMode = "increase" | "decrease";
 
@@ -42,6 +44,20 @@ export function ObligationDetailDialog({
   const status = getStatusOption(obligation.status);
   const origin = getOriginOption(obligation.originType, obligation.direction);
   const canDelete = obligation.events.every((event) => event.eventType === "opening");
+  const [showFullPlan, setShowFullPlan] = useState(false);
+  const plan = parsePaymentPlan(obligation.paymentPlan)
+    ?? (obligation.installmentCount ? { mode: "equal" as const, count: obligation.installmentCount } : null);
+  const planLabel = describePlan(plan, obligation.principalAmount, obligation.startDate, (amount) => formatCurrency(amount, obligation.currencyCode));
+  const coverage = plan ? coverPlan(
+    plan,
+    obligation.principalAmount,
+    currentPrincipal,
+    obligation.startDate,
+    obligation.events.filter((event) => event.eventType === "payment").map((event) => ({ amount: event.amount, date: event.eventDate })),
+  ) : [];
+  const coveredCount = coverage.filter((row) => row.status === "covered").length;
+  const nextIndex = coverage.findIndex((row) => row.status !== "covered");
+  const visiblePlan = showFullPlan ? coverage : nextIndex < 0 ? [] : coverage.slice(nextIndex, nextIndex + 3);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm" role="presentation">
@@ -69,8 +85,10 @@ export function ObligationDetailDialog({
             <DetailRow label="Inicio" value={formatDate(obligation.startDate)} />
             <DetailRow label="Vencimiento" value={obligation.dueDate ? formatDate(obligation.dueDate) : "Sin fecha"} />
             <DetailRow label="Cuenta" value={obligation.settlementAccountName ?? "Sin asignar"} />
-            <DetailRow label="Plan" value={obligation.installmentLabel} />
+            <DetailRow label="Plan" value={planLabel ?? "Sin plan"} />
           </dl>
+
+          {coverage.length ? <section className="border-b border-white/[0.08] py-5"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Plan y pagos</h3><span className="text-xs text-storm">{coveredCount} de {coverage.length} cubiertas</span></div>{!showFullPlan && coveredCount > 0 ? <button className="mt-3 flex min-h-11 w-full items-center justify-between border-t border-white/[0.07] text-left text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan(true)} type="button"><span>{coveredCount} {coveredCount === 1 ? "cuota cubierta" : "cuotas cubiertas"}</span><span>{formatCurrency(coverage.filter((row) => row.status === "covered").reduce((sum, row) => sum + row.covered, 0), obligation.currencyCode)}</span></button> : null}{visiblePlan.map((row) => <div className="flex min-h-12 items-center justify-between gap-4 border-t border-white/[0.07] text-sm" key={row.seq}><div><span className="font-medium text-ink">Cuota {row.seq}</span><span className="ml-2 text-xs text-storm">{formatDate(row.dueDate)} · {row.source === "agreed" ? "Acordada" : "Calculada"}</span></div><span className="shrink-0 tabular-nums text-storm">{row.status === "covered" ? "Cubierta" : row.status === "partial" ? `${formatCurrency(row.remaining, obligation.currencyCode)} pendiente` : formatCurrency(row.amount, obligation.currencyCode)}</span></div>)}{coverage.length > visiblePlan.length ? <button className="mt-2 min-h-10 text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan(!showFullPlan)} type="button">{showFullPlan ? "Ver menos" : `Ver el plan completo (${coverage.length} pagos)`}</button> : showFullPlan ? <button className="mt-2 min-h-10 text-sm text-storm hover:text-ink" onClick={() => setShowFullPlan(false)} type="button">Ver menos</button> : null}</section> : null}
 
           {(obligation.description || obligation.notes) ? <section className="border-b border-white/[0.08] py-5"><p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Notas</p><p className="mt-2 text-sm leading-6 text-ink/90">{obligation.description || obligation.notes}</p></section> : null}
 

@@ -114,6 +114,8 @@ import {
 } from "../../../services/queries/workspace-data";
 import { ObligationTable } from "../components/obligation-table";
 import { ObligationDetailDialog } from "../components/obligation-detail-dialog";
+import { PaymentPlanEditor } from "../components/payment-plan-editor";
+import { coverPlan, describePlan, expandPaymentPlan, normalizePaymentPlan, parsePaymentPlan, planDifference, type PaymentPlan } from "../lib/payment-plan";
 import { PendingEventRequestsSection } from "../components/pending-event-requests-section";
 import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
 import {
@@ -142,6 +144,7 @@ type ObligationFormState = {
   dueDate: string;
   installmentAmount: string;
   installmentCount: string;
+  paymentPlan: PaymentPlan | null;
   interestRate: string;
   description: string;
   notes: string;
@@ -377,6 +380,7 @@ function createDefaultFormState(baseCurrencyCode: string): ObligationFormState {
     dueDate: "",
     installmentAmount: "",
     installmentCount: "",
+    paymentPlan: null,
     interestRate: "",
     description: "",
     notes: "",
@@ -525,6 +529,8 @@ function buildFormStateFromObligation(obligation: ObligationSummary): Obligation
       obligation.installmentCount === null || obligation.installmentCount === undefined
         ? ""
         : String(obligation.installmentCount),
+    paymentPlan: parsePaymentPlan(obligation.paymentPlan)
+      ?? (obligation.installmentCount ? { mode: "equal", count: obligation.installmentCount } : null),
     interestRate:
       obligation.interestRate === null || obligation.interestRate === undefined
         ? ""
@@ -1629,13 +1635,18 @@ function PaymentDialog(props: Parameters<typeof LegacyPaymentDialog>[0]) {
   const accountOptions = accounts.filter((account) => (!account.isArchived || String(account.id) === formState.accountId) && account.currencyCode === obligation.currencyCode).map<PickerOption>((account) => ({ value: String(account.id), label: account.name, description: `${account.type} · ${account.currencyCode}`, leadingLabel: account.currencyCode, leadingColor: "#6b6459" }));
   const selectedAccount = accounts.find((account) => String(account.id) === formState.accountId) ?? null;
   const balanceAfter = selectedAccount ? selectedAccount.currentBalance + (isReceivable ? amount : -amount) : null;
-  const installmentAmount = obligation.installmentAmount ?? 0;
-  const paidBefore = obligation.events.filter((item) => item.eventType === "payment").reduce((sum, item) => sum + item.amount, 0);
-  const completedInstallments = installmentAmount > 0 ? Math.floor(paidBefore / installmentAmount) : 0;
-  const nextInstallmentNo = obligation.installmentCount ? Math.min(completedInstallments + 1, obligation.installmentCount) : completedInstallments + 1;
-  const coveredInInstallment = installmentAmount > 0 ? paidBefore % installmentAmount : 0;
-  const remainingInInstallment = installmentAmount > 0 ? Math.max(0, installmentAmount - coveredInInstallment) : 0;
-  const installmentEffect = installmentAmount > 0 && amount > 0
+  const plan = parsePaymentPlan(obligation.paymentPlan)
+    ?? (obligation.installmentCount ? { mode: "equal" as const, count: obligation.installmentCount } : null);
+  const coverage = plan ? coverPlan(
+    plan,
+    obligation.principalAmount,
+    obligation.currentPrincipalAmount ?? obligation.principalAmount,
+    obligation.startDate,
+    obligation.events.filter((item) => item.eventType === "payment").map((item) => ({ amount: item.amount, date: item.eventDate })),
+  ) : [];
+  const nextInstallment = coverage.find((item) => item.status !== "covered");
+  const remainingInInstallment = nextInstallment?.remaining ?? 0;
+  const installmentEffect = nextInstallment && amount > 0
     ? amount < remainingInInstallment
       ? `Quedarán ${formatCurrency(remainingInInstallment - amount, obligation.currencyCode)} pendientes de esta cuota.`
       : amount === remainingInInstallment
@@ -1647,7 +1658,7 @@ function PaymentDialog(props: Parameters<typeof LegacyPaymentDialog>[0]) {
     <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={onCancel} title={panel === "main" ? (isEditMode ? `Editar ${paymentNoun}` : `Registrar ${paymentNoun}`) : `Detalles del ${paymentNoun}`} />
     <div className="overflow-y-auto px-5 py-5 sm:px-7">{feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}{panel === "main" ? <div className="space-y-5">
       <Field label={`Monto del ${paymentNoun} (${getCurrencyLabel(obligation.currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" id="payment-amount" inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} /></Field>
-      {!isEditMode && installmentAmount > 0 ? <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm"><div className="flex items-center justify-between gap-4"><span className="text-storm">Cuota {nextInstallmentNo}{obligation.installmentCount ? ` de ${obligation.installmentCount}` : ""}</span><strong className="tabular-nums text-ink">{formatCurrency(remainingInInstallment, obligation.currencyCode)}</strong></div>{installmentEffect ? <p className="mt-2 text-xs text-storm">{installmentEffect}</p> : null}</div> : null}
+      {!isEditMode && nextInstallment ? <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm"><div className="flex items-center justify-between gap-4"><span className="text-storm">Cuota {nextInstallment.seq} de {coverage.length} · {formatDate(nextInstallment.dueDate)}</span><strong className="tabular-nums text-ink">{formatCurrency(remainingInInstallment, obligation.currencyCode)}</strong></div>{installmentEffect ? <p className="mt-2 text-xs text-storm">{installmentEffect}</p> : null}</div> : null}
       <div className="flex min-h-14 items-center justify-between border-y border-white/[0.09] text-sm"><span className="text-storm">Pendiente después</span><strong className="text-lg tabular-nums text-ink">{formatCurrency(pendingAfter, obligation.currencyCode)}</strong></div>
       <Field label="Cuándo"><DatePickerField appearance="compact" onChange={(value) => updateFormState("eventDate", value)} value={formState.eventDate} /></Field>
       <div className="flex min-h-14 items-center justify-between gap-4 border-y border-white/[0.09]"><div><p className="font-semibold text-ink">Movimiento en cuenta</p><p className="mt-1 text-xs text-storm">{isReceivable ? "Suma el cobro al saldo." : "Descuenta el pago del saldo."}</p></div><button aria-pressed={formState.registerAccountMovement} className={`relative h-7 w-12 rounded-full border transition ${formState.registerAccountMovement ? "border-[#d8d2c7]/60 bg-white/[0.12]" : "border-white/[0.12] bg-white/[0.03]"}`} onClick={() => updateFormState("registerAccountMovement", !formState.registerAccountMovement)} type="button"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition ${formState.registerAccountMovement ? "left-[25px]" : "left-1"}`} /></button></div>
@@ -2816,8 +2827,17 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
     updateShareFormState,
     updateFormState,
   } = props;
-  const [panel, setPanel] = useState<"main" | "details">("main");
+  const [panel, setPanel] = useState<"main" | "details" | "plan">("main");
   const currencyCode = formState.currencyCode || baseCurrencyCode;
+  const principalForPlan = Number(formState.principalAmount) || 0;
+  const planLabel = describePlan(formState.paymentPlan, principalForPlan, formState.startDate, (amount) => formatCurrency(amount, currencyCode));
+  const savePlan = (plan: PaymentPlan | null) => {
+    updateFormState("paymentPlan", plan);
+    const rows = plan ? expandPaymentPlan(plan, principalForPlan, formState.startDate) : [];
+    updateFormState("installmentCount", rows.length ? String(rows.length) : "");
+    updateFormState("installmentAmount", rows.length ? String(rows[0].amount) : "");
+    setPanel("details");
+  };
   const openingImpact = getOpeningImpactMeta(formState.direction, formState.originType, formState.manualOpeningImpact);
   const originOptions = getOriginTypeOptions(formState.direction);
   const counterpartyOptions = counterparties.filter((item) => !item.isArchived || String(item.id) === formState.counterpartyId).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: item.type, leadingLabel: item.name.slice(0, 2).toUpperCase(), leadingColor: "#6b6459" }));
@@ -2833,13 +2853,13 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3" role="presentation">
-      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={onSubmit}>
-        <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda") : "Detalles"} />
+      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={(event) => { if (panel === "plan") { event.preventDefault(); return; } onSubmit(event); }}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "plan" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda") : panel === "plan" ? "Plan de pagos" : "Detalles"} />
 
         <div className="overflow-y-auto px-5 py-5 sm:px-7">
           {feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
-          {panel === "main" ? <div className="space-y-5">
+          {panel === "plan" ? <PaymentPlanEditor currencyCode={currencyCode} onSave={savePlan} plan={formState.paymentPlan} principal={principalForPlan} startDate={formState.startDate} /> : panel === "main" ? <div className="space-y-5">
             <div data-field="principalAmount">
               <Field errorKey="principalAmount" invalidFields={invalidFields} label={`Monto (${getCurrencyLabel(currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></Field>
               {invalidFields.has("principalAmount") ? <p className="mt-2 text-xs text-rose-300">Ingresa un monto válido.</p> : null}
@@ -2865,7 +2885,8 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
             <Field label="Cuenta de abonos"><Picker emptyMessage="No hay cuentas." onChange={(value) => updateFormState("settlementAccountId", value)} options={accountOptions} placeholderDescription="Cuenta usada por defecto." placeholderLabel="Sin asignar" queryPlaceholder="Buscar cuenta..." value={formState.settlementAccountId} /></Field>
             <Field label="Estado"><Picker emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as ObligationStatus)} options={neutralize(statusOptions)} placeholderDescription="Estado del registro." placeholderLabel="Selecciona estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
 
-            <section className="border-y border-white/[0.09] py-4"><p className={labelClassName}>Plan de pago</p><div className="mt-4 grid gap-4 sm:grid-cols-3"><Field label="Cuota"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("installmentAmount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.installmentAmount} /></Field><Field label="N.º cuotas"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("installmentCount", event.target.value)} placeholder="12" step="1" type="number" value={formState.installmentCount} /></Field><Field label="Interés %"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("interestRate", event.target.value)} placeholder="0" step="0.0001" type="number" value={formState.interestRate} /></Field></div></section>
+            <section><p className={labelClassName}>Cómo se paga</p><button className="mt-3 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#141311] px-4 text-left text-sm" onClick={() => setPanel("plan")} type="button"><span className="font-medium text-ink">Plan de pagos</span><span className="text-right text-storm">{planLabel ?? "Sin plan"} ›</span></button>{formState.paymentPlan?.mode === "equal" && planLabel ? <p className="mt-2 text-xs text-storm">La cuota se calcula a partir del monto y se recalcula si cambia.</p> : null}</section>
+            <Field label="Interés %"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("interestRate", event.target.value)} placeholder="0" step="0.0001" type="number" value={formState.interestRate} /></Field>
             <Field label="Descripción"><Textarea className="min-h-20" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible del registro" value={formState.description} /></Field>
             <Field label="Notas"><Textarea className="min-h-20" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Notas internas" value={formState.notes} /></Field>
 
@@ -2875,7 +2896,7 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
           </div>}
         </div>
 
-        <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer>
+        {panel !== "plan" ? <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer> : null}
       </form>
     </div>
   );
@@ -4366,8 +4387,12 @@ export function ObligationsPage() {
     const openingAccountId = parseOptionalInteger(formState.openingAccountId);
     const settlementAccountId = parseOptionalInteger(formState.settlementAccountId);
     const principalAmount = parseOptionalNumber(formState.principalAmount);
-    const installmentAmount = parseOptionalNumber(formState.installmentAmount);
-    const installmentCount = parseOptionalInteger(formState.installmentCount);
+    const paymentPlan = normalizePaymentPlan(formState.paymentPlan);
+    const scheduledPayments = paymentPlan && principalAmount && principalAmount > 0
+      ? expandPaymentPlan(paymentPlan, principalAmount, formState.startDate)
+      : [];
+    const installmentAmount = scheduledPayments.length ? scheduledPayments[0].amount : null;
+    const installmentCount = scheduledPayments.length ? scheduledPayments.length : null;
     const interestRate = parseOptionalNumber(formState.interestRate);
     const openingImpact = getOpeningImpact(
       formState.direction,
@@ -4395,20 +4420,11 @@ export function ObligationsPage() {
       return;
     }
 
-    if (installmentAmount !== null && (Number.isNaN(installmentAmount) || installmentAmount <= 0)) {
+    if (paymentPlan && (!scheduledPayments.length || planDifference(principalAmount ?? 0, scheduledPayments) !== 0)) {
       setEditorFeedback({
         tone: "error",
-        title: "Monto por cuota invalido",
-        description: "Si lo completas, debe ser un valor mayor que cero.",
-      });
-      return;
-    }
-
-    if (installmentCount !== null && (Number.isNaN(installmentCount) || installmentCount <= 0)) {
-      setEditorFeedback({
-        tone: "error",
-        title: "Numero de cuotas invalido",
-        description: "Si defines cuotas, indica una cantidad mayor que cero.",
+        title: "El plan no cubre el monto",
+        description: "Revisa el plan de pagos: debe programar exactamente el monto del registro.",
       });
       return;
     }
@@ -4479,6 +4495,7 @@ export function ObligationsPage() {
       dueDate: formState.dueDate || null,
       installmentAmount,
       installmentCount,
+      paymentPlan,
       interestRate,
       description: formState.description,
       notes: formState.notes,

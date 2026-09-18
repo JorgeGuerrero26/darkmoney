@@ -351,6 +351,7 @@ export type ObligationSummary = {
   dueDate: string | null;
   installmentAmount?: number | null;
   installmentCount?: number | null;
+  paymentPlan?: import("../modules/obligations/lib/payment-plan").PaymentPlan | null;
   interestRate?: number | null;
   description?: string | null;
   notes?: string | null;

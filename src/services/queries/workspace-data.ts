@@ -218,6 +218,7 @@ type ObligationRow = {
   due_date: string | null;
   installment_amount: NumericLike;
   installment_count: number | null;
+  payment_plan: unknown;
   interest_rate: NumericLike;
   description: string | null;
   notes: string | null;
@@ -599,6 +600,7 @@ export type ObligationFormInput = {
   dueDate?: string | null;
   installmentAmount?: number | null;
   installmentCount?: number | null;
+  paymentPlan?: import("../../modules/obligations/lib/payment-plan").PaymentPlan | null;
   interestRate?: number | null;
   description?: string | null;
   notes?: string | null;
@@ -1655,7 +1657,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("obligations")
       .select(
-        "id, workspace_id, direction, origin_type, status, title, counterparty_id, settlement_account_id, currency_code, principal_amount, start_date, due_date, installment_amount, installment_count, interest_rate, description, notes",
+        "id, workspace_id, direction, origin_type, status, title, counterparty_id, settlement_account_id, currency_code, principal_amount, start_date, due_date, installment_amount, installment_count, payment_plan, interest_rate, description, notes",
       )
       .eq("workspace_id", workspace.id)
       .order("created_at", { ascending: false }),
@@ -2061,6 +2063,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       dueDate: row.due_date,
       installmentAmount: row.installment_amount === null ? null : toNumber(row.installment_amount),
       installmentCount: row.installment_count,
+      paymentPlan: row.payment_plan as ObligationSummary["paymentPlan"],
       interestRate: row.interest_rate === null ? null : toNumber(row.interest_rate),
       description: row.description,
       notes: row.notes,
@@ -4714,6 +4717,7 @@ function buildObligationMutationPayload(input: ObligationFormInput, userId: stri
     due_date: normalizeOptionalText(input.dueDate) ?? null,
     installment_amount: input.installmentAmount ?? null,
     installment_count: input.installmentCount ?? null,
+    payment_plan: input.paymentPlan ?? null,
     interest_rate: input.interestRate ?? null,
     description: normalizeOptionalText(input.description),
     notes: normalizeOptionalText(input.notes),
