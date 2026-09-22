@@ -1,6 +1,33 @@
 import { supabase } from "../../../services/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import type { SubscriptionStatus, SubscriptionSummary } from "../../../types/domain";
 import { computeNextRecurringDate, rollDueDateForward } from "./subscriptions-presenters";
+
+export type SubscriptionOccurrence = {
+  id: number;
+  dueDate: string;
+  expectedAmount: number;
+  status: "scheduled" | "paid" | "skipped" | "cancelled" | "overdue";
+};
+
+export function useSubscriptionOccurrences(subscriptionId: number) {
+  return useQuery({
+    queryKey: ["subscription-occurrences", subscriptionId],
+    queryFn: async (): Promise<SubscriptionOccurrence[]> => {
+      const { data, error } = await client().from("subscription_occurrences")
+        .select("id, due_date, expected_amount, status")
+        .eq("subscription_id", subscriptionId)
+        .order("due_date", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: Number(row.id),
+        dueDate: String(row.due_date).slice(0, 10),
+        expectedAmount: Number(row.expected_amount),
+        status: row.status as SubscriptionOccurrence["status"],
+      }));
+    },
+  });
+}
 
 function client() {
   if (!supabase) throw new Error("Supabase no disponible.");

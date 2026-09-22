@@ -7,6 +7,7 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, CategorySummary, MovementRecord, SubscriptionSummary } from "../../../types/domain";
 import { computeNextRecurringDate, getFrequencyOption } from "../lib/subscriptions-presenters";
+import { type SubscriptionOccurrence, useSubscriptionOccurrences } from "../lib/subscription-actions";
 
 type Props = {
   subscription: SubscriptionSummary;
@@ -25,12 +26,18 @@ type Props = {
   onAssignCategory: (categoryId: number | null) => void;
 };
 
-function standingCopy(subscription: SubscriptionSummary) {
+function standingCopy(subscription: SubscriptionSummary, occurrences?: SubscriptionOccurrence[]) {
   if (subscription.status === "cancelled") return { label: "Cancelada", detail: "Ya no genera cobros. Su historial se conserva." };
   if (subscription.status === "paused") return { label: "Pausada", detail: "No se cobrará hasta que la reactives." };
   const today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
   if (subscription.nextDueDate === today) return { label: "Se cobra hoy", detail: `Toca hoy, ${formatCurrency(subscription.amount, subscription.currencyCode)}.` };
   if (subscription.nextDueDate > today) return { label: "Al día", detail: `Próximo cobro el ${formatDate(subscription.nextDueDate)}.` };
+  const unresolved = occurrences?.filter((occurrence) => occurrence.status === "scheduled" && occurrence.dueDate < today);
+  if (unresolved && unresolved.length === 0) return { label: "Al día", detail: `Próximo cobro el ${formatDate(subscription.nextDueDate)}.` };
+  if (unresolved?.length) {
+    const missedAmount = unresolved.reduce((total, occurrence) => total + occurrence.expectedAmount, 0);
+    return { label: "Atrasada", detail: `${unresolved.length === 1 ? "Va 1 cobro" : `Van ${unresolved.length} cobros`} sin anotar, ${formatCurrency(missedAmount, subscription.currencyCode)}.` };
+  }
   let cursor = subscription.nextDueDate;
   let missed = 0;
   while (cursor < today && missed < 400) {
@@ -64,7 +71,8 @@ export function SubscriptionDetailDialog({ subscription, accounts, categories, m
   const payments = movements.filter((movement) => movement.subscriptionId === subscription.id && movement.status === "posted")
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const nextDueDate = computeNextRecurringDate(subscription.nextDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth);
-  const standing = standingCopy(subscription);
+  const occurrencesQuery = useSubscriptionOccurrences(subscription.id);
+  const standing = standingCopy(subscription, occurrencesQuery.data);
 
   async function confirmPayment() {
     if (!selectedAccount) { setError("Elige la cuenta con la que pagaste."); return; }
