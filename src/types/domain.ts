@@ -393,6 +393,7 @@ export type ObligationShareInviteDetails = {
 export type SubscriptionSummary = {
   id: number;
   workspaceId: number;
+  isPinned: boolean;
   name: string;
   vendorPartyId?: number | null;
   vendor: string;

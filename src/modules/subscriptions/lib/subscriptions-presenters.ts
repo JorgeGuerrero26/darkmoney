@@ -44,13 +44,14 @@ export function computeNextRecurringDate(
   currentYmd: string,
   frequency: SubscriptionFrequency,
   intervalCount: number,
+  anchor?: number | null,
 ): string {
   const parts = currentYmd.split("-");
   const date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12));
   const count = Math.max(1, Math.floor(intervalCount) || 1);
 
   const addMonthsClamped = (months: number) => {
-    const dayOfMonth = date.getUTCDate();
+    const dayOfMonth = anchor && anchor >= 1 ? Math.floor(anchor) : date.getUTCDate();
     date.setUTCDate(1);
     date.setUTCMonth(date.getUTCMonth() + months);
     const lastDayOfTargetMonth = new Date(
@@ -93,11 +94,12 @@ export function rollDueDateForward(
   frequency: SubscriptionFrequency,
   intervalCount: number,
   todayYmd: string,
+  anchor?: number | null,
 ): string {
   let next = currentYmd;
 
   for (let i = 0; next < todayYmd && i < 4000; i += 1) {
-    next = computeNextRecurringDate(next, frequency, intervalCount);
+    next = computeNextRecurringDate(next, frequency, intervalCount, anchor);
   }
 
   return next;

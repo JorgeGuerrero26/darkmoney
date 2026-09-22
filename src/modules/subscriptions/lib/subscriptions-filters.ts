@@ -2,6 +2,7 @@ import type { SubscriptionFrequency, SubscriptionStatus } from "../../../types/d
 
 export type SubscriptionTableFilters = {
   name: string;
+  pinned: boolean;
   vendor: string;
   frequency: "all" | SubscriptionFrequency;
   status: "all" | SubscriptionStatus;
@@ -16,6 +17,7 @@ export type SubscriptionTableFilterField = keyof SubscriptionTableFilters;
 
 export const defaultSubscriptionTableFilters = (): SubscriptionTableFilters => ({
   name: "",
+  pinned: false,
   vendor: "",
   frequency: "all",
   status: "all",
@@ -37,6 +39,8 @@ export function isSubscriptionTableFilterActive(
     case "account":
     case "amount":
       return Boolean(filters[field].trim());
+    case "pinned":
+      return filters.pinned;
     case "nextDueDateFrom":
     case "nextDueDateTo":
       return Boolean(filters[field]);

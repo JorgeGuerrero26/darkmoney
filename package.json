@@ -10,6 +10,7 @@
     "test:parity": "tsc -p tsconfig.parity-tests.json && node scripts/run-parity-smoke.mjs",
     "test:date-format": "node --experimental-strip-types scripts/test-date-format.mjs",
     "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
+    "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

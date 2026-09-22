@@ -254,6 +254,7 @@ export const mockSubscriptions: SubscriptionSummary[] = [
   {
     id: 501,
     workspaceId: 202,
+    isPinned: false,
     name: "Internet hogar",
     vendorPartyId: 9101,
     vendor: "FibraX",
@@ -281,6 +282,7 @@ export const mockSubscriptions: SubscriptionSummary[] = [
   {
     id: 502,
     workspaceId: 202,
+    isPinned: false,
     name: "Streaming familiar",
     vendorPartyId: 9102,
     vendor: "Stream+",
@@ -308,6 +310,7 @@ export const mockSubscriptions: SubscriptionSummary[] = [
   {
     id: 503,
     workspaceId: 101,
+    isPinned: false,
     name: "Suite creativa",
     vendorPartyId: 9103,
     vendor: "Pixel Cloud",

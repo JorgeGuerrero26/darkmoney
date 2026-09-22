@@ -39,6 +39,8 @@ import type {
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { SubscriptionAnalyticsModal } from "../components/subscription-analytics-modal";
+import { SubscriptionDetailDialog } from "../components/subscription-detail-dialog";
+import { assignSubscriptionField, changeSubscriptionStatus, markSubscriptionPaid, setSubscriptionPinned, todayPeru } from "../lib/subscription-actions";
 import {
   getQueryErrorMessage,
   type SubscriptionFormInput,
@@ -465,13 +467,15 @@ function escapeCSV(v: string | number | boolean | null | undefined): string {
 }
 
 function downloadSubscriptionsCSV(subscriptions: SubscriptionSummary[], filename: string) {
-  const headers = ["Nombre", "Proveedor", "Estado", "Monto", "Moneda", "Frecuencia", "Categoría", "Cuenta", "Inicio", "Próximo vencimiento", "Fin", "Auto movimiento", "Descripción", "Notas"];
+  const headers = ["Nombre", "Proveedor", "Estado", "Monto", "Moneda", "Monto moneda base", "Frecuencia", "Etiqueta frecuencia", "Categoría", "Cuenta", "Inicio", "Próximo vencimiento", "Fin", "Auto movimiento", "Descripción", "Notas"];
   const rows = subscriptions.map((s) => [
     escapeCSV(s.name),
     escapeCSV(s.vendor),
     escapeCSV(getStatusOption(s.status).label),
     escapeCSV(s.amount),
     escapeCSV(s.currencyCode),
+    escapeCSV(s.amountInBaseCurrency ?? ""),
+    escapeCSV(s.frequency),
     escapeCSV(getFrequencyOption(s.frequency).label),
     escapeCSV(s.categoryName ?? ""),
     escapeCSV(s.accountName ?? ""),
@@ -516,10 +520,14 @@ export function SubscriptionsPage() {
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [analyticsSubscriptionId, setAnalyticsSubscriptionId] = useState<number | null>(null);
+  const [detailSubscriptionId, setDetailSubscriptionId] = useState<number | null>(null);
+  const [cancelSubscriptionId, setCancelSubscriptionId] = useState<number | null>(null);
+  const [isActionPending, setIsActionPending] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   const {
     filters: subscriptionFilters,
+    setFilters: setSubscriptionFilters,
     currentPage,
     setCurrentPage,
     updateFilter: updateSubscriptionFilter,
@@ -530,7 +538,10 @@ export function SubscriptionsPage() {
   );
 
   const subscriptions = useMemo(
-    () => [...(snapshot?.subscriptions ?? [])].sort((left, right) => left.nextDueDate.localeCompare(right.nextDueDate)),
+    () => [...(snapshot?.subscriptions ?? [])].sort((left, right) => {
+      const rank = (item: SubscriptionSummary) => item.status === "active" ? (item.nextDueDate < todayPeru() ? 0 : 1) : item.status === "paused" ? 2 : 3;
+      return rank(left) - rank(right) || Number(right.isPinned) - Number(left.isPinned) || left.nextDueDate.localeCompare(right.nextDueDate);
+    }),
     [snapshot?.subscriptions],
   );
   const categories = snapshot?.catalogs.categories ?? [];
@@ -545,9 +556,12 @@ export function SubscriptionsPage() {
     deleteTargetId === null
       ? null
       : subscriptions.find((subscription) => subscription.id === deleteTargetId) ?? null;
+  const detailSubscription = detailSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === detailSubscriptionId) ?? null;
+  const cancelSubscription = cancelSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === cancelSubscriptionId) ?? null;
 
   const hasActiveFilters =
     subscriptionFilters.name.trim() !== "" ||
+    subscriptionFilters.pinned ||
     subscriptionFilters.vendor.trim() !== "" ||
     subscriptionFilters.category.trim() !== "" ||
     subscriptionFilters.account.trim() !== "" ||
@@ -558,6 +572,7 @@ export function SubscriptionsPage() {
     subscriptionFilters.status !== "all";
   const filteredSubscriptions = useMemo(() => {
     let result = subscriptions.filter((s) => !hiddenIds.has(s.id));
+    if (subscriptionFilters.pinned) result = result.filter((subscription) => subscription.isPinned);
     const normalizedName = subscriptionFilters.name.trim().toLowerCase();
     const normalizedVendor = subscriptionFilters.vendor.trim().toLowerCase();
     const normalizedCategory = subscriptionFilters.category.trim().toLowerCase();
@@ -668,6 +683,19 @@ export function SubscriptionsPage() {
   const dueSoonCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey && subscription.nextDueDate <= inSevenDaysKey).length;
   const overdueCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate < todayKey).length;
   const nextUpcoming = subscriptions.find((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey);
+  const activeInFilter = filteredSubscriptions.filter((subscription) => subscription.status === "active");
+  const pausedInFilter = filteredSubscriptions.filter((subscription) => subscription.status === "paused").length;
+  const monthlyTotal = activeInFilter.reduce((total, subscription) => {
+    const amount = subscription.amountInBaseCurrency ?? subscription.amount;
+    switch (subscription.frequency) {
+      case "daily": return total + amount * 30;
+      case "weekly": return total + amount * 52 / 12;
+      case "quarterly": return total + amount / 3;
+      case "yearly": return total + amount / 12;
+      case "monthly": return total + amount;
+      case "custom": return total + amount;
+    }
+  }, 0);
   const subscriptionVendors = useMemo(
     () =>
       Array.from(
@@ -842,7 +870,8 @@ export function SubscriptionsPage() {
           formState.nextDueDate,
           formState.frequency,
           intervalCount,
-          localDateKey(new Date()),
+          todayPeru(),
+          dayOfMonth,
         )
       : formState.nextDueDate;
 
@@ -923,9 +952,99 @@ export function SubscriptionsPage() {
     });
   }
 
+  async function runStatusChange(subscription: SubscriptionSummary, status: SubscriptionStatus) {
+    setIsActionPending(true);
+    try {
+      const nextDueDate = await changeSubscriptionStatus(subscription, status);
+      await snapshotQuery.refetch();
+      setFeedback({ tone: "success", title: status === "active" ? "Suscripción reactivada" : status === "paused" ? "Suscripción pausada" : "Suscripción cancelada", description: status === "active" ? `Próximo pago: ${formatDate(nextDueDate)}.` : "El historial de pagos se conserva." });
+    } catch (error) {
+      setFeedback({ tone: "error", title: "No se pudo cambiar el estado", description: getQueryErrorMessage(error) });
+    } finally {
+      setIsActionPending(false);
+      setCancelSubscriptionId(null);
+    }
+  }
+
+  async function handleTogglePin(subscription: SubscriptionSummary) {
+    setIsActionPending(true);
+    try {
+      await setSubscriptionPinned(subscription, !subscription.isPinned);
+      await snapshotQuery.refetch();
+    } catch (error) {
+      setFeedback({ tone: "error", title: "No se pudo cambiar la posición", description: getQueryErrorMessage(error) });
+    } finally {
+      setIsActionPending(false);
+    }
+  }
+
+  async function handleAssignField(subscription: SubscriptionSummary, field: "account_id" | "category_id", value: number | null) {
+    setIsActionPending(true);
+    try {
+      await assignSubscriptionField(subscription, field, value);
+      await snapshotQuery.refetch();
+    } catch (error) {
+      setFeedback({ tone: "error", title: "No se pudo actualizar la suscripción", description: getQueryErrorMessage(error) });
+    } finally {
+      setIsActionPending(false);
+    }
+  }
+
+  async function handleMarkPaid(subscription: SubscriptionSummary, input: { paidDate: string; amount: number; accountId: number }) {
+    setIsActionPending(true);
+    try {
+      const nextDueDate = await markSubscriptionPaid(subscription, input);
+      await snapshotQuery.refetch();
+      setFeedback({ tone: "success", title: "Pago registrado", description: `Próximo cobro: ${formatDate(nextDueDate)}.` });
+    } catch (error) {
+      await snapshotQuery.refetch();
+      throw error;
+    } finally {
+      setIsActionPending(false);
+    }
+  }
+
+  function applyDuePreset(preset: "all" | "overdue" | "today" | "next7" | "month") {
+    const today = todayPeru();
+    const day = new Date(`${today}T12:00:00Z`);
+    const addDays = (count: number) => {
+      const result = new Date(day);
+      result.setUTCDate(result.getUTCDate() + count);
+      return result.toISOString().slice(0, 10);
+    };
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const monthEnd = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0, 12)).toISOString().slice(0, 10);
+    const [from, to] = preset === "overdue" ? ["", addDays(-1)]
+      : preset === "today" ? [today, today]
+      : preset === "next7" ? [today, addDays(7)]
+      : preset === "month" ? [monthStart, monthEnd]
+      : ["", ""];
+    setSubscriptionFilters((current) => ({ ...current, nextDueDateFrom: from, nextDueDateTo: to }));
+  }
+
   async function handleBulkDelete() {
     if (selectedCount === 0) return;
     setShowBulkDeleteConfirm(true);
+  }
+
+  async function handleBulkPause() {
+    const active = selectedItems.filter((subscription) => subscription.status === "active");
+    if (!active.length) return;
+    setIsActionPending(true);
+    let completed = 0;
+    try {
+      for (const subscription of active) {
+        await changeSubscriptionStatus(subscription, "paused");
+        completed += 1;
+      }
+      clearAll();
+      setFeedback({ tone: "success", title: `${completed} suscripción${completed === 1 ? "" : "es"} pausada${completed === 1 ? "" : "s"}`, description: "Puedes reactivarlas desde su detalle." });
+    } catch (error) {
+      setFeedback({ tone: "error", title: `${completed} de ${active.length} pausadas`, description: getQueryErrorMessage(error) });
+    } finally {
+      await snapshotQuery.refetch();
+      setIsActionPending(false);
+    }
   }
 
   async function confirmBulkDelete() {
@@ -1021,6 +1140,7 @@ export function SubscriptionsPage() {
         </div>
         {showMoreFilters ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <label className="flex h-14 items-center gap-3 rounded-xl border border-white/[0.1] px-4 text-sm text-ink"><input checked={subscriptionFilters.pinned} onChange={(event) => updateSubscriptionFilter("pinned", event.target.checked)} type="checkbox" />Solo fijadas</label>
             <SearchablePicker appearance="toolbar" emptyMessage="No hay proveedores." onChange={(value) => updateSubscriptionFilter("vendor", value)} options={[{ value: "", label: "Todos los proveedores", description: "", leadingLabel: "—" }, ...subscriptionVendors.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Proveedor" placeholderLabel="Todos los proveedores" queryPlaceholder="Buscar proveedor..." value={subscriptionFilters.vendor} />
             <SearchablePicker appearance="toolbar" emptyMessage="No hay categorías." onChange={(value) => updateSubscriptionFilter("category", value)} options={[{ value: "", label: "Todas las categorías", description: "", leadingLabel: "—" }, ...subscriptionCategories.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Categoría" placeholderLabel="Todas las categorías" queryPlaceholder="Buscar categoría..." value={subscriptionFilters.category} />
             <SearchablePicker appearance="toolbar" emptyMessage="No hay cuentas." onChange={(value) => updateSubscriptionFilter("account", value)} options={[{ value: "", label: "Todas las cuentas", description: "", leadingLabel: "—" }, ...subscriptionAccounts.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Cuenta" placeholderLabel="Todas las cuentas" queryPlaceholder="Buscar cuenta..." value={subscriptionFilters.account} />
@@ -1029,13 +1149,15 @@ export function SubscriptionsPage() {
               <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro desde</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateFrom", value)} value={subscriptionFilters.nextDueDateFrom} /></div>
               <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro hasta</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateTo", value)} value={subscriptionFilters.nextDueDateTo} /></div>
             </div>
+            <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-3">{([ ["all", "Todo"], ["overdue", "Vencidas"], ["today", "Hoy"], ["next7", "Próx. 7 días"], ["month", "Este mes"] ] as const).map(([value, label]) => <button className="rounded-lg border border-white/[0.1] px-3 py-2 text-sm text-storm hover:text-ink" key={value} onClick={() => applyDuePreset(value)} type="button">{label}</button>)}</div>
           </div>
         ) : null}
         {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearSubscriptionFilters} type="button">Limpiar filtros</button> : null}
       </section>
 
-      <section className="border-y border-white/[0.08] px-1 py-3 text-sm text-storm">
-        Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro
+      <section className="flex flex-wrap items-center justify-between gap-2 border-y border-white/[0.08] px-1 py-3 text-sm text-storm">
+        <span>Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro · {activeInFilter.length} activas{pausedInFilter ? ` · ${pausedInFilter} pausadas, no suman` : ""}</span>
+        <span>Al mes <strong className="font-semibold text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong></span>
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? (
@@ -1053,6 +1175,7 @@ export function SubscriptionsPage() {
           onClearAll={clearAll}
           onDelete={setDeleteTargetId}
           onEdit={openEditEditor}
+          onOpen={(subscription) => setDetailSubscriptionId(subscription.id)}
           onSelectAll={selectAll}
           onToggleSelect={toggleSelect}
           selectedIds={selectedIds}
@@ -1087,6 +1210,31 @@ export function SubscriptionsPage() {
           updateFormState={updateFormState}
         />
       ) : null}
+
+      {detailSubscription && !isEditorOpen ? <SubscriptionDetailDialog
+        accounts={accounts}
+        categories={categories}
+        isPending={isActionPending}
+        movements={snapshot?.movements ?? []}
+        onAnalytics={() => setAnalyticsSubscriptionId(detailSubscription.id)}
+        onClose={() => setDetailSubscriptionId(null)}
+        onDelete={() => { setDetailSubscriptionId(null); setDeleteTargetId(detailSubscription.id); }}
+        onEdit={() => openEditEditor(detailSubscription)}
+        onPay={(input) => handleMarkPaid(detailSubscription, input)}
+        onAssignAccount={(value) => void handleAssignField(detailSubscription, "account_id", value)}
+        onAssignCategory={(value) => void handleAssignField(detailSubscription, "category_id", value)}
+        onPin={() => void handleTogglePin(detailSubscription)}
+        onStatus={(status) => status === "cancelled" ? setCancelSubscriptionId(detailSubscription.id) : void runStatusChange(detailSubscription, status)}
+        subscription={detailSubscription}
+      /> : null}
+
+      {cancelSubscription ? <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/75 p-3" role="presentation">
+        <div aria-labelledby="cancel-subscription-title" aria-modal="true" className="w-full max-w-md rounded-[14px] border border-white/10 bg-[#1a1917] p-6" role="dialog">
+          <h2 className="font-display text-xl font-semibold text-ink" id="cancel-subscription-title">¿Cancelar suscripción?</h2>
+          <p className="mt-3 text-sm leading-6 text-storm">«{cancelSubscription.name}» dejará de generar cobros. Su historial de pagos se conserva y podrás reactivarla cuando quieras.</p>
+          <div className="mt-6 flex gap-3"><Button disabled={isActionPending} onClick={() => void runStatusChange(cancelSubscription, "cancelled")}>Sí, cancelar</Button><Button disabled={isActionPending} onClick={() => setCancelSubscriptionId(null)} variant="ghost">Volver</Button></div>
+        </div>
+      </div> : null}
 
       {showUnsavedDialog ? (
         <UnsavedChangesDialog
@@ -1140,10 +1288,13 @@ export function SubscriptionsPage() {
       })() : null}
 
       <BulkActionBar
+        archiveLabel="Pausar"
+        isArchiving={isActionPending}
         isDeleting={isBulkDeleting}
         onClearAll={clearAll}
         onDelete={handleBulkDelete}
         onExport={() => downloadSubscriptionsCSV(selectedItems, `suscripciones-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onArchive={selectedItems.some((subscription) => subscription.status === "active") ? () => void handleBulkPause() : undefined}
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredSubscriptions.length}

@@ -281,6 +281,7 @@ type WorkspaceInvitationRow = {
 type SubscriptionRow = {
   id: number;
   workspace_id: number;
+  is_pinned: boolean | null;
   name: string;
   vendor_party_id: number | null;
   account_id: number | null;
@@ -1664,7 +1665,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("subscriptions")
       .select(
-        "id, workspace_id, name, vendor_party_id, account_id, category_id, currency_code, amount, frequency, interval_count, day_of_month, day_of_week, start_date, next_due_date, end_date, status, remind_days_before, auto_create_movement, description, notes",
+        "id, workspace_id, is_pinned, name, vendor_party_id, account_id, category_id, currency_code, amount, frequency, interval_count, day_of_month, day_of_week, start_date, next_due_date, end_date, status, remind_days_before, auto_create_movement, description, notes",
       )
       .eq("workspace_id", workspace.id)
       .order("next_due_date", { ascending: true }),
@@ -2077,6 +2078,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
   const subscriptions = subscriptionRows.map<SubscriptionSummary>((row) => ({
     id: row.id,
     workspaceId: row.workspace_id,
+    isPinned: row.is_pinned ?? false,
     name: row.name,
     vendorPartyId: row.vendor_party_id,
     vendor: row.vendor_party_id

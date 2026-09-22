@@ -23,6 +23,7 @@ export function useSubscriptionsFilters(viewMode: string) {
 
     return {
       name: searchParams.get("q") ?? defaults.name,
+      pinned: searchParams.get("pinned") === "1",
       vendor: searchParams.get("vendor") ?? defaults.vendor,
       frequency: (freqParam as SubscriptionTableFilters["frequency"]) || "all",
       status: (statusParam as SubscriptionTableFilters["status"]) || "all",
@@ -40,6 +41,7 @@ export function useSubscriptionsFilters(viewMode: string) {
     (next: SubscriptionTableFilters, page: number) => {
       const params = new URLSearchParams();
       if (next.name.trim()) params.set("q", next.name);
+      if (next.pinned) params.set("pinned", "1");
       if (next.vendor.trim()) params.set("vendor", next.vendor);
       if (next.frequency !== "all") params.set("freq", next.frequency);
       if (next.status !== "all") params.set("status", next.status);
@@ -140,6 +142,7 @@ export function useSubscriptionsFilters(viewMode: string) {
 
   return {
     filters,
+    setFilters,
     currentPage,
     setCurrentPage,
     openTableFilter,
