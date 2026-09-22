@@ -23,6 +23,7 @@ type Props = {
   onPin: () => void;
   onDelete: () => void;
   onPay: (input: { paidDate: string; amount: number; accountId: number }) => Promise<void>;
+  onOpenMovement: (movementId: number) => void;
   onAssignAccount: (accountId: number | null) => void;
   onAssignCategory: (categoryId: number | null) => void;
 };
@@ -53,7 +54,7 @@ function standingCopy(subscription: SubscriptionSummary, occurrences?: Subscript
   };
 }
 
-export function SubscriptionDetailDialog({ subscription, initialPanel = "detail", accounts, categories, movements, isPending, onClose, onEdit, onAnalytics, onStatus, onPin, onDelete, onPay, onAssignAccount, onAssignCategory }: Props) {
+export function SubscriptionDetailDialog({ subscription, initialPanel = "detail", accounts, categories, movements, isPending, onClose, onEdit, onAnalytics, onStatus, onPin, onDelete, onPay, onOpenMovement, onAssignAccount, onAssignCategory }: Props) {
   const [panel, setPanel] = useState<"detail" | "pay" | "account" | "category">(initialPanel);
   const [amount, setAmount] = useState(String(subscription.amount));
   const [paidDate, setPaidDate] = useState(subscription.nextDueDate);
@@ -107,7 +108,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
             <div className="flex justify-between gap-4 py-3"><span className="text-storm">Proveedor</span><span className="text-ink">{subscription.vendor}</span></div>
             <div className="flex justify-between gap-4 py-3"><span className="text-storm">Recordatorio</span><span className="text-ink">{subscription.remindDaysBefore} días antes</span></div>
           </div>
-          <section><h3 className="mb-2 text-xs uppercase tracking-[0.14em] text-storm">Pagos anotados · {payments.length}</h3>{payments.length ? <div className="divide-y divide-white/[0.08]">{(showAllPayments ? payments : payments.slice(0, 12)).map((payment) => <div className="flex justify-between gap-4 py-3 text-sm" key={payment.id}><span className="text-storm">{formatDate(payment.occurredAt)}</span><span className="font-semibold text-ink">{formatCurrency(payment.sourceAmount ?? payment.destinationAmount ?? 0, payment.sourceCurrencyCode ?? subscription.currencyCode)}</span></div>)}</div> : <p className="text-sm text-storm">Ninguno todavía. Cada vez que la marques como pagada, el gasto aparece aquí.</p>}{payments.length > 12 ? <button className="mt-3 text-sm text-ink underline-offset-4 hover:underline" onClick={() => setShowAllPayments((value) => !value)} type="button">{showAllPayments ? "Mostrar menos" : `Ver los ${payments.length - 12} restantes`}</button> : null}</section>
+          <section><h3 className="mb-2 text-xs uppercase tracking-[0.14em] text-storm">Pagos anotados · {payments.length}</h3>{payments.length ? <div className="divide-y divide-white/[0.08]">{(showAllPayments ? payments : payments.slice(0, 12)).map((payment) => <button aria-label={`Abrir movimiento del ${formatDate(payment.occurredAt)}`} className="flex w-full justify-between gap-4 py-3 text-left text-sm hover:bg-white/[0.03]" key={payment.id} onClick={() => onOpenMovement(payment.id)} type="button"><span className="text-storm">{formatDate(payment.occurredAt)} ›</span><span className="font-semibold text-ink">{formatCurrency(payment.sourceAmount ?? payment.destinationAmount ?? 0, payment.sourceCurrencyCode ?? subscription.currencyCode)}</span></button>)}</div> : <p className="text-sm text-storm">Ninguno todavía. Cada vez que la marques como pagada, el gasto aparece aquí.</p>}{payments.length > 12 ? <button className="mt-3 text-sm text-ink underline-offset-4 hover:underline" onClick={() => setShowAllPayments((value) => !value)} type="button">{showAllPayments ? "Mostrar menos" : `Ver los ${payments.length - 12} restantes`}</button> : null}</section>
           {subscription.description || subscription.notes ? <section className="space-y-2 border-t border-white/[0.08] pt-4 text-sm text-storm">{subscription.description ? <p>{subscription.description}</p> : null}{subscription.notes ? <p>{subscription.notes}</p> : null}</section> : null}
           <div className="flex flex-wrap gap-x-5 gap-y-3 border-t border-white/[0.08] pt-4 text-sm">
             <button className="text-ink hover:underline" onClick={onEdit} type="button">Editar</button><button className="text-ink hover:underline" onClick={onAnalytics} type="button">Analizar</button><button className="text-ink hover:underline" disabled={isPending} onClick={onPin} type="button">{subscription.isPinned ? "Quitar de fijadas" : "Fijar en la lista"}</button>

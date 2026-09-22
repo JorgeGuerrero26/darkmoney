@@ -13,6 +13,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -496,6 +497,7 @@ function downloadSubscriptionsCSV(subscriptions: SubscriptionSummary[], filename
 }
 
 export function SubscriptionsPage() {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
@@ -1179,6 +1181,7 @@ export function SubscriptionsPage() {
           onEdit={openEditEditor}
           onOpen={(subscription) => { setDetailInitialPanel("detail"); setDetailSubscriptionId(subscription.id); }}
           onPay={(subscription) => { setDetailInitialPanel("pay"); setDetailSubscriptionId(subscription.id); }}
+          onReactivate={(subscription) => void runStatusChange(subscription, "active")}
           onSelectAll={selectAll}
           onToggleSelect={toggleSelect}
           selectedIds={selectedIds}
@@ -1226,6 +1229,7 @@ export function SubscriptionsPage() {
         onDelete={() => { setDetailSubscriptionId(null); setDeleteTargetId(detailSubscription.id); }}
         onEdit={() => openEditEditor(detailSubscription)}
         onPay={(input) => handleMarkPaid(detailSubscription, input)}
+        onOpenMovement={(movementId) => navigate(`/app/movements?period=all&movement=${movementId}`)}
         onAssignAccount={(value) => void handleAssignField(detailSubscription, "account_id", value)}
         onAssignCategory={(value) => void handleAssignField(detailSubscription, "category_id", value)}
         onPin={() => void handleTogglePin(detailSubscription)}

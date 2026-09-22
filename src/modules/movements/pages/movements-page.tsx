@@ -4,7 +4,8 @@
   MoreVertical,
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
 import { Pagination } from "../../../components/ui/pagination";
@@ -110,6 +111,7 @@ function MovementsLoadingSkeleton() {
   );
 }
 export function MovementsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile, user } = useAuth();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
@@ -430,6 +432,19 @@ export function MovementsPage() {
     setEditorIntelligence({ budget: null, risk: null });
     setIsEditorOpen(true);
   }
+
+  useEffect(() => {
+    const linkedId = Number(searchParams.get("movement"));
+    if (!Number.isSafeInteger(linkedId) || linkedId <= 0 || !snapshot) return;
+    const linkedMovement = snapshot.movements.find((movement) => movement.id === linkedId);
+    if (!linkedMovement) return;
+    openEditEditor(linkedMovement);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("movement");
+      return next;
+    }, { replace: true });
+  }, [snapshot, searchParams, setSearchParams]);
 
   function closeEditor() {
     if (isSaving) {
