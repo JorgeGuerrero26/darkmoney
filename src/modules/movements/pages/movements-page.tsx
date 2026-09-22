@@ -294,6 +294,19 @@ export function MovementsPage() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
+  useEffect(() => {
+    const linkedId = Number(searchParams.get("movement"));
+    if (!Number.isSafeInteger(linkedId) || linkedId <= 0 || !snapshot) return;
+    const linkedMovement = snapshot.movements.find((movement) => movement.id === linkedId);
+    if (!linkedMovement) return;
+    openEditEditor(linkedMovement);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("movement");
+      return next;
+    }, { replace: true });
+  }, [snapshot, searchParams, setSearchParams]);
+
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
@@ -432,19 +445,6 @@ export function MovementsPage() {
     setEditorIntelligence({ budget: null, risk: null });
     setIsEditorOpen(true);
   }
-
-  useEffect(() => {
-    const linkedId = Number(searchParams.get("movement"));
-    if (!Number.isSafeInteger(linkedId) || linkedId <= 0 || !snapshot) return;
-    const linkedMovement = snapshot.movements.find((movement) => movement.id === linkedId);
-    if (!linkedMovement) return;
-    openEditEditor(linkedMovement);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("movement");
-      return next;
-    }, { replace: true });
-  }, [snapshot, searchParams, setSearchParams]);
 
   function closeEditor() {
     if (isSaving) {
