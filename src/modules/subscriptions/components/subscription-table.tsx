@@ -1,4 +1,4 @@
-import { BarChart3, ChevronRight, MoreHorizontal, PencilLine, Pin, Trash2 } from "lucide-react";
+import { BarChart3, ChevronRight, CircleCheck, MoreHorizontal, PencilLine, Pin, Trash2 } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
@@ -17,6 +17,7 @@ type SubscriptionTableProps = {
   onClearAll: () => void;
   onEdit: (subscription: SubscriptionSummary) => void;
   onOpen: (subscription: SubscriptionSummary) => void;
+  onPay: (subscription: SubscriptionSummary) => void;
   onAnalytics: (id: number) => void;
   onDelete: (id: number) => void;
 };
@@ -37,6 +38,7 @@ export function SubscriptionTable({
   onClearAll,
   onEdit,
   onOpen,
+  onPay,
   onAnalytics,
   onDelete,
 }: SubscriptionTableProps) {
@@ -78,6 +80,7 @@ export function SubscriptionTable({
                 <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenActionsId(null)} type="button" />
                 <div className="absolute right-0 top-10 z-50 w-44 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onOpen(subscription); }} type="button"><ChevronRight className="h-4 w-4" />Ver detalle</button>
+                  {subscription.status === "active" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onPay(subscription); }} type="button"><CircleCheck className="h-4 w-4" />Marcar como pagada</button> : null}
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onAnalytics(subscription.id); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onEdit(subscription); }} type="button"><PencilLine className="h-4 w-4" />Editar</button>
                   <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setOpenActionsId(null); onDelete(subscription.id); }} type="button"><Trash2 className="h-4 w-4" />Eliminar</button>

@@ -32,6 +32,7 @@ import type {
   AccountSummary,
   CategorySummary,
   CounterpartySummary,
+  MovementRecord,
   SubscriptionFrequency,
   SubscriptionStatus,
   SubscriptionSummary,
@@ -51,12 +52,12 @@ import {
 } from "../../../services/queries/workspace-data";
 import { Pagination } from "../../../components/ui/pagination";
 import { SubscriptionTable } from "../components/subscription-table";
+import { suggestSubscriptionFields } from "../lib/subscription-patterns";
 import { useSubscriptionsFilters } from "../hooks/use-subscriptions-filters";
 import {
   frequencyOptions,
   getFrequencyOption,
   getStatusOption,
-  rollDueDateForward,
   statusOptions,
 } from "../lib/subscriptions-presenters";
 
@@ -153,7 +154,7 @@ function parseOptionalInteger(value: string) {
   if (!normalizedValue) {
     return null;
   }
-  const parsedValue = Number.parseInt(normalizedValue, 10);
+  const parsedValue = Number(normalizedValue);
   return Number.isInteger(parsedValue) ? parsedValue : Number.NaN;
 }
 
@@ -308,6 +309,7 @@ function EditorDialog({
   invalidFields,
   isCreateMode,
   isSaving,
+  movements,
   onSubmit,
   updateFormState,
 }: {
@@ -322,6 +324,7 @@ function EditorDialog({
   invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
+  movements: MovementRecord[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   updateFormState: <Field extends keyof SubscriptionFormState>(
     field: Field,
@@ -353,11 +356,14 @@ function EditorDialog({
   const frequencyPickerOptions: PickerOption[] = frequencyOptions.map((item) => ({
     value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel,
   }));
-  const statusPickerOptions: PickerOption[] = statusOptions.map((item) => ({
-    value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel,
-  }));
   const needsDayOfWeek = formState.frequency === "weekly";
   const needsDayOfMonth = ["monthly", "quarterly", "yearly"].includes(formState.frequency);
+  const suggestedFields = useMemo(
+    () => suggestSubscriptionFields(formState.name, formState.vendorPartyId ? Number(formState.vendorPartyId) : null, movements),
+    [formState.name, formState.vendorPartyId, movements],
+  );
+  const suggestedCategory = categories.find((item) => item.id === suggestedFields.categoryId && item.isActive && (item.kind === "expense" || item.kind === "both"));
+  const suggestedAccount = accounts.find((item) => item.id === suggestedFields.accountId && !item.isArchived);
 
   useEffect(() => {
     if (!invalidFields.size) return;
@@ -397,6 +403,9 @@ function EditorDialog({
                   <DatePickerField appearance="compact" onChange={(value) => { clearFieldError("nextDueDate"); updateFormState("nextDueDate", value); }} value={formState.nextDueDate} />
                 </Field>
               </div>
+              <Field label="Avisarme antes"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" type="number" value={formState.remindDaysBefore} /></Field>
+              <ToggleRow checked={formState.autoCreateMovement} description="Cada cobro entra como gasto, sin que lo registres." label="Anotar el gasto solo" onChange={(checked) => updateFormState("autoCreateMovement", checked)} />
+              {formState.autoCreateMovement ? <div><Field label="Se paga con"><SearchablePicker appearance="compact" emptyMessage="No hay cuentas." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta donde se anotará el gasto." placeholderLabel="Elegir cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>{!formState.accountId && suggestedAccount ? <button className="mt-2 text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => updateFormState("accountId", String(suggestedAccount.id))} type="button">Sugerencia por pagos anteriores: {suggestedAccount.name}</button> : null}</div> : null}
               <ResourceEditorDestination label="Opcionales" onClick={() => setPanel("optional")} summary="Proveedor, cuenta y calendario" />
             </div>
           ) : (
@@ -404,12 +413,12 @@ function EditorDialog({
               <Field label="Proveedor">
                 <SearchablePicker appearance="compact" emptyMessage="No hay proveedores." onChange={(value) => updateFormState("vendorPartyId", value)} options={counterpartyOptions} placeholderDescription="Proveedor asociado." placeholderLabel="Sin proveedor" queryPlaceholder="Buscar proveedor..." value={formState.vendorPartyId} />
               </Field>
-              <Field label="Categoría">
+              <div><Field label="Categoría">
                 <SearchablePicker appearance="compact" emptyMessage="No hay categorías." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Categoría de gasto." placeholderLabel="Sin categoría" queryPlaceholder="Buscar categoría..." value={formState.categoryId} />
-              </Field>
-              <Field label="Cuenta sugerida">
+              </Field>{!formState.categoryId && suggestedCategory ? <button className="mt-2 text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => updateFormState("categoryId", String(suggestedCategory.id))} type="button">Sugerencia por pagos anteriores: {suggestedCategory.name}</button> : null}</div>
+              {!formState.autoCreateMovement ? <div><Field label="Cuenta sugerida">
                 <SearchablePicker appearance="compact" emptyMessage="No hay cuentas." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta recomendada para el pago." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
-              </Field>
+              </Field>{!formState.accountId && suggestedAccount ? <button className="mt-2 text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => updateFormState("accountId", String(suggestedAccount.id))} type="button">Sugerencia por pagos anteriores: {suggestedAccount.name}</button> : null}</div> : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Moneda"><SearchablePicker appearance="compact" emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda del cobro." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} /></Field>
                 <Field label="Cada cuántos ciclos"><Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" type="number" value={formState.intervalCount} /></Field>
@@ -420,9 +429,6 @@ function EditorDialog({
               {needsDayOfMonth ? <Field label="Día del mes"><Input inputMode="numeric" max="31" min="1" onChange={(event) => updateFormState("dayOfMonth", event.target.value)} placeholder="Sin día fijo" type="number" value={formState.dayOfMonth} /></Field> : null}
               {needsDayOfWeek ? <Field label="Día de la semana"><SearchablePicker appearance="compact" emptyMessage="No hay días." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((item) => ({ value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel }))} placeholderDescription="Día habitual." placeholderLabel="Sin día fijo" queryPlaceholder="Buscar día..." value={formState.dayOfWeek} /></Field> : null}
               <Field label="Fin"><DatePickerField appearance="compact" onChange={(value) => updateFormState("endDate", value)} value={formState.endDate} /></Field>
-              <Field label="Estado"><SearchablePicker appearance="compact" emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as SubscriptionStatus)} options={statusPickerOptions} placeholderDescription="Estado actual." placeholderLabel="Estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
-              <Field label="Recordar días antes"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" type="number" value={formState.remindDaysBefore} /></Field>
-              <ToggleRow checked={formState.autoCreateMovement} description="Usa esta suscripción para automatizar el movimiento cuando corresponda." label="Crear movimiento automáticamente" onChange={(checked) => updateFormState("autoCreateMovement", checked)} />
               <Field label="Descripción"><Textarea onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible" value={formState.description} /></Field>
               <Field label="Notas"><Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Solo para este espacio" value={formState.notes} /></Field>
             </div>
@@ -521,6 +527,7 @@ export function SubscriptionsPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [analyticsSubscriptionId, setAnalyticsSubscriptionId] = useState<number | null>(null);
   const [detailSubscriptionId, setDetailSubscriptionId] = useState<number | null>(null);
+  const [detailInitialPanel, setDetailInitialPanel] = useState<"detail" | "pay">("detail");
   const [cancelSubscriptionId, setCancelSubscriptionId] = useState<number | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
@@ -767,7 +774,7 @@ export function SubscriptionsPage() {
       return;
     }
 
-    if (intervalCount === null || Number.isNaN(intervalCount) || intervalCount <= 0) {
+    if (intervalCount === null || !Number.isInteger(intervalCount) || intervalCount <= 0) {
       setFeedback({
         tone: "error",
         title: "Intervalo inválido",
@@ -842,8 +849,17 @@ export function SubscriptionsPage() {
     if (accountId !== null && Number.isNaN(accountId)) {
       setFeedback({
         tone: "error",
-        title: "Cuenta invalida",
+        title: "Cuenta inválida",
         description: "Vuelve a seleccionar la cuenta sugerida.",
+      });
+      return;
+    }
+
+    if (formState.autoCreateMovement && accountId === null) {
+      setFeedback({
+        tone: "error",
+        title: "Falta la cuenta",
+        description: "Elige la cuenta con la que se paga: el cobro automático se anotará en ella.",
       });
       return;
     }
@@ -851,29 +867,15 @@ export function SubscriptionsPage() {
     if (categoryId !== null && Number.isNaN(categoryId)) {
       setFeedback({
         tone: "error",
-        title: "Categoria invalida",
+        title: "Categoría inválida",
         description: "Vuelve a seleccionar la categoría contable.",
       });
       return;
     }
 
-    // Reactivar una suscripcion pausada deja su proximo cobro en el pasado, asi
-    // que se rueda a la primera ocurrencia futura. Espeja rollDueDateForward
-    // de la app.
-    const isReactivating =
-      editorMode === "edit" &&
-      formState.status === "active" &&
-      selectedSubscription != null &&
-      selectedSubscription.status !== "active";
-    const nextDueDate = isReactivating
-      ? rollDueDateForward(
-          formState.nextDueDate,
-          formState.frequency,
-          intervalCount,
-          todayPeru(),
-          dayOfMonth,
-        )
-      : formState.nextDueDate;
+    const resolvedDayOfMonth = ["monthly", "quarterly", "yearly"].includes(formState.frequency)
+      ? dayOfMonth ?? Number(formState.nextDueDate.slice(8, 10))
+      : null;
 
     const payload: SubscriptionFormInput = {
       name,
@@ -884,12 +886,12 @@ export function SubscriptionsPage() {
       amount: amount!,
       frequency: formState.frequency,
       intervalCount,
-      dayOfMonth: dayOfMonth === null ? null : dayOfMonth,
-      dayOfWeek: dayOfWeek === null ? null : dayOfWeek,
+      dayOfMonth: resolvedDayOfMonth,
+      dayOfWeek: formState.frequency === "weekly" ? dayOfWeek : null,
       startDate: formState.startDate,
-      nextDueDate,
+      nextDueDate: formState.nextDueDate,
       endDate: formState.endDate || null,
-      status: formState.status,
+      status: editorMode === "create" ? "active" : selectedSubscription?.status ?? "active",
       autoCreateMovement: formState.autoCreateMovement,
       remindDaysBefore,
       description: formState.description,
@@ -1175,7 +1177,8 @@ export function SubscriptionsPage() {
           onClearAll={clearAll}
           onDelete={setDeleteTargetId}
           onEdit={openEditEditor}
-          onOpen={(subscription) => setDetailSubscriptionId(subscription.id)}
+          onOpen={(subscription) => { setDetailInitialPanel("detail"); setDetailSubscriptionId(subscription.id); }}
+          onPay={(subscription) => { setDetailInitialPanel("pay"); setDetailSubscriptionId(subscription.id); }}
           onSelectAll={selectAll}
           onToggleSelect={toggleSelect}
           selectedIds={selectedIds}
@@ -1206,6 +1209,7 @@ export function SubscriptionsPage() {
           invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
+          movements={snapshot?.movements ?? []}
           onSubmit={handleSubmit}
           updateFormState={updateFormState}
         />
@@ -1213,6 +1217,7 @@ export function SubscriptionsPage() {
 
       {detailSubscription && !isEditorOpen ? <SubscriptionDetailDialog
         accounts={accounts}
+        initialPanel={detailInitialPanel}
         categories={categories}
         isPending={isActionPending}
         movements={snapshot?.movements ?? []}
