@@ -25,9 +25,9 @@ export function FormField({
 
   return (
     <label className={`block min-w-0 ${className}`}>
-      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
+      <span className="text-[0.8125rem] font-medium tracking-[0.01em] text-storm">
         {label}
-        {required ? <span className="ml-1 text-pine">*</span> : null}
+        {required ? <span className="ml-1 text-[#d6b69b]">*</span> : null}
       </span>
       <div
         className={`mt-2 ${showErrorRing ? "field-error-ring" : ""}`}

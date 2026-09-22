@@ -140,7 +140,7 @@ const weekdayOptions = [
 const inputClassName = "field-dark";
 const textareaClassName = "field-dark min-h-[100px] resize-y py-3 leading-7";
 const labelClassName =
-  "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
+  "text-[0.8125rem] font-medium tracking-[0.01em] text-storm";
 
 function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
@@ -237,7 +237,7 @@ function Field({ children, errorKey, hint, invalidFields, label }: { children: R
     <label className="block min-w-0">
       <span className={labelClassName}>{label}</span>
       <div
-        className={`mt-1.5 sm:mt-3${hasError ? " field-error-ring" : ""}`}
+        className={`mt-1.5${hasError ? " field-error-ring" : ""}`}
         data-field={errorKey}
       >
         {children}

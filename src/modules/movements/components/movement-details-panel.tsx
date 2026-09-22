@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ChevronRight, Gauge, Repeat2, Sparkles } from "lu
 import type { ReactNode } from "react";
 
 import { PendingAttachmentControl } from "../../attachments/components/compact-attachment-field";
+import { DatePickerField } from "../../../components/ui/date-picker-field";
 
 type MovementDetailsPanelProps = {
   categoryLabel?: string;
@@ -175,20 +176,17 @@ export function MovementDetailsPanel({
 
         {suggestionRows}
 
-        <label
+        <div
           className={`flex h-[54px] items-center justify-between gap-4 border-t border-white/10 px-4 ${
             invalidFields.has("occurredAt") ? "field-error-ring" : ""
           }`}
           data-field="occurredAt"
         >
           <span className="shrink-0 text-sm font-medium text-ink">Fecha</span>
-          <input
-            className="min-w-0 bg-transparent text-right text-sm text-storm outline-none [color-scheme:dark]"
-            onChange={(event) => onOccurredAtChange(event.target.value)}
-            type="datetime-local"
-            value={occurredAt}
-          />
-        </label>
+          <div className="min-w-0 w-[min(62%,230px)]">
+            <DatePickerField appearance="inline" mode="datetime-local" onChange={onOccurredAtChange} value={occurredAt} />
+          </div>
+        </div>
 
         {receiptRows}
       </div>

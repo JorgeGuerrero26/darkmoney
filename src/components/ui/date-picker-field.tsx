@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type DatePickerFieldMode = "date" | "datetime-local";
 
@@ -18,11 +18,11 @@ type DatePickerFieldProps = {
   mode?: DatePickerFieldMode;
   disabled?: boolean;
   placeholder?: string;
-  appearance?: "default" | "compact";
+  appearance?: "default" | "compact" | "inline";
 };
 
 const weekdayLabels = ["DO", "LU", "MA", "MI", "JU", "VI", "SA"] as const;
-const minuteOptions = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, "0"));
+const minuteOptions = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 
 function padNumber(value: number) {
   return String(value).padStart(2, "0");
@@ -89,8 +89,10 @@ function buildCalendarDays(visibleMonth: Date) {
   const firstDayOfMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
   const firstWeekday = firstDayOfMonth.getDay();
   const calendarStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - firstWeekday);
+  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+  const cellCount = Math.max(35, Math.ceil((firstWeekday + daysInMonth) / 7) * 7);
 
-  return Array.from({ length: 42 }, (_, index) => {
+  return Array.from({ length: cellCount }, (_, index) => {
     const nextDate = new Date(calendarStart);
     nextDate.setDate(calendarStart.getDate() + index);
     return nextDate;
@@ -131,13 +133,13 @@ export function DatePickerField({
   const [draftDate, setDraftDate] = useState<Date | null>(selectedDate);
   const [draftHour, setDraftHour] = useState(selectedDate ? padNumber(selectedDate.getHours()) : "12");
   const [draftMinute, setDraftMinute] = useState(
-    selectedDate ? padNumber(Math.floor(selectedDate.getMinutes() / 5) * 5) : "00",
+    selectedDate ? padNumber(selectedDate.getMinutes()) : "00",
   );
 
   const monthLabel = new Intl.DateTimeFormat("es-PE", {
     month: "long",
     year: "numeric",
-  }).format(visibleMonth);
+  }).format(visibleMonth).replace(/^\p{L}/u, (letter) => letter.toUpperCase());
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const today = useMemo(() => {
     const now = new Date();
@@ -155,8 +157,8 @@ export function DatePickerField({
     setDraftHour(selectedDate ? padNumber(selectedDate.getHours()) : padNumber(new Date().getHours()));
     setDraftMinute(
       selectedDate
-        ? padNumber(Math.floor(selectedDate.getMinutes() / 5) * 5)
-        : padNumber(Math.floor(new Date().getMinutes() / 5) * 5),
+        ? padNumber(selectedDate.getMinutes())
+        : padNumber(new Date().getMinutes()),
     );
   }, [isOpen, selectedDate]);
 
@@ -165,23 +167,25 @@ export function DatePickerField({
     const rect = triggerRef.current.getBoundingClientRect();
     const viewportPadding = 12;
     const gap = 10;
-    const panelMinWidth = mode === "datetime-local" ? 320 : 300;
-    const expectedPanelHeight = mode === "datetime-local" ? 560 : 430;
-    const width = Math.min(
-      Math.max(rect.width, panelMinWidth),
-      window.innerWidth - viewportPadding * 2,
-    );
+    const expectedPanelHeight = mode === "datetime-local"
+      ? calendarDays.length === 42 ? 466 : 430
+      : calendarDays.length === 42 ? 380 : 345;
+    const width = Math.min(320, window.innerWidth - viewportPadding * 2);
     const left = Math.min(
       Math.max(viewportPadding, rect.left),
       window.innerWidth - width - viewportPadding,
     );
     const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
     const spaceAbove = rect.top - viewportPadding;
-    const openBelow = spaceBelow >= expectedPanelHeight || spaceBelow >= spaceAbove;
+    const openBelow = spaceBelow >= expectedPanelHeight;
+    const openAbove = !openBelow && spaceAbove >= expectedPanelHeight;
+    const canFloatOverContent = !openBelow && !openAbove && window.innerHeight - viewportPadding * 2 >= expectedPanelHeight;
     const availableSpace = Math.max(openBelow ? spaceBelow : spaceAbove, 120);
     const style: CSSProperties = {
       left,
-      maxHeight: Math.max(120, Math.min(expectedPanelHeight, availableSpace - gap)),
+      maxHeight: canFloatOverContent
+        ? expectedPanelHeight
+        : Math.max(120, Math.min(expectedPanelHeight, availableSpace - gap)),
       overscrollBehavior: "contain",
       position: "fixed",
       width,
@@ -190,11 +194,24 @@ export function DatePickerField({
 
     if (openBelow) {
       style.top = rect.bottom + gap;
+    } else if (openAbove) {
+      style.bottom = window.innerHeight - rect.top + gap;
+    } else if (canFloatOverContent) {
+      style.top = Math.min(
+        Math.max(viewportPadding, rect.top - expectedPanelHeight / 2),
+        window.innerHeight - expectedPanelHeight - viewportPadding,
+      );
+    } else if (spaceBelow >= spaceAbove) {
+      style.top = rect.bottom + gap;
     } else {
       style.bottom = window.innerHeight - rect.top + gap;
     }
     setDropdownStyle(style);
   }
+
+  useLayoutEffect(() => {
+    if (isOpen) calcPosition();
+  }, [isOpen, calendarDays.length]); // Reposicionar al pasar de cinco a seis semanas.
 
   useEffect(() => {
     if (!isOpen) return;
@@ -208,10 +225,18 @@ export function DatePickerField({
     }
 
     document.addEventListener("pointerdown", handlePointerDown, true);
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    }
+    document.addEventListener("keydown", handleEscape);
     window.addEventListener("scroll", calcPosition, true);
     window.addEventListener("resize", calcPosition);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleEscape);
       window.removeEventListener("scroll", calcPosition, true);
       window.removeEventListener("resize", calcPosition);
     };
@@ -221,6 +246,7 @@ export function DatePickerField({
     if (mode === "date") {
       onChange(formatDateValue(nextDate));
       setIsOpen(false);
+      triggerRef.current?.focus();
       return;
     }
 
@@ -260,7 +286,7 @@ export function DatePickerField({
 
     setDraftDate(today);
     setDraftHour(padNumber(today.getHours()));
-    setDraftMinute(padNumber(Math.floor(today.getMinutes() / 5) * 5));
+    setDraftMinute(padNumber(today.getMinutes()));
   }
 
   function handleClear() {
@@ -274,7 +300,8 @@ export function DatePickerField({
       <button
         ref={triggerRef}
         aria-expanded={isOpen}
-        className={`flex w-full items-center justify-between gap-3 border text-left text-sm text-ink outline-none transition duration-200 ${appearance === "compact" ? "h-11 rounded-[7px] border-white/[0.08] bg-[#141311] px-3 hover:border-white/[0.14] focus-visible:border-white/20" : "h-14 rounded-2xl border-white/10 bg-white/[0.05] px-4 hover:border-white/14 hover:bg-white/[0.06] focus-visible:border-pine/25 focus-visible:bg-white/[0.07] focus-visible:shadow-[0_0_0_4px_rgba(107,228,197,0.08)]"} ${
+        aria-haspopup="dialog"
+        className={`flex w-full items-center justify-between gap-3 border text-left text-sm text-ink outline-none transition-colors duration-150 motion-reduce:transition-none ${appearance === "inline" ? "h-10 rounded-[7px] border-transparent bg-transparent px-1.5" : appearance === "compact" ? "h-11 rounded-[7px] border-white/[0.12] bg-[#141311] px-3" : "h-12 rounded-[8px] border-white/[0.12] bg-[#1a1917] px-3.5"} hover:border-white/[0.24] focus-visible:border-white/40 focus-visible:ring-2 focus-visible:ring-white/10 ${
           disabled ? "cursor-not-allowed opacity-60" : ""
         }`}
         disabled={disabled}
@@ -282,33 +309,34 @@ export function DatePickerField({
         type="button"
       >
         <span className="flex min-w-0 items-center gap-3">
-          {appearance === "compact" ? null : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.04] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            {mode === "datetime-local" ? <Clock3 className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />}
-          </span>}
           <span className={`truncate ${selectedDate ? "text-ink" : "text-storm/72"}`}>
             {formatTriggerLabel(selectedDate, mode, resolvedPlaceholder)}
           </span>
         </span>
-        <CalendarDays className="h-4 w-4 shrink-0 text-storm" />
+        {mode === "datetime-local" ? <Clock3 className="h-4 w-4 shrink-0 text-storm" /> : <CalendarDays className="h-4 w-4 shrink-0 text-storm" />}
       </button>
 
       {isOpen ? createPortal(
         <div
           ref={panelRef}
-          className="animate-rise-in overflow-y-auto rounded-[24px] border border-white/10 bg-shell/95 p-3 shadow-haze backdrop-blur-2xl"
+          aria-label={mode === "datetime-local" ? "Elegir fecha y hora" : "Elegir fecha"}
+          className="overflow-y-auto rounded-[12px] border border-white/[0.16] bg-[#1d1c19] p-2.5 text-ink"
+          role="dialog"
           style={dropdownStyle}
         >
-          <div className="flex items-center justify-between gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] px-3 py-2">
+          <div className="flex h-10 items-center justify-between gap-2 px-0.5">
             <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition hover:bg-white/[0.08] hover:text-ink"
+              aria-label="Mes anterior"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink active:bg-white/[0.1] motion-reduce:transition-none"
               onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}
               type="button"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <p className="text-sm font-semibold capitalize text-ink">{monthLabel}</p>
+            <p className="text-sm font-semibold tracking-[-0.01em] text-ink">{monthLabel}</p>
             <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition hover:bg-white/[0.08] hover:text-ink"
+              aria-label="Mes siguiente"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink active:bg-white/[0.1] motion-reduce:transition-none"
               onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}
               type="button"
             >
@@ -316,9 +344,9 @@ export function DatePickerField({
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-7 gap-1">
+          <div className="mt-1.5 grid grid-cols-7 gap-0.5">
             {weekdayLabels.map((label) => (
-              <div className="px-1 py-2 text-center text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-storm/78" key={label}>
+              <div className="py-1.5 text-center text-[0.68rem] font-medium tracking-[0.04em] text-storm" key={label}>
                 {label}
               </div>
             ))}
@@ -330,13 +358,16 @@ export function DatePickerField({
 
               return (
                 <button
-                  className={`h-10 rounded-[16px] text-sm font-medium transition ${
+                  aria-current={isToday ? "date" : undefined}
+                  aria-label={new Intl.DateTimeFormat("es-PE", { dateStyle: "full" }).format(day)}
+                  aria-pressed={isSelected}
+                  className={`h-9 rounded-[8px] text-sm tabular-nums transition-colors duration-150 motion-reduce:transition-none ${
                     isSelected
-                      ? "bg-[#8eb6ff] text-[#08111d]"
+                      ? "bg-[#e8e3da] font-semibold text-[#171613]"
                       : isCurrentMonth
-                        ? "text-ink hover:bg-white/[0.08]"
+                        ? "text-ink hover:bg-white/[0.07] active:bg-white/[0.12]"
                         : "text-storm/40 hover:bg-white/[0.05]"
-                  } ${isToday && !isSelected ? "border border-pine/25 bg-pine/10 text-pine" : ""}`}
+                  } ${isToday && !isSelected ? "ring-1 ring-inset ring-white/40" : ""}`}
                   key={day.toISOString()}
                   onClick={() => handlePickDay(day)}
                   type="button"
@@ -348,11 +379,12 @@ export function DatePickerField({
           </div>
 
           {mode === "datetime-local" ? (
-            <div className="mt-3 rounded-[24px] border border-white/8 bg-white/[0.03] p-3">
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">Hora</p>
-              <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="mt-2 border-t border-white/[0.09] pt-3">
+              <p className="text-xs font-medium text-storm">Hora</p>
+              <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <select
-                  className="field-dark h-12 w-full"
+                  aria-label="Hora"
+                  className="h-9 w-full rounded-[7px] border border-white/[0.12] bg-[#141311] px-2 text-sm text-ink outline-none focus-visible:border-white/40"
                   onChange={(event) => setDraftHour(event.target.value)}
                   value={draftHour}
                 >
@@ -364,7 +396,8 @@ export function DatePickerField({
                 </select>
                 <span className="text-sm font-semibold text-storm">:</span>
                 <select
-                  className="field-dark h-12 w-full"
+                  aria-label="Minutos"
+                  className="h-9 w-full rounded-[7px] border border-white/[0.12] bg-[#141311] px-2 text-sm text-ink outline-none focus-visible:border-white/40"
                   onChange={(event) => setDraftMinute(event.target.value)}
                   value={draftMinute}
                 >
@@ -378,10 +411,10 @@ export function DatePickerField({
             </div>
           ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-white/8 pt-3">
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/[0.09] pt-2">
+            <div className="flex gap-1">
               <button
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-storm transition hover:bg-white/[0.08] hover:text-ink"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[7px] px-2 text-xs text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink motion-reduce:transition-none"
                 onClick={handleClear}
                 type="button"
               >
@@ -389,7 +422,7 @@ export function DatePickerField({
                 Borrar
               </button>
               <button
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-storm transition hover:bg-white/[0.08] hover:text-ink"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[7px] px-2 text-xs text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink motion-reduce:transition-none"
                 onClick={handleQuickNow}
                 type="button"
               >
@@ -398,13 +431,11 @@ export function DatePickerField({
               </button>
             </div>
 
-            <button
-              className="inline-flex items-center rounded-2xl bg-ink px-4 py-2 text-sm font-semibold text-void transition hover:-translate-y-0.5 hover:brightness-105"
+            {mode === "datetime-local" ? <button
+              className="inline-flex h-8 items-center rounded-[7px] bg-[#e8e3da] px-3 text-xs font-semibold text-[#171613] transition-colors duration-150 hover:bg-white motion-reduce:transition-none"
               onClick={handleApply}
               type="button"
-            >
-              Aplicar
-            </button>
+            >Aplicar</button> : null}
           </div>
         </div>,
         document.body

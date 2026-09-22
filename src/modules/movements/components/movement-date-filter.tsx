@@ -1,5 +1,6 @@
 import { CalendarDays, Check, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { DatePickerField } from "../../../components/ui/date-picker-field";
 
 import {
   buildMovementDatePresets,
@@ -84,26 +85,14 @@ export function MovementDateFilter({ dateFrom, dateTo, onChange }: MovementDateF
             <div className="border-t border-white/10 p-4">
               <p className="mb-3 text-xs font-medium text-ink">Rango personalizado</p>
               <div className="grid grid-cols-2 gap-2">
-                <label className="min-w-0">
-                  <span className="mb-1.5 block text-[10px] uppercase tracking-[0.14em] text-storm">Desde</span>
-                  <input
-                    className="h-10 w-full rounded-lg border border-white/10 bg-[#141311] px-3 text-xs text-ink outline-none [color-scheme:dark] focus:border-white/25"
-                    max={customTo || undefined}
-                    onChange={(event) => setCustomFrom(event.target.value)}
-                    type="date"
-                    value={customFrom}
-                  />
-                </label>
-                <label className="min-w-0">
-                  <span className="mb-1.5 block text-[10px] uppercase tracking-[0.14em] text-storm">Hasta</span>
-                  <input
-                    className="h-10 w-full rounded-lg border border-white/10 bg-[#141311] px-3 text-xs text-ink outline-none [color-scheme:dark] focus:border-white/25"
-                    min={customFrom || undefined}
-                    onChange={(event) => setCustomTo(event.target.value)}
-                    type="date"
-                    value={customTo}
-                  />
-                </label>
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-[0.8125rem] font-medium text-storm">Desde</span>
+                  <DatePickerField appearance="compact" onChange={setCustomFrom} value={customFrom} />
+                </div>
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-[0.8125rem] font-medium text-storm">Hasta</span>
+                  <DatePickerField appearance="compact" onChange={setCustomTo} value={customTo} />
+                </div>
               </div>
               <button
                 className="mt-3 h-10 w-full rounded-lg bg-ink text-sm font-semibold text-void transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#252320] disabled:text-[#6b6459]"
