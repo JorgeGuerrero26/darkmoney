@@ -101,7 +101,7 @@ export function MovementsTable({
             const isIncoming = incomingTypes.has(movement.movementType);
             const isTransfer = movement.movementType === "transfer";
             const contextParts = [
-              visibleColumns.categoria ? movement.category : null,
+              visibleColumns.categoria ? (movement.category === "Sin categoria" ? "Sin categoría" : movement.category) : null,
               visibleColumns.contraparte && movement.counterparty ? movement.counterparty : null,
               visibleColumns.estado ? formatMovementStatusLabel(movement.status) : null,
               new Date(movement.occurredAt).toLocaleTimeString("es-PE", {
