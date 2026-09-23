@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export const resourceEditorSurfaceClassName =
   "resource-editor !max-w-[640px] !rounded-[14px] !bg-[#1a1917] !shadow-none !backdrop-blur-none";
@@ -19,11 +19,18 @@ export function ResourceEditorHeader({
   title: string;
   titleId?: string;
 }) {
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+  const hasBack = Boolean(onBack);
+
+  useEffect(() => {
+    if (hasBack) backButtonRef.current?.focus();
+  }, [hasBack, title]);
+
   return (
     <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-white/10 px-5 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         {onBack ? (
-          <button aria-label="Volver" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink active:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 motion-reduce:transition-none" disabled={disabled} onClick={onBack} type="button">
+          <button ref={backButtonRef} aria-label="Volver" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink active:bg-white/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 motion-reduce:transition-none" disabled={disabled} onClick={onBack} type="button">
             <ArrowLeft className="h-4 w-4" />
           </button>
         ) : null}

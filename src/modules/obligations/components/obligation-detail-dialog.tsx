@@ -1,7 +1,9 @@
-import { Archive, ArchiveRestore, BarChart3, Pencil, Share2, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, BarChart3, Pencil, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "../../../components/ui/button";
+import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
+import { ModalBody } from "../../../components/ui/modal-body";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { ObligationEventSummary, ObligationSummary } from "../../../types/domain";
@@ -60,21 +62,13 @@ export function ObligationDetailDialog({
   const visiblePlan = showFullPlan ? coverage : nextIndex < 0 ? [] : coverage.slice(nextIndex, nextIndex + 3);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm" role="presentation">
-      <section aria-modal="true" className="flex max-h-[calc(100dvh-24px)] w-full max-w-[760px] flex-col overflow-hidden rounded-[20px] border border-white/[0.12] bg-[#181715]" role="dialog">
-        <header className="flex items-start gap-4 border-b border-white/[0.08] px-5 py-4 sm:px-7">
-          <div className="min-w-0 flex-1">
-            <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{getDirectionLabel(obligation.direction)} · {status.label}</p>
-            <h2 className="mt-1 truncate font-display text-2xl font-semibold text-ink">{obligation.title}</h2>
-            <p className="mt-1 text-sm text-storm">{obligation.counterparty}</p>
-          </div>
-          <button aria-label="Cerrar detalle" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={onClose} type="button"><X className="h-5 w-5" /></button>
-        </header>
+    <Modal className="!max-w-[720px]" labelledBy="obligation-detail-title" onClose={onClose} size="lg">
+        <ModalHeader description={`${getDirectionLabel(obligation.direction)} · ${status.label} · ${obligation.counterparty}`} onClose={onClose} title={obligation.title} titleId="obligation-detail-title" />
 
-        <div className="overflow-y-auto px-5 py-5 sm:px-7">
+        <ModalBody>
           <section className="border-b border-white/[0.08] pb-5">
-            <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Pendiente</p>
-            <p className="mt-1 font-display text-4xl font-semibold tracking-[-0.03em] text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</p>
+            <p className="text-[13px] font-medium text-storm">Pendiente</p>
+            <p className="mt-1 font-display text-3xl font-semibold tracking-[-0.03em] tabular-nums text-ink">{formatCurrency(obligation.pendingAmount, obligation.currencyCode)}</p>
             <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full bg-[#d8d2c7]" style={{ width: `${Math.max(0, Math.min(100, obligation.progressPercent))}%` }} /></div>
             <div className="mt-2 flex justify-between text-xs text-storm"><span>Pagado {formatCurrency(paidAmount, obligation.currencyCode)}</span><span>{Math.round(obligation.progressPercent)}%</span></div>
           </section>
@@ -96,9 +90,9 @@ export function ObligationDetailDialog({
             <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Historial</h3><button className="text-sm text-storm underline-offset-4 hover:text-ink hover:underline" onClick={() => onAnalytics(obligation.id)} type="button">Ver análisis</button></div>
             {obligation.events.length ? <div className="mt-3 divide-y divide-white/[0.07] border-y border-white/[0.08]">{obligation.events.slice(0, 6).map((event) => <div className="flex min-h-14 items-center gap-3 py-2" key={event.id}><div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{getEventLabel(event.eventType)}</p><p className="truncate text-xs text-storm">{formatDate(event.eventDate)}{event.description ? ` · ${event.description}` : ""}</p></div><p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(event.amount, obligation.currencyCode)}</p>{event.eventType === "payment" || event.eventType === "principal_increase" || event.eventType === "principal_decrease" ? <><button className="text-xs text-storm hover:text-ink" onClick={() => onEditEvent(obligation, event)} type="button">Editar</button><button aria-label="Eliminar evento" className="text-storm hover:text-ink" onClick={() => onDeleteEvent(obligation, event)} type="button"><Trash2 className="h-4 w-4" /></button></> : null}</div>)}</div> : <p className="mt-3 text-sm text-storm">Todavía no hay movimientos registrados.</p>}
           </section>
-        </div>
+        </ModalBody>
 
-        <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7">
+        <ModalFooter className="!block">
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => onPayment(obligation)}>{obligation.direction === "receivable" ? "Registrar cobro" : "Registrar pago"}</Button>
             <Button onClick={() => onAdjust(obligation, "increase")} variant="secondary">Ajustar monto</Button>
@@ -109,9 +103,8 @@ export function ObligationDetailDialog({
               {canDelete ? <button aria-label="Eliminar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onDelete(obligation.id)} type="button"><Trash2 className="h-4 w-4" /></button> : obligation.status === "cancelled" ? <button aria-label="Restaurar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onArchive(obligation, false)} type="button"><ArchiveRestore className="h-4 w-4" /></button> : <button aria-label="Archivar" className="flex h-10 w-10 items-center justify-center rounded-lg text-storm hover:bg-white/[0.05] hover:text-ink" onClick={() => onArchive(obligation, true)} type="button"><Archive className="h-4 w-4" /></button>}
             </div>
           </div>
-        </footer>
-      </section>
-    </div>
+        </ModalFooter>
+    </Modal>
   );
 }
 

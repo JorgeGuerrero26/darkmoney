@@ -35,6 +35,7 @@ export function Modal({
   className = "",
 }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -45,7 +46,7 @@ export function Modal({
     document.body.style.overflow = "hidden";
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented) {
         event.stopPropagation();
         onCloseRef.current();
       }
@@ -56,6 +57,7 @@ export function Modal({
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      openerRef.current?.focus();
     };
   }, []);
 

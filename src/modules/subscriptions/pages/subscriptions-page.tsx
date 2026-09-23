@@ -21,6 +21,7 @@ import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialo
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
+import { Modal } from "../../../components/ui/modal";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { PageHeader } from "../../../components/ui/page-header";
@@ -379,16 +380,16 @@ function EditorDialog({
   }, [invalidFields]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }} role="presentation">
-      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={onSubmit}>
-        <ResourceEditorHeader disabled={isSaving} onBack={panel === "optional" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nueva suscripción" : "Editar suscripción") : "Opcionales"} />
+    <Modal className="resource-editor !max-w-[640px] !bg-[#1a1917]" disableOutsideClose={isSaving} labelledBy="subscription-editor-title" onClose={closeEditor}>
+      <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "optional" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nueva suscripción" : "Editar suscripción") : "Opcionales"} titleId="subscription-editor-title" />
         <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
           {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
           {panel === "main" ? (
             <div className="space-y-5">
               <div data-field="amount">
                 <Field errorKey="amount" invalidFields={invalidFields} label={"Monto (" + getCurrencyLabel(formState.currencyCode || baseCurrencyCode).symbol + ")"}>
-                  <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" inputMode="decimal" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" type="number" value={formState.amount} />
+                  <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" data-modal-initial-focus inputMode="decimal" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" type="number" value={formState.amount} />
                 </Field>
               </div>
               <div data-field="name">
@@ -441,7 +442,7 @@ function EditorDialog({
           </Button>
         </footer>
       </form>
-    </div>
+    </Modal>
   );
 }
 

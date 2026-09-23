@@ -5,7 +5,7 @@
   LoaderCircle,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -13,6 +13,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { SearchablePicker as QuickPicker } from "../../../components/ui/searchable-picker";
 import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
+import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
   deleteStoredReceipt,
@@ -333,6 +334,10 @@ export function QuickMovementDialog({
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
   const [inlineCounterparties, setInlineCounterparties] = useState<CounterpartySummary[]>([]);
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
+  useFocusTrap(editorRef, !isContactDialogOpen && !showUnsavedDialog);
+  useEffect(() => () => openerRef.current?.focus(), []);
   const [linkedSubscriptionId, setLinkedSubscriptionId] = useState<number | null>(null);
   const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
   const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
@@ -649,6 +654,15 @@ export function QuickMovementDialog({
       onClose();
     }
   }
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || isContactDialogOpen || showUnsavedDialog) return;
+      requestClose();
+    }
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isContactDialogOpen, isDirty, onClose, showUnsavedDialog]);
 
   async function uploadReceiptForMovement(movementId: number, file: File) {
     const preparedReceipt = await prepareReceiptUpload({
@@ -1015,6 +1029,7 @@ export function QuickMovementDialog({
 
   return (
     <div
+      aria-label={activePanel === "main" ? "Nuevo movimiento" : "Detalles del movimiento"}
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-[80] bg-black/75"
       onMouseDown={(event) => {
@@ -1030,6 +1045,7 @@ export function QuickMovementDialog({
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           className="resource-editor animate-rise-in flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none"
+          ref={editorRef}
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           onMouseUp={(event) => event.stopPropagation()}
@@ -1112,6 +1128,7 @@ export function QuickMovementDialog({
                         </span>
                         <QuickInput
                           autoFocus
+                          data-modal-initial-focus
                           className="h-16 pl-12 font-display text-[2rem] font-semibold"
                           inputMode="decimal"
                           onChange={(event) => {

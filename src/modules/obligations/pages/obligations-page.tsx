@@ -22,7 +22,7 @@ import type {
   ReactNode,
   TextareaHTMLAttributes,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -31,6 +31,7 @@ import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DataState } from "../../../components/ui/data-state";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { Modal } from "../../../components/ui/modal";
 import { PageHeader } from "../../../components/ui/page-header";
 import { Pagination } from "../../../components/ui/pagination";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
@@ -977,8 +978,28 @@ function MultiSelectFilter({
   onChange: (values: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function dismissOutside(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function dismissWithEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      containerRef.current?.querySelector("button")?.focus();
+    }
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("keydown", dismissWithEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("keydown", dismissWithEscape, true);
+    };
+  }, [open]);
   const display = values.length === 0 ? label : values.length === 1 ? options.find((option) => option.value === values[0])?.label ?? label : `${values.length} seleccionados`;
-  return <div className="relative"><button aria-expanded={open} className="flex h-full min-h-14 w-full items-center justify-between rounded-[10px] border border-white/[0.1] bg-[#181715] px-4 text-left text-sm font-semibold text-ink" onClick={() => setOpen((value) => !value)} type="button"><span>{display}</span><ChevronDown className={`h-4 w-4 text-storm transition ${open ? "rotate-180" : ""}`} /></button>{open ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[12px] border border-white/[0.12] bg-[#1b1a18] py-1">{options.map((option) => { const checked = values.includes(option.value); return <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 text-sm text-ink hover:bg-white/[0.04]" key={option.value}><input checked={checked} className="accent-[#d8d2c7]" onChange={() => onChange(checked ? values.filter((value) => value !== option.value) : [...values, option.value])} type="checkbox" /><span>{option.label}</span></label>; })}</div> : null}</div>;
+  return <div className="relative" ref={containerRef}><button aria-expanded={open} className="flex h-full min-h-14 w-full items-center justify-between rounded-xl border border-white/[0.08] bg-[#1a1917] px-4 text-left text-sm font-medium text-ink transition-colors duration-150 hover:border-white/[0.14]" onClick={() => setOpen((value) => !value)} type="button"><span>{display}</span><ChevronDown className={`h-4 w-4 text-storm transition-transform duration-150 ${open ? "rotate-180" : ""}`} /></button>{open ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[9px] border border-white/[0.12] bg-[#1b1a18] py-1">{options.map((option) => { const checked = values.includes(option.value); return <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04]" key={option.value}><input checked={checked} className="accent-[#d8d2c7]" onChange={() => onChange(checked ? values.filter((value) => value !== option.value) : [...values, option.value])} type="checkbox" /><span>{option.label}</span></label>; })}</div> : null}</div>;
 }
 
 
@@ -2853,16 +2874,16 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
   }, [invalidFields]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3" role="presentation">
-      <form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={(event) => { if (panel === "plan") { event.preventDefault(); return; } onSubmit(event); }}>
-        <ResourceEditorHeader disabled={isSaving} onBack={panel === "plan" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda") : panel === "plan" ? "Plan de pagos" : "Detalles"} />
+    <Modal className="resource-editor !max-w-[640px] !bg-[#1a1917]" disableOutsideClose={isSaving} labelledBy="obligation-editor-title" onClose={closeEditor}>
+      <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={(event) => { if (panel === "plan") { event.preventDefault(); return; } onSubmit(event); }}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "plan" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo crédito o deuda" : "Editar crédito o deuda") : panel === "plan" ? "Plan de pagos" : "Detalles"} titleId="obligation-editor-title" />
 
-        <div className="overflow-y-auto px-5 py-5 sm:px-7">
+        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
           {feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
           {panel === "plan" ? <PaymentPlanEditor currencyCode={currencyCode} onSave={savePlan} plan={formState.paymentPlan} principal={principalForPlan} startDate={formState.startDate} /> : panel === "main" ? <div className="space-y-5">
             <div data-field="principalAmount">
-              <Field errorKey="principalAmount" invalidFields={invalidFields} label={`Monto (${getCurrencyLabel(currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></Field>
+              <Field errorKey="principalAmount" invalidFields={invalidFields} label={`Monto (${getCurrencyLabel(currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" data-modal-initial-focus={isCreateMode ? "" : undefined} disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></Field>
               {invalidFields.has("principalAmount") ? <p className="mt-2 text-xs text-rose-300">Ingresa un monto válido.</p> : null}
             </div>
 
@@ -2899,7 +2920,7 @@ function EditorDialog(props: Parameters<typeof LegacyEditorDialog>[0]) {
 
         {panel !== "plan" ? <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer> : null}
       </form>
-    </div>
+    </Modal>
   );
 }
 

@@ -109,7 +109,7 @@ export function AccountEditorDialog({
           {activePanel === "main" ? (
             <div className="space-y-5">
               <FormField className={neutralRequiredClassName} error={formErrors.openingBalance} errorKey="openingBalance" label="Saldo inicial" required>
-                <Input autoFocus className={`h-16 font-display text-[2rem] font-semibold ${neutralFieldClassName}`} inputMode="decimal" onChange={(event) => onFieldChange("openingBalance", event.target.value)} placeholder="0.00" type="number" value={formState.openingBalance} />
+                <Input autoFocus className={`h-16 font-display text-[2rem] font-semibold ${neutralFieldClassName}`} data-modal-initial-focus inputMode="decimal" onChange={(event) => onFieldChange("openingBalance", event.target.value)} placeholder="0.00" type="number" value={formState.openingBalance} />
               </FormField>
 
               <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm">

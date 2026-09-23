@@ -15,7 +15,7 @@ import type {
   InputHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
@@ -23,6 +23,7 @@ import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialo
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { ResourceEditorDestination } from "../../../components/ui/resource-editor";
+import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
@@ -224,6 +225,19 @@ export function MovementEditorDialog({
   userId,
 }: MovementEditorDialogProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
+  useFocusTrap(editorRef, !isDeleteConfirmOpen);
+
+  useEffect(() => () => openerRef.current?.focus(), []);
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || isDeleteConfirmOpen) return;
+      closeEditor();
+    }
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [closeEditor, isDeleteConfirmOpen]);
   const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
   const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
@@ -622,6 +636,7 @@ export function MovementEditorDialog({
 
   return (
     <div
+      aria-label={activePanel === "main" ? (isCreateMode ? "Nuevo movimiento" : "Editar movimiento") : "Detalles del movimiento"}
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-[80] isolate bg-black/75"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
@@ -631,6 +646,7 @@ export function MovementEditorDialog({
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
         <div
           className="resource-editor animate-rise-in relative max-h-[calc(100dvh-1.5rem)] w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none [transform:translateZ(0)]"
+          ref={editorRef}
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -700,6 +716,7 @@ export function MovementEditorDialog({
                     >
                       <EditorInput
                         autoFocus
+                        data-modal-initial-focus
                         className="h-16 font-display text-[2rem] font-semibold"
                         inputMode="decimal"
                         onChange={(event) => {
@@ -1056,7 +1073,7 @@ export function MovementEditorDialog({
                           {movementStatusOption.label}
                         </span>
                         <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                          {selectedCategory?.name ?? "Sin categoria"}
+                          {selectedCategory?.name ?? "Sin categoría"}
                         </span>
                       </div>
                     </div>
@@ -1372,7 +1389,7 @@ export function MovementEditorDialog({
                         onChange={(nextValue) => updateFormState("categoryId", nextValue)}
                         options={categoryPickerOptions}
                         placeholderDescription="Asocia este movimiento a una categoria."
-                        placeholderLabel="Sin categoria"
+                        placeholderLabel="Sin categoría"
                         queryPlaceholder="Buscar categoria..."
                         value={formState.categoryId}
                       />

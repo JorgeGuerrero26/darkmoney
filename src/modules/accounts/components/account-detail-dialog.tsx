@@ -83,8 +83,8 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
               <AccountIcon className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Saldo actual</p>
-              <p className="mt-1 font-display text-3xl font-semibold tracking-[-0.03em] text-ink">{formatCurrency(account.currentBalance, account.currencyCode)}</p>
+              <p className="text-[13px] font-medium text-storm">Saldo actual</p>
+              <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-ink">{formatCurrency(account.currentBalance, account.currencyCode)}</p>
               {!account.includeInNetWorth ? <p className="mt-1 text-xs text-storm">No incluida en el patrimonio neto</p> : null}
             </div>
           </div>
@@ -124,7 +124,7 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
           </div>
           <div className="mt-3 border-t border-white/[0.08]">
             {accountMovements.length === 0 ? (
-              <p className="py-8 text-center text-sm text-storm">Todavia no hay movimientos en esta cuenta.</p>
+              <p className="py-8 text-center text-sm text-storm">Todavía no hay movimientos en esta cuenta.</p>
             ) : accountMovements.slice(0, 8).map((movement) => {
               const display = movementAmount(movement, account);
               return (

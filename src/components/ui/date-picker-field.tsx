@@ -228,15 +228,16 @@ export function DatePickerField({
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
+      event.stopPropagation();
       setIsOpen(false);
       triggerRef.current?.focus();
     }
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleEscape, true);
     window.addEventListener("scroll", calcPosition, true);
     window.addEventListener("resize", calcPosition);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleEscape, true);
       window.removeEventListener("scroll", calcPosition, true);
       window.removeEventListener("resize", calcPosition);
     };

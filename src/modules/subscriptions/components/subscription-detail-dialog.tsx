@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, X } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
+import { Modal } from "../../../components/ui/modal";
+import { ModalBody } from "../../../components/ui/modal-body";
+import { ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, CategorySummary, MovementRecord, SubscriptionSummary } from "../../../types/domain";
@@ -91,20 +94,15 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
     }
   }
 
-  return <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/75 p-3" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div aria-labelledby="subscription-detail-title" aria-modal="true" className="flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917]" role="dialog">
-      <div className="flex min-h-16 items-center gap-3 border-b border-white/[0.09] px-6">
-        {panel !== "detail" ? <button aria-label="Volver al detalle" className="text-storm hover:text-ink" onClick={() => setPanel("detail")} type="button"><ArrowLeft className="h-5 w-5" /></button> : null}
-        <h2 className="min-w-0 flex-1 truncate font-display text-xl font-semibold text-ink" id="subscription-detail-title">{panel === "pay" ? `${subscription.name} · pago` : panel === "account" ? "Se paga con" : panel === "category" ? "Categoría" : subscription.name}</h2>
-        <button aria-label="Cerrar" className="text-storm hover:text-ink" onClick={onClose} type="button"><X className="h-5 w-5" /></button>
-      </div>
-      <div className="space-y-5 overflow-y-auto px-6 py-6">
+  return <Modal className="!max-w-[640px]" labelledBy="subscription-detail-title" onClose={onClose} size="lg">
+      <ResourceEditorHeader onBack={panel !== "detail" ? () => setPanel("detail") : undefined} onClose={onClose} title={panel === "pay" ? `${subscription.name} · pago` : panel === "account" ? "Se paga con" : panel === "category" ? "Categoría" : subscription.name} titleId="subscription-detail-title" />
+      <ModalBody className="space-y-5">
         {panel === "detail" ? <>
           <div><p className="text-xs uppercase tracking-[0.14em] text-storm">{standing.label}</p><p className="mt-1 font-display text-3xl font-semibold text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p><p className="mt-1 text-sm text-storm">{getFrequencyOption(subscription.frequency).label} · {standing.detail}</p></div>
           {subscription.status === "active" ? <Button className="w-full" onClick={() => setPanel("pay")}>{subscription.nextDueDate < new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10) ? "Ponerla al día" : "Marcar como pagada"}</Button> : <Button className="w-full" disabled={isPending} onClick={() => onStatus("active")}>Reactivar</Button>}
           <div className="divide-y divide-white/[0.08] border-y border-white/[0.08] text-sm">
-            <button className="flex w-full justify-between gap-4 py-3 text-left" onClick={() => setPanel("account")} type="button"><span className="text-storm">Se paga con</span><span className="text-ink">{subscription.accountName ?? "Sin cuenta ›"}</span></button>
-            <button className="flex w-full justify-between gap-4 py-3 text-left" onClick={() => setPanel("category")} type="button"><span className="text-storm">Categoría</span><span className="text-ink">{subscription.categoryName ?? "Sin categoría ›"}</span></button>
+            <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left transition-colors duration-150 hover:bg-white/[0.03]" onClick={() => setPanel("account")} type="button"><span className="text-storm">Se paga con</span><span className="flex min-w-0 items-center gap-2 text-ink"><span className="truncate">{subscription.accountName ?? "Sin cuenta"}</span><ChevronRight className="h-4 w-4 shrink-0 text-storm" /></span></button>
+            <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left transition-colors duration-150 hover:bg-white/[0.03]" onClick={() => setPanel("category")} type="button"><span className="text-storm">Categoría</span><span className="flex min-w-0 items-center gap-2 text-ink"><span className="truncate">{subscription.categoryName ?? "Sin categoría"}</span><ChevronRight className="h-4 w-4 shrink-0 text-storm" /></span></button>
             <div className="flex justify-between gap-4 py-3"><span className="text-storm">Proveedor</span><span className="text-ink">{subscription.vendor}</span></div>
             <div className="flex justify-between gap-4 py-3"><span className="text-storm">Recordatorio</span><span className="text-ink">{subscription.remindDaysBefore} días antes</span></div>
           </div>
@@ -117,7 +115,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
             <button className="text-storm hover:text-ink hover:underline" onClick={onDelete} type="button">Eliminar</button>
           </div>
         </> : panel === "pay" ? <>
-          <label className="block text-xs uppercase tracking-[0.14em] text-storm" htmlFor="subscription-paid-amount">Cuánto pagaste</label>
+          <label className="block text-[13px] font-medium text-storm" htmlFor="subscription-paid-amount">Cuánto pagaste</label>
           <input className="field-dark !h-16 w-full text-2xl font-semibold" id="subscription-paid-amount" min="0.01" onChange={(event) => { setAmount(event.target.value); setError(""); }} step="0.01" type="number" value={amount} />
           <div className="divide-y divide-white/[0.08] rounded-xl border border-white/[0.08] px-4">
             <div className="flex min-h-[54px] items-center justify-between gap-3"><span className="text-sm text-ink">Se pagó con</span><div className="w-1/2"><SearchablePicker appearance="compact" emptyMessage="No hay cuentas activas." onChange={(value) => { setAccountId(value); setError(""); }} options={eligibleAccounts.map((account) => ({ value: String(account.id), label: account.name, description: account.currencyCode, leadingLabel: account.name.slice(0, 2) }))} placeholderDescription="Cuenta del gasto" placeholderLabel="Elegir cuenta" queryPlaceholder="Buscar cuenta..." value={accountId} /></div></div>
@@ -127,8 +125,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
           {!eligibleAccounts.length ? <p className="text-sm text-storm">No tienes cuentas activas. Crea una en Cuentas antes de registrar el pago.</p> : null}
           {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
         </> : panel === "account" ? <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]"><button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-storm" disabled={isPending} onClick={() => { onAssignAccount(null); setPanel("detail"); }} type="button">Sin cuenta</button>{eligibleAccounts.map((account) => <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left" disabled={isPending} key={account.id} onClick={() => { onAssignAccount(account.id); setPanel("detail"); }} type="button"><span className="text-ink">{account.name}</span><span className="text-sm text-storm">{account.currencyCode}</span></button>)}</div> : <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]"><button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-storm" disabled={isPending} onClick={() => { onAssignCategory(null); setPanel("detail"); }} type="button">Sin categoría</button>{eligibleCategories.map((category) => <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-ink" disabled={isPending} key={category.id} onClick={() => { onAssignCategory(category.id); setPanel("detail"); }} type="button">{category.name}<span className="text-storm">›</span></button>)}</div>}
-      </div>
+      </ModalBody>
       {panel === "pay" ? <div className="border-t border-white/[0.08] px-6 py-4"><p className="mb-3 text-xs text-storm">{selectedAccount ? `Se anotará un gasto en ${selectedAccount.name} y avanzará el próximo cobro.` : "Elige la cuenta para registrar el gasto."}</p><Button className="w-full" disabled={isPending || !eligibleAccounts.length} onClick={() => void confirmPayment()}>{isPending ? "Registrando..." : selectedAccount ? "Confirmar pago" : "Elige la cuenta"}</Button></div> : null}
-    </div>
-  </div>;
+  </Modal>;
 }

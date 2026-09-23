@@ -26,8 +26,9 @@ export function useFocusTrap(
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     // Focus the first focusable element inside the container
-    const first = container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS);
-    first?.focus();
+    const initial = container.querySelector<HTMLElement>("[data-modal-initial-focus]");
+    const first = initial ?? container.querySelector<HTMLElement>(FOCUSABLE_SELECTORS);
+    if (initial || !container.contains(document.activeElement)) first?.focus();
 
     function getFocusable(): HTMLElement[] {
       return Array.from(
