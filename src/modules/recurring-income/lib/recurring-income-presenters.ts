@@ -1,18 +1,18 @@
 import type { RecurringIncomeFrequency, RecurringIncomeStatus } from "../../../types/domain";
 
 export const frequencyOptions = [
-  { value: "daily" as const, label: "Diaria", description: "Se repite cada dia.", leadingLabel: "D", leadingColor: "#1b6a58" },
-  { value: "weekly" as const, label: "Semanal", description: "Se repite por semanas.", leadingLabel: "S", leadingColor: "#4566d6" },
-  { value: "monthly" as const, label: "Mensual", description: "Se repite cada mes.", leadingLabel: "M", leadingColor: "#8366f2" },
-  { value: "quarterly" as const, label: "Trimestral", description: "Se repite cada trimestre.", leadingLabel: "T", leadingColor: "#b48b34" },
-  { value: "yearly" as const, label: "Anual", description: "Se repite una vez por ano.", leadingLabel: "A", leadingColor: "#c46a31" },
-  { value: "custom" as const, label: "Personalizada", description: "Tienes una frecuencia especial.", leadingLabel: "P", leadingColor: "#64748b" },
+  { value: "daily" as const, label: "Diaria", description: "Se repite cada día.", leadingLabel: "D" },
+  { value: "weekly" as const, label: "Semanal", description: "Se repite por semanas.", leadingLabel: "S" },
+  { value: "monthly" as const, label: "Mensual", description: "Se repite cada mes.", leadingLabel: "M" },
+  { value: "quarterly" as const, label: "Trimestral", description: "Se repite cada trimestre.", leadingLabel: "T" },
+  { value: "yearly" as const, label: "Anual", description: "Se repite una vez por año.", leadingLabel: "A" },
+  { value: "custom" as const, label: "Personalizada", description: "Tienes una frecuencia especial.", leadingLabel: "P" },
 ] as const;
 
 export const statusOptions = [
-  { value: "active" as const, label: "Activo", description: "Sigue generando recordatorios y vencimientos.", leadingLabel: "AC", leadingColor: "#1b6a58" },
-  { value: "paused" as const, label: "Pausado", description: "Se conserva, pero temporalmente detenido.", leadingLabel: "PA", leadingColor: "#b48b34" },
-  { value: "cancelled" as const, label: "Cancelado", description: "Ya no forma parte de tu control activo.", leadingLabel: "CA", leadingColor: "#8f3e3e" },
+  { value: "active" as const, label: "Activo", description: "Sigue generando recordatorios y vencimientos.", leadingLabel: "AC" },
+  { value: "paused" as const, label: "Pausado", description: "Se conserva, pero temporalmente detenido.", leadingLabel: "PA" },
+  { value: "cancelled" as const, label: "Cancelado", description: "Ya no forma parte de tu control activo.", leadingLabel: "CA" },
 ] as const;
 
 export function getFrequencyOption(frequency: RecurringIncomeFrequency) {

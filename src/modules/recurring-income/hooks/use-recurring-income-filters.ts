@@ -1,19 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
   defaultRecurringIncomeTableFilters,
-  type RecurringIncomeTableFilterField,
   type RecurringIncomeTableFilters,
 } from "../lib/recurring-income-filters";
 
 /**
- * Estado de filtros + paginación de ingresos recurrentes, persistido en la URL
- * (q, payer, freq, status, cat, account, amount, from, to, page). Cambiar un
- * filtro resetea a la página 1. Gestiona el menú de filtro por columna abierto y
- * limpia los filtros solo-tabla al salir de esa vista.
+ * Filtros y paginación de ingresos fijos persistidos en la URL. Cambiar un
+ * filtro vuelve a la primera página sin descartar los demás filtros.
  */
-export function useRecurringIncomeFilters(viewMode: string) {
+export function useRecurringIncomeFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const filters = useMemo<RecurringIncomeTableFilters>(() => {
@@ -71,40 +68,6 @@ export function useRecurringIncomeFilters(viewMode: string) {
     [filters, writeFiltersToParams],
   );
 
-  const [openTableFilter, setOpenTableFilter] = useState<RecurringIncomeTableFilterField | null>(null);
-
-  // Los filtros por columna (payer/category/account/amount/fechas) solo aplican a
-  // la tabla: al cambiar a lista/grid se cierran y se limpian.
-  useEffect(() => {
-    if (viewMode === "table") {
-      return;
-    }
-
-    setOpenTableFilter(null);
-    setFilters((currentValue) => {
-      if (
-        !currentValue.payer &&
-        !currentValue.category &&
-        !currentValue.account &&
-        !currentValue.amount &&
-        !currentValue.nextExpectedDateFrom &&
-        !currentValue.nextExpectedDateTo
-      ) {
-        return currentValue;
-      }
-
-      return {
-        ...currentValue,
-        payer: "",
-        category: "",
-        account: "",
-        amount: "",
-        nextExpectedDateFrom: "",
-        nextExpectedDateTo: "",
-      };
-    });
-  }, [viewMode, setFilters]);
-
   const updateFilter = useCallback(
     <Field extends keyof RecurringIncomeTableFilters>(field: Field, value: RecurringIncomeTableFilters[Field]) => {
       setFilters((current) => ({ ...current, [field]: value }));
@@ -114,40 +77,13 @@ export function useRecurringIncomeFilters(viewMode: string) {
 
   const clearFilters = useCallback(() => {
     setFilters(defaultRecurringIncomeTableFilters());
-    setOpenTableFilter(null);
   }, [setFilters]);
-
-  const toggleTableFilterMenu = useCallback((field: RecurringIncomeTableFilterField) => {
-    setOpenTableFilter((current) => (current === field ? null : field));
-  }, []);
-
-  const closeTableFilterMenu = useCallback(() => setOpenTableFilter(null), []);
-
-  const clearSingleTableFilter = useCallback(
-    (field: RecurringIncomeTableFilterField) => {
-      updateFilter(field, defaultRecurringIncomeTableFilters()[field]);
-    },
-    [updateFilter],
-  );
-
-  const applyFilterAndClose = useCallback(
-    <Field extends RecurringIncomeTableFilterField>(field: Field, value: RecurringIncomeTableFilters[Field]) => {
-      updateFilter(field, value);
-      setOpenTableFilter(null);
-    },
-    [updateFilter],
-  );
 
   return {
     filters,
     currentPage,
     setCurrentPage,
-    openTableFilter,
     updateFilter,
     clearFilters,
-    toggleTableFilterMenu,
-    closeTableFilterMenu,
-    clearSingleTableFilter,
-    applyFilterAndClose,
   };
 }

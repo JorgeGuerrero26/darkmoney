@@ -1,14 +1,10 @@
 ﻿import {
-  CheckCircle2,
-  Clock,
   Download,
   LoaderCircle,
+  MoreVertical,
   Plus,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  X,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   FormEvent,
@@ -19,20 +15,16 @@ import type {
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
-import { InfoTip } from "../../../components/ui/info-tip";
 import { Pagination } from "../../../components/ui/pagination";
-import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
+import { Modal, ModalHeader } from "../../../components/ui/modal";
 import { PageHeader } from "../../../components/ui/page-header";
-import { StatusBadge } from "../../../components/ui/status-badge";
-import { SurfaceCard } from "../../../components/ui/surface-card";
+import { ResourceEditorDestination, ResourceEditorHeader, resourceEditorSurfaceClassName } from "../../../components/ui/resource-editor";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
-import { useViewMode, ViewSelector } from "../../../components/ui/view-selector";
-import { ColumnPicker, type ColumnDef, useColumnVisibility } from "../../../components/ui/column-picker";
 import { BulkActionBar, useSelection } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
@@ -59,9 +51,7 @@ import {
   useUpdateRecurringIncomeMutation,
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
-import { RecurringIncomeGrid } from "../components/recurring-income-grid";
 import { RecurringIncomeList } from "../components/recurring-income-list";
-import { RecurringIncomeTable } from "../components/recurring-income-table";
 import { useRecurringIncomeFilters } from "../hooks/use-recurring-income-filters";
 import {
   frequencyOptions,
@@ -79,7 +69,6 @@ const statusFilterPickerOptions: PickerOption[] = [
     label: option.label,
     description: option.description,
     leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
     searchText: `${option.value} ${option.label}`,
   })),
 ];
@@ -91,7 +80,6 @@ const frequencyFilterPickerOptions: PickerOption[] = [
     label: option.label,
     description: option.description,
     leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
     searchText: `${option.value} ${option.label}`,
   })),
 ];
@@ -127,33 +115,35 @@ type FeedbackState = {
 
 
 const currencyOptions = [
-  { code: "PEN", label: "Sol peruano", region: "Peru", symbol: "S/" },
-  { code: "USD", label: "Dolar estadounidense", region: "Estados Unidos", symbol: "$" },
-  { code: "EUR", label: "Euro", region: "Union Europea", symbol: "EUR" },
-  { code: "BRL", label: "Real brasileno", region: "Brasil", symbol: "R$" },
-  { code: "MXN", label: "Peso mexicano", region: "Mexico", symbol: "MXN" },
+  { code: "PEN", label: "Sol peruano", region: "Perú", symbol: "S/" },
+  { code: "USD", label: "Dólar estadounidense", region: "Estados Unidos", symbol: "$" },
+  { code: "EUR", label: "Euro", region: "Unión Europea", symbol: "EUR" },
+  { code: "BRL", label: "Real brasileño", region: "Brasil", symbol: "R$" },
+  { code: "MXN", label: "Peso mexicano", region: "México", symbol: "MXN" },
   { code: "CLP", label: "Peso chileno", region: "Chile", symbol: "CLP" },
 ] as const;
 
 const weekdayOptions = [
-  { value: "0", label: "Domingo", description: "Inicio de semana clasica.", leadingLabel: "DO" },
-  { value: "1", label: "Lunes", description: "Buen dia para ingresos fijos.", leadingLabel: "LU" },
-  { value: "2", label: "Martes", description: "Repeticion semanal en martes.", leadingLabel: "MA" },
-  { value: "3", label: "Miercoles", description: "Repeticion semanal en miercoles.", leadingLabel: "MI" },
-  { value: "4", label: "Jueves", description: "Repeticion semanal en jueves.", leadingLabel: "JU" },
-  { value: "5", label: "Viernes", description: "Repeticion semanal en viernes.", leadingLabel: "VI" },
-  { value: "6", label: "Sabado", description: "Repeticion semanal en sabado.", leadingLabel: "SA" },
+  { value: "0", label: "Domingo", description: "Inicio de semana.", leadingLabel: "DO" },
+  { value: "1", label: "Lunes", description: "Llega los lunes.", leadingLabel: "LU" },
+  { value: "2", label: "Martes", description: "Llega los martes.", leadingLabel: "MA" },
+  { value: "3", label: "Miércoles", description: "Llega los miércoles.", leadingLabel: "MI" },
+  { value: "4", label: "Jueves", description: "Llega los jueves.", leadingLabel: "JU" },
+  { value: "5", label: "Viernes", description: "Llega los viernes.", leadingLabel: "VI" },
+  { value: "6", label: "Sábado", description: "Llega los sábados.", leadingLabel: "SA" },
 ] as const;
 
 const inputClassName = "field-dark";
 const textareaClassName = "field-dark min-h-[100px] resize-y py-3 leading-7";
-const panelClassName =
-  "glass-panel-soft relative min-w-0 overflow-visible rounded-[24px] p-4 sm:p-6";
-const labelClassName =
-  "text-xs font-semibold uppercase tracking-[0.22em] text-storm/80";
+const labelClassName = "text-[13px] font-medium text-storm";
 
 function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
+}
+
+function todayDateInputValue() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
 function parseOptionalInteger(value: string) {
@@ -198,8 +188,8 @@ function createDefaultFormState(baseCurrencyCode: string): RecurringIncomeFormSt
     intervalCount: "1",
     dayOfMonth: "",
     dayOfWeek: "",
-    startDate: toDateInputValue(new Date().toISOString()),
-    nextExpectedDate: toDateInputValue(new Date().toISOString()),
+    startDate: todayDateInputValue(),
+    nextExpectedDate: todayDateInputValue(),
     endDate: "",
     status: "active",
     remindDaysBefore: "3",
@@ -290,12 +280,12 @@ function Field({ children, errorKey, hint, invalidFields, label }: { children: R
     <label className="block min-w-0">
       <span className={labelClassName}>{label}</span>
       <div
-        className={`mt-1.5 sm:mt-3${hasError ? " field-error-ring" : ""}`}
+        className={`mt-1.5${hasError ? " field-error-ring" : ""}`}
         data-field={errorKey}
       >
         {children}
       </div>
-      {hint ? <p className="mt-1 sm:mt-2 break-words text-[0.65rem] sm:text-xs leading-5 sm:leading-6 text-storm/75">{hint}</p> : null}
+      {hint ? <p className="mt-1 break-words text-xs leading-5 text-storm">{hint}</p> : null}
     </label>
   );
 }
@@ -358,317 +348,86 @@ function EditorDialog({
     value: RecurringIncomeFormState[Field],
   ) => void;
 }) {
-  const title = formState.name.trim() || "Nuevo ingreso recurrente";
-  // Divulgación progresiva: al crear, lo avanzado (estado, recordatorio, notas)
-  // arranca plegado; al editar se muestra todo para revisar de un vistazo.
-  const [showAdvanced, setShowAdvanced] = useState(!isCreateMode);
+  const [panel, setPanel] = useState<"main" | "details">("main");
 
   useEffect(() => {
-    if (invalidFields.size === 0) return;
+    if (!invalidFields.size) return;
     const firstField = [...invalidFields][0];
-    const firstEl = document.querySelector<HTMLElement>(`[data-field="${firstField}"]`);
-    if (firstEl) {
-      firstEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        firstEl.querySelector<HTMLElement>("input,button,[tabindex='0']")?.focus();
-      }, 300);
-    }
-    invalidFields.forEach((field) => {
-      const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
-      if (!el) return;
-      el.classList.remove("field-error-shake");
-      void el.offsetWidth;
-      el.classList.add("field-error-shake");
-    });
+    setPanel(firstField === "startDate" ? "details" : "main");
+    const timer = window.setTimeout(() => {
+      const field = document.querySelector<HTMLElement>('[data-field="' + firstField + '"]');
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+      field?.querySelector<HTMLElement>("input,button")?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
   }, [invalidFields]);
 
-  const amount = parseOptionalNumber(formState.amount) ?? 0;
-  const selectedPayer = counterparties.find(
-    (counterparty) => String(counterparty.id) === formState.payerPartyId,
-  );
-  const selectedAccount = accounts.find((account) => String(account.id) === formState.accountId);
-  const frequencyOption = getFrequencyOption(formState.frequency);
-  const statusOption = getStatusOption(formState.status);
-  const currencyLabel = getCurrencyLabel(formState.currencyCode || baseCurrencyCode);
   const counterpartyOptions = counterparties
-    .filter((counterparty) => !counterparty.isArchived || String(counterparty.id) === formState.payerPartyId)
-    .map<PickerOption>((counterparty) => ({
-      value: String(counterparty.id),
-      label: counterparty.name,
-      description: counterparty.isArchived
-        ? "Archivada, pero disponible para este ingreso."
-        : `Tipo ${counterparty.type}.`,
-      leadingLabel: counterparty.name.slice(0, 2).toUpperCase(),
-      leadingColor:
-        counterparty.type === "service"
-          ? "#b48b34"
-          : counterparty.type === "company"
-            ? "#4566d6"
-            : counterparty.type === "merchant"
-              ? "#c46a31"
-              : "#6b7280",
-      searchText: `${counterparty.name} ${counterparty.type}`,
-    }));
+    .filter((item) => !item.isArchived || String(item.id) === formState.payerPartyId)
+    .map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: "", leadingLabel: item.name.slice(0, 2).toUpperCase() }));
   const accountOptions = accounts
-    .filter((account) => !account.isArchived || String(account.id) === formState.accountId)
-    .map<PickerOption>((account) => ({
-      value: String(account.id),
-      label: account.name,
-      description: `${account.type} - ${account.currencyCode}`,
-      leadingLabel: account.currencyCode,
-      leadingColor: account.color,
-      searchText: `${account.name} ${account.type} ${account.currencyCode}`,
-    }));
+    .filter((item) => !item.isArchived || String(item.id) === formState.accountId)
+    .map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: item.currencyCode, leadingLabel: item.currencyCode }));
   const categoryOptions = categories
-    .filter((category) => (category.isActive || String(category.id) === formState.categoryId) && (category.kind === "income" || category.kind === "both"))
-    .map<PickerOption>((category) => ({
-      value: String(category.id),
-      label: category.name,
-      description:
-        category.kind === "both"
-          ? "Disponible para varios tipos de movimientos."
-          : "Categoria pensada para ingresos recurrentes.",
-      leadingLabel: category.name.slice(0, 2).toUpperCase(),
-      leadingColor: category.kind === "both" ? "#4566d6" : "#1b6a58",
-      searchText: `${category.name} ${category.kind}`,
-    }));
-  const frequencyPickerOptions = frequencyOptions.map<PickerOption>((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
-  }));
-  const statusPickerOptions = statusOptions.map<PickerOption>((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    leadingColor: option.leadingColor,
-  }));
-  const currencyPickerOptions = currencyOptions.map<PickerOption>((option) => ({
-    value: option.code,
-    label: option.code,
-    description: `${option.label} - ${option.region}`,
-    leadingLabel: option.symbol,
-    leadingColor: "#4566d6",
-    searchText: `${option.code} ${option.label} ${option.region}`,
-  }));
+    .filter((item) => (item.isActive || String(item.id) === formState.categoryId) && (item.kind === "income" || item.kind === "both"))
+    .map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: "", leadingLabel: item.name.slice(0, 2).toUpperCase() }));
+  const frequencyPickerOptions = frequencyOptions.map<PickerOption>((item) => ({ value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel }));
+  const statusPickerOptions = statusOptions.map<PickerOption>((item) => ({ value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel }));
+  const currencyPickerOptions = currencyOptions.map<PickerOption>((item) => ({ value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol }));
   const needsDayOfWeek = formState.frequency === "weekly";
-  const needsDayOfMonth =
-    formState.frequency === "monthly" ||
-    formState.frequency === "quarterly" ||
-    formState.frequency === "yearly";
+  const needsDayOfMonth = ["monthly", "quarterly", "yearly"].includes(formState.frequency);
 
   return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6" onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }} onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}>
-      <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
-          <form className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden" noValidate onSubmit={onSubmit}>
-            <div className="overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6">
-              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-                <h2 className="font-display text-xl font-semibold text-ink">
-                  {isCreateMode ? "Nuevo ingreso recurrente" : "Editar ingreso recurrente"}
-                </h2>
-
-                <button
-                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-                  onClick={closeEditor}
-                  type="button"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {feedback?.tone === "error" ? (
-                <FormFeedbackBanner
-                  className="mt-6"
-                  description={feedback.description}
-                  title={feedback.title}
-                />
-              ) : null}
-
-              <div className="hidden">
-                <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
-                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-white/10 bg-[linear-gradient(160deg,#1b6a58,rgba(8,13,20,0.72))] text-white">
-                        <TrendingUp className="h-7 w-7" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Vista previa</p>
-                        <h3 className="mt-2 break-words font-display text-4xl font-semibold text-ink">{title}</h3>
-                        <p className="mt-3 text-base leading-8 text-storm">
-                          {selectedPayer?.name ?? "Selecciona un pagador"}
-                        </p>
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{frequencyOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{statusOption.label}</span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/85">{currencyLabel.code}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4">
-                    <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Monto esperado</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(amount, currencyLabel.code)}
-                      </p>
-                    </div>
-                    <div className="rounded-[28px] border border-white/10 bg-black/15 p-5">
-                      <p className="text-[0.68rem] uppercase tracking-[0.22em] text-storm/75">Proxima llegada</p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formState.nextExpectedDate ? formatDate(formState.nextExpectedDate) : "Sin fecha"}
-                      </p>
-                      <p className="mt-2 text-sm text-storm">{selectedAccount?.name ?? "Sin cuenta sugerida"}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 [&>*:nth-child(2)]:order-first">
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Identidad</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Base del ingreso recurrente</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field errorKey="name" hint="Nombre visible para reconocerlo en la app." invalidFields={invalidFields} label="Nombre">
-                      <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Sueldo mensual" type="text" value={formState.name} />
-                    </Field>
-                    <Field hint="Empresa o persona que te paga." label="Pagador">
-                      <SearchablePicker disabled={counterpartyOptions.length === 0} emptyMessage="No tienes contrapartes disponibles aun." onChange={(value) => updateFormState("payerPartyId", value)} options={counterpartyOptions} placeholderDescription="Puedes dejarlo libre si aun no lo registras." placeholderLabel="Sin pagador fijo" queryPlaceholder="Buscar pagador..." value={formState.payerPartyId} />
-                    </Field>
-                    <Field hint="Categoria contable sugerida." label="Categoria">
-                      <SearchablePicker disabled={categoryOptions.length === 0} emptyMessage="No tienes categorias de ingreso disponibles aun." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Puedes dejarla vacia por ahora." placeholderLabel="Sin categoria" queryPlaceholder="Buscar categoria..." value={formState.categoryId} />
-                    </Field>
-                    <Field hint="Cuenta donde recibes este ingreso." label="Cuenta sugerida">
-                      <SearchablePicker disabled={accountOptions.length === 0} emptyMessage="No tienes cuentas disponibles aun." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Puedes definirla mas adelante." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Monto</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Monto y moneda</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field errorKey="amount" hint="Monto esperado en cada ingreso." invalidFields={invalidFields} label="Monto">
-                      <Input inputMode="decimal" min="0" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.amount} />
-                    </Field>
-                    <Field hint="Moneda principal del ingreso." label="Moneda">
-                      <SearchablePicker emptyMessage="No hay monedas configuradas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Selecciona la moneda principal." placeholderLabel="Selecciona una moneda" queryPlaceholder="Buscar PEN, USD, EUR..." value={formState.currencyCode} />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className={panelClassName}>
-                  <p className={labelClassName}>Ritmo</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Frecuencia y calendario</h3>
-                  <div className="mt-3 grid gap-4">
-                    <Field hint="Define cada cuanto esperas el ingreso." label="Frecuencia">
-                      <SearchablePicker emptyMessage="No hay frecuencias disponibles." onChange={(value) => updateFormState("frequency", value as RecurringIncomeFrequency)} options={frequencyPickerOptions} placeholderDescription="Selecciona el ritmo principal." placeholderLabel="Selecciona una frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
-                    </Field>
-                    <Field hint="Usa 1 para la frecuencia normal, 2 para cada dos ciclos, etc." label="Intervalo">
-                      <Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" step="1" type="number" value={formState.intervalCount} />
-                    </Field>
-                    <Field errorKey="startDate" hint="Fecha desde la que empieza a considerarse activo." invalidFields={invalidFields} label="Inicio">
-                      <DatePickerField
-                        onChange={(nextValue) => { clearFieldError("startDate"); updateFormState("startDate", nextValue); }}
-                        value={formState.startDate}
-                      />
-                    </Field>
-                    <Field errorKey="nextExpectedDate" hint="Siguiente fecha esperada de llegada." invalidFields={invalidFields} label="Proxima llegada">
-                      <DatePickerField
-                        onChange={(nextValue) => { clearFieldError("nextExpectedDate"); updateFormState("nextExpectedDate", nextValue); }}
-                        value={formState.nextExpectedDate}
-                      />
-                    </Field>
-                    {needsDayOfMonth ? (
-                      <Field hint="Opcional. Dia del mes en el que suele llegar." label="Dia del mes">
-                        <Input inputMode="numeric" max="31" min="1" onChange={(event) => updateFormState("dayOfMonth", event.target.value)} placeholder="Ej. 28" step="1" type="number" value={formState.dayOfMonth} />
-                      </Field>
-                    ) : null}
-                    {needsDayOfWeek ? (
-                      <Field hint="Opcional. Dia semanal habitual." label="Dia de la semana">
-                        <SearchablePicker emptyMessage="No hay dias disponibles." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((option) => ({ value: option.value, label: option.label, description: option.description, leadingLabel: option.leadingLabel, leadingColor: "#4566d6" }))} placeholderDescription="Selecciona el dia mas comun." placeholderLabel="Sin dia fijo" queryPlaceholder="Buscar dia..." value={formState.dayOfWeek} />
-                      </Field>
-                    ) : null}
-                    <Field hint="Opcional. Si termina en una fecha puntual." label="Fin">
-                      <DatePickerField
-                        onChange={(nextValue) => updateFormState("endDate", nextValue)}
-                        value={formState.endDate}
-                      />
-                    </Field>
-                  </div>
-                </div>
-
-                {!showAdvanced ? (
-                  <button
-                    className="flex w-full items-center justify-center gap-2 rounded-[24px] border border-dashed border-white/15 bg-white/[0.02] px-4 py-3.5 text-sm font-medium text-storm transition hover:border-white/25 hover:text-ink lg:col-span-2"
-                    onClick={() => setShowAdvanced(true)}
-                    type="button"
-                  >
-                    Detalles
-                  </button>
-                ) : null}
-
-                <div className={`${panelClassName} ${showAdvanced ? "" : "hidden"}`}>
-                  <p className={labelClassName}>Seguimiento</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Estado y recordatorios</h3>
-                  <div className="mt-3 sm:mt-6 grid gap-3 sm:gap-5">
-                    <Field hint="Controla si sigue activo, pausado o cerrado." label="Estado">
-                      <SearchablePicker emptyMessage="No hay estados disponibles." onChange={(value) => updateFormState("status", value as RecurringIncomeStatus)} options={statusPickerOptions} placeholderDescription="Selecciona el estado actual." placeholderLabel="Selecciona un estado" queryPlaceholder="Buscar estado..." value={formState.status} />
-                    </Field>
-                    <Field hint="Cuantos dias antes quieres ver el aviso si no llega." label="Recordatorio">
-                      <Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" step="1" type="number" value={formState.remindDaysBefore} />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className={`${panelClassName} lg:col-span-2 ${showAdvanced ? "" : "hidden"}`}>
-                  <p className={labelClassName}>Contexto</p>
-                  <h3 className="mt-1 sm:mt-2 font-display text-lg sm:text-2xl font-semibold text-ink">Descripcion y notas</h3>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                    <Field hint="Se usa como resumen dentro de la tarjeta." label="Descripcion">
-                      <Textarea className="min-h-[120px]" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Ej. Sueldo base mensual neto despues de impuestos." value={formState.description} />
-                    </Field>
-                    <Field hint="Solo para contexto interno." label="Notas">
-                      <Textarea className="min-h-[120px]" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Ej. Llega entre el 28 y el ultimo dia del mes." value={formState.notes} />
-                    </Field>
-                  </div>
-                </div>
-              </div>
+    <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-editor-title" onClose={closeEditor}>
+      <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo ingreso fijo" : "Editar ingreso fijo") : "Detalles"} titleId="income-editor-title" />
+        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
+          {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
+          {panel === "main" ? (
+            <div className="space-y-5">
+              <Field errorKey="amount" invalidFields={invalidFields} label={"Monto (" + getCurrencyLabel(formState.currencyCode || baseCurrencyCode).symbol + ")"}>
+                <Input autoFocus className="h-16 font-display text-[2rem] font-semibold" data-modal-initial-focus inputMode="decimal" onChange={(event) => { clearFieldError("amount"); updateFormState("amount", event.target.value); }} placeholder="0.00" type="number" value={formState.amount} />
+              </Field>
+              <Field errorKey="name" invalidFields={invalidFields} label="Nombre">
+                <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Sueldo mensual" value={formState.name} />
+              </Field>
+              <Field label="Frecuencia">
+                <SearchablePicker appearance="compact" emptyMessage="No hay frecuencias." onChange={(value) => updateFormState("frequency", value as RecurringIncomeFrequency)} options={frequencyPickerOptions} placeholderDescription="Cada cuánto llega." placeholderLabel="Selecciona frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency} />
+              </Field>
+              <Field errorKey="nextExpectedDate" invalidFields={invalidFields} label="Próxima llegada">
+                <DatePickerField appearance="compact" onChange={(value) => { clearFieldError("nextExpectedDate"); updateFormState("nextExpectedDate", value); }} value={formState.nextExpectedDate} />
+              </Field>
+              <ResourceEditorDestination onClick={() => setPanel("details")} summary="Pagador, cuenta y calendario" />
             </div>
-
-            <div className="relative z-[60] border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
-              <div className="flex justify-end">
-                  <Button disabled={isSaving} type="submit">
-                    {isSaving ? (
-                      <>
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : isCreateMode ? (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Registrar ingreso
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Guardar cambios
-                      </>
-                    )}
-                  </Button>
+          ) : (
+            <div className="space-y-5">
+              <Field label="Pagador"><SearchablePicker appearance="compact" emptyMessage="No hay pagadores." onChange={(value) => updateFormState("payerPartyId", value)} options={counterpartyOptions} placeholderDescription="Persona o empresa." placeholderLabel="Sin pagador fijo" queryPlaceholder="Buscar pagador..." value={formState.payerPartyId} /></Field>
+              <Field label="Cuenta sugerida"><SearchablePicker appearance="compact" emptyMessage="No hay cuentas." onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta donde llegará." placeholderLabel="Sin cuenta fija" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>
+              <Field label="Categoría"><SearchablePicker appearance="compact" emptyMessage="No hay categorías de ingreso." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Categoría de ingreso." placeholderLabel="Sin categoría" queryPlaceholder="Buscar categoría..." value={formState.categoryId} /></Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Moneda"><SearchablePicker appearance="compact" emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda del ingreso." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} /></Field>
+                <Field label="Cada cuántos ciclos"><Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" type="number" value={formState.intervalCount} /></Field>
               </div>
+              <Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField appearance="compact" onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field>
+              {needsDayOfMonth ? <Field label="Día del mes"><Input inputMode="numeric" max="31" min="1" onChange={(event) => updateFormState("dayOfMonth", event.target.value)} placeholder="Sin día fijo" type="number" value={formState.dayOfMonth} /></Field> : null}
+              {needsDayOfWeek ? <Field label="Día de la semana"><SearchablePicker appearance="compact" emptyMessage="No hay días." onChange={(value) => updateFormState("dayOfWeek", value)} options={weekdayOptions.map((item) => ({ value: item.value, label: item.label, description: item.description, leadingLabel: item.leadingLabel }))} placeholderDescription="Día habitual." placeholderLabel="Sin día fijo" queryPlaceholder="Buscar día..." value={formState.dayOfWeek} /></Field> : null}
+              <Field label="Fin"><DatePickerField appearance="compact" onChange={(value) => updateFormState("endDate", value)} value={formState.endDate} /></Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Estado"><SearchablePicker appearance="compact" emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as RecurringIncomeStatus)} options={statusPickerOptions} placeholderDescription="Estado del ingreso." placeholderLabel="Selecciona estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
+                <Field label="Avisarme antes (días)"><Input inputMode="numeric" min="0" onChange={(event) => updateFormState("remindDaysBefore", event.target.value)} placeholder="3" type="number" value={formState.remindDaysBefore} /></Field>
+              </div>
+              <Field label="Descripción"><Textarea onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible" value={formState.description} /></Field>
+              <Field label="Notas"><Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Solo para este espacio" value={formState.notes} /></Field>
             </div>
-          </form>
+          )}
         </div>
-      </div>
-    </div>
+        <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7">
+          <Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear ingreso fijo" : "Guardar cambios"}</Button>
+        </footer>
+      </form>
+    </Modal>
   );
 }
-
 function ConfirmArrivalDialog({
   income,
   movements,
@@ -682,34 +441,36 @@ function ConfirmArrivalDialog({
   onConfirm: (input: Omit<ConfirmArrivalInput, "workspaceId" | "userId">) => Promise<void>;
   isSaving: boolean;
 }) {
-  const today = toDateInputValue(new Date().toISOString());
-  const [actualDate, setActualDate] = useState(today);
+  const [panel, setPanel] = useState<"main" | "details">("main");
+  const [actualDate, setActualDate] = useState(todayDateInputValue());
+  const [actualAmount, setActualAmount] = useState(String(income.amount));
   const [notes, setNotes] = useState("");
   const [movementId, setMovementId] = useState("");
   const [error, setError] = useState<string | null>(null);
-
   const incomeMovements = useMemo(
-    () =>
-      movements
-        .filter((m) => m.movementType === "income" && m.status !== "voided")
-        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-        .slice(0, 40),
+    () => movements.filter((item) => item.movementType === "income" && item.status !== "voided")
+      .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)).slice(0, 40),
     [movements],
   );
-  const movementOptions = incomeMovements.map<PickerOption>((m) => ({
-    value: String(m.id),
-    label: m.description || `Movimiento #${m.id}`,
-    description: `${formatDate(m.occurredAt)} Â· ${m.destinationCurrencyCode ?? m.sourceCurrencyCode ?? ""}`,
-    leadingLabel: (m.destinationCurrencyCode ?? m.sourceCurrencyCode ?? "??").slice(0, 3),
-    leadingColor: "#1b6a58",
-    searchText: `${m.description} ${m.occurredAt}`,
+  const movementOptions = incomeMovements.map<PickerOption>((item) => ({
+    value: String(item.id),
+    label: item.description || `Movimiento #${item.id}`,
+    description: `${formatDate(item.occurredAt)} · ${item.destinationCurrencyCode ?? item.sourceCurrencyCode ?? ""}`,
+    leadingLabel: (item.destinationCurrencyCode ?? item.sourceCurrencyCode ?? "??").slice(0, 3),
   }));
   const nextExpectedDate = advanceNextExpectedDate(income);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!actualDate) {
+      setPanel("main");
       setError("Indica la fecha real de llegada.");
+      return;
+    }
+    const amount = parseOptionalNumber(actualAmount);
+    if (amount === null || !Number.isFinite(amount) || amount <= 0) {
+      setPanel("details");
+      setError("Indica un monto recibido mayor que cero.");
       return;
     }
     setError(null);
@@ -717,7 +478,7 @@ function ConfirmArrivalDialog({
       recurringIncomeId: income.id,
       expectedDate: income.nextExpectedDate,
       actualDate,
-      amount: income.amount,
+      amount,
       currencyCode: income.currencyCode,
       movementId: movementId ? Number(movementId) : null,
       notes,
@@ -726,108 +487,39 @@ function ConfirmArrivalDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-void/70 p-4 backdrop-blur-sm"
-      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
-      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0 && !isSaving) onClose(); }}
-    >
-      <div className="flex min-h-full items-center justify-center">
-        <div
-          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl"
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
-        >
-          <form className="flex flex-col gap-5 p-6" noValidate onSubmit={handleSubmit}>
-            <div className="flex items-start justify-between gap-4">
+    <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-arrival-title" onClose={onClose}>
+      <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={handleSubmit}>
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={onClose} title={panel === "main" ? "Confirmar llegada" : "Llegó distinto"} titleId="income-arrival-title" />
+        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
+          {error ? <FormFeedbackBanner className="mb-5" description={error} title="Revisa la fecha" tone="error" /> : null}
+          {panel === "main" ? (
+            <div className="space-y-5">
               <div>
-                <span className="rounded-full border border-pine/20 bg-pine/10 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-pine/80">
-                  Confirmar llegada
-                </span>
-                <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
-                <p className="mt-1 text-sm text-storm">
-                  Esperado el {formatDate(income.nextExpectedDate)} Â· {formatCurrency(income.amount, income.currencyCode)}
-                </p>
+                <p className="text-sm font-semibold text-ink">{income.name}</p>
+                <p className="mt-1 text-sm text-storm">Esperado el {formatDate(income.nextExpectedDate)} · {formatCurrency(income.amount, income.currencyCode)}</p>
               </div>
-              <button
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
-                disabled={isSaving}
-                onClick={onClose}
-                type="button"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <Field label="Fecha real de llegada"><DatePickerField appearance="compact" onChange={setActualDate} value={actualDate} /></Field>
+              <p className="border-t border-white/[0.08] pt-4 text-sm text-storm">La siguiente llegada quedará para el <span className="text-ink">{formatDate(nextExpectedDate)}</span>.</p>
+              <ResourceEditorDestination label="Llegó distinto" onClick={() => setPanel("details")} summary="Monto, movimiento y notas" />
             </div>
-
-            {error ? (
-              <p className="rounded-[18px] border border-[#ffb4bc]/20 bg-[#ffb4bc]/10 px-4 py-3 text-sm text-[#ffb4bc]">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="rounded-[26px] border border-pine/15 bg-pine/8 px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-storm">Proxima llegada despues de confirmar</p>
-              <p className="mt-1.5 font-medium text-ink">{formatDate(nextExpectedDate)}</p>
+          ) : (
+            <div className="space-y-5">
+              <Field label={"Monto recibido (" + getCurrencyLabel(income.currencyCode).symbol + ")"}><Input inputMode="decimal" onChange={(event) => { setError(null); setActualAmount(event.target.value); }} placeholder="0.00" type="number" value={actualAmount} /></Field>
+              <Field label="Movimiento vinculado"><SearchablePicker appearance="compact" emptyMessage="No hay movimientos de ingreso recientes." onChange={setMovementId} options={movementOptions} placeholderDescription="Ingreso ya registrado." placeholderLabel="Sin vincular" queryPlaceholder="Buscar movimiento..." value={movementId} /></Field>
+              <Field label="Notas"><Textarea onChange={(event) => setNotes(event.target.value)} placeholder="Contexto de esta llegada" value={notes} /></Field>
             </div>
-
-            <Field label="Fecha real de llegada">
-              <DatePickerField
-                value={actualDate}
-                onChange={(v) => setActualDate(v ?? "")}
-              />
-            </Field>
-
-            <Field hint="Opcional. Vincula este ingreso a un movimiento ya registrado." label="Movimiento vinculado">
-              <SearchablePicker
-                emptyMessage="No hay movimientos de ingreso recientes."
-                onChange={setMovementId}
-                options={movementOptions}
-                placeholderDescription="Sin vinculo a un movimiento especifico."
-                placeholderLabel="Sin vinculo"
-                queryPlaceholder="Buscar movimiento..."
-                value={movementId}
-              />
-            </Field>
-
-            <Field hint="Opcional. Puedes agregar contexto sobre esta llegada." label="Notas">
-              <Textarea
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="ej. Llego con demora por feriado..."
-                value={notes}
-              />
-            </Field>
-
-            <div className="flex flex-col-reverse gap-3 sm:flex-row">
-              <Button disabled={isSaving} onClick={onClose} type="button" variant="ghost">
-                Cancelar
-              </Button>
-              <Button disabled={isSaving} type="submit">
-                {isSaving ? (
-                  <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Confirmando...</>
-                ) : (
-                  <><CheckCircle2 className="mr-2 h-4 w-4" />Confirmar llegada</>
-                )}
-              </Button>
-            </div>
-          </form>
+          )}
         </div>
-      </div>
-    </div>
+        <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? "Confirmando..." : "Confirmar llegada"}</Button></footer>
+      </form>
+    </Modal>
   );
 }
-
 function getOccurrenceStatusLabel(status: RecurringIncomeOccurrence["status"]) {
   switch (status) {
     case "on_time": return "A tiempo";
     case "late": return "Con demora";
-    case "missed": return "No llegÃ³";
-  }
-}
-
-function getOccurrenceStatusColor(status: RecurringIncomeOccurrence["status"]) {
-  switch (status) {
-    case "on_time": return "text-pine";
-    case "late": return "text-[#b48b34]";
-    case "missed": return "text-[#ffb4bc]";
+    case "missed": return "No llegó";
   }
 }
 
@@ -844,90 +536,32 @@ function HistoryDialog({
   const occurrences = occurrencesQuery.data ?? [];
 
   return (
-    <div
-      className="fixed inset-0 z-[90] isolate overflow-y-auto bg-void/70 p-4 backdrop-blur-sm"
-      onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
-      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) onClose(); }}
-    >
-      <div className="flex min-h-full items-center justify-center">
-        <div
-          className="animate-rise-in relative w-full max-w-lg overflow-hidden rounded-[28px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl"
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
-        >
-          <div className="flex flex-col gap-5 p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-storm/90">
-                  Historial de llegadas
-                </span>
-                <h2 className="mt-3 font-display text-2xl font-semibold text-ink">{income.name}</h2>
-                <p className="mt-1 text-sm text-storm">{income.frequencyLabel} Â· {formatCurrency(income.amount, income.currencyCode)}</p>
-              </div>
-              <button
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm hover:border-white/16 hover:text-ink"
-                onClick={onClose}
-                type="button"
-              >
-                <X className="h-4 w-4" />
-              </button>
+    <Modal className="!max-w-xl !bg-[#1a1917]" labelledBy="income-history-title" onClose={onClose}>
+      <ModalHeader description={income.name + " · " + getFrequencyOption(income.frequency).label} onClose={onClose} title="Historial de llegadas" titleId="income-history-title" />
+      <div className="min-h-0 overflow-y-auto px-6 py-3">
+        {occurrencesQuery.isLoading ? <div className="space-y-2 py-4">{Array.from({ length: 3 }).map((_, index) => <div className="h-16 animate-pulse rounded-lg bg-white/[0.04]" key={index} />)}</div>
+        : occurrences.length === 0 ? <p className="py-10 text-center text-sm text-storm">Aún no hay llegadas confirmadas.</p>
+        : occurrences.map((occurrence) => (
+          <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-4 last:border-0" key={occurrence.id}>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink">{formatDate(occurrence.expectedDate)}</p>
+              <p className="mt-1 text-xs text-storm">{occurrence.actualDate ? "Recibido el " + formatDate(occurrence.actualDate) : "Sin fecha de llegada"} · {getOccurrenceStatusLabel(occurrence.status)}</p>
+              {occurrence.notes ? <p className="mt-1 truncate text-xs text-storm">{occurrence.notes}</p> : null}
             </div>
-
-            {occurrencesQuery.isLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div className="shimmer-surface h-16 rounded-[20px]" key={i} />
-                ))}
-              </div>
-            ) : occurrences.length === 0 ? (
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.02] px-5 py-8 text-center">
-                <Clock className="mx-auto h-8 w-8 text-storm/50" />
-                <p className="mt-3 font-medium text-ink">Sin historial todavia</p>
-                <p className="mt-1 text-sm text-storm">Cuando confirmes la primera llegada, aparecera aqui.</p>
-              </div>
-            ) : (
-              <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
-                {occurrences.map((occ) => (
-                  <div
-                    className="flex items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3"
-                    key={occ.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink">
-                        Esperado: {formatDate(occ.expectedDate)}
-                      </p>
-                      {occ.actualDate ? (
-                        <p className="mt-0.5 text-xs text-storm">
-                          Recibido: {formatDate(occ.actualDate)}
-                        </p>
-                      ) : null}
-                      {occ.notes ? (
-                        <p className="mt-0.5 text-xs text-storm/70">{occ.notes}</p>
-                      ) : null}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-medium text-ink">{formatCurrency(occ.amount, occ.currencyCode)}</p>
-                      <p className={`mt-0.5 text-xs font-semibold ${getOccurrenceStatusColor(occ.status)}`}>
-                        {getOccurrenceStatusLabel(occ.status)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(occurrence.amount, occurrence.currencyCode)}</p>
           </div>
-        </div>
+        ))}
       </div>
-    </div>
+    </Modal>
   );
 }
-
 function RecurringIncomeLoadingSkeleton() {
   return (
-    <>
-      <div className="shimmer-surface h-[248px] rounded-[32px]" />
-      <div className="shimmer-surface h-[520px] rounded-[32px]" />
-    </>
+    <div className="space-y-3">
+      <div className="shimmer-surface h-14 rounded-xl" />
+      <div className="shimmer-surface h-12 rounded-xl" />
+      {Array.from({ length: 5 }).map((_, index) => <div className="shimmer-surface h-[76px] rounded-lg" key={index} />)}
+    </div>
   );
 }
 
@@ -951,14 +585,14 @@ function escapeCSV(v: string | number | boolean | null | undefined): string {
 }
 
 function downloadRecurringIncomeCSV(items: RecurringIncomeSummary[], filename: string) {
-  const headers = ["Nombre", "Pagador", "Estado", "Monto", "Moneda", "Frecuencia", "Categoria", "Cuenta", "Inicio", "Proxima llegada", "Fin", "Descripcion", "Notas"];
+  const headers = ["Nombre", "Pagador", "Estado", "Monto", "Moneda", "Frecuencia", "Categoría", "Cuenta", "Inicio", "Próxima llegada", "Fin", "Descripción", "Notas"];
   const rows = items.map((r) => [
     escapeCSV(r.name),
     escapeCSV(r.payer),
-    escapeCSV(r.status),
+    escapeCSV(getStatusOption(r.status).label),
     escapeCSV(r.amount),
     escapeCSV(r.currencyCode),
-    escapeCSV(r.frequencyLabel),
+    escapeCSV(getFrequencyOption(r.frequency).label),
     escapeCSV(r.categoryName ?? ""),
     escapeCSV(r.accountName ?? ""),
     escapeCSV(r.startDate),
@@ -983,15 +617,8 @@ export function RecurringIncomePage() {
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
-  const incomeColumns: ColumnDef[] = [
-    { key: "pagador", label: "Pagador" },
-    { key: "frecuencia", label: "Frecuencia" },
-    { key: "categoria", label: "Categoria" },
-    { key: "cuenta", label: "Cuenta" },
-    { key: "proxima_llegada", label: "PrÃ³xima llegada" },
-  ];
-  const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-recurring-income", incomeColumns);
-  const [viewMode, setViewMode] = useViewMode("recurring-income", "table");
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -1016,14 +643,9 @@ export function RecurringIncomePage() {
     filters: incomeFilters,
     currentPage,
     setCurrentPage,
-    openTableFilter,
     updateFilter: updateIncomeFilter,
     clearFilters: clearIncomeFilters,
-    toggleTableFilterMenu,
-    closeTableFilterMenu,
-    clearSingleTableFilter,
-    applyFilterAndClose: applyIncomeFilterAndClose,
-  } = useRecurringIncomeFilters(viewMode);
+  } = useRecurringIncomeFilters();
   const [formState, setFormState] = useState<RecurringIncomeFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
@@ -1072,6 +694,7 @@ export function RecurringIncomePage() {
       result = result.filter(
         (r) =>
           r.name.toLowerCase().includes(normalizedName) ||
+          (r.payer ?? "").toLowerCase().includes(normalizedName) ||
           (r.categoryName ?? "").toLowerCase().includes(normalizedName) ||
           (r.accountName ?? "").toLowerCase().includes(normalizedName),
       );
@@ -1164,35 +787,17 @@ export function RecurringIncomePage() {
   const isDeleting = deleteMutation.isPending;
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const todayDate = todayDateInputValue();
+  const overdueCount = recurringIncome.filter((item) => item.status === "active" && item.nextExpectedDate < todayDate).length;
   const dueSoonCount = recurringIncome.filter((r) => {
-    const differenceInMs =
-      new Date(r.nextExpectedDate).getTime() - new Date().setHours(0, 0, 0, 0);
-    const differenceInDays = differenceInMs / 86_400_000;
+    if (r.status !== "active") return false;
+    const differenceInDays = (Date.parse(r.nextExpectedDate) - Date.parse(todayDate)) / 86_400_000;
     return differenceInDays >= 0 && differenceInDays <= 7;
   }).length;
-  const nextIncome = recurringIncome[0] ?? null;
-  const allAmountsConvertible =
-    recurringIncome.length > 0 &&
-    recurringIncome.every(
-      (r) => r.amountInBaseCurrency !== null && r.amountInBaseCurrency !== undefined,
-    );
-  const currencySet = new Set(recurringIncome.map((r) => r.currencyCode));
-  const sharedCurrency = currencySet.size === 1 ? recurringIncome[0]?.currencyCode ?? baseCurrencyCode : null;
-  const totalAmountDisplay =
-    sharedCurrency !== null
-      ? formatCurrency(
-          recurringIncome.reduce((total, r) => total + r.amount, 0),
-          sharedCurrency,
-        )
-      : allAmountsConvertible
-        ? formatCurrency(
-            recurringIncome.reduce(
-              (total, r) => total + (r.amountInBaseCurrency ?? 0),
-              0,
-            ),
-            baseCurrencyCode,
-          )
-        : "Multimoneda";
+  const nextIncome = [...recurringIncome]
+    .filter((item) => item.status === "active" && item.nextExpectedDate >= todayDate)
+    .sort((left, right) => left.nextExpectedDate.localeCompare(right.nextExpectedDate))[0] ?? null;
+  const activeInFilter = filteredIncome.filter((item) => item.status === "active").length;
   const recurringIncomePayers = useMemo(
     () =>
       Array.from(
@@ -1234,8 +839,8 @@ export function RecurringIncomePage() {
     if (!activeWorkspace || !user?.id) {
       setFeedback({
         tone: "error",
-        title: "No encontramos el workspace activo",
-        description: "Recarga la pagina e intenta nuevamente.",
+        title: "No encontramos el espacio activo",
+        description: "Recarga la página e intenta nuevamente.",
       });
       return;
     }
@@ -1260,7 +865,7 @@ export function RecurringIncomePage() {
       setFeedback({
         tone: "error",
         title: "Revisa los campos requeridos",
-        description: "Completa los campos marcados en rojo antes de guardar.",
+        description: "Completa los campos indicados antes de guardar.",
       });
       return;
     }
@@ -1268,7 +873,7 @@ export function RecurringIncomePage() {
     if (intervalCount === null || Number.isNaN(intervalCount) || intervalCount <= 0) {
       setFeedback({
         tone: "error",
-        title: "Intervalo invalido",
+        title: "Intervalo inválido",
         description: "Indica un intervalo mayor que cero.",
       });
       return;
@@ -1278,7 +883,7 @@ export function RecurringIncomePage() {
       setFeedback({
         tone: "error",
         title: "La fecha no cuadra",
-        description: "La proxima llegada no puede ser anterior al inicio.",
+        description: "La próxima llegada no puede ser anterior al inicio.",
       });
       return;
     }
@@ -1295,7 +900,7 @@ export function RecurringIncomePage() {
     if (dayOfMonth !== null && (Number.isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31)) {
       setFeedback({
         tone: "error",
-        title: "Dia del mes invalido",
+        title: "Día del mes inválido",
         description: "Si lo completas, debe estar entre 1 y 31.",
       });
       return;
@@ -1304,7 +909,7 @@ export function RecurringIncomePage() {
     if (dayOfWeek !== null && (Number.isNaN(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
       setFeedback({
         tone: "error",
-        title: "Dia de la semana invalido",
+        title: "Día de la semana inválido",
         description: "Si lo completas, debe estar entre 0 y 6.",
       });
       return;
@@ -1313,8 +918,8 @@ export function RecurringIncomePage() {
     if (remindDaysBefore === null || Number.isNaN(remindDaysBefore) || remindDaysBefore < 0) {
       setFeedback({
         tone: "error",
-        title: "Recordatorio invalido",
-        description: "Indica cero o un numero positivo de dias.",
+        title: "Recordatorio inválido",
+        description: "Indica cero o un número positivo de días.",
       });
       return;
     }
@@ -1322,7 +927,7 @@ export function RecurringIncomePage() {
     if (payerPartyId !== null && Number.isNaN(payerPartyId)) {
       setFeedback({
         tone: "error",
-        title: "Pagador invalido",
+        title: "Pagador inválido",
         description: "Vuelve a seleccionar el pagador si deseas asociarlo.",
       });
       return;
@@ -1331,7 +936,7 @@ export function RecurringIncomePage() {
     if (accountId !== null && Number.isNaN(accountId)) {
       setFeedback({
         tone: "error",
-        title: "Cuenta invalida",
+        title: "Cuenta inválida",
         description: "Vuelve a seleccionar la cuenta sugerida.",
       });
       return;
@@ -1340,8 +945,8 @@ export function RecurringIncomePage() {
     if (categoryId !== null && Number.isNaN(categoryId)) {
       setFeedback({
         tone: "error",
-        title: "Categoria invalida",
-        description: "Vuelve a seleccionar la categoria contable.",
+        title: "Categoría inválida",
+        description: "Vuelve a seleccionar la categoría contable.",
       });
       return;
     }
@@ -1375,8 +980,8 @@ export function RecurringIncomePage() {
         });
         setFeedback({
           tone: "success",
-          title: "Ingreso recurrente registrado",
-          description: "Ya aparece en tu radar de compromisos futuros y en la lista principal.",
+          title: "Ingreso fijo registrado",
+          description: "Ya aparece en la lista de ingresos fijos.",
         });
       } else if (selectedIncome) {
         await updateMutation.mutateAsync({
@@ -1388,7 +993,7 @@ export function RecurringIncomePage() {
         setFeedback({
           tone: "success",
           title: "Cambios guardados",
-          description: "El ingreso recurrente se actualizo correctamente.",
+          description: "El ingreso fijo se actualizó correctamente.",
         });
       }
 
@@ -1397,7 +1002,7 @@ export function RecurringIncomePage() {
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "No pudimos guardar el ingreso recurrente",
+        title: "No pudimos guardar el ingreso fijo",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
     }
@@ -1409,7 +1014,7 @@ export function RecurringIncomePage() {
     setDeleteTargetId(null);
     setHiddenIds((prev) => new Set([...prev, targetId]));
     schedule({
-      label: "Ingreso recurrente eliminado",
+      label: "Ingreso fijo eliminado",
       onCommit: () =>
         deleteMutation.mutateAsync({ recurringIncomeId: targetId, workspaceId: activeWorkspace.id }),
       onUndo: () => {
@@ -1454,7 +1059,7 @@ export function RecurringIncomePage() {
       setFeedback({
         tone: "success",
         title: "Llegada confirmada",
-        description: `La proxima llegada se actualizo automaticamente a ${formatDate(input.nextExpectedDate)}.`,
+        description: `La próxima llegada se actualizó automáticamente a ${formatDate(input.nextExpectedDate)}.`,
       });
     } catch (err) {
       setFeedback({
@@ -1468,7 +1073,7 @@ export function RecurringIncomePage() {
   if (!activeWorkspace && (isWorkspacesLoading || snapshotQuery.isLoading)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Estamos preparando los ingresos recurrentes del workspace activo." eyebrow="ingresos recurrentes" title="Cargando ingresos recurrentes" />
+        <PageHeader description="Estamos preparando los ingresos fijos del espacio activo." eyebrow="ingresos fijos" title="Cargando ingresos fijos" />
         <RecurringIncomeLoadingSkeleton />
       </div>
     );
@@ -1477,8 +1082,8 @@ export function RecurringIncomePage() {
   if (workspaceError) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Necesitamos acceder correctamente al workspace activo." eyebrow="ingresos recurrentes" title="Ingresos recurrentes no disponibles" />
-        <DataState description={getQueryErrorMessage(workspaceError, "No pudimos abrir tu workspace actual.")} title="No hay acceso al workspace" tone="error" />
+        <PageHeader description="Necesitamos acceder al espacio activo." eyebrow="ingresos fijos" title="Ingresos fijos no disponibles" />
+        <DataState description={getQueryErrorMessage(workspaceError, "No pudimos abrir tu espacio actual.")} title="No hay acceso al espacio" tone="error" />
       </div>
     );
   }
@@ -1486,8 +1091,8 @@ export function RecurringIncomePage() {
   if (!activeWorkspace) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Cuando tengas un workspace activo, aqui veras tus ingresos fijos." eyebrow="ingresos recurrentes" title="Aun no hay un workspace activo" />
-        <DataState description="Activa o crea un workspace para comenzar a registrar ingresos recurrentes." title="Sin ingresos recurrentes para mostrar" />
+        <PageHeader description="Cuando tengas un espacio activo, aquí verás tus ingresos fijos." eyebrow="ingresos fijos" title="Aún no hay un espacio activo" />
+        <DataState description="Activa o crea un espacio para comenzar a registrar ingresos fijos." title="Sin ingresos fijos para mostrar" />
       </div>
     );
   }
@@ -1495,7 +1100,7 @@ export function RecurringIncomePage() {
   if (snapshotQuery.isLoading || !snapshot) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Estamos cargando tus ingresos recurrentes y sus proximas llegadas." eyebrow="ingresos recurrentes" title="Cargando ingresos recurrentes" />
+        <PageHeader description="Estamos cargando tus ingresos fijos y sus próximas llegadas." eyebrow="ingresos fijos" title="Cargando ingresos fijos" />
         <RecurringIncomeLoadingSkeleton />
       </div>
     );
@@ -1504,207 +1109,73 @@ export function RecurringIncomePage() {
   if (snapshotQuery.error) {
     return (
       <div className="flex flex-col gap-6 pb-8">
-        <PageHeader description="Intentamos reconstruir el estado actual de tus ingresos recurrentes." eyebrow="ingresos recurrentes" title="No fue posible cargar la informacion" />
-        <DataState description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer tus ingresos recurrentes actuales.")} title="Error al cargar ingresos recurrentes" tone="error" />
+        <PageHeader description="Intentamos recuperar el estado actual de tus ingresos fijos." eyebrow="ingresos fijos" title="No fue posible cargar la información" />
+        <DataState description={getQueryErrorMessage(snapshotQuery.error, "No pudimos leer tus ingresos fijos actuales.")} title="Error al cargar ingresos fijos" tone="error" />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      {/* Header compacto (estÃ¡ndar de cuentas) */}
-      <section className="min-w-0">
-        <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Entradas</p>
-        <div className="mt-1 flex items-center gap-2.5">
-          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
-            Ingresos recurrentes
-          </h2>
-          <InfoTip ariaLabel="Sobre los ingresos recurrentes">
-            Registra tus ingresos fijos esperados (sueldo, rentas, cobros periÃ³dicos) para anticipar
-            cuÃ¡ndo y cuÃ¡nto entra. Los filtros de la barra superior aplican a todas las vistas.
-          </InfoTip>
+      <section className="module-header">
+        <div className="min-w-0 flex-1 basis-[15rem]">
+          <h1 className="module-heading">Ingresos fijos</h1>
+          <p className="mt-1.5 text-sm leading-6 text-storm">
+            {recurringIncome.length} {recurringIncome.length === 1 ? "registrado" : "registrados"} · {overdueCount > 0 ? `${overdueCount} ${overdueCount === 1 ? "pendiente" : "pendientes"} de llegada` : dueSoonCount > 0 ? `${dueSoonCount} ${dueSoonCount === 1 ? "llega" : "llegan"} en los próximos 7 días` : nextIncome ? `siguiente llegada el ${formatDate(nextIncome.nextExpectedDate)}` : "sin llegadas próximas"}.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-storm">
-          {recurringIncome.length} ingresos fijos; {dueSoonCount} llegan en los próximos 7 días. Total esperado: <span className="text-pine">{totalAmountDisplay}</span>.
-        </p>
-      </section>
-
-      {/* Toolbar sticky (estÃ¡ndar de cuentas) */}
-      <section className="sticky top-[64px] z-30 rounded-[9px] border border-white/[0.08] bg-[#141312]/95 p-3 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <ViewSelector available={["table"]} onChange={setViewMode} value={viewMode} />
-          {viewMode === "table" ? (
-            <ColumnPicker columns={incomeColumns} visible={colVis} onToggle={toggleCol} />
-          ) : null}
-          <StatusBadge status={`${filteredIncome.length} visibles`} tone="neutral" />
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-storm transition hover:border-white/16 hover:text-ink disabled:opacity-50"
-              disabled={snapshotQuery.isFetching}
-              onClick={() => snapshotQuery.refetch()}
-              title="Actualizar"
-              type="button"
-            >
-              <RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />
-            </button>
-            {hasActiveFilters ? (
-              <Button onClick={clearIncomeFilters} variant="ghost">
-                <X className="mr-2 h-4 w-4" />
-                Limpiar
-              </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button data-tour="create-recurring-income" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo ingreso</span></Button>
+          <div className="relative">
+            <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
+            {isActionsMenuOpen ? (
+              <>
+                <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
+                <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
+                  <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
+                  <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredIncome.length} onClick={() => { setIsActionsMenuOpen(false); downloadRecurringIncomeCSV(filteredIncome, "ingresos-fijos-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar los {filteredIncome.length}</button>
+                </div>
+              </>
             ) : null}
-            <Button
-              disabled={!filteredIncome.length}
-              onClick={() =>
-                downloadRecurringIncomeCSV(
-                  filteredIncome,
-                  `ingresos-recurrentes-${new Date().toISOString().slice(0, 10)}.csv`,
-                )
-              }
-              variant="ghost"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
-            </Button>
-            <Button data-tour="create-recurring-income" onClick={openCreateEditor}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo ingreso
-            </Button>
           </div>
         </div>
+      </section>
 
-        {/* Filtros principales: siempre visibles (aplican a todas las vistas) */}
-        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <input
-            className="field-dark"
-            onChange={(e) => updateIncomeFilter("name", e.target.value)}
-            placeholder="Buscar por nombre, categoria o cuenta..."
-            type="text"
-            value={incomeFilters.name}
-          />
-          <SearchablePicker
-            emptyMessage="No hay estados para mostrar."
-            onChange={(value) => updateIncomeFilter("status", value as "all" | RecurringIncomeStatus)}
-            options={statusFilterPickerOptions}
-            placeholderDescription="Filtra por estado."
-            placeholderLabel="Estado"
-            queryPlaceholder="Buscar estado..."
-            value={incomeFilters.status}
-          />
-          <SearchablePicker
-            emptyMessage="No hay frecuencias para mostrar."
-            onChange={(value) => updateIncomeFilter("frequency", value as "all" | RecurringIncomeFrequency)}
-            options={frequencyFilterPickerOptions}
-            placeholderDescription="Filtra por frecuencia."
-            placeholderLabel="Frecuencia"
-            queryPlaceholder="Buscar frecuencia..."
-            value={incomeFilters.frequency}
-          />
+      <section aria-label="Filtros de ingresos fijos">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,0.75fr)_auto]">
+          <input aria-label="Buscar ingresos fijos" className="field-dark !h-14" onChange={(event) => updateIncomeFilter("name", event.target.value)} placeholder="Buscar por nombre, pagador o categoría..." type="search" value={incomeFilters.name} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay estados." onChange={(value) => updateIncomeFilter("status", value as "all" | RecurringIncomeStatus)} options={statusFilterPickerOptions} placeholderDescription="Estado" placeholderLabel="Todos los estados" queryPlaceholder="Buscar estado..." showSearch={false} value={incomeFilters.status} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay frecuencias." onChange={(value) => updateIncomeFilter("frequency", value as "all" | RecurringIncomeFrequency)} options={frequencyFilterPickerOptions} placeholderDescription="Frecuencia" placeholderLabel="Todas las frecuencias" queryPlaceholder="Buscar frecuencia..." showSearch={false} value={incomeFilters.frequency} />
+          <button aria-expanded={showMoreFilters} className="flex h-14 items-center justify-center gap-2 rounded-xl border border-white/[0.1] px-4 text-sm text-storm transition hover:text-ink" onClick={() => setShowMoreFilters((value) => !value)} type="button"><SlidersHorizontal className="h-4 w-4" />Más filtros</button>
         </div>
+        {showMoreFilters ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay pagadores." onChange={(value) => updateIncomeFilter("payer", value)} options={[{ value: "", label: "Todos los pagadores", description: "", leadingLabel: "—" }, ...recurringIncomePayers.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Pagador" placeholderLabel="Todos los pagadores" queryPlaceholder="Buscar pagador..." value={incomeFilters.payer} />
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay categorías." onChange={(value) => updateIncomeFilter("category", value)} options={[{ value: "", label: "Todas las categorías", description: "", leadingLabel: "—" }, ...recurringIncomeCategories.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Categoría" placeholderLabel="Todas las categorías" queryPlaceholder="Buscar categoría..." value={incomeFilters.category} />
+            <SearchablePicker appearance="toolbar" emptyMessage="No hay cuentas." onChange={(value) => updateIncomeFilter("account", value)} options={[{ value: "", label: "Todas las cuentas", description: "", leadingLabel: "—" }, ...recurringIncomeAccounts.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Cuenta" placeholderLabel="Todas las cuentas" queryPlaceholder="Buscar cuenta..." value={incomeFilters.account} />
+            <input aria-label="Filtrar por monto" className="field-dark !h-14" onChange={(event) => updateIncomeFilter("amount", event.target.value)} placeholder="Monto" type="search" value={incomeFilters.amount} />
+            <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
+              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Llegada desde</p><DatePickerField appearance="compact" onChange={(value) => updateIncomeFilter("nextExpectedDateFrom", value)} value={incomeFilters.nextExpectedDateFrom} /></div>
+              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Llegada hasta</p><DatePickerField appearance="compact" onChange={(value) => updateIncomeFilter("nextExpectedDateTo", value)} value={incomeFilters.nextExpectedDateTo} /></div>
+            </div>
+          </div>
+        ) : null}
+        {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearIncomeFilters} type="button">Limpiar filtros</button> : null}
+      </section>
+
+      <section aria-label="Resumen de ingresos filtrados" className="module-summary">
+        <span><span className="font-semibold text-ink">{filteredIncome.length}</span> {filteredIncome.length === 1 ? "ingreso" : "ingresos"} en esta vista{activeInFilter !== filteredIncome.length ? ` · ${activeInFilter} activos` : ""}</span>
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
-      {viewMode === "list" ? (
-        recurringIncome.length === 0 ? (
-          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" />
-        ) : filteredIncome.length === 0 ? (
-          <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
-        ) : (
-          <RecurringIncomeList
-            income={paginatedIncome}
-            onConfirm={setConfirmIncomeId}
-            onEdit={openEditEditor}
-            onHistory={setHistoryIncomeId}
-            onToggleSelect={toggleSelect}
-            selectedIds={selectedIds}
-          />
-        )
-      ) : viewMode === "table" ? (
-        recurringIncome.length === 0 ? (
-          <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" />
-        ) : filteredIncome.length === 0 ? (
-          <DataState description="Prueba cambiando los filtros activos de la tabla." title="Sin resultados" />
-        ) : (
-          <RecurringIncomeTable
-            accounts={recurringIncomeAccounts}
-            allSelected={allSelected}
-            categories={recurringIncomeCategories}
-            cv={cv}
-            filters={incomeFilters}
-            income={paginatedIncome}
-            onApplyFilterAndClose={applyIncomeFilterAndClose}
-            onClearAll={clearAll}
-            onClearSingleFilter={clearSingleTableFilter}
-            onCloseFilterMenu={closeTableFilterMenu}
-            onConfirm={setConfirmIncomeId}
-            onEdit={openEditEditor}
-            onHistory={setHistoryIncomeId}
-            onSelectAll={selectAll}
-            onToggleFilterMenu={toggleTableFilterMenu}
-            onToggleSelect={toggleSelect}
-            onUpdateFilter={updateIncomeFilter}
-            openFilter={openTableFilter}
-            payers={recurringIncomePayers}
-            someSelected={someSelected}
-            selectedIds={selectedIds}
-          />
-        )
-      ) : null}
-      {viewMode === "grid" ? (
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <SurfaceCard action={<StatusBadge status={`${filteredIncome.length} de ${recurringIncome.length} registrados`} tone="success" />} description="Cada tarjeta representa un ingreso recurrente real con sus datos principales y sus acciones." title="Ingresos recurrentes">
-          {recurringIncome.length === 0 ? (
-            <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Registrar primer ingreso</Button>} description="Todavia no hay ingresos recurrentes registrados para este workspace." title="Sin ingresos recurrentes" />
-          ) : filteredIncome.length === 0 ? (
-            <DataState description="Prueba cambiando los filtros o el texto de busqueda." title="Sin resultados" />
-          ) : (
-            <RecurringIncomeGrid
-              income={paginatedIncome}
-              onConfirm={setConfirmIncomeId}
-              onDelete={setDeleteTargetId}
-              onEdit={openEditEditor}
-              onHistory={setHistoryIncomeId}
-              onToggleSelect={toggleSelect}
-              selectedCount={selectedCount}
-              selectedIds={selectedIds}
-            />
-          )}
-        </SurfaceCard>
-
-        <SurfaceCard action={<Sparkles className="h-5 w-5 text-pine" />} description="Orden cronologico con lo que llega mas pronto y una lectura rapida de la configuracion." title="Proximas llegadas">
-          {recurringIncome.length === 0 ? (
-            <DataState description="Cuando registres un ingreso recurrente, aqui veras el siguiente en orden cronologico." title="Sin calendario todavia" />
-          ) : (
-            <>
-              <div className="space-y-3">
-                {recurringIncome.map((income) => (
-                  <div className="glass-panel-soft flex items-center justify-between gap-3 rounded-[26px] p-4" key={income.id}>
-                    <div className="min-w-0">
-                      <p className="font-medium text-ink">{income.name}</p>
-                      <p className="mt-1 text-sm text-storm">{formatDate(income.nextExpectedDate)} - {income.frequencyLabel}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-ink">{formatCurrency(income.amount, income.currencyCode)}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-storm">{getStatusOption(income.status).label}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 rounded-[26px] border border-pine/15 bg-pine/10 p-5">
-                <p className="font-medium text-ink">Resumen rapido</p>
-                <p className="mt-2 text-sm leading-7 text-storm">
-                  {dueSoonCount} llegan en los proximos 7 dias y el siguiente ingreso es{" "}
-                  {nextIncome ? `${nextIncome.name} el ${formatDate(nextIncome.nextExpectedDate)}` : "sin fecha registrada"}.
-                </p>
-              </div>
-            </>
-          )}
-        </SurfaceCard>
-      </section>
-      ) : null}
-
+      {recurringIncome.length === 0 ? (
+        <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer ingreso</Button>} description="Aún no hay ingresos fijos registrados en este espacio." title="Sin ingresos fijos" />
+      ) : filteredIncome.length === 0 ? (
+        <DataState action={hasActiveFilters ? <Button onClick={clearIncomeFilters} variant="secondary">Quitar filtros</Button> : undefined} description="No hay ingresos que coincidan con los filtros." title="Sin resultados" />
+      ) : (
+        <RecurringIncomeList allSelected={allSelected} income={paginatedIncome} onClearAll={clearAll} onConfirm={setConfirmIncomeId} onDelete={setDeleteTargetId} onEdit={openEditEditor} onHistory={setHistoryIncomeId} onSelectAll={selectAll} onToggleSelect={toggleSelect} selectedIds={selectedIds} someSelected={someSelected} />
+      )}
       {filteredIncome.length > 0 ? (
         <Pagination
           onPageChange={setCurrentPage}
@@ -1740,46 +1211,22 @@ export function RecurringIncomePage() {
       ) : null}
 
       {deleteTarget ? (
-        <DeleteConfirmDialog
-          badge="Eliminar ingreso recurrente"
-          description="Esto elimina el ingreso recurrente permanentemente. No se puede deshacer."
-          isDeleting={isDeleting}
-          onCancel={() => {
-            if (!isDeleting) {
-              setDeleteTargetId(null);
-            }
-          }}
-          onConfirm={() => {
-            void handleDelete();
-          }}
-        >
-          <div>
-            <p className="truncate text-lg font-semibold text-ink">{deleteTarget.name}</p>
-            <p className="mt-1 text-sm text-storm">{deleteTarget.payer}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-ink">
-                {formatCurrency(deleteTarget.amount, deleteTarget.currencyCode)}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                {deleteTarget.frequencyLabel}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-storm">
-                {formatDate(deleteTarget.nextExpectedDate)}
-              </span>
-            </div>
-          </div>
-        </DeleteConfirmDialog>
+        <Modal className="!max-w-md !bg-[#1a1917]" disableOutsideClose={isDeleting} labelledBy="income-delete-title" onClose={() => { if (!isDeleting) setDeleteTargetId(null); }}>
+          <ModalHeader description="Podrás deshacerlo durante unos segundos." onClose={() => setDeleteTargetId(null)} title="¿Eliminar ingreso fijo?" titleId="income-delete-title" />
+          <div className="px-6 py-5"><p className="font-semibold text-ink">{deleteTarget.name}</p><p className="mt-1 text-sm text-storm">{formatCurrency(deleteTarget.amount, deleteTarget.currencyCode)} · {getFrequencyOption(deleteTarget.frequency).label}</p></div>
+          <div className="flex justify-end gap-2 border-t border-white/[0.08] px-6 py-4"><Button disabled={isDeleting} onClick={() => setDeleteTargetId(null)} variant="ghost">Cancelar</Button><Button className="!bg-[#3a2423] !text-[#f0b0ab] hover:!bg-[#4a2d2b]" disabled={isDeleting} onClick={handleDelete}>Eliminar</Button></div>
+        </Modal>
       ) : null}
 
-      <BulkActionBar
+      {!deleteTarget && !showBulkDeleteConfirm ? <BulkActionBar
         isDeleting={isBulkDeleting}
         onClearAll={clearAll}
         onDelete={handleBulkDelete}
-        onExport={() => downloadRecurringIncomeCSV(selectedItems, `ingresos-recurrentes-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onExport={() => downloadRecurringIncomeCSV(selectedItems, `ingresos-fijos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredIncome.length}
-      />
+      /> : null}
       {confirmIncome && activeWorkspace ? (
         <ConfirmArrivalDialog
           income={confirmIncome}
@@ -1799,24 +1246,10 @@ export function RecurringIncomePage() {
       ) : null}
 
       {showBulkDeleteConfirm ? (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ri-bulk-title">
-          <div className="glass-panel-strong w-full max-w-md rounded-[28px] p-6">
-            <h2 id="ri-bulk-title" className="font-display text-xl font-semibold text-ink">
-              Eliminar {selectedCount} ingreso{selectedCount !== 1 ? "s" : ""}?
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-storm">
-              Esta accion eliminara permanentemente los ingresos recurrentes seleccionados. No se puede deshacer.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
-                {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
-              </Button>
-              <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        </div>
+        <Modal className="!max-w-md !bg-[#1a1917]" disableOutsideClose={isBulkDeleting} labelledBy="income-bulk-delete-title" onClose={() => { if (!isBulkDeleting) setShowBulkDeleteConfirm(false); }}>
+          <ModalHeader description="Esta acción elimina los registros seleccionados de forma permanente." onClose={() => setShowBulkDeleteConfirm(false)} title={`¿Eliminar ${selectedCount} ingreso${selectedCount === 1 ? "" : "s"}?`} titleId="income-bulk-delete-title" />
+          <div className="flex justify-end gap-2 border-t border-white/[0.08] px-6 py-4"><Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">Cancelar</Button><Button className="!bg-[#3a2423] !text-[#f0b0ab] hover:!bg-[#4a2d2b]" disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>{isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}</Button></div>
+        </Modal>
       ) : null}
     </div>
   );
