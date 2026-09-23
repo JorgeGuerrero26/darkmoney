@@ -107,9 +107,9 @@ export function SelectionCheckbox({
       />
       <span
         aria-hidden="true"
-        className={`flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border transition duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-pine/40 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-canvas ${
+        className={`flex h-[18px] w-[18px] items-center justify-center rounded-[6px] border transition duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-white/40 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-canvas ${
           active
-            ? "border-pine bg-pine text-void"
+            ? "border-[#f9f7f3] bg-[#f9f7f3] text-[#1a1917]"
             : "border-white/20 bg-white/[0.04] text-transparent hover:border-white/35"
         }`}
       >
@@ -154,7 +154,7 @@ export function BulkActionBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 z-[300] -translate-x-1/2 px-4">
-      <div className="flex items-center gap-3 rounded-[24px] border border-white/15 bg-[#080d14]/95 px-5 py-3 shadow-[0_8px_40px_rgba(0,0,0,0.7)] backdrop-blur-xl">
+      <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-[#1b1a18] px-5 py-3">
         <span className="whitespace-nowrap text-sm font-semibold text-ink">
           {selectedCount} seleccionado{selectedCount !== 1 ? "s" : ""}
         </span>
