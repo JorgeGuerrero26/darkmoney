@@ -75,6 +75,20 @@
 }
 
 @layer components {
+  .module-header {
+    @apply relative z-40 flex min-w-0 flex-wrap items-start gap-x-4 gap-y-3;
+  }
+
+  .module-heading {
+    @apply font-display text-2xl font-semibold tracking-[-0.025em] text-ink;
+    line-height: 1.25;
+  }
+
+  .module-summary {
+    @apply flex flex-wrap items-center gap-x-7 gap-y-2 border-y border-white/[0.08] py-3 text-sm text-storm;
+    font-variant-numeric: tabular-nums;
+  }
+
   .glass-panel {
     @apply border backdrop-blur-2xl shadow-haze;
     border-color: rgba(255, 255, 255, 0.1);
@@ -468,6 +482,21 @@ textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid rgba(107, 228, 197, 0.5);
   outline-offset: 2px;
+}
+
+.app-v39 :is(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid rgba(244, 241, 236, 0.58);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-v39 *,
+  .app-v39 *::before,
+  .app-v39 *::after {
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .app-v39 .account-editor-field,

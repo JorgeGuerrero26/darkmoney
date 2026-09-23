@@ -1113,13 +1113,14 @@ export function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <section className="relative z-40 flex min-w-0 items-start gap-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Suscripciones</h2>
-          <p className="mt-1 text-sm text-storm">
+      <section className="module-header">
+        <div className="min-w-0 flex-1 basis-[15rem]">
+          <h1 className="module-heading">Suscripciones</h1>
+          <p className="mt-1.5 text-sm leading-6 text-storm">
             {subscriptions.length} registradas · {overdueCount > 0 ? `${overdueCount} con cobro vencido` : dueSoonCount > 0 ? `${dueSoonCount} vencen en los próximos 7 días` : nextUpcoming ? `siguiente cobro el ${formatDate(nextUpcoming.nextDueDate)}` : "sin cobros próximos"}.
           </p>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
         <Button data-tour="create-subscription" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nueva</span><span className="hidden sm:inline">Nueva suscripción</span></Button>
         <div className="relative">
           <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
@@ -1133,13 +1134,14 @@ export function SubscriptionsPage() {
             </>
           ) : null}
         </div>
+        </div>
       </section>
 
       <section>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,0.75fr)_auto]">
-          <input className="field-dark !h-14" onChange={(event) => updateSubscriptionFilter("name", event.target.value)} placeholder="Buscar por nombre, proveedor o categoría..." type="search" value={subscriptionFilters.name} />
-          <SearchablePicker appearance="toolbar" emptyMessage="No hay estados." onChange={(value) => updateSubscriptionFilter("status", value as "all" | SubscriptionStatus)} options={statusFilterPickerOptions} placeholderDescription="Estado" placeholderLabel="Todos los estados" queryPlaceholder="Buscar estado..." value={subscriptionFilters.status} />
-          <SearchablePicker appearance="toolbar" emptyMessage="No hay frecuencias." onChange={(value) => updateSubscriptionFilter("frequency", value as "all" | SubscriptionFrequency)} options={frequencyFilterPickerOptions} placeholderDescription="Frecuencia" placeholderLabel="Todas las frecuencias" queryPlaceholder="Buscar frecuencia..." value={subscriptionFilters.frequency} />
+          <input aria-label="Buscar suscripciones" className="field-dark !h-14" onChange={(event) => updateSubscriptionFilter("name", event.target.value)} placeholder="Buscar por nombre, proveedor o categoría..." type="search" value={subscriptionFilters.name} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay estados." onChange={(value) => updateSubscriptionFilter("status", value as "all" | SubscriptionStatus)} options={statusFilterPickerOptions} placeholderDescription="Estado" placeholderLabel="Todos los estados" queryPlaceholder="Buscar estado..." showSearch={false} value={subscriptionFilters.status} />
+          <SearchablePicker appearance="toolbar" emptyMessage="No hay frecuencias." onChange={(value) => updateSubscriptionFilter("frequency", value as "all" | SubscriptionFrequency)} options={frequencyFilterPickerOptions} placeholderDescription="Frecuencia" placeholderLabel="Todas las frecuencias" queryPlaceholder="Buscar frecuencia..." showSearch={false} value={subscriptionFilters.frequency} />
           <button aria-expanded={showMoreFilters} className="flex h-14 items-center justify-center gap-2 rounded-xl border border-white/[0.1] px-4 text-sm text-storm transition hover:text-ink" onClick={() => setShowMoreFilters((value) => !value)} type="button"><SlidersHorizontal className="h-4 w-4" />Más filtros</button>
         </div>
         {showMoreFilters ? (
@@ -1150,8 +1152,8 @@ export function SubscriptionsPage() {
             <SearchablePicker appearance="toolbar" emptyMessage="No hay cuentas." onChange={(value) => updateSubscriptionFilter("account", value)} options={[{ value: "", label: "Todas las cuentas", description: "", leadingLabel: "—" }, ...subscriptionAccounts.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Cuenta" placeholderLabel="Todas las cuentas" queryPlaceholder="Buscar cuenta..." value={subscriptionFilters.account} />
             <input aria-label="Filtrar por monto" className="field-dark !h-14" onChange={(event) => updateSubscriptionFilter("amount", event.target.value)} placeholder="Monto" type="search" value={subscriptionFilters.amount} />
             <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
-              <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro desde</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateFrom", value)} value={subscriptionFilters.nextDueDateFrom} /></div>
-              <div><p className="mb-1 text-[10px] uppercase tracking-[0.15em] text-storm">Cobro hasta</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateTo", value)} value={subscriptionFilters.nextDueDateTo} /></div>
+              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Cobro desde</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateFrom", value)} value={subscriptionFilters.nextDueDateFrom} /></div>
+              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Cobro hasta</p><DatePickerField appearance="compact" onChange={(value) => updateSubscriptionFilter("nextDueDateTo", value)} value={subscriptionFilters.nextDueDateTo} /></div>
             </div>
             <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-3">{([ ["all", "Todo"], ["overdue", "Vencidas"], ["today", "Hoy"], ["next7", "Próx. 7 días"], ["month", "Este mes"] ] as const).map(([value, label]) => <button className="rounded-lg border border-white/[0.1] px-3 py-2 text-sm text-storm hover:text-ink" key={value} onClick={() => applyDuePreset(value)} type="button">{label}</button>)}</div>
           </div>
@@ -1159,8 +1161,8 @@ export function SubscriptionsPage() {
         {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearSubscriptionFilters} type="button">Limpiar filtros</button> : null}
       </section>
 
-      <section className="flex flex-wrap items-center justify-between gap-2 border-y border-white/[0.08] px-1 py-3 text-sm text-storm">
-        <span>Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro · {activeInFilter.length} activas{pausedInFilter ? ` · ${pausedInFilter} pausadas, no suman` : ""}</span>
+      <section aria-label="Resumen de suscripciones filtradas" className="module-summary">
+        <span className="mr-auto">Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro{activeInFilter.length !== filteredSubscriptions.length ? ` · ${activeInFilter.length} activas` : ""}{pausedInFilter ? ` · ${pausedInFilter} pausadas, no suman` : ""}</span>
         <span>Al mes <strong className="font-semibold text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong></span>
       </section>
 

@@ -894,12 +894,12 @@ export function MovementsPage() {
   return (
     <>
       <div className="flex flex-col gap-6 pb-8">
-        <section className="relative z-40 flex min-w-0 items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">
+        <section className="module-header">
+          <div className="min-w-0 flex-1">
+            <h1 className="module-heading">
               Movimientos
-            </h2>
-            <p className="mt-1 text-sm text-storm">
+            </h1>
+            <p className="mt-1.5 text-sm leading-6 text-storm">
               <span className="text-ink">{filteredMovements.length}</span> movimientos · mostrando los{" "}
               <span className="text-ink">{paginatedMovements.length}</span>{" "}
               {safePage === 1 ? "más recientes" : "de esta página"}.{" "}
@@ -979,6 +979,7 @@ export function MovementsPage() {
 
         <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.72fr)_minmax(0,0.72fr)_minmax(0,0.72fr)]">
             <input
+              aria-label="Buscar movimientos"
               className="field-dark"
               onChange={(event) => updateTableFilter("description", event.target.value)}
               placeholder="Buscar por descripción, categoría o contraparte..."
@@ -1014,7 +1015,7 @@ export function MovementsPage() {
             />
         </section>
 
-        <section className="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-4 py-3 text-sm">
+        <section aria-label="Resumen de movimientos filtrados" className="module-summary">
           <p className="mr-auto text-storm">
             Los <span className="font-medium text-ink">{filteredMovements.length}</span> del filtro
             <span className="ml-2 text-storm/70">· {activeDateLabel}</span>

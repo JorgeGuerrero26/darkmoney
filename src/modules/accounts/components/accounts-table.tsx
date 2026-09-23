@@ -40,12 +40,12 @@ export function AccountsTable({
 
   return (
     <div className="border-t border-white/[0.08]">
-      <div className="flex items-center justify-between border-b border-white/[0.07] px-2 py-2.5 text-xs text-storm sm:px-0">
+      <div className="flex min-h-11 items-center justify-between gap-3 border-b border-white/[0.07] px-2 py-2.5 text-[13px] text-storm sm:px-0">
         <label className="flex items-center gap-2">
           <SelectionCheckbox ariaLabel="Seleccionar todas las cuentas" checked={allSelected} indeterminate={someSelected} onChange={onSelectAll} />
           Seleccionar todas
         </label>
-        <span>{accounts.length} cuentas</span>
+        <span>{accounts.length} en esta página</span>
       </div>
 
       {accounts.map((account, index) => {
@@ -67,9 +67,10 @@ export function AccountsTable({
             </div>
           ) : null}
           <div
-            className="grid min-h-[60px] cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition hover:bg-white/[0.025] sm:px-0"
+            className={`grid min-h-[64px] cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-white/[0.06] px-2 py-2 transition-colors duration-150 hover:bg-white/[0.035] sm:px-0 ${selectedIds.has(account.id) ? "bg-white/[0.045]" : ""}`}
             onClick={() => onOpen(account)}
             onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onOpen(account);
@@ -86,10 +87,10 @@ export function AccountsTable({
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-ink">{account.name}</p>
-              <p className="mt-0.5 truncate text-xs text-storm">{context}</p>
+              <p className="mt-0.5 truncate text-[13px] text-storm">{context}</p>
             </div>
             {visibleColumns.balance === false ? null : (
-              <p className="text-right text-sm font-semibold text-ink">{formatCurrency(account.currentBalance, account.currencyCode)}</p>
+              <p className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-ink">{formatCurrency(account.currentBalance, account.currencyCode)}</p>
             )}
             <div className="relative" onClick={(event) => event.stopPropagation()}>
               <button aria-expanded={openActionsId === account.id} aria-label={`Más opciones de ${account.name}`} className="grid h-8 w-8 place-items-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={() => setOpenActionsId((current) => current === account.id ? null : account.id)} type="button">

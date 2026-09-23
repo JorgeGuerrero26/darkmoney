@@ -78,10 +78,10 @@ function AccountsLoadingSkeleton() {
 
 function AccountsModuleHeader({ actions, totalCount, visibleCount }: { actions?: ReactNode; totalCount?: number; visibleCount?: number }) {
   return (
-    <section className="relative z-40 flex min-w-0 items-start justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Cuentas</h1>
-        <p className="mt-1 text-sm text-storm">
+    <section className="module-header">
+      <div className="min-w-0 flex-1 basis-[15rem]">
+        <h1 className="module-heading">Cuentas</h1>
+        <p className="mt-1.5 text-sm leading-6 text-storm">
           {typeof visibleCount === "number" ? <><span className="text-ink">{visibleCount}</span> cuentas en esta vista</> : "Consulta tus saldos y disponibilidad."}
           {typeof totalCount === "number" && visibleCount !== totalCount ? <> · {totalCount} registradas</> : null}
         </p>
@@ -566,11 +566,11 @@ export function AccountsPage() {
           onUpdateFilters={writeFilters}
         />
 
-        <section className="flex flex-wrap items-center gap-x-7 gap-y-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-4 py-3 text-sm">
+        <section aria-label="Resumen de cuentas filtradas" className="module-summary">
           <p className="mr-auto text-storm">Las <span className="font-medium text-ink">{filteredAccounts.length}</span> del filtro</p>
           <p className="text-storm">Patrimonio <span className="font-medium text-ink">{formatCurrency(filteredPatrimony.amount, filteredPatrimony.currencyCode)}</span></p>
-          <p className="text-storm">Activas <span className="font-medium text-ink">{filteredActiveAccounts.length}</span></p>
-          <p className="text-storm">Fuera de patrimonio <span className="font-medium text-ink">{filteredExcludedCount}</span></p>
+          {filteredActiveAccounts.length !== filteredAccounts.length ? <p className="text-storm">Activas <span className="font-medium text-ink">{filteredActiveAccounts.length}</span></p> : null}
+          {filteredExcludedCount > 0 ? <p className="text-storm">Fuera de patrimonio <span className="font-medium text-ink">{filteredExcludedCount}</span></p> : null}
         </section>
 
         <AccountComposition

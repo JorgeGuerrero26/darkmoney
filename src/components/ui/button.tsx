@@ -13,18 +13,18 @@ type ButtonClassNameOptions = {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-ink text-void hover:-translate-y-0.5 hover:brightness-105 focus-visible:outline-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60",
+    "bg-ink text-void hover:bg-white active:bg-[#ded9d1] focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-60",
   secondary:
-    "bg-white/[0.06] text-ink ring-1 ring-white/10 hover:-translate-y-0.5 hover:bg-white/[0.1] focus-visible:outline-ember disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60",
+    "bg-white/[0.04] text-ink ring-1 ring-white/10 hover:bg-white/[0.08] active:bg-white/[0.12] focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-60",
   ghost:
-    "bg-white/[0.03] text-storm ring-1 ring-white/8 hover:-translate-y-0.5 hover:bg-white/[0.07] hover:text-ink focus-visible:outline-gold disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60",
+    "bg-transparent text-storm hover:bg-white/[0.05] hover:text-ink active:bg-white/[0.08] focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-60",
 };
 
 export function getButtonClassName({
   className = "",
   variant = "primary",
 }: ButtonClassNameOptions = {}) {
-  return `inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${variants[variant]} ${className}`;
+  return `inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] px-4 py-2.5 text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${variants[variant]} ${className}`;
 }
 
 export function Button({

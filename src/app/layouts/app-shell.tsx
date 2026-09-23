@@ -1087,7 +1087,7 @@ function AppShellContent() {
 
         <main className="flex min-w-0 flex-1 flex-col gap-0 lg:min-h-0 lg:overflow-y-auto" id="main-content" tabIndex={-1}>
           <header aria-label="Encabezado del espacio" className="sticky top-0 z-[60] border-b border-white/[0.07] bg-[#141312]/95 px-5 py-3 backdrop-blur-xl lg:px-[30px]">
-            <div className="flex min-h-9 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-h-9 items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   aria-label="Abrir menú"
@@ -1121,7 +1121,7 @@ function AppShellContent() {
                     type="button"
                   >
                     <Bell className="h-4 w-4" />
-                    <span className="sm:sr-only">Notificaciones</span>
+                    <span className="sr-only">Notificaciones</span>
                     {unreadNotificationsCount > 0 ? (
                       <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#e8ded3] px-1 text-[9px] font-bold text-[#141312]">
                         {unreadNotificationsCount}
@@ -1132,7 +1132,7 @@ function AppShellContent() {
                   {isNotificationsPanelOpen ? (
                     <section
                       aria-label="Panel de notificaciones"
-                      className="animate-rise-in fixed left-4 right-4 top-[7.25rem] z-[70] overflow-hidden rounded-[10px] border border-white/[0.1] bg-[#1a1917] shadow-[0_24px_70px_rgba(0,0,0,0.52)] lg:absolute lg:left-auto lg:right-0 lg:top-[calc(100%+0.65rem)] lg:w-[404px]"
+                      className="animate-rise-in fixed left-4 right-4 top-[4.5rem] z-[70] overflow-hidden rounded-[10px] border border-white/[0.1] bg-[#1a1917] lg:absolute lg:left-auto lg:right-0 lg:top-[calc(100%+0.65rem)] lg:w-[404px]"
                       role="dialog"
                     >
                       <div className="flex items-center justify-between gap-4 px-5 py-4">

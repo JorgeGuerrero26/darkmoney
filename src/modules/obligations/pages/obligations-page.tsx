@@ -3,6 +3,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CircleDollarSign,
+  Check,
   ChevronDown,
   Download,
   LoaderCircle,
@@ -5070,39 +5071,46 @@ export function ObligationsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <section className="flex min-w-0 items-start gap-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] text-ink">Créditos y deudas</h2>
-          <p className="mt-1 text-sm text-storm">{activeOwnObligations.length + activeSharedObligations.length} registros activos · te deben <span className="font-medium text-ink">{receivablePendingDisplay}</span> · debes <span className="font-medium text-ink">{payablePendingDisplay}</span>.</p>
+      <section className="module-header">
+        <div className="min-w-0 flex-1 basis-[15rem]">
+          <h1 className="module-heading">Créditos y deudas</h1>
+          <p className="mt-1.5 text-sm leading-6 text-storm">{activeOwnObligations.length + activeSharedObligations.length} registros activos · te deben <span className="font-medium text-ink">{receivablePendingDisplay}</span> · debes <span className="font-medium text-ink">{payablePendingDisplay}</span>.</p>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
         <Button data-tour="create-obligation" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Nuevo registro</Button>
         <div className="relative">
-          <button aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
-          {isActionsMenuOpen ? <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
-            <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04]" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={`h-4 w-4${snapshotQuery.isFetching ? " animate-spin" : ""}`} />Actualizar</button>
-            <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredObligations.length} onClick={() => { setIsActionsMenuOpen(false); downloadObligationsCSV(filteredObligations, `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`); }} type="button"><Download className="h-4 w-4" />Exportar los {filteredObligations.length}</button>
-          </div> : null}
+          <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition-colors duration-150 hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
+          {isActionsMenuOpen ? <>
+            <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
+            <div className="absolute right-0 top-12 z-40 min-w-56 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1b1a18] py-1">
+              <button aria-pressed={groupByDirection} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04]" onClick={() => { toggleGroupByDirection(); setIsActionsMenuOpen(false); }} type="button"><Layers className="h-4 w-4 text-storm" />Agrupar por tipo{groupByDirection ? <Check className="ml-auto h-4 w-4" /> : null}</button>
+              <button aria-pressed={showArchived} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04]" onClick={() => { setShowArchived((value) => !value); setIsActionsMenuOpen(false); }} type="button"><Archive className="h-4 w-4 text-storm" />Mostrar archivadas{showArchived ? <Check className="ml-auto h-4 w-4" /> : null}</button>
+              <button className="flex w-full items-center gap-3 border-t border-white/[0.08] px-4 py-3 text-left text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04]" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={`h-4 w-4 text-storm${snapshotQuery.isFetching ? " animate-spin" : ""}`} />Actualizar</button>
+              <button className="flex w-full items-center gap-3 border-t border-white/[0.08] px-4 py-3 text-left text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredObligations.length} onClick={() => { setIsActionsMenuOpen(false); downloadObligationsCSV(filteredObligations, `creditos-deudas-${new Date().toISOString().slice(0, 10)}.csv`); }} type="button"><Download className="h-4 w-4 text-storm" />Exportar los {filteredObligations.length}</button>
+            </div>
+          </> : null}
+        </div>
         </div>
       </section>
 
       <section>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <input
+            aria-label="Buscar créditos y deudas"
             className="field-dark"
             onChange={(event) => updateObligationFilter("title", event.target.value)}
-            placeholder="Buscar por titulo, contraparte o cuenta..."
+            placeholder="Buscar por título, contraparte o cuenta..."
             type="text"
             value={obligationFilters.title}
           />
           <MultiSelectFilter label="Toda la cartera" onChange={(values) => setDirectionFilters(values as ObligationDirection[])} options={[{ value: "receivable", label: "Me deben" }, { value: "payable", label: "Debo" }]} values={directionFilters} />
           <MultiSelectFilter label="Todos los estados" onChange={(values) => setStatusFilters(values as ObligationStatus[])} options={[{ value: "active", label: "Activa" }, { value: "defaulted", label: "Incumplida" }, { value: "draft", label: "Borrador" }, { value: "paid", label: "Liquidada" }]} values={statusFilters} />
-          <div className="flex gap-2"><button aria-label={groupByDirection ? "No agrupar" : "Agrupar por tipo"} className={`flex h-14 w-14 items-center justify-center rounded-[10px] border transition ${groupByDirection ? "border-[#d8d2c7]/55 bg-white/[0.07] text-ink" : "border-white/[0.1] text-storm hover:text-ink"}`} onClick={toggleGroupByDirection} type="button"><Layers className="h-4 w-4" /></button><button aria-label={showArchived ? "Ocultar archivadas" : "Mostrar archivadas"} className={`flex h-14 w-14 items-center justify-center rounded-[10px] border transition ${showArchived ? "border-[#d8d2c7]/55 bg-white/[0.07] text-ink" : "border-white/[0.1] text-storm hover:text-ink"}`} onClick={() => setShowArchived((value) => !value)} type="button"><Archive className="h-4 w-4" /></button></div>
         </div>
         {(hasActiveFilters || groupByDirection) ? <div className="mt-2 flex flex-wrap items-center gap-2">{directionFilters.map((value) => <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" key={value} onClick={() => setDirectionFilters((current) => current.filter((item) => item !== value))} type="button">{value === "receivable" ? "Me deben" : "Debo"} ×</button>)}{statusFilters.map((value) => <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" key={value} onClick={() => setStatusFilters((current) => current.filter((item) => item !== value))} type="button">{getStatusOption(value).label} ×</button>)}{showArchived ? <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" onClick={() => setShowArchived(false)} type="button">Archivadas ×</button> : null}{groupByDirection ? <button className="rounded-full border border-white/[0.1] px-3 py-1 text-xs text-storm hover:text-ink" onClick={toggleGroupByDirection} type="button">Agrupado por tipo ×</button> : null}{hasActiveFilters ? <button className="text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearObligationFilters} type="button">Limpiar filtros</button> : null}</div> : null}
       </section>
 
-      <section className="grid min-h-14 grid-cols-1 items-center gap-2 border-y border-white/[0.08] px-1 py-3 text-sm sm:grid-cols-[1fr_auto_auto] sm:gap-8">
-        <p className="text-storm">Los <span className="font-semibold text-ink">{filteredObligations.length + filteredSharedObligations.length}</span> del filtro</p>
+      <section aria-label="Resumen de créditos y deudas filtrados" className="module-summary">
+        <p className="mr-auto text-storm">Los <span className="font-semibold text-ink">{filteredObligations.length + filteredSharedObligations.length}</span> del filtro</p>
         <p className="text-storm">Por cobrar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredReceivableDisplay}</span></p>
         <p className="text-storm">Por pagar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredPayableDisplay}</span></p>
       </section>

@@ -70,7 +70,7 @@ export function Modal({
   }
 
   return (
-    <div className="animate-fade-in fixed inset-0 z-[90] overflow-y-auto bg-void/60 backdrop-blur-sm">
+    <div className="animate-fade-in fixed inset-0 z-[90] overflow-y-auto bg-black/65">
       <div
         className={`flex min-h-full justify-center p-4 sm:p-6 ${
           align === "top" ? "items-start pt-[14vh] sm:pt-[18vh]" : "items-center"
@@ -81,7 +81,7 @@ export function Modal({
           aria-label={ariaLabel}
           aria-labelledby={labelledBy}
           aria-modal="true"
-          className={`animate-rise-in flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[24px] border border-white/10 bg-shell/95 shadow-haze backdrop-blur-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-[28px] ${sizeClassNames[size]} ${className}`}
+          className={`animate-fade-in flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[14px] border border-white/10 bg-shell sm:max-h-[calc(100dvh-3rem)] ${sizeClassNames[size]} ${className}`}
           ref={cardRef}
           role="dialog"
         >
@@ -118,7 +118,7 @@ export function ModalHeader({ title, description, onClose, titleId, accessory }:
       {onClose ? (
         <button
           aria-label="Cerrar"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-storm transition-colors duration-150 hover:bg-white/[0.06] hover:text-ink motion-reduce:transition-none"
           onClick={onClose}
           type="button"
         >

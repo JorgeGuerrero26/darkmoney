@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string | number>({
     return (
       <div
         aria-label={ariaLabel}
-        className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1 ${className}`}
+        className={`inline-flex shrink-0 items-center gap-1 rounded-[10px] border border-white/[0.08] bg-[#1a1917] p-1 ${className}`}
         role="group"
       >
         {options.map((option) => {
@@ -37,12 +37,12 @@ export function SegmentedControl<T extends string | number>({
           return (
             <button
               aria-pressed={isActive}
-              className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs font-semibold transition duration-200 sm:py-1.5 ${
+              className={`min-h-8 whitespace-nowrap rounded-[6px] px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 motion-reduce:transition-none ${
                 isDisabled
                   ? "cursor-not-allowed text-storm/45"
                   : isActive
-                    ? "bg-white/[0.1] text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-white/12"
-                    : "text-storm hover:text-ink"
+                    ? "bg-ink text-void"
+                    : "text-storm hover:bg-white/[0.04] hover:text-ink"
               }`}
               disabled={isDisabled}
               key={String(option.value)}
@@ -70,11 +70,11 @@ export function SegmentedControl<T extends string | number>({
         return (
           <button
             aria-pressed={isActive}
-            className={`rounded-[18px] border px-4 py-2 text-left transition duration-200 ${
+            className={`rounded-[10px] border px-4 py-3 text-left transition-colors duration-150 motion-reduce:transition-none ${
               isDisabled
                 ? "cursor-not-allowed border-white/8 bg-white/[0.02] text-storm/45"
                 : isActive
-                  ? "border-pine/30 bg-pine/12 text-ink shadow-[0_0_0_1px_rgba(107,228,197,0.12)]"
+                  ? "border-white/30 bg-white/[0.07] text-ink"
                   : "border-white/10 bg-white/[0.03] text-storm hover:border-white/20 hover:bg-white/[0.06]"
             }`}
             disabled={isDisabled}
@@ -85,8 +85,8 @@ export function SegmentedControl<T extends string | number>({
             <div className="text-sm font-semibold">{option.label}</div>
             {option.helper ? (
               <div
-                className={`mt-1 text-[11px] uppercase tracking-[0.16em] ${
-                  isDisabled ? "text-storm/45" : isActive ? "text-pine" : "text-storm/75"
+                className={`mt-1 text-xs leading-5 ${
+                  isDisabled ? "text-storm/45" : "text-storm"
                 }`}
               >
                 {option.helper}

@@ -47,10 +47,10 @@ export function SubscriptionTable({
   const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   return (
     <section aria-label="Suscripciones" className="border-y border-white/[0.08]">
-      <div className="flex h-12 items-center gap-3 border-b border-white/[0.08] px-1 text-sm text-storm">
+      <div className="flex min-h-11 items-center gap-3 border-b border-white/[0.08] py-2.5 text-[13px] text-storm">
         <SelectionCheckbox ariaLabel="Seleccionar todas" checked={allSelected} indeterminate={someSelected} onChange={() => (allSelected ? onClearAll() : onSelectAll())} />
         <span>Seleccionar todas</span>
-        <span className="ml-auto font-public-mono text-[11px] uppercase tracking-[0.12em]">{subscriptions.length} en esta página</span>
+        <span className="ml-auto">{subscriptions.length} en esta página</span>
       </div>
       {subscriptions.map((subscription, index) => {
         const today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
@@ -59,23 +59,26 @@ export function SubscriptionTable({
         return <Fragment key={subscription.id}>
         {section !== previous ? <div className="border-b border-white/[0.08] px-1 py-3 font-public-mono text-[11px] uppercase tracking-[0.13em] text-storm">{section}</div> : null}
         <article
-          className="group grid min-h-[68px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/[0.06] px-1 transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[auto_minmax(0,1.3fr)_minmax(130px,0.6fr)_auto]"
+          className={`group grid min-h-[68px] cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/[0.06] transition-colors duration-150 last:border-b-0 hover:bg-white/[0.035] sm:grid-cols-[auto_minmax(0,1.3fr)_minmax(130px,0.6fr)_auto] ${selectedIds.has(subscription.id) ? "bg-white/[0.045]" : ""}`}
           onClick={() => onOpen(subscription)}
+          onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(subscription); } }}
+          role="button"
+          tabIndex={0}
         >
           <span onClick={(event) => event.stopPropagation()}>
             <SelectionCheckbox ariaLabel={"Seleccionar " + subscription.name} checked={selectedIds.has(subscription.id)} onChange={() => onToggleSelect(subscription.id)} />
           </span>
           <div className="min-w-0 py-3">
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate font-semibold text-ink">{subscription.name}</p>
+              <p className="truncate text-sm font-medium text-ink">{subscription.name}</p>
               {subscription.isPinned ? <Pin aria-label="Fijada" className="h-3 w-3 shrink-0 text-storm" /> : null}
-              <span className="shrink-0 font-public-mono text-[9px] uppercase tracking-[0.12em] text-storm/70">{getStatusOption(subscription.status).label}</span>
+              {subscription.status !== "active" ? <span className="shrink-0 text-xs text-storm">{getStatusOption(subscription.status).label}</span> : null}
             </div>
-            <p className="mt-0.5 truncate text-sm text-storm">{subscription.vendor} · {getFrequencyOption(subscription.frequency).label} · {formatDate(subscription.nextDueDate)}</p>
+            <p className="mt-0.5 truncate text-[13px] text-storm">{subscription.vendor} · {getFrequencyOption(subscription.frequency).label} · {formatDate(subscription.nextDueDate)}</p>
           </div>
-          <p className="hidden text-right text-xs text-storm sm:block">{subscription.accountName ?? subscription.categoryName ?? ""}</p>
+          <p className="hidden text-right text-[13px] text-storm sm:block">{subscription.accountName ?? subscription.categoryName ?? ""}</p>
           <div className="flex items-center gap-1 py-3 text-right">
-            <p className="mr-1 whitespace-nowrap font-semibold tabular-nums text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
+            <p className="mr-1 whitespace-nowrap text-sm font-semibold tabular-nums text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
             <div className="relative" onClick={(event) => event.stopPropagation()}>
               <button aria-expanded={openActionsId === subscription.id} aria-label={"Opciones de " + subscription.name} className="grid h-9 w-9 place-items-center rounded-lg text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={() => setOpenActionsId((current) => current === subscription.id ? null : subscription.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>
               {openActionsId === subscription.id ? <>
