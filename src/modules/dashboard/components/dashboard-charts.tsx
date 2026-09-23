@@ -100,13 +100,13 @@ function LineChartSvg<P extends ChartPointBase>({
     <div className="relative" ref={inViewRef}>
       {hoverPoint ? (
         <div
-          className="pointer-events-none absolute top-2 z-10 w-max max-w-[220px] -translate-x-1/2 rounded-[6px] border border-white/[0.12] bg-[#11110f] px-3 py-2 shadow-xl"
-          style={{ left: `${Math.min(Math.max((hoverX / width) * 100, 16), 84)}%` }}
+          className="pointer-events-none absolute top-2 z-10 w-[220px] max-w-full rounded-[8px] border border-white/[0.16] bg-[#171614] px-3 py-2"
+          style={{ left: `clamp(0px, calc(${(hoverX / width) * 100}% - 110px), calc(100% - 220px))` }}
         >
-          <p className="text-[0.65rem] font-semibold text-ink">{hoverPoint.fullLabel}</p>
+          <p className="text-xs font-semibold text-ink">{hoverPoint.fullLabel}</p>
           {buildTooltipRows(hoverPoint).map((row) => (
             <p
-              className="mt-0.5 flex items-baseline justify-between gap-3 text-[0.65rem] text-storm"
+              className="mt-1 flex items-baseline justify-between gap-3 text-xs text-storm"
               key={row.label}
             >
               <span>{row.label}</span>
@@ -119,11 +119,27 @@ function LineChartSvg<P extends ChartPointBase>({
       ) : null}
 
       <svg
-        className="h-auto w-full cursor-pointer touch-pan-y"
+        aria-label="Día del gráfico. Usa las flechas para cambiar de día."
+        aria-valuemin={0}
+        aria-valuemax={points.length - 1}
+        aria-valuenow={selectedIndex}
+        aria-valuetext={points[selectedIndex]?.fullLabel}
+        className="h-auto min-h-[180px] w-full cursor-pointer touch-pan-y rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
         onClick={handleClick}
+        onBlur={() => setHoverIndex(null)}
+        onFocus={() => setHoverIndex(selectedIndex)}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.min(points.length - 1, Math.max(0, selectedIndex + (event.key === "ArrowRight" ? 1 : -1)));
+          onSelect(next);
+          setHoverIndex(next);
+        }}
         onPointerLeave={() => setHoverIndex(null)}
         onPointerMove={handlePointerMove}
-        role="img"
+        preserveAspectRatio="none"
+        role="slider"
+        tabIndex={0}
         viewBox={`0 0 ${width} ${height}`}
       >
         <defs>
@@ -143,7 +159,7 @@ function LineChartSvg<P extends ChartPointBase>({
           />
         ))}
         <polygon
-          className={isInView ? "chart-area-fade" : "opacity-0"}
+          className={isInView ? "animate-fade-in" : "opacity-0"}
           fill={`url(#${gradientId})`}
           points={areaPath}
         />
@@ -158,7 +174,7 @@ function LineChartSvg<P extends ChartPointBase>({
           strokeWidth="1.5"
         />
         <polyline
-          className={isInView ? "chart-line-draw" : "opacity-0"}
+          className={isInView ? "animate-fade-in" : "opacity-0"}
           fill="none"
           pathLength={1}
           points={currentPath}
@@ -388,7 +404,7 @@ export function FlowLineChart({
     <div>
       <div className="flex flex-col gap-4 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">{chartTitle}</p>
+          <p className="text-sm font-medium text-ink">{chartTitle}</p>
           <p className="mt-2 text-sm text-storm">Selecciona un punto para comparar ese día.</p>
         </div>
         <div className="flex flex-wrap gap-5 text-xs text-storm" aria-label="Leyenda del gráfico">
@@ -429,24 +445,24 @@ export function FlowLineChart({
 
       {selected ? (
         <>
-          <section className="mt-6 grid border-y border-white/[0.07] sm:grid-cols-4">
-            <div className="py-4 sm:pr-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Detalle del día</p>
+          <section className="mt-6 grid gap-x-6 border-y border-white/[0.07] md:grid-cols-2 xl:grid-cols-4">
+            <div className="py-4">
+              <p className="text-[13px] font-medium text-storm">Detalle del día</p>
               <p className="mt-2 font-display text-lg font-semibold text-ink">{selected.fullLabel}</p>
               <p className="mt-1 text-xs text-storm">vs. {fullDateFormatter.format(selected.previousDate)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
-              <p className={`font-public-mono text-[10px] uppercase tracking-[0.18em] ${theme.accentClass}`}>{dailyLabel}</p>
+            <div className="border-t border-white/[0.07] py-4 md:border-t-0">
+              <p className={`text-[13px] font-medium ${theme.accentClass}`}>{dailyLabel}</p>
               <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.daily, currencyCode)}</p>
               <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.cumulative, currencyCode)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">{comparisonDailyLabel}</p>
+            <div className="border-t border-white/[0.07] py-4 xl:border-t-0">
+              <p className="text-[13px] font-medium text-storm">{comparisonDailyLabel}</p>
               <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.previousDaily, currencyCode)}</p>
               <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.previousCumulative, currencyCode)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:pl-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Variación del día</p>
+            <div className="border-t border-white/[0.07] py-4 xl:border-t-0">
+              <p className="text-[13px] font-medium text-storm">Variación del día</p>
               <p className="mt-2 font-public-mono text-base font-medium text-ink">
                 {selectedDelta > 0 ? "+" : ""}{formatCurrency(selectedDelta, currencyCode)}
               </p>
@@ -506,7 +522,7 @@ export function SavingsLineChart({
     <div>
       <div className="flex flex-col gap-4 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Ahorro acumulado</p>
+          <p className="text-sm font-medium text-ink">Ahorro acumulado</p>
           <p className="mt-2 text-sm text-storm">Selecciona un punto para comparar ese día.</p>
         </div>
         <div className="flex flex-wrap gap-5 text-xs text-storm" aria-label="Leyenda del gráfico">
@@ -547,24 +563,24 @@ export function SavingsLineChart({
 
       {selected ? (
         <>
-          <section className="mt-6 grid border-y border-white/[0.07] sm:grid-cols-4">
-            <div className="py-4 sm:pr-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Detalle del ritmo</p>
+          <section className="mt-6 grid gap-x-6 border-y border-white/[0.07] md:grid-cols-2 xl:grid-cols-4">
+            <div className="py-4">
+              <p className="text-[13px] font-medium text-storm">Detalle del ritmo</p>
               <p className="mt-2 font-display text-lg font-semibold text-ink">{selected.fullLabel}</p>
               <p className="mt-1 text-xs text-storm">vs. {fullDateFormatter.format(selected.previousDate)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Ahorro del día</p>
+            <div className="border-t border-white/[0.07] py-4 md:border-t-0">
+              <p className="text-[13px] font-medium text-storm">Ahorro del día</p>
               <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.net, currencyCode)}</p>
               <p className="mt-1 text-xs text-storm">Entradas {formatCurrency(selected.income, currencyCode)} · salidas {formatCurrency(selected.expense, currencyCode)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:px-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Comparación</p>
+            <div className="border-t border-white/[0.07] py-4 xl:border-t-0">
+              <p className="text-[13px] font-medium text-storm">Comparación</p>
               <p className="mt-2 font-display text-xl font-semibold text-ink">{formatCurrency(selected.previousNet, currencyCode)}</p>
               <p className="mt-1 text-xs text-storm">Acumulado {formatCurrency(selected.cumulative, currencyCode)}</p>
             </div>
-            <div className="border-t border-white/[0.07] py-4 sm:border-l sm:border-t-0 sm:pl-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Variación del día</p>
+            <div className="border-t border-white/[0.07] py-4 xl:border-t-0">
+              <p className="text-[13px] font-medium text-storm">Variación del día</p>
               <p className="mt-2 font-public-mono text-base font-medium text-ink">{selectedDelta > 0 ? "+" : ""}{formatCurrency(selectedDelta, currencyCode)}</p>
               <p className="mt-1 text-xs text-storm">Frente al período anterior</p>
             </div>

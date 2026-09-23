@@ -1064,7 +1064,7 @@ export function DashboardPage() {
     },
     {
       key: "on_track",
-      label: "Al dia",
+      label: "Al día",
       amount: onTrackObligations.reduce((total, obligation) => total + obligation.pendingAmount, 0),
       count: onTrackObligations.length,
       tone: "success" as const,
@@ -1622,9 +1622,10 @@ export function DashboardPage() {
 
     return (
       <div className="flex flex-col gap-7 pb-8">
+        <h1 className="sr-only">Inicio</h1>
         <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Disponible hoy</p>
+            <p className="text-sm font-medium text-storm">Disponible hoy</p>
             <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
               {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
             </p>
@@ -1676,16 +1677,16 @@ export function DashboardPage() {
               },
             ].map((item, index) => (
               <Link
-                className={`grid min-h-[66px] grid-cols-[1fr_auto_auto] items-center gap-5 px-4 py-3 transition hover:bg-white/[0.025] ${index ? "border-t border-white/[0.07]" : ""}`}
+                className={`grid min-h-[66px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 hover:bg-white/[0.04] sm:grid-cols-[minmax(0,1fr)_auto_auto] ${index ? "border-t border-white/[0.07]" : ""}`}
                 key={item.title}
                 to={item.to}
               >
                 <div>
                   <p className="text-sm font-semibold text-ink">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-storm">{item.description}</p>
+                  <p className="mt-0.5 text-[13px] leading-5 text-storm">{item.description}</p>
                 </div>
                 <span className="font-public-mono text-sm text-ink">{item.count}</span>
-                <span className="text-xs font-semibold text-ink">{item.action} →</span>
+                <span className="col-span-2 text-[13px] font-medium text-ink sm:col-span-1">{item.action} →</span>
               </Link>
             ))}
           </div>
@@ -1693,7 +1694,7 @@ export function DashboardPage() {
 
         <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
           <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
-            <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">De dónde sale el cierre de mes</p>
+            <p className="text-[13px] font-medium text-storm">Cierre de mes estimado</p>
             <p className="mt-3 font-display text-3xl font-semibold text-ink">
               {formatCurrency(parityMonthProjection.expectedBalance, displayCurrencyCode)}
             </p>
@@ -1716,14 +1717,14 @@ export function DashboardPage() {
 
           <div className="grid gap-5">
             <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Este período</p>
+              <p className="text-[13px] font-medium text-storm">Neto del período</p>
               <p className="mt-3 font-display text-3xl font-semibold text-ink">{formatCurrency(currentTotals.net, displayCurrencyCode)}</p>
               <p className="mt-3 text-sm text-storm">
                 Entraron <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> · salieron <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>
               </p>
             </article>
             <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.18em] text-storm">Reserva</p>
+              <p className="text-[13px] font-medium text-storm">Reserva</p>
               <p className="mt-3 font-display text-3xl font-semibold text-ink">
                 {healthScore.coverageMonths === null ? "Sin dato" : `${healthScore.coverageMonths.toFixed(1)} meses`}
               </p>
@@ -1737,28 +1738,11 @@ export function DashboardPage() {
         <section className="border-t border-white/[0.07] pt-7">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="font-public-mono text-[10px] uppercase tracking-[0.2em] text-storm">Evolución</p>
-              <h2 className="mt-1 font-display text-xl font-semibold text-ink">Cómo se mueve tu dinero</h2>
+              <h2 className="font-display text-xl font-semibold tracking-[-0.02em] text-ink">Cómo se mueve tu dinero</h2>
             </div>
-            <div className="flex rounded-[8px] border border-white/[0.08] bg-[#1a1917] p-1">
-              {([
-                ["savings", "Neto"],
-                ["expense", "Salidas"],
-                ["income", "Entradas"],
-                ["transfer", "Traspasos"],
-              ] as const).map(([value, label]) => (
-                <button
-                  className={`rounded-[6px] px-3 py-1.5 text-xs transition ${chronologicalTrendTab === value ? "bg-[#f4f1ec] text-[#141312]" : "text-storm hover:text-ink"}`}
-                  key={value}
-                  onClick={() => setChronologicalTrendTab(value)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <PillControl ariaLabel="Tipo de evolución" onChange={setChronologicalTrendTab} options={[{ value: "savings", label: "Neto" }, { value: "expense", label: "Salidas" }, { value: "income", label: "Entradas" }, { value: "transfer", label: "Traspasos" }]} value={chronologicalTrendTab} />
           </div>
-          <div className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-4">
+          <div className="rounded-[10px] border border-white/[0.08] bg-[#1a1917] p-4 sm:p-5">
             {chronologicalTrendTab === "savings" ? (
               <SavingsLineChart currencyCode={displayCurrencyCode} dayMovements={movementsForSelectedChronologicalDay} onSelect={setSelectedTrendIndex} points={trendFilteredSavingsSeries} selectedIndex={selectedTrendSafeIndex} />
             ) : null}
@@ -1784,7 +1768,7 @@ export function DashboardPage() {
             <div className="mt-5 space-y-4">
               {visibleCategories.length ? visibleCategories.map((item) => (
                 <div key={item.key}>
-                  <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-storm">{item.name}</span><span className="font-medium text-ink">{formatCurrency(item.current, displayCurrencyCode)}</span></div>
+                  <div className="flex items-center justify-between gap-3 text-[13px]"><span className="truncate text-storm">{item.name === "Sin categoria" ? "Sin categoría" : item.name}</span><span className="font-medium tabular-nums text-ink">{formatCurrency(item.current, displayCurrencyCode)}</span></div>
                   <div className="mt-2 space-y-1">
                     <div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.current / maxCategoryAmount) * 100}%` }} /></div>
                     <div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-white/20" style={{ width: `${(item.previous / maxCategoryAmount) * 100}%` }} /></div>
@@ -1803,7 +1787,7 @@ export function DashboardPage() {
             <div className="mt-5 space-y-4">
               {visibleAccountsBreakdown.length ? visibleAccountsBreakdown.map((item) => (
                 <div key={item.account.id}>
-                  <div className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-storm">{item.account.name}</span><span className="font-medium text-ink">{formatCurrency(item.account.currentBalance, item.account.currencyCode)}</span></div>
+                  <div className="flex items-center justify-between gap-3 text-[13px]"><span className="truncate text-storm">{item.account.name}</span><span className="font-medium tabular-nums text-ink">{formatCurrency(item.account.currentBalance, item.account.currencyCode)}</span></div>
                   <div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.share / maxAccountShare) * 100}%` }} /></div>
                 </div>
               )) : <p className="text-sm text-storm">Aún no hay cuentas activas para comparar.</p>}
@@ -1820,7 +1804,7 @@ export function DashboardPage() {
                     <div className="w-[38%] rounded-t-[3px] bg-pine" style={{ height: `${Math.max(2, (item.income / maxMonthlyAmount) * 100)}%` }} />
                     <div className="w-[38%] rounded-t-[3px] bg-[#f4f1ec]" style={{ height: `${Math.max(2, (item.expense / maxMonthlyAmount) * 100)}%` }} />
                   </div>
-                  <span className="truncate text-[10px] text-storm">{item.label}</span>
+                  <span className="truncate text-[11px] text-storm">{item.label}</span>
                 </div>
               )) : <p className="m-auto text-sm text-storm">Sin historia mensual todavía.</p>}
             </div>
