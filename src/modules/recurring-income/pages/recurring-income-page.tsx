@@ -13,6 +13,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
 import { Pagination } from "../../../components/ui/pagination";
@@ -508,11 +509,13 @@ function HistoryDialog({
   workspaceId,
   onClose,
   onConfirm,
+  onOpenMovement,
 }: {
   income: RecurringIncomeSummary;
   workspaceId: number;
   onClose: () => void;
   onConfirm: (date: string) => void;
+  onOpenMovement: (movementId: number) => void;
 }) {
   const [view, setView] = useState<"history" | "analytics">("history");
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
@@ -560,6 +563,7 @@ function HistoryDialog({
               <p className="text-sm font-medium text-ink">{formatDate(occurrence.expectedDate)}</p>
               <p className="mt-1 text-xs text-storm">{occurrence.actualDate ? "Recibido el " + formatDate(occurrence.actualDate) : "Sin fecha de llegada"} · {getOccurrenceStatusLabel(occurrence.status)}</p>
               {occurrence.notes ? <p className="mt-1 truncate text-xs text-storm">{occurrence.notes}</p> : null}
+              {occurrence.movementId ? <button className="mt-1 text-xs text-ink underline underline-offset-4" onClick={() => onOpenMovement(occurrence.movementId!)} type="button">Ver movimiento</button> : null}
             </div>
             <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(occurrence.amount, occurrence.currencyCode)}</p>
           </div>
@@ -618,6 +622,7 @@ function downloadRecurringIncomeCSV(items: RecurringIncomeSummary[], filename: s
 }
 
 export function RecurringIncomePage() {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
@@ -1325,6 +1330,7 @@ export function RecurringIncomePage() {
         <HistoryDialog
           income={historyIncome}
           onConfirm={(date) => { setHistoryIncomeId(null); setConfirmDate(date); setConfirmIncomeId(historyIncome.id); }}
+          onOpenMovement={(movementId) => navigate(`/app/movements?period=all&movement=${movementId}`)}
           onClose={() => setHistoryIncomeId(null)}
           workspaceId={activeWorkspace.id}
         />
