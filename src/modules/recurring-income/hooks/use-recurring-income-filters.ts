@@ -22,7 +22,7 @@ export function useRecurringIncomeFilters() {
       name: searchParams.get("q") ?? defaults.name,
       payer: searchParams.get("payer") ?? defaults.payer,
       frequency: (freqParam as RecurringIncomeTableFilters["frequency"]) || "all",
-      status: statusParam && !statusParam.includes(",") ? statusParam as RecurringIncomeTableFilters["status"] : "all",
+      status: statusParam === "active" || statusParam === "paused" || statusParam === "cancelled" ? statusParam : "all",
       selectedStatuses: statusParam?.includes(",") ? statusParam.split(",").filter((value): value is "active" | "paused" | "cancelled" => ["active", "paused", "cancelled"].includes(value)) : [],
       pinnedOnly: searchParams.get("pinned") === "1",
       upcomingOnly: searchParams.get("upcoming") === "1",

@@ -33,6 +33,7 @@ import type {
   AccountSummary,
   CategorySummary,
   CounterpartySummary,
+  MovementRecord,
   RecurringIncomeFrequency,
   RecurringIncomeOccurrence,
   RecurringIncomeStatus,
@@ -279,6 +280,7 @@ function EditorDialog({
   clearFieldError,
   closeEditor,
   counterparties,
+  movements,
   feedback,
   formState,
   invalidFields,
@@ -293,6 +295,7 @@ function EditorDialog({
   clearFieldError: (field: string) => void;
   closeEditor: () => void;
   counterparties: CounterpartySummary[];
+  movements: MovementRecord[];
   feedback: FeedbackState | null;
   formState: RecurringIncomeFormState;
   invalidFields: Set<string>;
@@ -332,6 +335,13 @@ function EditorDialog({
   const currencyPickerOptions = currencyOptions.map<PickerOption>((item) => ({ value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol }));
   const needsDayOfWeek = formState.frequency === "weekly";
   const needsDayOfMonth = ["monthly", "quarterly", "yearly"].includes(formState.frequency);
+  const matchingMovement = movements.find((item) => {
+    if (item.movementType !== "income" || item.status !== "posted") return false;
+    const query = formState.name.trim().toLowerCase();
+    return (query.length >= 3 && item.description.toLowerCase().includes(query)) || (formState.payerPartyId && item.counterpartyId === Number(formState.payerPartyId));
+  });
+  const suggestedCategory = !formState.categoryId ? categoryOptions.find((item) => item.value === String(matchingMovement?.categoryId ?? "")) : null;
+  const suggestedAccount = !formState.accountId ? accountOptions.find((item) => item.value === String(matchingMovement?.destinationAccountId ?? "")) : null;
 
   return (
     <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-editor-title" onClose={closeEditor}>
@@ -348,6 +358,7 @@ function EditorDialog({
                 <Input maxLength={120} onChange={(event) => { clearFieldError("name"); updateFormState("name", event.target.value); }} placeholder="Ej. Sueldo mensual" value={formState.name} />
               </Field>
               <Field errorKey="accountId" invalidFields={invalidFields} label="Cuenta donde llegará"><SearchablePicker appearance="compact" emptyMessage="No hay cuentas." onChange={(value) => { clearFieldError("accountId"); updateFormState("accountId", value); }} options={accountOptions} placeholderDescription="Cuenta cuyo saldo aumentará al confirmar." placeholderLabel="Elige una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>
+              {suggestedAccount ? <button className="text-left text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => { clearFieldError("accountId"); updateFormState("accountId", suggestedAccount.value); }} type="button">Cuenta sugerida por tus ingresos anteriores: {suggestedAccount.label}</button> : null}
               <Field label="Frecuencia">
                 <SearchablePicker appearance="compact" emptyMessage="No hay frecuencias." onChange={(value) => { updateFormState("frequency", value === "monthly_last" ? "monthly" : value as RecurringIncomeFrequency); if (value === "monthly_last") updateFormState("dayOfMonth", "31"); }} options={frequencyPickerOptions} placeholderDescription="Cada cuánto llega." placeholderLabel="Selecciona frecuencia" queryPlaceholder="Buscar frecuencia..." value={formState.frequency === "monthly" && formState.dayOfMonth === "31" ? "monthly_last" : formState.frequency} />
               </Field>
@@ -360,6 +371,7 @@ function EditorDialog({
             <div className="space-y-5">
               <Field label="Pagador"><SearchablePicker appearance="compact" emptyMessage="No hay pagadores." onChange={(value) => updateFormState("payerPartyId", value)} options={counterpartyOptions} placeholderDescription="Persona o empresa." placeholderLabel="Sin pagador fijo" queryPlaceholder="Buscar pagador..." value={formState.payerPartyId} /></Field>
               <Field label="Categoría"><SearchablePicker appearance="compact" emptyMessage="No hay categorías de ingreso." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Categoría de ingreso." placeholderLabel="Sin categoría" queryPlaceholder="Buscar categoría..." value={formState.categoryId} /></Field>
+              {suggestedCategory ? <button className="text-left text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => updateFormState("categoryId", suggestedCategory.value)} type="button">Categoría sugerida por tus movimientos: {suggestedCategory.label}</button> : null}
               <ResourceEditorDestination label="Desglose" onClick={() => setPanel("breakdown")} summary={formState.grossAmount ? `Bruto ${formatCurrency(Number(formState.grossAmount) || 0, formState.currencyCode)}` : "Bruto y descuentos, si tienes boleta"} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Moneda"><SearchablePicker appearance="compact" emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda del ingreso." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} /></Field>
@@ -837,7 +849,7 @@ export function RecurringIncomePage() {
   const dueSoonCount = recurringIncome.filter((r) => {
     if (r.status !== "active") return false;
     const differenceInDays = (Date.parse(r.nextExpectedDate) - Date.parse(todayDate)) / 86_400_000;
-    return differenceInDays >= 0 && differenceInDays <= 7;
+    return differenceInDays >= 0 && differenceInDays <= 30;
   }).length;
   const nextIncome = [...recurringIncome]
     .filter((item) => item.status === "active" && item.nextExpectedDate >= todayDate)
@@ -1202,7 +1214,7 @@ export function RecurringIncomePage() {
         <div className="min-w-0 flex-1 basis-[15rem]">
           <h1 className="module-heading">Ingresos fijos</h1>
           <p className="mt-1.5 text-sm leading-6 text-storm">
-            {recurringIncome.length} {recurringIncome.length === 1 ? "registrado" : "registrados"} · {missedArrivals > 0 ? `${missedArrivals} ${missedArrivals === 1 ? "llegada sin confirmar" : "llegadas sin confirmar"} en ${overdueCount} ${overdueCount === 1 ? "ingreso" : "ingresos"}` : dueSoonCount > 0 ? `${dueSoonCount} ${dueSoonCount === 1 ? "llega" : "llegan"} en los próximos 7 días` : nextIncome ? `siguiente llegada el ${formatDate(nextIncome.nextExpectedDate)}` : "sin llegadas próximas"}.
+            {recurringIncome.length} {recurringIncome.length === 1 ? "registrado" : "registrados"} · {missedArrivals > 0 ? `${missedArrivals} ${missedArrivals === 1 ? "llegada sin confirmar" : "llegadas sin confirmar"} en ${overdueCount} ${overdueCount === 1 ? "ingreso" : "ingresos"}` : dueSoonCount > 0 ? `${dueSoonCount} ${dueSoonCount === 1 ? "llega" : "llegan"} en los próximos 30 días` : nextIncome ? `siguiente llegada el ${formatDate(nextIncome.nextExpectedDate)}` : "sin llegadas próximas"}.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -1278,6 +1290,7 @@ export function RecurringIncomePage() {
           clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           counterparties={counterparties}
+          movements={snapshot.movements}
           feedback={feedback}
           formState={formState}
           invalidFields={invalidFields}
