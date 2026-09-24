@@ -435,6 +435,9 @@ export type RecurringIncomeSummary = {
   categoryName?: string | null;
   status: RecurringIncomeStatus;
   amount: number;
+  grossAmount?: number | null;
+  deductions?: { name: string; amount: number }[];
+  isPinned?: boolean;
   amountInBaseCurrency?: number | null;
   currencyCode: string;
   frequency: RecurringIncomeFrequency;

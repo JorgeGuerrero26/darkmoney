@@ -311,6 +311,9 @@ type RecurringIncomeRow = {
   category_id: number | null;
   currency_code: string;
   amount: NumericLike;
+  gross_amount: NumericLike | null;
+  deductions: { name: string; amount: number }[] | null;
+  is_pinned: boolean | null;
   frequency: RecurringIncomeFrequency;
   interval_count: number;
   day_of_month: number | null;
@@ -704,6 +707,8 @@ export type RecurringIncomeFormInput = {
   categoryId?: number | null;
   currencyCode: string;
   amount: number;
+  grossAmount?: number | null;
+  deductions?: { name: string; amount: number }[];
   frequency: RecurringIncomeFrequency;
   intervalCount: number;
   dayOfMonth?: number | null;
@@ -725,7 +730,14 @@ export type ConfirmArrivalInput = {
   actualDate: string;
   amount: number;
   currencyCode: string;
-  movementId: number | null;
+  accountId: number;
+  currentAccountId: number | null;
+  categoryId: number | null;
+  payerPartyId: number | null;
+  recurringIncomeName: string;
+  description: string | null;
+  currentBaseAmount: number;
+  newBaseAmount: number | null;
   notes: string;
   nextExpectedDate: string;
 };
@@ -1684,7 +1696,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("recurring_income")
       .select(
-        "id, workspace_id, name, payer_party_id, account_id, category_id, currency_code, amount, frequency, interval_count, day_of_month, day_of_week, start_date, next_expected_date, end_date, status, remind_days_before, description, notes",
+        "id, workspace_id, name, payer_party_id, account_id, category_id, currency_code, amount, gross_amount, deductions, is_pinned, frequency, interval_count, day_of_month, day_of_week, start_date, next_expected_date, end_date, status, remind_days_before, description, notes",
       )
       .eq("workspace_id", workspace.id)
       .order("next_expected_date", { ascending: true }),
@@ -2123,6 +2135,9 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     categoryName: row.category_id ? categoryNameMap.get(row.category_id) ?? null : null,
     status: row.status,
     amount: toNumber(row.amount),
+    grossAmount: row.gross_amount == null ? null : toNumber(row.gross_amount),
+    deductions: Array.isArray(row.deductions) ? row.deductions : [],
+    isPinned: row.is_pinned ?? false,
     amountInBaseCurrency: convertAmountToCurrency(toNumber(row.amount), row.currency_code, baseCurrencyCode, exchangeRateMap),
     currencyCode: row.currency_code,
     frequency: row.frequency,
@@ -4759,6 +4774,8 @@ function buildRecurringIncomeMutationPayload(input: RecurringIncomeFormInput, us
     category_id: input.categoryId ?? null,
     currency_code: input.currencyCode.trim().toUpperCase(),
     amount: input.amount,
+    gross_amount: input.grossAmount ?? null,
+    deductions: input.deductions ?? [],
     frequency: input.frequency,
     interval_count: input.intervalCount,
     day_of_month: input.dayOfMonth ?? null,
@@ -7468,6 +7485,23 @@ export function useUpdateRecurringIncomeMutation(workspaceId?: number, userId?: 
   });
 }
 
+export function useSetRecurringIncomeFlagsMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { recurringIncomeId: number; patch: { is_pinned?: boolean; status?: RecurringIncomeSummary["status"] } }) => {
+      if (!workspaceId || !userId) throw new Error("No hay un espacio activo.");
+      const { error } = await getClient().from("recurring_income")
+        .update({ ...input.patch, updated_by_user_id: userId })
+        .eq("workspace_id", workspaceId)
+        .eq("id", input.recurringIncomeId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+    },
+  });
+}
+
 export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -7507,7 +7541,7 @@ export function useRecurringIncomeOccurrencesQuery(
         .eq("workspace_id", workspaceId)
         .eq("recurring_income_id", recurringIncomeId)
         .order("expected_date", { ascending: false })
-        .limit(20);
+        .limit(200);
       if (error) {
         if (isMissingRelationError(error, "recurring_income_occurrences")) return [];
         throw error;
@@ -7534,25 +7568,86 @@ export function useConfirmRecurringIncomeArrivalMutation(workspaceId?: number, u
   return useMutation({
     mutationFn: async (input: ConfirmArrivalInput) => {
       const client = getClient();
+      if (!input.accountId || input.amount <= 0 || !input.actualDate) {
+        throw new Error("Indica la fecha, el monto recibido y la cuenta de destino.");
+      }
+      const { data: previous, error: previousError } = await client
+        .from("recurring_income_occurrences")
+        .select("id")
+        .eq("workspace_id", input.workspaceId)
+        .eq("recurring_income_id", input.recurringIncomeId)
+        .eq("expected_date", input.expectedDate)
+        .maybeSingle();
+      if (previousError) throw previousError;
+      if (previous) throw new Error("Esta llegada ya fue confirmada. Actualiza la página antes de continuar.");
+
+      const updateBase = input.newBaseAmount != null && Number.isFinite(input.newBaseAmount) && input.newBaseAmount > 0 && Math.abs(input.newBaseAmount - input.currentBaseAmount) > 0.000001;
+      const baseNote = updateBase
+        ? `El monto esperado de las próximas llegadas pasa de ${input.currentBaseAmount.toFixed(2)} a ${input.newBaseAmount!.toFixed(2)} ${input.currencyCode}.`
+        : "";
+      const movementNotes = [input.notes.trim(), baseNote].filter(Boolean).join("\n") || null;
+      const peruTime = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(11, 23);
+      const occurredAt = new Date(`${input.actualDate}T${peruTime}-05:00`).toISOString();
+      const { data: movement, error: movementError } = await client.from("movements").insert({
+        workspace_id: input.workspaceId,
+        created_by_user_id: input.userId,
+        updated_by_user_id: input.userId,
+        movement_type: "income",
+        status: "posted",
+        occurred_at: occurredAt,
+        description: input.description?.trim() || input.recurringIncomeName.trim(),
+        notes: movementNotes,
+        source_account_id: null,
+        source_amount: null,
+        destination_account_id: input.accountId,
+        destination_amount: input.amount,
+        category_id: input.categoryId,
+        counterparty_id: input.payerPartyId,
+        metadata: {
+          recurring_income_id: input.recurringIncomeId,
+          recurring_income_expected_date: input.expectedDate,
+          recurring_income_actual_date: input.actualDate,
+          recurring_income_confirmed_arrival: true,
+          recurring_income_base_change_kind: updateBase ? (input.newBaseAmount! > input.currentBaseAmount ? "bonus" : "discount") : null,
+          recurring_income_base_amount_before: input.currentBaseAmount,
+          recurring_income_base_amount_after: updateBase ? input.newBaseAmount : null,
+        },
+      }).select("id").single();
+      if (movementError) throw movementError;
+      const movementId = movement.id as number;
       const occurrenceStatus = input.actualDate <= input.expectedDate ? "on_time" : "late";
-      const { error: occErr } = await client.from("recurring_income_occurrences").insert({
+      const { data: occurrence, error: occErr } = await client.from("recurring_income_occurrences").insert({
         workspace_id: input.workspaceId,
         recurring_income_id: input.recurringIncomeId,
         expected_date: input.expectedDate,
         actual_date: input.actualDate,
         amount: input.amount,
         currency_code: input.currencyCode.toUpperCase(),
-        movement_id: input.movementId || null,
+        movement_id: movementId,
         status: occurrenceStatus,
-        notes: input.notes || null,
-      });
-      if (occErr) throw occErr;
-      const { error: updateErr } = await client
+        notes: movementNotes,
+      }).select("id").single();
+      if (occErr) {
+        await client.from("movements").delete().eq("id", movementId).eq("workspace_id", input.workspaceId);
+        throw occErr;
+      }
+      const { data: updated, error: updateErr } = await client
         .from("recurring_income")
-        .update({ next_expected_date: input.nextExpectedDate })
+        .update({
+          next_expected_date: input.nextExpectedDate,
+          ...(updateBase ? { amount: input.newBaseAmount } : {}),
+          ...(!input.currentAccountId ? { account_id: input.accountId } : {}),
+        })
         .eq("id", input.recurringIncomeId)
-        .eq("workspace_id", input.workspaceId);
-      if (updateErr) throw updateErr;
+        .eq("workspace_id", input.workspaceId)
+        .eq("next_expected_date", input.expectedDate)
+        .select("id")
+        .maybeSingle();
+      if (updateErr || !updated) {
+        await client.from("recurring_income_occurrences").delete().eq("id", occurrence.id).eq("workspace_id", input.workspaceId);
+        await client.from("movements").delete().eq("id", movementId).eq("workspace_id", input.workspaceId);
+        throw updateErr ?? new Error("La próxima llegada cambió mientras confirmabas. Actualiza la página y vuelve a intentarlo.");
+      }
     },
     onSuccess: async (_, input) => {
       if (workspaceId) {

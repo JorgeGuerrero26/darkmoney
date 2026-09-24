@@ -22,7 +22,10 @@ export function useRecurringIncomeFilters() {
       name: searchParams.get("q") ?? defaults.name,
       payer: searchParams.get("payer") ?? defaults.payer,
       frequency: (freqParam as RecurringIncomeTableFilters["frequency"]) || "all",
-      status: (statusParam as RecurringIncomeTableFilters["status"]) || "all",
+      status: statusParam && !statusParam.includes(",") ? statusParam as RecurringIncomeTableFilters["status"] : "all",
+      selectedStatuses: statusParam?.includes(",") ? statusParam.split(",").filter((value): value is "active" | "paused" | "cancelled" => ["active", "paused", "cancelled"].includes(value)) : [],
+      pinnedOnly: searchParams.get("pinned") === "1",
+      upcomingOnly: searchParams.get("upcoming") === "1",
       category: searchParams.get("cat") ?? defaults.category,
       account: searchParams.get("account") ?? defaults.account,
       amount: searchParams.get("amount") ?? defaults.amount,
@@ -39,7 +42,10 @@ export function useRecurringIncomeFilters() {
       if (next.name.trim()) params.set("q", next.name);
       if (next.payer.trim()) params.set("payer", next.payer);
       if (next.frequency !== "all") params.set("freq", next.frequency);
-      if (next.status !== "all") params.set("status", next.status);
+      if (next.selectedStatuses.length) params.set("status", next.selectedStatuses.join(","));
+      else if (next.status !== "all") params.set("status", next.status);
+      if (next.pinnedOnly) params.set("pinned", "1");
+      if (next.upcomingOnly) params.set("upcoming", "1");
       if (next.category.trim()) params.set("cat", next.category);
       if (next.account.trim()) params.set("account", next.account);
       if (next.amount.trim()) params.set("amount", next.amount);
@@ -75,6 +81,10 @@ export function useRecurringIncomeFilters() {
     [setFilters],
   );
 
+  const updateFilters = useCallback((patch: Partial<RecurringIncomeTableFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+  }, [setFilters]);
+
   const clearFilters = useCallback(() => {
     setFilters(defaultRecurringIncomeTableFilters());
   }, [setFilters]);
@@ -84,6 +94,7 @@ export function useRecurringIncomeFilters() {
     currentPage,
     setCurrentPage,
     updateFilter,
+    updateFilters,
     clearFilters,
   };
 }

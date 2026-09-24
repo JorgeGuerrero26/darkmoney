@@ -5,6 +5,9 @@ export type RecurringIncomeTableFilters = {
   payer: string;
   frequency: "all" | RecurringIncomeFrequency;
   status: "all" | RecurringIncomeStatus;
+  selectedStatuses: RecurringIncomeStatus[];
+  pinnedOnly: boolean;
+  upcomingOnly: boolean;
   category: string;
   account: string;
   amount: string;
@@ -19,6 +22,9 @@ export const defaultRecurringIncomeTableFilters = (): RecurringIncomeTableFilter
   payer: "",
   frequency: "all",
   status: "all",
+  selectedStatuses: [],
+  pinnedOnly: false,
+  upcomingOnly: false,
   category: "",
   account: "",
   amount: "",
@@ -43,6 +49,11 @@ export function isRecurringIncomeTableFilterActive(
     case "frequency":
     case "status":
       return filters[field] !== "all";
+    case "pinnedOnly":
+    case "upcomingOnly":
+      return filters[field];
+    case "selectedStatuses":
+      return filters[field].length > 0;
     default:
       return false;
   }

@@ -11,6 +11,7 @@
     "test:date-format": "node --experimental-strip-types scripts/test-date-format.mjs",
     "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
+    "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
