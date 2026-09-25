@@ -10,6 +10,7 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import {
   getQueryErrorMessage,
+  useAdjustBudgetLimitMutation,
   useBudgetSpendTypesQuery,
   useCreateBudgetMutation,
   useDeleteBudgetMutation,
@@ -26,6 +27,7 @@ import { BudgetDetailDialog } from "../components/budget-detail-dialog";
 import { BudgetEditorDialog, initialBudgetEditorValue, type BudgetEditorValue } from "../components/budget-editor-dialog";
 import { useBudgetScopeMovements } from "../hooks/use-budget-scope-movements";
 import { applyBudgetComputedMetrics, buildBudgetMetricsMap } from "../lib/budget-metrics";
+import { buildBudgetCSV } from "../lib/budget-csv";
 import { budgetRowNote, duplicateBudgetPeriod, firstBudgetPeriod, groupBudgetRules, nextBudgetPeriod } from "../lib/budget-periods";
 
 function todayPeru() {
@@ -43,10 +45,7 @@ function rateToBase(from: string, base: string, rates: ExchangeRateSummary[]): n
 }
 
 function saveCSV(budgets: BudgetOverview[]) {
-  const fields = ["Nombre", "Alcance", "Inicio", "Fin", "Moneda", "Límite", "Gastado", "Restante", "Estado"];
-  const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const lines = budgets.map((budget) => [budget.name, budget.scopeLabel, budget.periodStart, budget.periodEnd, budget.currencyCode, budget.limitAmount, budget.spentAmount, budget.remainingAmount, budget.isActive ? "Activo" : "Inactivo"].map(escape).join(","));
-  const blob = new Blob(["\ufeff", fields.join(","), "\n", lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([buildBudgetCSV(budgets)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -56,9 +55,11 @@ function saveCSV(budgets: BudgetOverview[]) {
 }
 
 function ruleSummary(closed: BudgetOverview[]) {
-  const exceeded = closed.filter((budget) => budget.spentAmount > budget.limitAmount).length;
-  if (closed.length === 1) return exceeded ? "Te pasaste el último período" : "Dentro del límite el último período";
-  return exceeded ? `Te pasaste en ${exceeded} de ${closed.length} períodos` : `Dentro del límite los ${closed.length} períodos`;
+  const withData = closed.filter((budget) => budget.movementCount > 0);
+  if (!withData.length) return closed.length === 1 ? "Último período sin movimientos" : `${closed.length} períodos sin movimientos`;
+  const exceeded = withData.filter((budget) => budget.spentAmount > budget.limitAmount).length;
+  if (withData.length === 1) return exceeded ? "Te pasaste el último período con datos" : "Dentro del límite el último período con datos";
+  return exceeded ? `Te pasaste en ${exceeded} de ${withData.length} períodos con datos` : `Dentro del límite los ${withData.length} períodos con datos`;
 }
 
 export function BudgetsPage() {
@@ -68,6 +69,7 @@ export function BudgetsPage() {
   const spendTypesQuery = useBudgetSpendTypesQuery(activeWorkspace?.id);
   const createMutation = useCreateBudgetMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateBudgetMutation(activeWorkspace?.id, user?.id);
+  const adjustMutation = useAdjustBudgetLimitMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteBudgetMutation(activeWorkspace?.id, user?.id);
   const pinMutation = usePinBudgetMutation(activeWorkspace?.id, user?.id);
   const duplicateMutation = useDuplicateBudgetMutation(activeWorkspace?.id, user?.id);
@@ -126,7 +128,7 @@ export function BudgetsPage() {
     for (const rule of groupBudgetRules(snapshot.budgets, today)) {
       if (rule.current || rule.closed.length === 0) continue;
       const last = rule.closed[0];
-      if (!last.isActive || !last.recurrence || last.recurrence === "none") continue;
+      if (!last.recurrence || last.recurrence === "none") continue;
       let period = nextBudgetPeriod(last, last.recurrence);
       let loops = 0;
       while (period && period.periodEnd < today && loops++ < 400) period = nextBudgetPeriod(period, last.recurrence);
@@ -205,8 +207,7 @@ export function BudgetsPage() {
   }
 
   async function duplicate(budget: BudgetOverview) {
-    const period = budget.recurrence && budget.recurrence !== "none" ? nextBudgetPeriod(budget, budget.recurrence) : duplicateBudgetPeriod(budget);
-    if (!period) return;
+    const period = duplicateBudgetPeriod(budget);
     try { await duplicateMutation.mutateAsync({ budget, ...period }); }
     catch (error) { setPageError(getQueryErrorMessage(error, "No se pudo duplicar el presupuesto.")); }
     setRowMenuId(null);
@@ -251,12 +252,12 @@ export function BudgetsPage() {
     {active.length ? <section className="mt-6"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Este período</h2>{active.map(budgetRow)}</section> : null}
     {upcoming.length ? <section className="mt-8"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Próximos períodos</h2>{upcoming.map(budgetRow)}</section> : null}
     {inactive.length ? <section className="mt-8"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Inactivos</h2>{inactive.map(budgetRow)}</section> : null}
-    {closed.length ? <section className="mt-8"><button aria-expanded={showClosed} className="flex w-full items-center justify-between border-b border-white/10 py-3 text-left font-public-mono text-xs uppercase tracking-[0.16em] text-storm hover:text-ink" onClick={() => setShowClosed(!showClosed)} type="button"><span>Períodos cerrados · {closed.length} {closed.length === 1 ? "regla" : "reglas"}</span>{showClosed ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>{showClosed ? closed.map((rule) => <button className="flex min-h-[60px] w-full items-center justify-between border-b border-white/[0.08] py-3 text-left hover:bg-white/[0.02]" key={rule.key} onClick={() => setAnalyticsId(rule.closed[0].id)} type="button"><span><span className="block text-sm font-semibold text-ink">{rule.closed[0].name}</span><span className="mt-1 block text-xs text-storm">{ruleSummary(rule.closed)}</span></span><ChevronRight className="h-4 w-4 text-storm" /></button>) : null}</section> : null}
+    {closed.length ? <section className="mt-8"><button aria-expanded={showClosed || selectionMode} className="flex w-full items-center justify-between border-b border-white/10 py-3 text-left font-public-mono text-xs uppercase tracking-[0.16em] text-storm hover:text-ink" onClick={() => setShowClosed(!showClosed)} type="button"><span>Períodos cerrados · {closed.length} {closed.length === 1 ? "regla" : "reglas"}</span>{showClosed || selectionMode ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>{selectionMode ? closed.flatMap((rule) => rule.closed).map(budgetRow) : showClosed ? closed.map((rule) => <button className="flex min-h-[60px] w-full items-center justify-between border-b border-white/[0.08] py-3 text-left hover:bg-white/[0.02]" key={rule.key} onClick={() => setAnalyticsId(rule.closed[0].id)} type="button"><span><span className="block text-sm font-semibold text-ink">{rule.closed[0].name}</span><span className="mt-1 block text-xs text-storm">{ruleSummary(rule.closed)}</span></span><ChevronRight className="h-4 w-4 text-storm" /></button>) : null}</section> : null}
     {!visibleBudgets.length ? <div className="mt-8"><DataState action={<Button onClick={search ? () => setSearch("") : openCreate}>{search ? "Limpiar búsqueda" : "Crear presupuesto"}</Button>} description={search ? "Prueba con otro nombre, categoría o cuenta." : "Pon un límite a una categoría, un tipo de gasto, una cuenta o a todo tu gasto."} title={search ? "No hay coincidencias" : "Aún no tienes presupuestos"} /></div> : null}
 
     {editorValue ? <BudgetEditorDialog accounts={snapshot.accounts.filter((account) => !account.isArchived).map((account) => ({ id: account.id, name: account.name }))} categories={snapshot.catalogs.categories} currencies={[...new Set([baseCurrency, "PEN", "USD", "EUR", ...snapshot.accounts.map((account) => account.currencyCode)])]} error={editorError} isCreate={!editing} isSaving={createMutation.isPending || updateMutation.isPending} onChange={(value) => { setEditorValue(value); setEditorDirty(true); setEditorError(null); }} onClose={requestCloseEditor} onSubmit={(event) => void submitEditor(event)} spendTypes={spendTypesQuery.data ?? []} value={editorValue} /> : null}
     {unsavedOpen ? <UnsavedChangesDialog onDiscard={closeEditor} onKeepEditing={() => setUnsavedOpen(false)} /> : null}
-    {analyticsId !== null ? (() => { const budget = budgets.find((item) => item.id === analyticsId); return budget ? <BudgetDetailDialog allBudgets={budgets} budget={budget} metrics={metricMap.get(budget.id) ?? null} onClose={() => setAnalyticsId(null)} onEdit={() => { setAnalyticsId(null); openEdit(budget); }} onQuickSave={async (limitAmount, alertPercent) => { if (!user?.id) throw new Error("No hay sesión activa."); await updateMutation.mutateAsync({ budgetId: budget.id, workspaceId: activeWorkspace.id, userId: user.id, name: budget.name, periodStart: budget.periodStart, periodEnd: budget.periodEnd, currencyCode: budget.currencyCode, categoryId: budget.categoryId, accountId: budget.accountId, spendTypeId: budget.spendTypeId, recurrence: budget.recurrence, limitAmount, alertPercent, rolloverEnabled: budget.rolloverEnabled, notes: budget.notes, isActive: budget.isActive }); }} /> : null; })() : null}
+    {analyticsId !== null ? (() => { const budget = budgets.find((item) => item.id === analyticsId); return budget ? <BudgetDetailDialog allBudgets={budgets} budget={budget} metrics={metricMap.get(budget.id) ?? null} onClose={() => setAnalyticsId(null)} onEdit={() => { setAnalyticsId(null); openEdit(budget); }} onQuickSave={async (limitAmount, alertPercent) => { if (!user?.id) throw new Error("No hay sesión activa."); await adjustMutation.mutateAsync({ budgetId: budget.id, limitAmount, alertPercent }); }} /> : null; })() : null}
     {deleteTarget ? <DeleteConfirmDialog badge="Eliminar presupuesto" description="Se elimina este período, no sus movimientos. Puedes deshacer la acción durante unos segundos." isDeleting={deleteMutation.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => deleteWithUndo(deleteTarget)}><p className="text-lg font-semibold text-ink">{deleteTarget.name}</p></DeleteConfirmDialog> : null}
     {bulkDelete ? <DeleteConfirmDialog badge="Eliminar presupuestos" description={`Se eliminarán ${selected.size} períodos. Tus movimientos no se borrarán.`} isDeleting={false} onCancel={() => setBulkDelete(false)} onConfirm={() => { visibleBudgets.filter((budget) => selected.has(budget.id)).forEach(deleteWithUndo); setBulkDelete(false); setSelectionMode(false); setSelected(new Set()); }}><p className="text-lg font-semibold text-ink">{selected.size} seleccionados</p></DeleteConfirmDialog> : null}
   </div>;

@@ -9,7 +9,7 @@ import { ModalBody } from "../../../components/ui/modal-body";
 import { ResourceEditorDestination, ResourceEditorHeader, resourceEditorSurfaceClassName } from "../../../components/ui/resource-editor";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { BudgetOverview, CategorySummary } from "../../../types/domain";
-import { firstBudgetPeriod, recurrenceLabel, recurrenceOptions, type BudgetRecurrence } from "../lib/budget-periods";
+import { firstBudgetPeriod, inferBudgetRecurrence, recurrenceLabel, recurrenceOptions, type BudgetRecurrence } from "../lib/budget-periods";
 
 export type BudgetEditorValue = {
   name: string;
@@ -37,7 +37,7 @@ export function initialBudgetEditorValue(today: string, baseCurrency: string, bu
     accountId: budget?.accountId ?? null,
     spendTypeId: budget?.spendTypeId ?? null,
     limitAmount: budget ? String(budget.limitAmount) : "",
-    recurrence: budget?.recurrence ?? "monthly",
+    recurrence: budget ? (budget.recurrence && budget.recurrence !== "none" ? budget.recurrence : inferBudgetRecurrence(budget)) : "monthly",
     periodStart: budget?.periodStart ?? period.periodStart,
     periodEnd: budget?.periodEnd ?? period.periodEnd,
     alertPercent: budget?.alertPercent ?? 80,

@@ -63,6 +63,17 @@ export function duplicateBudgetPeriod(previous: BudgetPeriod): BudgetPeriod {
   return { periodStart, periodEnd: addDays(periodStart, duration) };
 }
 
+/** Older periods predate the recurrence field; mirror the mobile editor inference. */
+export function inferBudgetRecurrence(period: BudgetPeriod): BudgetRecurrence {
+  const days = Math.round((utc(period.periodEnd).getTime() - utc(period.periodStart).getTime()) / 86_400_000) + 1;
+  if (days <= 8) return "weekly";
+  if (days <= 16) return "biweekly";
+  if (days <= 45) return "monthly";
+  if (days <= 120) return "quarterly";
+  if (days <= 400) return "yearly";
+  return "none";
+}
+
 export function budgetRuleKey(budget: BudgetOverview) {
   const name = budget.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
   return `${budget.categoryId ?? "-"}|${budget.accountId ?? "-"}|${budget.spendTypeId ?? "-"}|${name}`;

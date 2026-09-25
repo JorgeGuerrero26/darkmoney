@@ -3,6 +3,7 @@ import type {
   ExchangeRateSummary,
   MovementRecord,
 } from "../../../types/domain";
+import { budgetLimaDate } from "./budget-date.ts";
 
 /**
  * Gasto consumido de un presupuesto, calculado en cliente.
@@ -201,7 +202,7 @@ function movementMatchesBudget(
   movement: MovementRecord,
   expenseSide: ExpenseSide,
 ) {
-  const occurredOn = movement.occurredAt.slice(0, 10);
+  const occurredOn = budgetLimaDate(movement.occurredAt);
 
   if (occurredOn < budget.periodStart || occurredOn > budget.periodEnd) {
     return false;

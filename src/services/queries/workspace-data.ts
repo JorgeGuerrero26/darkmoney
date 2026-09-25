@@ -4385,6 +4385,20 @@ export function useUpdateBudgetMutation(workspaceId?: number, userId?: string) {
   });
 }
 
+/** Quick adjustment updates only its two fields, never stale form values. */
+export function useAdjustBudgetLimitMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ budgetId, limitAmount, alertPercent }: { budgetId: number; limitAmount: number; alertPercent: number }) => {
+      const { error } = await getClient().from("budgets")
+        .update({ limit_amount: limitAmount, alert_percent: alertPercent, updated_by_user_id: userId })
+        .eq("id", budgetId).eq("workspace_id", workspaceId as number);
+      if (error) throw error;
+    },
+    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+  });
+}
+
 export function useToggleBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 

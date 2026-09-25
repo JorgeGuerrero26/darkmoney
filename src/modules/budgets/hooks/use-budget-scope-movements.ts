@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { supabase } from "../../../services/supabase/client";
 import type { AccountSummary, BudgetOverview, CategorySummary, MovementRecord } from "../../../types/domain";
+import { budgetDateFrom, budgetDateTo } from "../lib/budget-date";
 
 const PAGE_SIZE = 500;
 
@@ -45,8 +46,8 @@ export function useBudgetScopeMovements({ workspaceId, budgets, accounts, catego
           .select("id, movement_type, occurred_at, description, category_id, spend_type_id, category:categories(default_spend_type_id), source_account_id, source_amount, destination_account_id, destination_amount")
           .eq("workspace_id", workspaceId)
           .eq("status", "posted")
-          .gte("occurred_at", `${bounds.start}T00:00:00`)
-          .lte("occurred_at", `${bounds.end}T23:59:59.999`)
+          .gte("occurred_at", budgetDateFrom(bounds.start))
+          .lte("occurred_at", budgetDateTo(bounds.end))
           .order("occurred_at", { ascending: false })
           .order("id", { ascending: false })
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
