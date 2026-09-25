@@ -211,6 +211,10 @@ function movementMatchesBudget(
     return false;
   }
 
+  if (budget.spendTypeId != null && (movement.spendTypeId ?? movement.categoryDefaultSpendTypeId ?? null) !== budget.spendTypeId) {
+    return false;
+  }
+
   if (budget.accountId != null && expenseSide.accountId !== budget.accountId) {
     return false;
   }

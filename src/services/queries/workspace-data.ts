@@ -121,6 +121,8 @@ type BudgetProgressRow = {
   category_name: string | null;
   account_id: number | null;
   account_name: string | null;
+  spend_type_id: number | null;
+  spend_type_name: string | null;
   scope_kind: BudgetOverview["scopeKind"];
   scope_label: string;
   limit_amount: NumericLike;
@@ -130,10 +132,12 @@ type BudgetProgressRow = {
   alert_percent: NumericLike;
   movement_count: number | null;
   rollover_enabled: boolean;
+  recurrence: BudgetOverview["recurrence"] | null;
   notes: string | null;
   is_active: boolean;
   is_near_limit: boolean;
   is_over_limit: boolean;
+  is_pinned: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -197,6 +201,7 @@ type MovementRow = {
   destination_amount: NumericLike;
   fx_rate: NumericLike;
   category_id: number | null;
+  spend_type_id: number | null;
   counterparty_id: number | null;
   obligation_id: number | null;
   subscription_id: number | null;
@@ -769,6 +774,8 @@ export type BudgetFormInput = {
   currencyCode: string;
   categoryId?: number | null;
   accountId?: number | null;
+  spendTypeId?: number | null;
+  recurrence?: BudgetOverview["recurrence"];
   limitAmount: number;
   rolloverEnabled: boolean;
   alertPercent: number;
@@ -1654,7 +1661,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("movements")
       .select(
-        "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, counterparty_id, obligation_id, subscription_id, metadata",
+        "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, spend_type_id, counterparty_id, obligation_id, subscription_id, metadata",
       )
       .eq("workspace_id", workspace.id)
       .order("occurred_at", { ascending: false })
@@ -1662,7 +1669,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("v_budget_progress")
       .select(
-        "id, workspace_id, created_by_user_id, updated_by_user_id, name, period_start, period_end, currency_code, category_id, category_name, account_id, account_name, scope_kind, scope_label, limit_amount, spent_amount, remaining_amount, used_percent, alert_percent, movement_count, rollover_enabled, notes, is_active, is_near_limit, is_over_limit, created_at, updated_at",
+        "id, workspace_id, created_by_user_id, updated_by_user_id, name, period_start, period_end, currency_code, category_id, category_name, account_id, account_name, spend_type_id, spend_type_name, scope_kind, scope_label, limit_amount, spent_amount, remaining_amount, used_percent, alert_percent, movement_count, rollover_enabled, recurrence, notes, is_active, is_near_limit, is_over_limit, is_pinned, created_at, updated_at",
       )
       .eq("workspace_id", workspace.id)
       .order("period_end", { ascending: true })
@@ -1910,6 +1917,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       notes: row.notes,
       category: row.category_id ? categoryNameMap.get(row.category_id) ?? "Sin categoria" : "Sin categoria",
       categoryId: row.category_id,
+      spendTypeId: row.spend_type_id,
       counterparty: row.counterparty_id
         ? counterpartyNameMap.get(row.counterparty_id) ?? "Sin contraparte"
         : row.movement_type === "transfer"
@@ -2166,6 +2174,8 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     categoryName: row.category_name,
     accountId: row.account_id,
     accountName: row.account_name,
+    spendTypeId: row.spend_type_id,
+    spendTypeName: row.spend_type_name,
     scopeKind: row.scope_kind,
     scopeLabel: row.scope_label,
     limitAmount: toNumber(row.limit_amount),
@@ -2175,10 +2185,12 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     alertPercent: toNumber(row.alert_percent),
     movementCount: row.movement_count ?? 0,
     rolloverEnabled: row.rollover_enabled,
+    recurrence: row.recurrence ?? "none",
     notes: row.notes,
     isActive: row.is_active,
     isNearLimit: row.is_near_limit,
     isOverLimit: row.is_over_limit,
+    isPinned: row.is_pinned ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -4296,6 +4308,59 @@ export function useCreateBudgetMutation(workspaceId?: number, userId?: string) {
   });
 }
 
+export function useBudgetSpendTypesQuery(workspaceId?: number) {
+  return useQuery({
+    queryKey: ["budget-spend-types", workspaceId],
+    enabled: Boolean(workspaceId),
+    queryFn: async () => {
+      const { data, error } = await getClient()
+        .from("spend_types")
+        .select("id, name, is_active")
+        .eq("workspace_id", workspaceId as number)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []).filter((row) => row.is_active).map((row) => ({ id: Number(row.id), name: String(row.name) }));
+    },
+  });
+}
+
+export function usePinBudgetMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ budgetId, isPinned }: { budgetId: number; isPinned: boolean }) => {
+      const { error } = await getClient().from("budgets").update({ is_pinned: isPinned }).eq("id", budgetId).eq("workspace_id", workspaceId as number);
+      if (error) throw error;
+    },
+    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+  });
+}
+
+export function useDuplicateBudgetMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ budget, periodStart, periodEnd }: { budget: BudgetOverview; periodStart: string; periodEnd: string }) => {
+      const { error } = await getClient().from("budgets").insert({
+        workspace_id: workspaceId as number,
+        created_by_user_id: userId,
+        name: budget.name,
+        period_start: periodStart,
+        period_end: periodEnd,
+        currency_code: budget.currencyCode,
+        category_id: budget.categoryId ?? null,
+        account_id: budget.accountId ?? null,
+        spend_type_id: budget.spendTypeId ?? null,
+        limit_amount: budget.limitAmount,
+        alert_percent: budget.alertPercent,
+        rollover_enabled: budget.rolloverEnabled,
+        recurrence: budget.recurrence ?? "none",
+        notes: budget.notes ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+  });
+}
+
 export function useUpdateBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -4799,6 +4864,8 @@ function buildBudgetMutationPayload(input: BudgetFormInput, userId: string) {
     currency_code: input.currencyCode.trim().toUpperCase(),
     category_id: input.categoryId ?? null,
     account_id: input.accountId ?? null,
+    spend_type_id: input.spendTypeId ?? null,
+    recurrence: input.recurrence ?? "none",
     limit_amount: input.limitAmount,
     rollover_enabled: input.rolloverEnabled,
     alert_percent: input.alertPercent,

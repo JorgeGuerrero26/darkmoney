@@ -186,6 +186,8 @@ export type BudgetOverview = {
   categoryName?: string | null;
   accountId?: number | null;
   accountName?: string | null;
+  spendTypeId?: number | null;
+  spendTypeName?: string | null;
   scopeKind: BudgetScopeKind;
   scopeLabel: string;
   limitAmount: number;
@@ -195,10 +197,12 @@ export type BudgetOverview = {
   alertPercent: number;
   movementCount: number;
   rolloverEnabled: boolean;
+  recurrence?: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "none";
   notes?: string | null;
   isActive: boolean;
   isNearLimit: boolean;
   isOverLimit: boolean;
+  isPinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -240,6 +244,8 @@ export type MovementRecord = {
   notes?: string | null;
   category: string;
   categoryId?: number | null;
+  spendTypeId?: number | null;
+  categoryDefaultSpendTypeId?: number | null;
   counterparty: string;
   counterpartyId?: number | null;
   occurredAt: string;

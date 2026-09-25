@@ -185,7 +185,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "budgets",
-        lazy: lazyRoute(() => import("../../modules/budgets/pages/budgets-page"), "BudgetsPage"),
+        lazy: lazyRoute(() => import("../../modules/budgets/pages/budgets-overview-page"), "BudgetsPage"),
       },
       {
         path: "obligations",
