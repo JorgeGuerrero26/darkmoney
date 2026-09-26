@@ -93,6 +93,11 @@ type AccountRow = {
   updated_at: string;
 };
 
+type AccountBalanceRow = {
+  account_id: number | null;
+  current_balance: NumericLike;
+};
+
 type CategoryRow = {
   id: number;
   workspace_id: number;
@@ -1627,6 +1632,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
 
   const [
     accountsResult,
+    accountBalancesResult,
     categoriesResult,
     counterpartiesResult,
     movementsResult,
@@ -1645,6 +1651,10 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       .eq("workspace_id", workspace.id)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
+    client
+      .from("v_account_balances")
+      .select("account_id, current_balance")
+      .eq("workspace_id", workspace.id),
     client
       .from("categories")
       .select(
@@ -1711,6 +1721,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
 
   const resultError =
     accountsResult.error ||
+    accountBalancesResult.error ||
     categoriesResult.error ||
     counterpartiesResult.error ||
     movementsResult.error ||
@@ -1746,6 +1757,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
   }
 
   const accountRows = (accountsResult.data ?? []) as AccountRow[];
+  const accountBalanceRows = (accountBalancesResult.data ?? []) as AccountBalanceRow[];
   const categoryRows = (categoriesResult.data ?? []) as CategoryRow[];
   const counterpartyRows = (counterpartiesResult.data ?? []) as CounterpartyRow[];
   const movementRows = (movementsResult.data ?? []) as MovementRow[];
@@ -1821,7 +1833,11 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
   const accountRowMap = new Map(accountRows.map((row) => [row.id, row]));
   const categoryNameMap = new Map(categoryRows.map((row) => [row.id, row.name]));
   const counterpartyNameMap = new Map(counterpartyRows.map((row) => [row.id, row.name]));
-  const accountBalanceMap = new Map(accountRows.map((row) => [row.id, toNumber(row.opening_balance)]));
+  const accountBalanceMap = new Map(
+    accountBalanceRows
+      .filter((row): row is AccountBalanceRow & { account_id: number } => row.account_id !== null)
+      .map((row) => [row.account_id, toNumber(row.current_balance)]),
+  );
   const accountActivityMap = new Map<number, string>();
   const exchangeRateMap = buildExchangeRateMap(exchangeRateRows);
 
@@ -1842,25 +1858,6 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
         ),
       );
     }
-
-    if (movement.status !== "posted") {
-      continue;
-    }
-
-    if (movement.source_account_id) {
-      accountBalanceMap.set(
-        movement.source_account_id,
-        (accountBalanceMap.get(movement.source_account_id) ?? 0) - toNumber(movement.source_amount),
-      );
-    }
-
-    if (movement.destination_account_id) {
-      accountBalanceMap.set(
-        movement.destination_account_id,
-        (accountBalanceMap.get(movement.destination_account_id) ?? 0) +
-          toNumber(movement.destination_amount),
-      );
-    }
   }
 
   const accounts = [...accountRows]
@@ -1876,7 +1873,10 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       return left.name.localeCompare(right.name);
     })
     .map<AccountSummary>((row) => {
-      const currentBalance = accountBalanceMap.get(row.id) ?? toNumber(row.opening_balance);
+      const currentBalance = accountBalanceMap.get(row.id);
+      if (currentBalance === undefined) {
+        throw new Error(`No se pudo cargar el saldo de la cuenta ${row.name}.`);
+      }
 
       return {
         id: row.id,
