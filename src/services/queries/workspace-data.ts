@@ -1630,6 +1630,30 @@ async function acceptWorkspaceInvitation(token: string) {
 async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, profile?: AppProfile | null) {
   const client = getClient();
 
+  // Supabase limita una respuesta a 1,000 filas. El historial se usa para filtros,
+  // totales y enlaces a movimientos antiguos, así que debe cargarse completo.
+  const fetchMovementRows = async (): Promise<MovementRow[]> => {
+    const rows: MovementRow[] = [];
+    const pageSize = 500;
+
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from("movements")
+        .select(
+          "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, spend_type_id, counterparty_id, obligation_id, subscription_id, metadata",
+        )
+        .eq("workspace_id", workspace.id)
+        .order("occurred_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) throw error;
+      const page = (data ?? []) as MovementRow[];
+      rows.push(...page);
+      if (page.length < pageSize) return rows;
+    }
+  };
+
   const [
     accountsResult,
     accountBalancesResult,
@@ -1668,14 +1692,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       .select("id, workspace_id, name, type, phone, email, document_number, notes, is_archived")
       .eq("workspace_id", workspace.id)
       .order("name", { ascending: true }),
-    client
-      .from("movements")
-      .select(
-        "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, spend_type_id, counterparty_id, obligation_id, subscription_id, metadata",
-      )
-      .eq("workspace_id", workspace.id)
-      .order("occurred_at", { ascending: false })
-      .order("id", { ascending: false }),
+    fetchMovementRows(),
     client
       .from("v_budget_progress")
       .select(
@@ -1724,7 +1741,6 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     accountBalancesResult.error ||
     categoriesResult.error ||
     counterpartiesResult.error ||
-    movementsResult.error ||
     budgetsResult.error ||
     obligationsResult.error ||
     subscriptionsResult.error ||
@@ -1760,7 +1776,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
   const accountBalanceRows = (accountBalancesResult.data ?? []) as AccountBalanceRow[];
   const categoryRows = (categoriesResult.data ?? []) as CategoryRow[];
   const counterpartyRows = (counterpartiesResult.data ?? []) as CounterpartyRow[];
-  const movementRows = (movementsResult.data ?? []) as MovementRow[];
+  const movementRows = movementsResult;
   const budgetRows = (budgetsResult.data ?? []) as BudgetProgressRow[];
   const obligationRows = (obligationsResult.data ?? []) as ObligationRow[];
   const subscriptionRows = (subscriptionsResult.data ?? []) as SubscriptionRow[];
