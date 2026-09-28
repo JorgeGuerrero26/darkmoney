@@ -252,9 +252,9 @@ export function MovementsPage() {
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
         .map((value) => String(value));
       const filterAmount = Math.abs(Number(
-        movement.movementType === "income" || movement.movementType === "refund"
-          ? movement.destinationAmount ?? 0
-          : movement.sourceAmount ?? 0,
+        movementActsAsIncome(movement)
+          ? movement.destinationAmount ?? movement.sourceAmount ?? 0
+          : movement.sourceAmount ?? movement.destinationAmount ?? 0,
       ));
       const occurredDate = movementDateInPeru(movement.occurredAt);
 
