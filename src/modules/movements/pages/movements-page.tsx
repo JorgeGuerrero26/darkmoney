@@ -78,6 +78,7 @@ import type {
   MovementFormState,
 } from "../lib/movement-form";
 import { useMovementTableFilters } from "../hooks/use-movement-table-filters";
+import { useMovementsRealtimeSync } from "../hooks/use-movements-realtime-sync";
 import { getMovementDateRangeLabel, movementDateInPeru } from "../lib/movement-date-range";
 
 const statusFilterPickerOptions: PickerOption[] = [
@@ -115,6 +116,7 @@ export function MovementsPage() {
   const { profile, user } = useAuth();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
+  useMovementsRealtimeSync(activeWorkspace?.id, user?.id);
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const snapshot = snapshotQuery.data;
