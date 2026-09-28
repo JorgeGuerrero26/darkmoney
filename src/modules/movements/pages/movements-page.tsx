@@ -47,6 +47,12 @@ import {
 } from "../../../services/queries/workspace-data";
 
 import { MovementEditorDialog, type MovementCategoryFeedbackIntent } from "../components/movement-editor-dialog";
+import { MovementTemplateMenu } from "../components/movement-template-menu";
+import {
+  useMovementTemplateMutations,
+  useMovementTemplatesQuery,
+  type MovementTemplate,
+} from "../../../services/queries/movement-templates";
 import type { BudgetInsight, RiskInsight } from "../../../services/queries/movement-ai";
 import { MovementDateFilter } from "../components/movement-date-filter";
 import { MovementsTable } from "../components/movements-table";
@@ -128,6 +134,8 @@ export function MovementsPage() {
   ];
   const { visible: colVis, toggle: toggleCol, cv } = useColumnVisibility("columns-movements", movementColumns);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const templatesQuery = useMovementTemplatesQuery(activeWorkspace?.id, user?.id, isActionsMenuOpen);
+  const templateMutations = useMovementTemplateMutations(activeWorkspace?.id, user?.id);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -461,6 +469,50 @@ export function MovementsPage() {
     setCategoryFeedbackIntent(null);
     setEditorIntelligence({ budget: null, risk: null });
     setIsEditorOpen(true);
+  }
+
+  function openCreateWithType(type: MovementTemplate["movementType"]) {
+    openCreateEditor();
+    setFormState({ ...createDefaultMovementFormState(), movementType: type });
+    setIsActionsMenuOpen(false);
+  }
+
+  function openCreateFromTemplate(template: MovementTemplate) {
+    openCreateEditor();
+    setFormState({
+      ...createDefaultMovementFormState(),
+      movementType: template.movementType,
+      description: template.description,
+      notes: template.notes ?? "",
+      sourceAccountId: template.sourceAccountId == null ? "" : String(template.sourceAccountId),
+      destinationAccountId: template.destinationAccountId == null ? "" : String(template.destinationAccountId),
+      sourceAmount: template.sourceAmount == null ? "" : String(template.sourceAmount),
+      destinationAmount: template.destinationAmount == null ? "" : String(template.destinationAmount),
+      categoryId: template.categoryId == null ? "" : String(template.categoryId),
+      counterpartyId: template.counterpartyId == null ? "" : String(template.counterpartyId),
+    });
+    setIsActionsMenuOpen(false);
+  }
+
+  async function saveSelectedAsTemplate() {
+    if (!selectedMovement || !["expense", "income", "transfer"].includes(selectedMovement.movementType)) return;
+    try {
+      await templateMutations.create.mutateAsync({
+        name: selectedMovement.description.trim() || "Atajo sin nombre",
+        movementType: selectedMovement.movementType as MovementTemplate["movementType"],
+        sourceAccountId: selectedMovement.sourceAccountId,
+        destinationAccountId: selectedMovement.destinationAccountId,
+        sourceAmount: selectedMovement.sourceAmount ?? null,
+        destinationAmount: selectedMovement.destinationAmount ?? null,
+        categoryId: selectedMovement.categoryId ?? null,
+        counterpartyId: selectedMovement.counterpartyId ?? null,
+        description: selectedMovement.description,
+        notes: selectedMovement.notes ?? null,
+      });
+      setFeedbackMessage("Atajo guardado. Lo encontrarás en Más opciones de Movimientos.");
+    } catch (error) {
+      setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar el atajo."));
+    }
   }
 
   function closeEditor() {
@@ -942,7 +994,7 @@ export function MovementsPage() {
                   onClick={() => setIsActionsMenuOpen(false)}
                   type="button"
                 />
-                <div className="absolute right-0 top-11 z-50 w-60 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
+                <div className="absolute right-0 top-11 z-50 max-h-[min(80vh,640px)] w-72 overflow-y-auto rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
                   <p className="px-4 pb-2 pt-4 font-public-mono text-[10px] uppercase tracking-[0.16em] text-storm">
                     Columnas visibles
                   </p>
@@ -994,6 +1046,31 @@ export function MovementsPage() {
                       </label>
                     </div>
                   </div>
+                  <MovementTemplateMenu
+                    isBusy={templateMutations.rename.isPending || templateMutations.remove.isPending}
+                    isLoading={templatesQuery.isLoading}
+                    onDelete={async (id) => {
+                      try {
+                        await templateMutations.remove.mutateAsync(id);
+                        return true;
+                      } catch (error) {
+                        setErrorMessage(getQueryErrorMessage(error, "No pudimos eliminar el atajo."));
+                        return false;
+                      }
+                    }}
+                    onRename={async (id, name) => {
+                      try {
+                        await templateMutations.rename.mutateAsync({ id, name });
+                        return true;
+                      } catch (error) {
+                        setErrorMessage(getQueryErrorMessage(error, "No pudimos renombrar el atajo."));
+                        return false;
+                      }
+                    }}
+                    onStart={openCreateWithType}
+                    onUse={openCreateFromTemplate}
+                    templates={templatesQuery.data ?? []}
+                  />
                   {hasActiveFilters ? (
                     <button
                       className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm transition hover:bg-white/[0.04] hover:text-ink"
@@ -1169,6 +1246,7 @@ export function MovementsPage() {
           formState={formState}
           handleDeleteMovement={handleDeleteMovement}
           handleDuplicateMovement={handleDuplicateMovement}
+          handleSaveTemplate={() => { void saveSelectedAsTemplate(); }}
           handleDeleteReceipt={handleDeleteReceipt}
           handleUploadReceipt={handleUploadReceipt}
           handleSubmit={handleSubmit}
@@ -1176,6 +1254,7 @@ export function MovementsPage() {
           invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSaving}
+          isSavingTemplate={templateMutations.create.isPending}
           isUploadingReceipt={isUploadingReceipt}
           obligations={snapshot.obligations}
           onErrorMessage={setErrorMessage}

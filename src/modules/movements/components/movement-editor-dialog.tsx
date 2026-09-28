@@ -143,6 +143,8 @@ export type MovementEditorDialogProps = {
   invalidFields: Set<string>;
   handleDeleteMovement: () => void;
   handleDuplicateMovement: () => void;
+  handleSaveTemplate: () => void;
+  isSavingTemplate: boolean;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
   handleSubmit: (event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null) => Promise<void>;
@@ -201,12 +203,14 @@ export function MovementEditorDialog({
   formState,
   handleDeleteMovement,
   handleDuplicateMovement,
+  handleSaveTemplate,
   handleDeleteReceipt,
   handleUploadReceipt,
   handleSubmit,
   invalidFields,
   isCreateMode,
   isSaving,
+  isSavingTemplate,
   isUploadingReceipt,
   obligations,
   onErrorMessage,
@@ -1543,10 +1547,20 @@ export function MovementEditorDialog({
 
               {activePanel === "main" || activePanel === "details" ? (
               <div className="sticky bottom-0 z-[60] -mx-4 mt-6 border-t border-white/10 bg-[#1a1917] px-4 py-4 sm:-mx-6 sm:px-6">
-                <div className="flex items-center justify-end gap-3">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {!isCreateMode && selectedMovement && ["expense", "income", "transfer"].includes(selectedMovement.movementType) ? (
+                    <Button
+                      disabled={isSaving || isSavingTemplate}
+                      onClick={handleSaveTemplate}
+                      type="button"
+                      variant="ghost"
+                    >
+                      {isSavingTemplate ? "Guardando atajo…" : "Guardar como atajo"}
+                    </Button>
+                  ) : null}
                   {!isCreateMode && selectedMovement ? (
                     <Button
-                      className="min-w-[150px] justify-center"
+                      className="min-w-[100px] justify-center"
                       disabled={isSaving}
                       onClick={handleDuplicateMovement}
                       type="button"
@@ -1558,7 +1572,7 @@ export function MovementEditorDialog({
                   ) : null}
                   {!isCreateMode && selectedMovement ? (
                     <Button
-                      className="min-w-[150px] justify-center"
+                      className="min-w-[100px] justify-center"
                       disabled={isSaving}
                       onClick={() => setIsDeleteConfirmOpen(true)}
                       type="button"
@@ -1569,7 +1583,7 @@ export function MovementEditorDialog({
                     </Button>
                   ) : null}
                   <Button
-                    className={isCreateMode ? "w-full justify-center" : "min-w-[190px] justify-center"}
+                    className={isCreateMode ? "w-full justify-center" : "min-w-[155px] justify-center"}
                     disabled={isSaving}
                     type="submit"
                   >
