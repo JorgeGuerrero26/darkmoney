@@ -42,6 +42,8 @@ export function useMovementTableFilters(viewMode: string) {
       counterparty: searchParams.get("who") ?? defaults.counterparty,
       sourceAccount: searchParams.get("account") ?? defaults.sourceAccount,
       amount: searchParams.get("amount") ?? defaults.amount,
+      amountMin: searchParams.get("min") ?? defaults.amountMin,
+      amountMax: searchParams.get("max") ?? defaults.amountMax,
       dateFrom: searchParams.get("from") ?? (showAllDates ? defaults.dateFrom : currentMonth.from),
       dateTo: searchParams.get("to") ?? (showAllDates ? defaults.dateTo : currentMonth.to),
     };
@@ -59,6 +61,8 @@ export function useMovementTableFilters(viewMode: string) {
       if (filters.counterparty.trim()) params.set("who", filters.counterparty);
       if (filters.sourceAccount.trim()) params.set("account", filters.sourceAccount);
       if (filters.amount.trim()) params.set("amount", filters.amount);
+      if (filters.amountMin.trim()) params.set("min", filters.amountMin);
+      if (filters.amountMax.trim()) params.set("max", filters.amountMax);
       if (filters.dateFrom) params.set("from", filters.dateFrom);
       if (filters.dateTo) params.set("to", filters.dateTo);
       if (!filters.dateFrom && !filters.dateTo) params.set("period", "all");

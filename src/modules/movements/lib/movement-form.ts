@@ -57,6 +57,8 @@ export type MovementTableFilters = {
   counterparty: string;
   sourceAccount: string;
   amount: string;
+  amountMin: string;
+  amountMax: string;
   dateFrom: string;
   dateTo: string;
 };
@@ -479,6 +481,8 @@ export const movementTableFilterDefaults: MovementTableFilters = {
   counterparty: "",
   sourceAccount: "",
   amount: "",
+  amountMin: "",
+  amountMax: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -497,6 +501,8 @@ export function isMovementTableFilterActive(
     case "counterparty":
     case "sourceAccount":
     case "amount":
+    case "amountMin":
+    case "amountMax":
       return Boolean(filters[field].trim());
     case "dateFrom":
     case "dateTo":

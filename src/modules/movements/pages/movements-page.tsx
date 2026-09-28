@@ -230,6 +230,10 @@ export function MovementsPage() {
     const normalizedCounterparty = tableFilters.counterparty.trim().toLowerCase();
     const normalizedSourceAccount = tableFilters.sourceAccount.trim().toLowerCase();
     const normalizedAmount = tableFilters.amount.trim();
+    const rawMin = Number(tableFilters.amountMin.replace(",", "."));
+    const rawMax = Number(tableFilters.amountMax.replace(",", "."));
+    const amountMin = Number.isFinite(rawMin) && rawMin > 0 ? rawMin : null;
+    const amountMax = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : null;
 
     return snapshot.movements.filter((movement) => {
       if (hiddenIds.has(movement.id)) {
@@ -247,6 +251,11 @@ export function MovementsPage() {
       ]
         .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
         .map((value) => String(value));
+      const filterAmount = Math.abs(Number(
+        movement.movementType === "income" || movement.movementType === "refund"
+          ? movement.destinationAmount ?? 0
+          : movement.sourceAmount ?? 0,
+      ));
       const occurredDate = movementDateInPeru(movement.occurredAt);
 
       const matchesDescription =
@@ -265,6 +274,9 @@ export function MovementsPage() {
         (movement.destinationAccountName ?? "").toLowerCase().includes(normalizedSourceAccount);
       const matchesAmount =
         !normalizedAmount || amountCandidates.some((candidate) => candidate.includes(normalizedAmount));
+      const matchesAmountRange =
+        (amountMin === null || filterAmount >= amountMin) &&
+        (amountMax === null || filterAmount <= amountMax);
       const matchesDateFrom = !tableFilters.dateFrom || occurredDate >= tableFilters.dateFrom;
       const matchesDateTo = !tableFilters.dateTo || occurredDate <= tableFilters.dateTo;
 
@@ -276,6 +288,7 @@ export function MovementsPage() {
         matchesCounterparty &&
         matchesSourceAccount &&
         matchesAmount &&
+        matchesAmountRange &&
         matchesDateFrom &&
         matchesDateTo
       );
@@ -414,6 +427,8 @@ export function MovementsPage() {
       tableFilters.counterparty.trim() ||
       tableFilters.sourceAccount.trim() ||
       tableFilters.amount.trim() ||
+      tableFilters.amountMin.trim() ||
+      tableFilters.amountMax.trim() ||
       tableFilters.dateFrom ||
       tableFilters.dateTo ||
       tableFilters.status !== "all" ||
@@ -946,6 +961,39 @@ export function MovementsPage() {
                       {column.label}
                     </button>
                   ))}
+                  <div className="border-t border-white/[0.08] px-4 py-3">
+                    <p className="mb-2 font-public-mono text-[10px] uppercase tracking-[0.16em] text-storm">Monto nominal</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs text-storm">
+                        Mínimo
+                        <input
+                          aria-label="Monto mínimo"
+                          className="field-dark mt-1 h-9 w-full px-2 text-sm"
+                          inputMode="decimal"
+                          min="0"
+                          onChange={(event) => updateTableFilter("amountMin", event.target.value)}
+                          placeholder="0"
+                          step="0.01"
+                          type="number"
+                          value={tableFilters.amountMin}
+                        />
+                      </label>
+                      <label className="text-xs text-storm">
+                        Máximo
+                        <input
+                          aria-label="Monto máximo"
+                          className="field-dark mt-1 h-9 w-full px-2 text-sm"
+                          inputMode="decimal"
+                          min="0"
+                          onChange={(event) => updateTableFilter("amountMax", event.target.value)}
+                          placeholder="Sin límite"
+                          step="0.01"
+                          type="number"
+                          value={tableFilters.amountMax}
+                        />
+                      </label>
+                    </div>
+                  </div>
                   {hasActiveFilters ? (
                     <button
                       className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm transition hover:bg-white/[0.04] hover:text-ink"
