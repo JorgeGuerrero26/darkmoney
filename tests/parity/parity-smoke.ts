@@ -23,7 +23,8 @@ import {
   buildParityExchangeRateMap,
 } from "@darkmoney/shared/exchange-map";
 import { buildFutureFlowWindows } from "@darkmoney/shared/future-flow";
-import { buildMonthProjection } from "@darkmoney/shared/month-projection";
+import { buildMonthProjection } from "../../src/modules/dashboard/lib/calendar-month-projection.js";
+import "./month-projection-smoke.js";
 import { buildParityNetWorth } from "@darkmoney/shared/net-worth";
 import { buildReadiness } from "@darkmoney/shared/readiness";
 import { buildReviewInboxSnapshot } from "@darkmoney/shared/review-inbox";

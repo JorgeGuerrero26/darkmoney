@@ -44,7 +44,7 @@ import {
   selectPeriodTotals as selectParityPeriodTotals,
 } from "@darkmoney/shared/aggregations";
 import { buildFutureFlowWindows as buildParityFutureFlowWindows } from "@darkmoney/shared/future-flow";
-import { buildMonthProjection } from "@darkmoney/shared/month-projection";
+import { buildMonthProjection } from "../lib/calendar-month-projection";
 import { buildParityNetWorth } from "@darkmoney/shared/net-worth";
 import { buildReadiness as buildParityReadiness } from "@darkmoney/shared/readiness";
 import { buildReviewInboxSnapshot as buildParityReviewInbox } from "@darkmoney/shared/review-inbox";
