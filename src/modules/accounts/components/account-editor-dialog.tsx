@@ -146,6 +146,19 @@ export function AccountEditorDialog({
                 />
               </FormField>
 
+              {formState.type === "credit_card" ? <section aria-label="Ciclo de la tarjeta" className="space-y-4 border-y border-white/10 py-4">
+                <h3 className="text-sm font-semibold text-ink">Ciclo de la tarjeta</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["statementDay", "paymentDay"] as const).map((field) => <FormField error={formErrors[field]} errorKey={field} key={field} label={field === "statementDay" ? "Día de corte" : "Día de pago"}>
+                    <SearchablePicker appearance="compact" emptyMessage="No hay días disponibles." onChange={(value) => onFieldChange(field, value === "none" ? "" : value)} options={[{ value: "none", label: "Sin definir", description: "", leadingLabel: "" }, ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: String(index + 1), description: "", leadingLabel: "" }))]} placeholderDescription="Día del mes" placeholderLabel="Sin definir" queryPlaceholder="Buscar día…" value={formState[field] || "none"} />
+                  </FormField>)}
+                </div>
+                <FormField error={formErrors.creditLimit} errorKey="creditLimit" label={`Límite de crédito · ${formState.currencyCode}`}>
+                  <Input className={neutralFieldClassName} inputMode="decimal" min="0.01" onChange={(event) => onFieldChange("creditLimit", event.target.value)} placeholder="Sin definir" step="0.01" type="number" value={formState.creditLimit} />
+                </FormField>
+                <p className="text-xs leading-5 text-storm">Opcional. Usa los días y el límite indicados por tu banco.</p>
+              </section> : null}
+
               <FormField className={neutralRequiredClassName} error={formErrors.currencyCode} errorKey="currencyCode" label="Moneda" required>
                 <SearchablePicker appearance="compact" emptyMessage="No hay monedas disponibles." onChange={(value) => onFieldChange("currencyCode", value)} options={currencyOptions} placeholderDescription="Selecciona una moneda." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} />
               </FormField>

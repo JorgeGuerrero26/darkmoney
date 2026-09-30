@@ -140,6 +140,9 @@ export type AccountSummary = {
   icon: string;
   isArchived: boolean;
   institutionCode?: string | null;
+  statementDay?: number | null;
+  paymentDay?: number | null;
+  creditLimit?: number | null;
   notes?: string | null;
 };
 

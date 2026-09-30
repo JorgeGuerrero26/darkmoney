@@ -6,6 +6,7 @@ import { formatDateTime } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary } from "../../../types/domain";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
+import { describeAccountCycle } from "../lib/account-formatters";
 
 type AccountsTableProps = {
   accounts: AccountSummary[];
@@ -55,6 +56,7 @@ export function AccountsTable({
           visibleColumns.currency === false ? null : account.currencyCode,
           visibleColumns.status === false ? null : account.isArchived ? "Archivada" : account.includeInNetWorth ? "En patrimonio" : "Fuera de patrimonio",
           visibleColumns.activity ? formatDateTime(account.lastActivity) : null,
+          describeAccountCycle(account),
         ].filter(Boolean).join(" · ");
 
         const showGroup = groupByType && (index === 0 || accounts[index - 1]?.type !== account.type);

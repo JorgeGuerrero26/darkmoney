@@ -48,3 +48,39 @@ assert.deepEqual(categories.categoryParentCandidates(parents, "expense", 1).map(
 assert.deepEqual(categories.categoryParentCandidates(parents, "income").map((item) => item.id), [4, 5]);
 assert.deepEqual(categories.categoryParentCandidates(parents, "both").map((item) => item.id), [1, 2, 3, 4, 5]);
 console.log("catalog-parity: OK — cobros, monedas, cancelados, filtros, padres y doce meses en Lima");
+
+const accounts = await import(compile(resolve(root, "src/modules/accounts/lib/account-validation.ts")));
+const defaultAccount = accounts.createDefaultFormState("PEN");
+assert.equal(defaultAccount.statementDay, "");
+const card = { ...defaultAccount, name: "Tarjeta", type: "credit_card", statementDay: "25", paymentDay: "15", creditLimit: "2000.50" };
+assert.deepEqual(accounts.validateAccountForm(card), {});
+const input = accounts.toAccountInput(card);
+assert.equal(input.statementDay, 25); assert.equal(input.paymentDay, 15); assert.equal(input.creditLimit, 2000.5);
+const restored = accounts.buildFormStateFromAccount({ ...input, openingBalance: 0 });
+assert.equal(restored.statementDay, "25"); assert.equal(restored.paymentDay, "15"); assert.equal(restored.creditLimit, "2000.5");
+assert.equal(accounts.validateAccountForm({ ...card, statementDay: "32" }).statementDay, "Elige un día del 1 al 31.");
+assert.equal(accounts.validateAccountForm({ ...card, paymentDay: "1.5" }).paymentDay, "Elige un día del 1 al 31.");
+assert.ok(accounts.validateAccountForm({ ...card, creditLimit: "0" }).creditLimit);
+assert.deepEqual(accounts.validateAccountForm({ ...card, statementDay: "", paymentDay: "", creditLimit: "" }), {});
+assert.equal(accounts.toAccountInput({ ...card, type: "cash" }).statementDay, null);
+assert.equal(accounts.toAccountInput({ ...card, type: "cash" }).paymentDay, null);
+assert.equal(accounts.toAccountInput({ ...card, type: "cash" }).creditLimit, null);
+
+// Exercise the actual mutation bodies with an in-memory client, never Supabase.
+const servicePath = resolve(root, "src/services/queries/workspace-data.ts");
+const serviceText = readFileSync(servicePath, "utf8");
+const serviceAst = ts.createSourceFile(servicePath, serviceText, ts.ScriptTarget.Latest, true);
+const selectedHooks = serviceAst.statements.filter((node) => ts.isFunctionDeclaration(node) && ["useCreateAccountMutation", "useUpdateAccountMutation"].includes(node.name?.text));
+const hookJs = ts.transpileModule(selectedHooks.map((node) => node.getText(serviceAst).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+const payloads = [];
+const client = { from(table) {
+  assert.equal(table, "accounts");
+  return { insert(payload) { payloads.push(payload); return Promise.resolve({ error: null }); }, update(payload) { payloads.push(payload); return { eq() { return this; }, then(resolve) { resolve({ error: null }); } }; } };
+} };
+const hooks = new Function("useQueryClient", "useMutation", "getClient", "invalidateWorkspaceSnapshot", `${hookJs}; return {useCreateAccountMutation,useUpdateAccountMutation};`)(() => ({}), (options) => options, () => client, async () => {});
+await hooks.useCreateAccountMutation(1, "test").mutationFn({ ...input, workspaceId: 1, userId: "test", sortOrder: 1 });
+await hooks.useUpdateAccountMutation(1, "test").mutationFn({ ...input, workspaceId: 1, userId: "test", accountId: 1 });
+for (const payload of payloads) { assert.equal(payload.statement_day, 25); assert.equal(payload.payment_day, 15); assert.equal(payload.credit_limit, 2000.5); }
+await hooks.useUpdateAccountMutation(1, "test").mutationFn({ ...input, type: "cash", workspaceId: 1, userId: "test", accountId: 1 });
+assert.equal(payloads.at(-1).statement_day, null); assert.equal(payloads.at(-1).payment_day, null); assert.equal(payloads.at(-1).credit_limit, null);
+console.log("account-cycle: OK — hydrate, validate, create/update payloads and clear on type change");

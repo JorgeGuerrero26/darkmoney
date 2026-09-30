@@ -17,6 +17,9 @@ export type AccountFormState = {
   color: string;
   icon: string;
   institutionCode: string;
+  statementDay: string;
+  paymentDay: string;
+  creditLimit: string;
   notes: string;
 };
 
@@ -36,6 +39,9 @@ export function createDefaultFormState(currencyCode: string): AccountFormState {
     color: preset.color,
     icon: preset.icon,
     institutionCode: "",
+    statementDay: "",
+    paymentDay: "",
+    creditLimit: "",
     notes: "",
   };
 }
@@ -50,6 +56,9 @@ export function buildFormStateFromAccount(account: AccountSummary): AccountFormS
     color: account.color,
     icon: account.icon || getTypePreset(account.type).icon,
     institutionCode: account.institutionCode ?? "",
+    statementDay: account.statementDay == null ? "" : String(account.statementDay),
+    paymentDay: account.paymentDay == null ? "" : String(account.paymentDay),
+    creditLimit: account.creditLimit == null ? "" : String(account.creditLimit),
     notes: account.notes ?? "",
   };
 }
@@ -58,6 +67,14 @@ export function validateAccountForm(formState: AccountFormState): AccountFormErr
   const errors: AccountFormErrors = {};
   const openingBalance = Number(formState.openingBalance);
   const normalizedCurrency = formState.currencyCode.trim().toUpperCase();
+  if (formState.type === "credit_card") {
+    for (const field of ["statementDay", "paymentDay"] as const) {
+      const text = formState[field].trim();
+      const day = Number(text);
+      if (text && (!Number.isInteger(day) || day < 1 || day > 31)) errors[field] = "Elige un día del 1 al 31.";
+    }
+    if (formState.creditLimit.trim() && (!Number.isFinite(Number(formState.creditLimit)) || Number(formState.creditLimit) <= 0)) errors.creditLimit = "El límite debe ser mayor que cero.";
+  }
 
   if (!formState.name.trim()) {
     errors.name = "Ingresa un nombre para la cuenta.";
@@ -101,6 +118,9 @@ export function toAccountInput(formState: AccountFormState): AccountFormInput {
     color: formState.color,
     icon: formState.icon,
     institutionCode: formState.institutionCode.trim() || null,
+    statementDay: formState.type === "credit_card" && formState.statementDay.trim() ? Number(formState.statementDay) : null,
+    paymentDay: formState.type === "credit_card" && formState.paymentDay.trim() ? Number(formState.paymentDay) : null,
+    creditLimit: formState.type === "credit_card" && formState.creditLimit.trim() ? Number(formState.creditLimit) : null,
     notes: formState.notes.trim() || null,
   };
 }

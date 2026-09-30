@@ -131,7 +131,7 @@ export function useAccountEditor({
 
     setEditorMode(persistedState.editorMode);
     setSelectedAccountId(persistedState.selectedAccountId);
-    setFormState(persistedState.formState);
+    setFormState({ ...createDefaultFormState(baseCurrencyCode), ...persistedState.formState });
     setIsEditorOpen(persistedState.isEditorOpen);
     isEditorDraftReady.current = true;
   }, [userId, workspaceId]);
@@ -158,12 +158,12 @@ export function useAccountEditor({
   }, [editorMode, formState, isEditorOpen, selectedAccountId, userId, workspaceId]);
 
   useEffect(() => {
-    if (!isEditorOpen || editorMode !== "edit" || !selectedAccount) {
+    if (!isEditorOpen || editorMode !== "edit" || !selectedAccount || isDirty) {
       return;
     }
 
     setFormState(buildFormStateFromAccount(selectedAccount));
-  }, [editorMode, isEditorOpen, selectedAccount]);
+  }, [editorMode, isEditorOpen, selectedAccount, isDirty]);
 
   function openCreateEditor() {
     if (!workspaceId) {
@@ -204,6 +204,9 @@ export function useAccountEditor({
     setFormState((currentState) => ({
       ...currentState,
       type: nextType,
+      statementDay: nextType === "credit_card" ? currentState.statementDay : "",
+      paymentDay: nextType === "credit_card" ? currentState.paymentDay : "",
+      creditLimit: nextType === "credit_card" ? currentState.creditLimit : "",
       color:
         currentState.color === currentPreset.color ? nextPreset.color : currentState.color,
       icon:

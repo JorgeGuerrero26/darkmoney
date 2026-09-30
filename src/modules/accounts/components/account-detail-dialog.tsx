@@ -88,6 +88,9 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
               {!account.includeInNetWorth ? <p className="mt-1 text-xs text-storm">No incluida en el patrimonio neto</p> : null}
             </div>
           </div>
+          {account.type === "credit_card" ? <div className="mt-4 divide-y divide-white/10 border-y border-white/10 text-sm">
+            {[["Día de corte", account.statementDay ?? "Sin definir"], ["Día de pago", account.paymentDay ?? "Sin definir"], ["Límite de crédito", account.creditLimit == null ? "Sin definir" : formatCurrency(account.creditLimit, account.currencyCode)]].map(([label, value]) => <div className="flex min-h-[48px] items-center justify-between gap-4" key={label}><span className="text-storm">{label}</span><span className="text-ink">{value}</span></div>)}
+          </div> : null}
           {!account.isArchived ? (
             <div className="mt-5 flex flex-wrap gap-2">
               <Button onClick={() => openMovement("expense")}><ArrowDown className="h-4 w-4" />Nuevo gasto</Button>
