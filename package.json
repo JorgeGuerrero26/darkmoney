@@ -15,6 +15,7 @@
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",
+    "test:catalog-parity": "node scripts/test-catalog-parity.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -110,6 +110,7 @@ type CategoryRow = {
   sort_order: number;
   is_system: boolean;
   is_active: boolean;
+  is_pinned: boolean | null;
   default_spend_type_id: number | null;
   created_at: string;
   updated_at: string;
@@ -159,6 +160,7 @@ type CounterpartyRow = {
   document_number: string | null;
   notes: string | null;
   is_archived: boolean;
+  is_pinned: boolean | null;
 };
 
 type CounterpartyRoleRow = {
@@ -774,6 +776,7 @@ export type CategoryFormInput = {
   icon?: string | null;
   sortOrder: number;
   isActive: boolean;
+  defaultSpendTypeId?: number | null;
 };
 
 export type BudgetFormInput = {
@@ -1693,7 +1696,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       .order("name", { ascending: true }),
     client
       .from("counterparties")
-      .select("id, workspace_id, name, type, phone, email, document_number, notes, is_archived")
+      .select("id, workspace_id, name, type, phone, email, document_number, notes, is_archived, is_pinned")
       .eq("workspace_id", workspace.id)
       .order("name", { ascending: true }),
     fetchMovementRows(),
@@ -2810,6 +2813,7 @@ async function fetchCounterpartiesOverview(workspaceId: number) {
       documentNumber: row.document_number,
       notes: row.notes,
       isArchived: row.is_archived,
+      isPinned: row.is_pinned ?? false,
       roles,
       receivableCount: summaryRow?.receivable_count ?? 0,
       receivablePrincipalTotal: toNumber(summaryRow?.receivable_principal_total ?? 0),
@@ -2833,7 +2837,7 @@ async function fetchCategoriesOverview(workspaceId: number) {
     client
       .from("categories")
       .select(
-        "id, workspace_id, name, kind, parent_id, color, icon, sort_order, is_system, is_active, created_at, updated_at",
+        "id, workspace_id, name, kind, parent_id, color, icon, sort_order, is_system, is_active, is_pinned, default_spend_type_id, created_at, updated_at",
       )
       .eq("workspace_id", workspaceId)
       .order("sort_order", { ascending: true })
@@ -2930,6 +2934,8 @@ async function fetchCategoriesOverview(workspaceId: number) {
         icon: row.icon,
         sortOrder: row.sort_order,
         isSystem: row.is_system,
+        isPinned: row.is_pinned ?? false,
+        defaultSpendTypeId: row.default_spend_type_id,
         movementCount: usage?.movementCount ?? 0,
         subscriptionCount: usage?.subscriptionCount ?? 0,
         lastActivityAt: usage?.lastActivityAt ?? row.updated_at ?? row.created_at,
@@ -4213,6 +4219,19 @@ export function useToggleCategoryMutation(workspaceId?: number, userId?: string)
   });
 }
 
+export function usePinCategoryMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ categoryId, isPinned }: { categoryId: number; isPinned: boolean }) => {
+      const { error } = await getClient().from("categories")
+        .update({ is_pinned: isPinned, updated_by_user_id: userId })
+        .eq("id", categoryId).eq("workspace_id", workspaceId as number);
+      if (error) throw error;
+    },
+    onSuccess: async () => { if (workspaceId) await Promise.all([invalidateWorkspaceSnapshot(queryClient, workspaceId, userId), invalidateCategoriesOverview(queryClient, workspaceId)]); },
+  });
+}
+
 export function useDeleteCategoryMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -4620,6 +4639,19 @@ export function useArchiveCounterpartyMutation(workspaceId?: number, userId?: st
   });
 }
 
+export function usePinCounterpartyMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ counterpartyId, isPinned }: { counterpartyId: number; isPinned: boolean }) => {
+      const { error } = await getClient().from("counterparties")
+        .update({ is_pinned: isPinned, updated_by_user_id: userId })
+        .eq("id", counterpartyId).eq("workspace_id", workspaceId as number);
+      if (error) throw error;
+    },
+    onSuccess: async () => { if (workspaceId) await Promise.all([invalidateWorkspaceSnapshot(queryClient, workspaceId, userId), invalidateCounterpartiesOverview(queryClient, workspaceId)]); },
+  });
+}
+
 export function useDeleteCounterpartyMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -4926,6 +4958,7 @@ function buildCategoryMutationPayload(input: CategoryFormInput, userId: string) 
     icon: normalizeOptionalText(input.icon),
     sort_order: input.sortOrder,
     is_active: input.isActive,
+    default_spend_type_id: input.kind === "income" ? null : (input.defaultSpendTypeId ?? null),
   };
 }
 

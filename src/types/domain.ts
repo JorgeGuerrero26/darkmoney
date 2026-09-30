@@ -153,6 +153,8 @@ export type CategorySummary = {
 
 export type CategoryOverview = CategorySummary & {
   workspaceId: number;
+  isPinned: boolean;
+  defaultSpendTypeId?: number | null;
   parentId?: number | null;
   parentName?: string | null;
   color?: string | null;
@@ -217,6 +219,7 @@ export type CounterpartySummary = {
 
 export type CounterpartyOverview = CounterpartySummary & {
   workspaceId: number;
+  isPinned: boolean;
   phone?: string | null;
   email?: string | null;
   documentNumber?: string | null;

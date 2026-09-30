@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const cache = new Map();
+function compile(path) {
+  if (cache.has(path)) return cache.get(path);
+  let js = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  js = js.replace(/from "([^"]+)"/g, (match, specifier) => {
+    if (!specifier.startsWith(".")) return `from "${import.meta.resolve(specifier)}"`;
+    const candidate = resolve(dirname(path), specifier);
+    const target = [candidate, `${candidate}.ts`, `${candidate}.tsx`].find(existsSync);
+    return `from "${compile(target)}"`;
+  });
+  const url = `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`;
+  cache.set(path, url); return url;
+}
+const money = await import(compile(resolve(root, "src/lib/analytics-money.ts")));
+const contacts = await import(compile(resolve(root, "src/modules/contacts/lib/contact-parity.ts")));
+const categories = await import(compile(resolve(root, "src/modules/categories/lib/category-parent.ts")));
+const incoming = { movementType: "obligation_payment", sourceAmount: null, destinationAmount: 50, destinationAmountInBaseCurrency: 50, destinationCurrencyCode: "PEN" };
+assert.deepEqual(money.movementAnalyticsAmount(incoming, "PEN"), { amount: 50, currencyCode: "PEN", amountInBaseCurrency: 50 });
+assert.equal(money.comparableAmount(money.movementAnalyticsAmount({ ...incoming, sourceAmount: 20, destinationAmount: null, sourceCurrencyCode: "PEN" }, "PEN"), "PEN"), 20);
+assert.deepEqual(money.currencyTotals([{ amount: 10, currencyCode: "USD" }, { amount: 50, currencyCode: "PEN" }], "PEN"), [{ amount: 10, currencyCode: "USD" }, { amount: 50, currencyCode: "PEN" }]);
+assert.equal(money.comparableAmount({ amount: 10, currencyCode: "USD", amountInBaseCurrency: null }, "PEN"), null);
+assert.deepEqual(money.currencyTotals([{ amount: 10, currencyCode: "USD", amountInBaseCurrency: 38 }, { amount: 50, currencyCode: "PEN" }], "PEN"), [{ amount: 88, currencyCode: "PEN" }]);
+assert.equal(money.comparableAmount({ amount: 0, currencyCode: "USD", amountInBaseCurrency: 0 }, "PEN"), 0);
+assert.equal(money.analyticsMonthKey("2026-10-01T04:59:59Z"), "2026-09");
+assert.equal(money.analyticsMonthKey("2026-10-01T05:00:00Z"), "2026-10");
+assert.equal(money.analyticsMonthKey("2026-10-01"), "2026-10");
+assert.deepEqual(money.analyticsMonthKeys(new Date("2026-10-01T04:30:00Z")), Array.from({ length: 12 }, (_, i) => `${i < 3 ? 2025 : 2026}-${String((i + 9) % 12 + 1).padStart(2, "0")}`));
+const obligation = { counterpartyId: 7, status: "active", direction: "receivable", pendingAmount: 50, currencyCode: "PEN" };
+assert.deepEqual(contacts.contactExposure([obligation, { ...obligation, status: "cancelled", pendingAmount: 900 }, { ...obligation, counterpartyId: 8 }], 7, "PEN").receivable, [{ amount: 50, currencyCode: "PEN" }]);
+assert.deepEqual(contacts.contactExposure([{ ...obligation, currencyCode: "USD" }], 7, "PEN").receivable, [{ amount: 50, currencyCode: "USD" }]);
+const person = { id: 1, type: "person", name: "Uno", isPinned: true };
+const service = { id: 2, type: "service", name: "Dos", isPinned: false };
+assert.equal(contacts.contactMatchesFilters(person, ["person", "service"], ""), true);
+assert.equal(contacts.contactMatchesFilters(service, ["person", "service"], ""), true);
+assert.equal(contacts.contactMatchesFilters(service, ["pinned", "service"], ""), false);
+assert.equal(contacts.contactMatchesFilters(person, ["pinned", "person"], "person"), true);
+assert.equal(contacts.contactWhatsAppUrl("+51 999-111-222"), "https://wa.me/51999111222");
+assert.equal(contacts.contactWhatsAppUrl("---"), null);
+const parents = [{ id: 1, kind: "expense", isSystem: false }, { id: 2, parentId: 1, kind: "expense", isSystem: false }, { id: 3, parentId: 2, kind: "expense", isSystem: false }, { id: 4, kind: "income", isSystem: false }, { id: 5, kind: "both", isSystem: false }, { id: 6, kind: "expense", isSystem: true }];
+assert.deepEqual(categories.categoryParentCandidates(parents, "expense", 1).map((item) => item.id), [5]);
+assert.deepEqual(categories.categoryParentCandidates(parents, "income").map((item) => item.id), [4, 5]);
+assert.deepEqual(categories.categoryParentCandidates(parents, "both").map((item) => item.id), [1, 2, 3, 4, 5]);
+console.log("catalog-parity: OK — cobros, monedas, cancelados, filtros, padres y doce meses en Lima");
