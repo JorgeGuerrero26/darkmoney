@@ -19,8 +19,8 @@ import {
   suggestAccountLocally,
   suggestCategoryLocally,
   suggestCounterpartyLocally,
-  suggestDescriptionCleanupLocally,
 } from "../lib/movement-suggestions";
+import { cleanupMovementDescriptionLocally, shouldShowDescriptionCleanup } from "../lib/movement-description-cleanup";
 import type { AccountSuggestion } from "../lib/movement-suggestions";
 import { LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD } from "../lib/local-category-suggestion";
 import { useMovementLearningQuery } from "../../../services/queries/movement-learning";
@@ -60,6 +60,42 @@ export function useMovementSuggestions(input: {
   movements: MovementRecord[];
   editingMovementId?: number;
 }): MovementSuggestions {
+  const [remote, setRemote] = useState<RemoteMovementSuggestions>({
+    category: null,
+    counterparty: null,
+    description: null,
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
+
+  const requestKey = useMemo(
+    () =>
+      JSON.stringify({
+        workspaceId: input.workspaceId,
+        type: input.movementType,
+        amount: input.amount,
+        currency: input.currencyCode,
+        description: input.description.trim().toLocaleLowerCase("es-PE"),
+        categoryId: input.categoryId,
+        counterpartyId: input.counterpartyId,
+      }),
+    [
+      input.amount,
+      input.categoryId,
+      input.counterpartyId,
+      input.currencyCode,
+      input.description,
+      input.movementType,
+      input.workspaceId,
+    ],
+  );
+  const [resolvedRequestKey, setResolvedRequestKey] = useState("");
+  const [resolvedCounterpartyKey, setResolvedCounterpartyKey] = useState("");
+  const rawLocalCleanup = useMemo(() => cleanupMovementDescriptionLocally({ rawDescription: input.description }), [input.description]);
+  const localDescription = rawLocalCleanup && shouldShowDescriptionCleanup(input.description, rawLocalCleanup.cleanedDescription) ? rawLocalCleanup : null;
+  const descriptionSuggestion = input.enabled && input.proAccessEnabled && resolvedRequestKey === requestKey
+    ? remote.description ?? localDescription : localDescription;
+  const effectiveDescription = descriptionSuggestion?.cleanedDescription ?? input.description;
   const learningQuery = useMovementLearningQuery(input.workspaceId, input.enabled);
   const localAccount = useMemo(
     () =>
@@ -67,6 +103,7 @@ export function useMovementSuggestions(input: {
         accountId: input.accountId,
         accounts: input.accounts,
         actsAsIncome: input.actsAsIncome,
+        movementType: input.movementType,
         counterpartyId: input.counterpartyId,
         movements: input.movements,
         excludedMovementId: input.editingMovementId,
@@ -75,6 +112,7 @@ export function useMovementSuggestions(input: {
       input.accountId,
       input.accounts,
       input.actsAsIncome,
+      input.movementType,
       input.counterpartyId,
       input.editingMovementId,
       input.movements,
@@ -114,51 +152,21 @@ export function useMovementSuggestions(input: {
     () =>
       input.counterpartyId === null
         ? suggestCounterpartyLocally({
-            description: input.description,
+            description: effectiveDescription,
             counterparties: input.counterparties,
             movements: input.movements,
             excludedMovementId: input.editingMovementId,
           })
         : null,
-    [input.counterparties, input.counterpartyId, input.description, input.editingMovementId, input.movements],
-  );
-  const localDescription = useMemo(
-    () => suggestDescriptionCleanupLocally(input.description),
-    [input.description],
-  );
-  const [remote, setRemote] = useState<RemoteMovementSuggestions>({
-    category: null,
-    counterparty: null,
-    description: null,
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [aiUnavailable, setAiUnavailable] = useState(false);
-
-  const requestKey = useMemo(
-    () =>
-      JSON.stringify({
-        workspaceId: input.workspaceId,
-        type: input.movementType,
-        amount: input.amount,
-        currency: input.currencyCode,
-        description: input.description.trim().toLocaleLowerCase("es-PE"),
-        categoryId: input.categoryId,
-        counterpartyId: input.counterpartyId,
-      }),
-    [
-      input.amount,
-      input.categoryId,
-      input.counterpartyId,
-      input.currencyCode,
-      input.description,
-      input.movementType,
-      input.workspaceId,
-    ],
+    [input.counterparties, input.counterpartyId, effectiveDescription, input.editingMovementId, input.movements],
   );
   const categoryRequestKey = JSON.stringify({
     requestKey, accountId: input.accountId, occurredOn: input.occurredAt.slice(0, 10),
     categories: input.categories.map(({ id, name, kind, isActive }) => ({ id, name, kind, isActive })),
     localCategory,
+  });
+  const counterpartyRequestKey = JSON.stringify({ requestKey, effectiveDescription, localCounterparty,
+    counterparties: input.counterparties.map(({ id, name, type, isArchived }) => ({ id, name, type, isArchived })),
   });
   const [resolvedCategoryKey, setResolvedCategoryKey] = useState("");
 
@@ -181,7 +189,7 @@ export function useMovementSuggestions(input: {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       const categoryKey = `category:${categoryRequestKey}`;
-      const counterpartyKey = `counterparty:${requestKey}`;
+      const counterpartyKey = `counterparty:${counterpartyRequestKey}`;
       const descriptionKey = `description:${requestKey}`;
       const categoryPromise =
         input.categoryId === null && (!localCategory || localCategory.confidence < LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD)
@@ -212,7 +220,7 @@ export function useMovementSuggestions(input: {
                 movementType: input.movementType === "income" ? "income" : "expense",
                 amount: input.amount,
                 currencyCode: input.currencyCode,
-                description,
+                description: effectiveDescription,
                 counterparties: input.counterparties
                   .filter((counterparty) => !counterparty.isArchived)
                   .map(({ id, name, type }) => ({ id, name, type })),
@@ -223,7 +231,7 @@ export function useMovementSuggestions(input: {
               })
           : Promise.resolve(null);
       const descriptionPromise =
-        !localDescription || localDescription.confidence < 0.7
+        !rawLocalCleanup || rawLocalCleanup.confidence < 0.7
           ? descriptionCache.has(descriptionKey)
             ? Promise.resolve(descriptionCache.get(descriptionKey) ?? null)
             : requestDescriptionSuggestion({
@@ -231,7 +239,7 @@ export function useMovementSuggestions(input: {
                 rawDescription: description,
                 amount: input.amount,
                 currencyCode: input.currencyCode,
-                localSuggestion: localDescription,
+                localSuggestion: rawLocalCleanup,
               }).then((result) => {
                 descriptionCache.set(descriptionKey, result);
                 return result;
@@ -243,6 +251,8 @@ export function useMovementSuggestions(input: {
       void Promise.allSettled([categoryPromise, counterpartyPromise, descriptionPromise]).then((results) => {
         if (cancelled) return;
         setResolvedCategoryKey(categoryRequestKey);
+        setResolvedRequestKey(requestKey);
+        setResolvedCounterpartyKey(counterpartyRequestKey);
         setRemote({
           category: results[0].status === "fulfilled" ? results[0].value : null,
           counterparty: results[1].status === "fulfilled" ? results[1].value : null,
@@ -272,7 +282,9 @@ export function useMovementSuggestions(input: {
     input.workspaceId,
     localCategory,
     localCounterparty,
-    localDescription,
+    rawLocalCleanup,
+    effectiveDescription,
+    counterpartyRequestKey,
     requestKey,
     categoryRequestKey,
   ]);
@@ -284,10 +296,12 @@ export function useMovementSuggestions(input: {
     category: input.categoryId === null
       ? localCategory && localCategory.confidence >= LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD
         ? localCategory
-        : resolvedCategoryKey === categoryRequestKey ? remote.category ?? localCategory : localCategory
+        : input.enabled && input.proAccessEnabled && resolvedCategoryKey === categoryRequestKey ? remote.category ?? localCategory : localCategory
       : null,
-    counterparty: input.counterpartyId === null ? remote.counterparty ?? localCounterparty : null,
-    description: remote.description ?? localDescription,
+    counterparty: input.counterpartyId === null
+      ? input.enabled && input.proAccessEnabled && resolvedCounterpartyKey === counterpartyRequestKey ? remote.counterparty ?? localCounterparty : localCounterparty
+      : null,
+    description: descriptionSuggestion,
     isLoading,
   };
 }

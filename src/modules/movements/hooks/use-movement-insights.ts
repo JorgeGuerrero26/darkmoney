@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { recentPatternMovements } from "../lib/movement-suggestions";
 
 import {
   requestBudgetInsight,
@@ -41,7 +42,7 @@ const budgetCache = new Map<string, BudgetInsight | null>();
 function movementPayload(movement: InsightMovement) {
   return {
     id: movement.id,
-    movementType: movement.actsAsIncome ? "income" : "expense",
+    movementType: movement.movementType,
     occurredAt: movement.occurredAt,
     description: movement.description,
     amount: movement.amount,
@@ -65,6 +66,7 @@ export function useMovementInsights(input: {
   counterparty: NamedEntity;
   currencyCode: string;
   description: string;
+  cleanedDescription?: string;
   editingMovementId?: number;
   enabled: boolean;
   exchangeRates: ExchangeRateSummary[];
@@ -77,8 +79,9 @@ export function useMovementInsights(input: {
   workspaceId: number;
 }): MovementInsights {
   const history = useMemo(
-    () => input.movements.map((movement) => movementRecordToInsight(movement, input.currencyCode)),
-    [input.currencyCode, input.movements],
+    () => recentPatternMovements(input.movements, input.editingMovementId)
+      .map((movement) => movementRecordToInsight(movement, input.currencyCode)),
+    [input.currencyCode, input.movements, input.editingMovementId],
   );
   const current = useMemo<InsightMovement>(
     () => ({
@@ -111,13 +114,13 @@ export function useMovementInsights(input: {
   );
   const localRecurring = useMemo(
     () =>
-      suggestRecurringLocally({
-        current,
+      input.editingMovementId === undefined ? suggestRecurringLocally({
+        current: { ...current, description: input.cleanedDescription ?? current.description },
         history,
         subscriptions: input.subscriptions,
         recurringIncome: input.recurringIncome,
-      }),
-    [current, history, input.recurringIncome, input.subscriptions],
+      }) : null,
+    [current, history, input.cleanedDescription, input.editingMovementId, input.recurringIncome, input.subscriptions],
   );
   const localRisk = useMemo(() => analyzeRiskLocally(current, history), [current, history]);
   const localBudget = useMemo(
@@ -136,24 +139,24 @@ export function useMovementInsights(input: {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [aiUnavailable, setAiUnavailable] = useState(false);
+  const [resolvedRequestKey, setResolvedRequestKey] = useState("");
   const requestKey = useMemo(
     () =>
       JSON.stringify({
         workspaceId: input.workspaceId,
         movement: movementPayload(current),
+        cleanedDescription: input.cleanedDescription,
         localRecurring,
         localRisk,
         localBudget,
       }),
-    [current, input.workspaceId, localBudget, localRecurring, localRisk],
+    [current, input.cleanedDescription, input.workspaceId, localBudget, localRecurring, localRisk],
   );
 
   useEffect(() => {
     if (
       !input.enabled ||
       !input.proAccessEnabled ||
-      current.amount <= 0 ||
-      current.description.length < 3 ||
       current.movementType === "transfer"
     ) {
       setRemote({ budget: null, recurring: null, risk: null });
@@ -174,13 +177,16 @@ export function useMovementInsights(input: {
       const recurringKey = `recurring:${requestKey}`;
       const riskKey = `risk:${requestKey}`;
       const budgetKey = `budget:${requestKey}`;
-      const recurringPromise = !localRecurring || localRecurring.confidence < 0.7
+      const recurringPromise = input.editingMovementId === undefined &&
+        (current.movementType === "expense" || current.movementType === "income") &&
+        Boolean((input.cleanedDescription ?? current.description).trim()) &&
+        (!localRecurring || localRecurring.confidence < 0.7)
         ? recurringCache.has(recurringKey)
           ? Promise.resolve(recurringCache.get(recurringKey) ?? null)
           : requestRecurringInsight({
               workspaceId: input.workspaceId,
               movementType: current.actsAsIncome ? "income" : "expense",
-              description: current.description,
+              description: input.cleanedDescription ?? current.description,
               amount: current.amount,
               currencyCode: current.currencyCode,
               occurredAt: current.occurredAt,
@@ -189,11 +195,13 @@ export function useMovementInsights(input: {
               recentMovements: recentMovements.map(movementPayload),
               subscriptions: input.subscriptions
                 .filter((item) => item.status === "active")
+                .slice(0, 40)
                 .map(({ id, name, amount, currencyCode, frequency, intervalCount, vendorPartyId, categoryId }) => ({
                   id, name, amount, currencyCode, frequency, intervalCount, vendorPartyId, categoryId,
                 })),
               recurringIncome: input.recurringIncome
                 .filter((item) => item.status === "active")
+                .slice(0, 40)
                 .map(({ id, name, amount, currencyCode, frequency, intervalCount, payerPartyId, categoryId }) => ({
                   id, name, amount, currencyCode, frequency, intervalCount, payerPartyId, categoryId,
                 })),
@@ -204,7 +212,7 @@ export function useMovementInsights(input: {
             })
         : Promise.resolve(null);
       const relatedMovements = localRisk
-        ? recentMovements.filter((movement) => localRisk.relatedMovementIds.includes(movement.id))
+        ? history.filter((movement) => localRisk.relatedMovementIds.includes(movement.id)).slice(0, 5)
         : [];
       const riskPromise = localRisk && relatedMovements.length > 0
         ? riskCache.has(riskKey)
@@ -260,6 +268,7 @@ export function useMovementInsights(input: {
       setIsLoading(true);
       void Promise.allSettled([recurringPromise, riskPromise, budgetPromise]).then((results) => {
         if (cancelled) return;
+        setResolvedRequestKey(requestKey);
         setRemote({
           recurring: results[0].status === "fulfilled" ? results[0].value : null,
           risk: results[1].status === "fulfilled" ? results[1].value : null,
@@ -278,6 +287,8 @@ export function useMovementInsights(input: {
     current,
     history,
     input.category,
+    input.cleanedDescription,
+    input.editingMovementId,
     input.counterparty,
     input.enabled,
     input.proAccessEnabled,
@@ -291,10 +302,10 @@ export function useMovementInsights(input: {
   ]);
 
   return {
-    recurring: remote.recurring ?? localRecurring,
+    recurring: input.enabled && input.proAccessEnabled && resolvedRequestKey === requestKey ? remote.recurring ?? localRecurring : localRecurring,
     aiUnavailable,
-    risk: remote.risk ?? localRisk,
-    budget: remote.budget ?? localBudget,
+    risk: input.enabled && input.proAccessEnabled && resolvedRequestKey === requestKey ? remote.risk ?? localRisk : localRisk,
+    budget: input.enabled && input.proAccessEnabled && resolvedRequestKey === requestKey ? remote.budget ?? localBudget : localBudget,
     isLoading,
   };
 }

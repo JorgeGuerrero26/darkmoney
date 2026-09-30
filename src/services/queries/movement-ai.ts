@@ -1,5 +1,6 @@
 import type { CategoryKind, CounterpartyType } from "../../types/domain";
 import { invokeAuthenticatedFunction } from "./workspace-data";
+import { shouldShowDescriptionCleanup } from "../../modules/movements/lib/movement-description-cleanup";
 
 export type MovementSuggestionSource = "local" | "deepseek";
 
@@ -35,6 +36,7 @@ export type RecurringInsight = {
   type: "subscription" | "recurring_income";
   name: string;
   frequency: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
+  intervalCount?: number | null;
   confidence: number;
   reasons: string[];
   source: MovementSuggestionSource;
@@ -164,9 +166,9 @@ export async function requestCounterpartySuggestion(input: {
       surface: "movement_form",
       localSuggestion: input.localSuggestion
         ? {
-            type: "existing_counterparty",
+            type: input.localSuggestion.type,
             counterpartyId: input.localSuggestion.counterpartyId,
-            counterpartyName: input.localSuggestion.counterpartyName,
+            counterpartyName: input.localSuggestion.type === "new_counterparty" ? null : input.localSuggestion.counterpartyName,
             newCounterpartyName: input.localSuggestion.newCounterpartyName,
             counterpartyType: input.localSuggestion.counterpartyType,
             confidence: input.localSuggestion.confidence,
@@ -224,15 +226,13 @@ export async function requestDescriptionSuggestion(input: {
   if (
     !response.ok ||
     !response.cleanedDescription ||
-    response.confidence < 0.65 ||
-    response.cleanedDescription.trim().toLocaleLowerCase("es-PE") ===
-      input.rawDescription.trim().toLocaleLowerCase("es-PE")
+    !shouldShowDescriptionCleanup(input.rawDescription, response.cleanedDescription)
   ) {
     return null;
   }
   return {
-    cleanedDescription: response.cleanedDescription,
-    confidence: response.confidence,
+    cleanedDescription: response.cleanedDescription.trim().replace(/\s+/g, " "),
+    confidence: Math.max(0, Math.min(1, response.confidence)),
     reasons: response.reasons,
     source: "deepseek" as const,
   } satisfies DescriptionSuggestion;
@@ -245,6 +245,7 @@ export async function requestRecurringInsight(input: Record<string, unknown>) {
       type: "subscription" | "recurring_income" | "none";
       name: string | null;
       frequency: RecurringInsight["frequency"] | null;
+      intervalCount?: number | null;
       confidence: number;
       reasons: string[];
     } | null;
@@ -263,6 +264,7 @@ export async function requestRecurringInsight(input: Record<string, unknown>) {
     type: recommendation.type,
     name: recommendation.name,
     frequency: recommendation.frequency,
+    intervalCount: recommendation.intervalCount,
     confidence: recommendation.confidence,
     reasons: recommendation.reasons,
     source: "deepseek" as const,

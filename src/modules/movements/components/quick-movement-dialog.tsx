@@ -410,6 +410,7 @@ export function QuickMovementDialog({
     movements: snapshot.movements,
   });
   const insights = useMovementInsights({
+    cleanedDescription: suggestions.description?.cleanedDescription,
     account: selectedAccount,
     actsAsIncome: kind === "income",
     amount: computedAmount,

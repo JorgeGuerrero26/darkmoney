@@ -445,6 +445,7 @@ export function MovementEditorDialog({
     editingMovementId: selectedMovement?.id,
   });
   const insights = useMovementInsights({
+    cleanedDescription: suggestions.description?.cleanedDescription,
     account: primaryAccount,
     actsAsIncome: primaryUsesDestination,
     amount: displayAmount,
