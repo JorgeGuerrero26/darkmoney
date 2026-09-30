@@ -36,6 +36,7 @@ import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { normalizeInsightText, recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
 import { buildMovementDescription } from "../lib/movement-description";
+import { movementSpendTypeId, movementSpendTypeLabel } from "../lib/movement-spend-type";
 import {
   buildSplitDescription,
   buildSplitMetadata,
@@ -54,6 +55,7 @@ import {
   useCreateCounterpartyMutation,
   useCreateRecurringIncomeMutation,
   useCreateSubscriptionMutation,
+  useBudgetSpendTypesQuery,
   usePersistLearningFeedbackMutation,
   getQueryErrorMessage,
   type WorkspaceSnapshot,
@@ -77,6 +79,7 @@ type QuickMovementFormState = {
   accountId: string;
   amount: string;
   categoryId: string;
+  spendTypeId: string;
   counterpartyId: string;
   description: string;
   destinationAccountId: string;
@@ -86,7 +89,7 @@ type QuickMovementFormState = {
   status: Exclude<MovementStatus, "voided">;
 };
 
-type QuickMovementPanel = "main" | "details" | "category" | "counterparty" | "split";
+type QuickMovementPanel = "main" | "details" | "category" | "spendType" | "counterparty" | "split";
 
 type CategoryFeedbackIntent = {
   confidence: number | null;
@@ -159,6 +162,7 @@ function createDefaultQuickMovementFormState(
     accountId: initialKind === "transfer" ? "" : accountValue,
     amount: "",
     categoryId: "",
+    spendTypeId: "",
     counterpartyId: "",
     description: "",
     destinationAccountId: "",
@@ -313,6 +317,7 @@ export function QuickMovementDialog({
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
   const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
   const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
+  const spendTypes = useBudgetSpendTypesQuery(workspaceId).data ?? [];
   const persistLearningFeedbackMutation = usePersistLearningFeedbackMutation(workspaceId, userId);
   const visibleAccounts = useMemo(
     () => snapshot.accounts.filter((account) => !account.isArchived),
@@ -729,6 +734,7 @@ export function QuickMovementDialog({
             const lineCategoryId = Number(line.categoryId);
             const movementId = await createMovementMutation.mutateAsync({
               categoryId: lineCategoryId,
+              spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")),
               counterpartyId:
                 counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
               description: buildSplitDescription(description, index, splitLines.length),
@@ -778,6 +784,7 @@ export function QuickMovementDialog({
 
         const createdMovementId = await createMovementMutation.mutateAsync({
           categoryId: categoryId !== null && Number.isFinite(categoryId) ? categoryId : null,
+          spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(formState.spendTypeId)),
           counterpartyId:
             counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
           description,
@@ -1009,7 +1016,7 @@ export function QuickMovementDialog({
           onMouseDown={(event) => event.stopPropagation()}
           onMouseUp={(event) => event.stopPropagation()}
         >
-          <ResourceEditorHeader disabled={isSaving} onBack={activePanel === "main" ? undefined : () => setActivePanel(activePanel === "category" || activePanel === "counterparty" || activePanel === "split" ? "details" : "main")} onClose={requestClose} title={activePanel === "main" ? "Nuevo movimiento" : activePanel === "details" ? "Detalles" : activePanel === "category" ? "Categoría" : activePanel === "counterparty" ? "Contraparte" : "Dividir en categorías"} />
+          <ResourceEditorHeader disabled={isSaving} onBack={activePanel === "main" ? undefined : () => setActivePanel(activePanel === "category" || activePanel === "spendType" || activePanel === "counterparty" || activePanel === "split" ? "details" : "main")} onClose={requestClose} title={activePanel === "main" ? "Nuevo movimiento" : activePanel === "details" ? "Detalles" : activePanel === "category" ? "Categoría" : activePanel === "spendType" ? "Tipo de gasto" : activePanel === "counterparty" ? "Contraparte" : "Dividir en categorías"} />
 
           <form
             className="flex min-h-0 flex-1 flex-col"
@@ -1261,6 +1268,8 @@ export function QuickMovementDialog({
                       updateFormState("occurredAt", value);
                     }}
                     onOpenCategory={splitLines ? undefined : () => setActivePanel("category")}
+                    onOpenSpendType={kind === "expense" && !splitLines ? () => setActivePanel("spendType") : undefined}
+                    spendTypeLabel={kind === "expense" && !splitLines ? movementSpendTypeLabel(spendTypes, parseOptionalInteger(formState.spendTypeId), selectedCategory?.defaultSpendTypeId) : undefined}
                     onOpenCounterparty={() => setActivePanel("counterparty")}
                     receiptRows={
                       <MovementDetailsReceiptRow>
@@ -1389,6 +1398,20 @@ export function QuickMovementDialog({
                 />
               ) : null}
 
+              {activePanel === "spendType" ? (
+                <MovementDetailOptionsPanel
+                  onChange={(value) => {
+                    updateFormState("spendTypeId", value);
+                    setActivePanel("details");
+                  }}
+                  options={[
+                    { value: "", label: selectedCategory?.defaultSpendTypeId ? "Usar tipo de la categoría" : "Sin tipo" },
+                    ...spendTypes.map((type) => ({ value: String(type.id), label: type.name })),
+                  ]}
+                  value={formState.spendTypeId}
+                />
+              ) : null}
+
               {activePanel === "counterparty" ? (
                 <MovementDetailOptionsPanel
                   actionLabel="Nuevo contacto"
@@ -1411,6 +1434,8 @@ export function QuickMovementDialog({
                   ) : null}
                   <MovementSplitPanel
                     categories={filteredCategories}
+                    spendTypes={spendTypes}
+                    movementType={kind}
                     currencyCode={suggestionCurrencyCode}
                     lines={splitLines}
                     onChange={(lines) => {

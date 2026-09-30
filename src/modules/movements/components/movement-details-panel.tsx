@@ -18,6 +18,8 @@ type MovementDetailsPanelProps = {
   onDestinationAmountChange?: (value: string) => void;
   onOccurredAtChange: (value: string) => void;
   onOpenCategory?: () => void;
+  spendTypeLabel?: string;
+  onOpenSpendType?: () => void;
   onOpenCounterparty?: () => void;
   onOpenType?: () => void;
   occurredAt: string;
@@ -101,6 +103,8 @@ export function MovementDetailsPanel({
   onDestinationAmountChange,
   onOccurredAtChange,
   onOpenCategory,
+  spendTypeLabel,
+  onOpenSpendType,
   onOpenCounterparty,
   onOpenType,
   occurredAt,
@@ -148,6 +152,14 @@ export function MovementDetailsPanel({
             label="Categoría"
             onClick={onOpenCategory}
             value={categoryLabel}
+          />
+        ) : null}
+
+        {spendTypeLabel !== undefined && onOpenSpendType ? (
+          <MovementDetailsNavigationRow
+            label="Tipo de gasto"
+            onClick={onOpenSpendType}
+            value={spendTypeLabel}
           />
         ) : null}
 

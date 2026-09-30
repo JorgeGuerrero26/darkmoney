@@ -32,6 +32,7 @@ export type MovementFormState = {
   destinationAmount: string;
   fxRate: string;
   categoryId: string;
+  spendTypeId: string;
   counterpartyId: string;
   obligationId: string;
   subscriptionId: string;
@@ -374,6 +375,7 @@ export function createDefaultMovementFormState() {
     destinationAmount: "",
     fxRate: "",
     categoryId: "",
+    spendTypeId: "",
     counterpartyId: "",
     obligationId: "",
     subscriptionId: "",
@@ -406,6 +408,7 @@ export function buildFormStateFromMovement(movement: MovementRecord): MovementFo
     destinationAmount: movement.destinationAmount === null ? "" : String(movement.destinationAmount),
     fxRate: movement.fxRate === null || movement.fxRate === undefined ? "" : String(movement.fxRate),
     categoryId: movement.categoryId ? String(movement.categoryId) : "",
+    spendTypeId: movement.spendTypeId ? String(movement.spendTypeId) : "",
     counterpartyId: movement.counterpartyId ? String(movement.counterpartyId) : "",
     obligationId: movement.obligationId ? String(movement.obligationId) : "",
     subscriptionId: movement.subscriptionId ? String(movement.subscriptionId) : "",

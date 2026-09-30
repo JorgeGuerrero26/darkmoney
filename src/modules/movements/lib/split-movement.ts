@@ -4,6 +4,7 @@ export type MovementSplitLine = {
   id: string;
   amount: string;
   categoryId: string;
+  spendTypeId?: string;
 };
 
 export function createMovementSplitLines(initialCategoryId = ""): MovementSplitLine[] {

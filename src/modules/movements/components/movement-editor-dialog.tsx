@@ -74,6 +74,7 @@ import {
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
+import { movementSpendTypeLabel } from "../lib/movement-spend-type";
 import { MovementSplitPanel } from "./movement-split-panel";
 import {
   createMovementSplitLines,
@@ -86,6 +87,7 @@ import {
   useCreateCounterpartyMutation,
   useCreateRecurringIncomeMutation,
   useCreateSubscriptionMutation,
+  useBudgetSpendTypesQuery,
 } from "../../../services/queries/workspace-data";
 
 const movementTextInputClassName = "field-dark";
@@ -185,6 +187,7 @@ type MovementEditorPanel =
   | "type"
   | "destinationAccount"
   | "category"
+  | "spendType"
   | "counterparty"
   | "split";
 
@@ -242,6 +245,7 @@ export function MovementEditorDialog({
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
   const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
   const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
+  const spendTypes = useBudgetSpendTypesQuery(workspaceId).data ?? [];
   const isCreatingRecurrence = createSubscriptionMutation.isPending || createRecurringIncomeMutation.isPending;
   const isBusy = isSaving || isCreatingRecurrence;
 
@@ -757,6 +761,8 @@ export function MovementEditorDialog({
                           ? "Cuenta de destino"
                         : activePanel === "category"
                           ? "Categoría"
+                          : activePanel === "spendType"
+                            ? "Tipo de gasto"
                           : activePanel === "counterparty"
                             ? "Contraparte"
                             : "Dividir en categorías"}
@@ -911,6 +917,8 @@ export function MovementEditorDialog({
                       updateFormState("occurredAt", value);
                     }}
                     onOpenCategory={splitLines ? undefined : () => setActivePanel("category")}
+                    onOpenSpendType={formState.movementType === "expense" && !splitLines ? () => setActivePanel("spendType") : undefined}
+                    spendTypeLabel={formState.movementType === "expense" && !splitLines ? movementSpendTypeLabel(spendTypes, parseOptionalInteger(formState.spendTypeId), selectedCategory?.defaultSpendTypeId) : undefined}
                     onOpenCounterparty={() => setActivePanel("counterparty")}
                     onOpenType={() => setActivePanel("type")}
                     receiptRows={
@@ -1054,6 +1062,20 @@ export function MovementEditorDialog({
                   />
                 ) : null}
 
+                {activePanel === "spendType" ? (
+                  <MovementDetailOptionsPanel
+                    onChange={(value) => {
+                      updateFormState("spendTypeId", value);
+                      setActivePanel("details");
+                    }}
+                    options={[
+                      { value: "", label: selectedCategory?.defaultSpendTypeId ? "Usar tipo de la categoría" : "Sin tipo" },
+                      ...spendTypes.map((type) => ({ value: String(type.id), label: type.name })),
+                    ]}
+                    value={formState.spendTypeId}
+                  />
+                ) : null}
+
                 {activePanel === "destinationAccount" ? (
                   <MovementDetailOptionsPanel
                     onChange={(value) => {
@@ -1101,6 +1123,8 @@ export function MovementEditorDialog({
                 {activePanel === "split" && splitLines ? (
                   <MovementSplitPanel
                     categories={filteredCategories}
+                    spendTypes={spendTypes}
+                    movementType={formState.movementType}
                     currencyCode={displayCurrencyCode}
                     lines={splitLines}
                     onChange={(lines) => {

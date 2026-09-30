@@ -109,6 +109,7 @@ type CategoryRow = {
   sort_order: number;
   is_system: boolean;
   is_active: boolean;
+  default_spend_type_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -582,6 +583,7 @@ export type MovementFormInput = {
   destinationAmount: number | null;
   fxRate?: number | null;
   categoryId?: number | null;
+  spendTypeId?: number | null;
   counterpartyId?: number | null;
   obligationId?: number | null;
   subscriptionId?: number | null;
@@ -1682,7 +1684,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("categories")
       .select(
-        "id, workspace_id, name, kind, parent_id, color, icon, sort_order, is_system, is_active, created_at, updated_at",
+        "id, workspace_id, name, kind, parent_id, color, icon, sort_order, is_system, is_active, default_spend_type_id, created_at, updated_at",
       )
       .eq("workspace_id", workspace.id)
       .order("sort_order", { ascending: true })
@@ -1839,6 +1841,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       name: row.name,
       kind: row.kind,
       isActive: row.is_active,
+      defaultSpendTypeId: row.default_spend_type_id,
     }));
   const counterparties = counterpartyRows.map<CounterpartySummary>((row) => ({
     id: row.id,
@@ -1848,6 +1851,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
   }));
   const accountRowMap = new Map(accountRows.map((row) => [row.id, row]));
   const categoryNameMap = new Map(categoryRows.map((row) => [row.id, row.name]));
+  const categoryDefaultSpendTypeMap = new Map(categoryRows.map((row) => [row.id, row.default_spend_type_id]));
   const counterpartyNameMap = new Map(counterpartyRows.map((row) => [row.id, row.name]));
   const accountBalanceMap = new Map(
     accountBalanceRows
@@ -1934,6 +1938,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       category: row.category_id ? categoryNameMap.get(row.category_id) ?? "Sin categoria" : "Sin categoria",
       categoryId: row.category_id,
       spendTypeId: row.spend_type_id,
+      categoryDefaultSpendTypeId: row.category_id ? categoryDefaultSpendTypeMap.get(row.category_id) ?? null : null,
       counterparty: row.counterparty_id
         ? counterpartyNameMap.get(row.counterparty_id) ?? "Sin contraparte"
         : row.movement_type === "transfer"
@@ -4807,6 +4812,7 @@ function buildMovementMutationPayload(input: MovementFormInput, userId: string) 
     destination_amount: input.destinationAmount,
     fx_rate: input.fxRate ?? null,
     category_id: input.categoryId ?? null,
+    spend_type_id: input.movementType === "expense" ? input.spendTypeId ?? null : null,
     counterparty_id: input.counterpartyId ?? null,
     obligation_id: input.obligationId ?? null,
     subscription_id: input.subscriptionId ?? null,

@@ -3,7 +3,8 @@ import { useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { formatCurrency } from "../../../lib/formatting/money";
-import type { CategorySummary } from "../../../types/domain";
+import type { CategorySummary, MovementType } from "../../../types/domain";
+import { movementSpendTypeLabel, type MovementSpendType } from "../lib/movement-spend-type";
 import {
   createMovementSplitLine,
   getMovementSplitTotal,
@@ -13,6 +14,8 @@ import {
 
 type MovementSplitPanelProps = {
   categories: CategorySummary[];
+  spendTypes: MovementSpendType[];
+  movementType: MovementType;
   currencyCode: string;
   lines: MovementSplitLine[];
   onChange: (lines: MovementSplitLine[]) => void;
@@ -23,6 +26,8 @@ type MovementSplitPanelProps = {
 
 export function MovementSplitPanel({
   categories,
+  spendTypes,
+  movementType,
   currencyCode,
   lines,
   onChange,
@@ -101,6 +106,24 @@ export function MovementSplitPanel({
             >
               <Trash2 className="h-4 w-4" />
             </button>
+            {movementType === "expense" ? (
+              <label className="col-span-3 flex items-center justify-between gap-4 border-t border-white/10 py-2 text-xs text-storm">
+                <span>Tipo de gasto</span>
+                <select
+                  aria-label={`Tipo de gasto de la parte ${index + 1}`}
+                  className="min-w-0 max-w-[65%] appearance-none bg-transparent text-right text-sm text-ink outline-none"
+                  onChange={(event) => updateLine(line.id, { spendTypeId: event.target.value })}
+                  value={line.spendTypeId ?? ""}
+                >
+                  <option value="">
+                    {movementSpendTypeLabel(spendTypes, null, categories.find((category) => String(category.id) === line.categoryId)?.defaultSpendTypeId)}
+                  </option>
+                  {spendTypes.map((type) => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
         ))}
         <button

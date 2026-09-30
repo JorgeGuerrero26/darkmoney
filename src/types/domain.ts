@@ -148,6 +148,7 @@ export type CategorySummary = {
   name: string;
   kind: CategoryKind;
   isActive: boolean;
+  defaultSpendTypeId?: number | null;
 };
 
 export type CategoryOverview = CategorySummary & {

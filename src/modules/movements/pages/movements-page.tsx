@@ -74,6 +74,7 @@ import {
 } from "../lib/movement-form";
 import { normalizeInsightText } from "../lib/movement-insights";
 import { buildMovementDescription } from "../lib/movement-description";
+import { movementSpendTypeId } from "../lib/movement-spend-type";
 import {
   buildSplitDescription,
   buildSplitMetadata,
@@ -649,6 +650,7 @@ export function MovementsPage() {
     const sourceAccountId = parseOptionalInteger(formState.sourceAccountId);
     const destinationAccountId = parseOptionalInteger(formState.destinationAccountId);
     const categoryId = parseOptionalInteger(formState.categoryId);
+    const spendTypeId = parseOptionalInteger(formState.spendTypeId);
     const counterpartyId = parseOptionalInteger(formState.counterpartyId);
     const obligationId = parseOptionalInteger(formState.obligationId);
     const subscriptionId = parseOptionalInteger(formState.subscriptionId);
@@ -670,7 +672,7 @@ export function MovementsPage() {
     }
 
     const numericFieldError =
-      [sourceAccountId, destinationAccountId, categoryId, counterpartyId, obligationId, subscriptionId].some(
+      [sourceAccountId, destinationAccountId, categoryId, spendTypeId, counterpartyId, obligationId, subscriptionId].some(
         (value) => value !== null && !Number.isFinite(value),
       ) ||
       [sourceAmount, destinationAmount, manualFxRate].some(
@@ -765,6 +767,7 @@ export function MovementsPage() {
       destinationAmount,
       fxRate: manualFxRate ?? inferredFxRate,
       categoryId,
+      spendTypeId: movementSpendTypeId(formState.movementType, spendTypeId),
       counterpartyId,
       obligationId,
       subscriptionId,
@@ -810,6 +813,7 @@ export function MovementsPage() {
           const splitPayload: MovementFormInput = {
             ...payload,
             categoryId: Number(line.categoryId),
+            spendTypeId: movementSpendTypeId(formState.movementType, parseOptionalInteger(line.spendTypeId ?? "")),
             description: buildSplitDescription(payload.description, index, splitLines.length),
             destinationAmount: formState.movementType === "income" ? lineAmount : null,
             obligationId: index === 0 ? payload.obligationId : null,
