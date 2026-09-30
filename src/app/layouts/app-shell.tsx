@@ -54,6 +54,7 @@ import {
 import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
 import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
+import { useWorkspaceDataSync } from "../../modules/workspaces/use-workspace-data-sync";
 import {
   getQueryErrorMessage,
   useMarkAllNotificationsReadMutation,
@@ -426,6 +427,7 @@ function AppShellContent() {
     workspaces,
   } = useActiveWorkspace();
   const workspaceSnapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
+  useWorkspaceDataSync(activeWorkspace?.id, user?.id);
   const notificationsQuery = useNotificationsQuery(user?.id);
   const pendingNotificationInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);

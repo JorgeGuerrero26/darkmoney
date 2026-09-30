@@ -39,7 +39,6 @@ import { AccountsTable } from "../components/accounts-table";
 import { AccountsToolbar } from "../components/accounts-toolbar";
 import { useAccountEditor } from "../hooks/use-account-editor";
 import { useAccountFilters } from "../hooks/use-account-filters";
-import { useAccountsRealtimeSync } from "../hooks/use-accounts-realtime-sync";
 import {
   ACCOUNT_PAGE_SIZE,
   filterAccounts,
@@ -132,7 +131,6 @@ export function AccountsPage() {
     isLoading: isWorkspacesLoading,
   } = useActiveWorkspace();
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  useAccountsRealtimeSync(activeWorkspace?.id);
   const snapshot = snapshotQuery.data;
   const baseCurrencyCode =
     snapshot?.workspace.baseCurrencyCode ??

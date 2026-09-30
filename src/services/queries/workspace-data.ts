@@ -2955,16 +2955,15 @@ async function fetchCategoriesOverview(workspaceId: number) {
 async function invalidateWorkspaceSnapshot(
   queryClient: ReturnType<typeof useQueryClient>,
   workspaceId: number,
-  userId?: string,
+  _userId?: string,
 ) {
   await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ["workspace-snapshot", workspaceId, userId],
-    }),
     queryClient.invalidateQueries({
       queryKey: ["workspace-snapshot", workspaceId],
       exact: false,
     }),
+    queryClient.invalidateQueries({ queryKey: ["categories-overview", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["counterparties-overview", workspaceId] }),
   ]);
 }
 

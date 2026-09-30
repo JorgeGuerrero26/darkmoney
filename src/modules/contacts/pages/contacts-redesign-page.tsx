@@ -55,14 +55,16 @@ export function ContactsPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<CounterpartyOverview | "new" | null>(null);
-  const [detail, setDetail] = useState<CounterpartyOverview | null>(null);
-  const [analytics, setAnalytics] = useState<CounterpartyOverview | null>(null);
+  const [detailSelection, setDetail] = useState<CounterpartyOverview | null>(null);
+  const [analyticsSelection, setAnalytics] = useState<CounterpartyOverview | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CounterpartyOverview | null>(null);
   const [bulkDelete, setBulkDelete] = useState(false);
   const [bulkArchive, setBulkArchive] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const all = overview.data ?? [];
+  const detail = all.find((item) => item.id === detailSelection?.id) ?? null;
+  const analytics = all.find((item) => item.id === analyticsSelection?.id) ?? null;
   const links = useMemo(() => {
     const map = new Map<number, { subscriptions: number; income: number }>();
     for (const subscription of snapshot.data?.subscriptions ?? []) if (subscription.vendorPartyId) { const current = map.get(subscription.vendorPartyId) ?? { subscriptions: 0, income: 0 }; current.subscriptions++; map.set(subscription.vendorPartyId, current); }

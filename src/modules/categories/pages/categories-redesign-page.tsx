@@ -62,12 +62,14 @@ export function CategoriesPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<CategoryOverview | "new" | null>(null);
-  const [detail, setDetail] = useState<CategoryOverview | null>(null);
-  const [analytics, setAnalytics] = useState<CategoryOverview | null>(null);
+  const [detailSelection, setDetail] = useState<CategoryOverview | null>(null);
+  const [analyticsSelection, setAnalytics] = useState<CategoryOverview | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CategoryOverview | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const all = overview.data ?? [];
+  const detail = all.find((item) => item.id === detailSelection?.id) ?? null;
+  const analytics = all.find((item) => item.id === analyticsSelection?.id) ?? null;
   const visible = useMemo(() => all.filter((item) => {
     if (hiddenIds.has(item.id) || (!showInactive && !item.isActive)) return false;
     if (kind === "pinned" && !item.isPinned) return false;
