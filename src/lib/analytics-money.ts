@@ -23,10 +23,12 @@ export function currencyTotals(items: CurrencyAmount[], baseCurrencyCode: string
 
 export function movementAnalyticsAmount(item: MovementRecord, baseCurrencyCode: string): CurrencyAmount {
   const income = movementActsAsIncome(item);
+  const useDestination = income || (item.movementType === "transfer" && !item.sourceAmount);
+  const converted = useDestination ? item.destinationAmountInBaseCurrency : item.sourceAmountInBaseCurrency;
   return {
-    amount: Math.abs((income ? item.destinationAmount : item.sourceAmount) ?? 0),
-    currencyCode: (income ? item.destinationCurrencyCode : item.sourceCurrencyCode) ?? baseCurrencyCode,
-    amountInBaseCurrency: income ? item.destinationAmountInBaseCurrency : item.sourceAmountInBaseCurrency,
+    amount: Math.abs((useDestination ? item.destinationAmount : item.sourceAmount) ?? 0),
+    currencyCode: (useDestination ? item.destinationCurrencyCode : item.sourceCurrencyCode) ?? baseCurrencyCode,
+    amountInBaseCurrency: converted == null ? converted : Math.abs(converted),
   };
 }
 

@@ -28,6 +28,8 @@ assert.deepEqual(money.currencyTotals([{ amount: 10, currencyCode: "USD" }, { am
 assert.equal(money.comparableAmount({ amount: 10, currencyCode: "USD", amountInBaseCurrency: null }, "PEN"), null);
 assert.deepEqual(money.currencyTotals([{ amount: 10, currencyCode: "USD", amountInBaseCurrency: 38 }, { amount: 50, currencyCode: "PEN" }], "PEN"), [{ amount: 88, currencyCode: "PEN" }]);
 assert.equal(money.comparableAmount({ amount: 0, currencyCode: "USD", amountInBaseCurrency: 0 }, "PEN"), 0);
+assert.equal(money.movementAnalyticsAmount({ ...incoming, destinationAmountInBaseCurrency: -50 }, "PEN").amountInBaseCurrency, 50);
+assert.equal(money.movementAnalyticsAmount({ ...incoming, movementType: "transfer", sourceAmount: 0 }, "PEN").amount, 50);
 assert.equal(money.analyticsMonthKey("2026-10-01T04:59:59Z"), "2026-09");
 assert.equal(money.analyticsMonthKey("2026-10-01T05:00:00Z"), "2026-10");
 assert.equal(money.analyticsMonthKey("2026-10-01"), "2026-10");
@@ -70,6 +72,8 @@ assert.equal(accounts.toAccountInput({ ...card, type: "cash" }).creditLimit, nul
 const servicePath = resolve(root, "src/services/queries/workspace-data.ts");
 const serviceText = readFileSync(servicePath, "utf8");
 const serviceAst = ts.createSourceFile(servicePath, serviceText, ts.ScriptTarget.Latest, true);
+const overviewQuery = serviceAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "fetchCounterpartiesOverview").getText(serviceAst);
+assert.match(overviewQuery, /\.select\("id, workspace_id, name, type, phone, email, document_number, notes, is_archived, is_pinned"\)/);
 const selectedHooks = serviceAst.statements.filter((node) => ts.isFunctionDeclaration(node) && ["useCreateAccountMutation", "useUpdateAccountMutation"].includes(node.name?.text));
 const hookJs = ts.transpileModule(selectedHooks.map((node) => node.getText(serviceAst).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
 const payloads = [];

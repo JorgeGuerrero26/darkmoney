@@ -2765,7 +2765,7 @@ async function fetchCounterpartiesOverview(workspaceId: number) {
   const [counterpartiesResult, rolesResult, summaryResult] = await Promise.all([
     client
       .from("counterparties")
-      .select("id, workspace_id, name, type, phone, email, document_number, notes, is_archived")
+      .select("id, workspace_id, name, type, phone, email, document_number, notes, is_archived, is_pinned")
       .eq("workspace_id", workspaceId)
       .order("name", { ascending: true }),
     client
