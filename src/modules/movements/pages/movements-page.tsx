@@ -630,7 +630,7 @@ export function MovementsPage() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null, linkedRecurringIncomeId: number | null) {
     event.preventDefault();
 
     if (!activeWorkspace || !user || !snapshot) {
@@ -764,6 +764,9 @@ export function MovementsPage() {
       subscriptionId,
       metadata: {
         ...metadataObject,
+        ...(editorMode === "create" && linkedRecurringIncomeId !== null
+          ? { recurring_income_id: linkedRecurringIncomeId }
+          : {}),
         riskAi: editorIntelligence.risk?.source === "deepseek" ? editorIntelligence.risk : null,
         budgetAi: editorIntelligence.budget?.source === "deepseek" ? editorIntelligence.budget : null,
       },
@@ -806,7 +809,10 @@ export function MovementsPage() {
             obligationId: index === 0 ? payload.obligationId : null,
             sourceAmount: formState.movementType === "expense" ? lineAmount : null,
             subscriptionId: index === 0 ? payload.subscriptionId : null,
-            metadata: buildSplitMetadata(payload.metadata, splitGroupId, index, splitLines.length),
+            metadata: {
+              ...buildSplitMetadata(payload.metadata, splitGroupId, index, splitLines.length),
+              ...(index > 0 && linkedRecurringIncomeId !== null ? { recurring_income_id: null } : {}),
+            },
           };
 
           if (editorMode === "edit" && index === 0) {

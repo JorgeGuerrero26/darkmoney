@@ -471,7 +471,7 @@ export function QuickMovementDialog({
 
   async function applyRecurringSuggestion() {
     const suggestion = insights.recurring;
-    if (!suggestion || computedAmount <= 0) return;
+    if (!suggestion || computedAmount <= 0 || isSaving || linkedSubscriptionId || linkedRecurringIncomeId) return;
     const { frequency, intervalCount } = recurringFrequencyFields(suggestion.frequency);
     const startDate = formState.occurredAt.slice(0, 10);
     const parsedDate = new Date(`${startDate}T12:00:00`);
@@ -648,6 +648,7 @@ export function QuickMovementDialog({
   }
 
   function requestClose() {
+    if (isSaving) return;
     if (isDirty) {
       setShowUnsavedDialog(true);
     } else {
@@ -662,7 +663,7 @@ export function QuickMovementDialog({
     }
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [isContactDialogOpen, isDirty, onClose, showUnsavedDialog]);
+  }, [isContactDialogOpen, isDirty, isSaving, onClose, showUnsavedDialog]);
 
   async function uploadReceiptForMovement(movementId: number, file: File) {
     const preparedReceipt = await prepareReceiptUpload({
@@ -712,6 +713,7 @@ export function QuickMovementDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
     setErrorMessage("");
 
     const occurredAt = new Date(formState.occurredAt);
@@ -1352,7 +1354,8 @@ export function QuickMovementDialog({
                         ) : null}
                         {insights.recurring && !linkedSubscriptionId && !linkedRecurringIncomeId ? (
                           <MovementInsightRow
-                            actionLabel="Crear"
+                            actionDisabled={isSaving}
+                            actionLabel={createSubscriptionMutation.isPending || createRecurringIncomeMutation.isPending ? "Creando…" : "Crear"}
                             description={insights.recurring.reasons[0] ?? "Coincide con un patrón que ya aparece en tus movimientos."}
                             kind="recurring"
                             label="Posible recurrencia"
@@ -1362,7 +1365,7 @@ export function QuickMovementDialog({
                         ) : null}
                         {linkedSubscriptionId || linkedRecurringIncomeId ? (
                           <MovementInsightRow
-                            description="Se asociará cuando guardes este movimiento."
+                            description="La recurrencia ya está guardada. Se asociará a este movimiento al guardarlo."
                             kind="recurring"
                             label="Recurrencia creada"
                             title={linkedSubscriptionId ? "Suscripción vinculada" : "Ingreso fijo vinculado"}

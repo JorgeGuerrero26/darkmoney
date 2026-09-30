@@ -227,6 +227,7 @@ export function MovementSuggestionRow({
 }
 
 export function MovementInsightRow({
+  actionDisabled,
   actionLabel,
   description,
   kind,
@@ -234,6 +235,7 @@ export function MovementInsightRow({
   onAction,
   title,
 }: {
+  actionDisabled?: boolean;
   actionLabel?: string;
   description: string;
   kind: "budget" | "recurring" | "risk";
@@ -254,7 +256,8 @@ export function MovementInsightRow({
       </div>
       {actionLabel && onAction ? (
         <button
-          className="shrink-0 text-sm font-semibold text-ink underline-offset-4 hover:underline"
+          className="shrink-0 text-sm font-semibold text-ink underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-50"
+          disabled={actionDisabled}
           onClick={onAction}
           type="button"
         >

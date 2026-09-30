@@ -73,7 +73,7 @@ import {
 } from "./movement-details-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
-import { recurringFrequencyLabel } from "../lib/movement-insights";
+import { recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
 import { MovementSplitPanel } from "./movement-split-panel";
 import {
   createMovementSplitLines,
@@ -84,6 +84,8 @@ import {
   getQueryErrorMessage,
   useCreateCategoryMutation,
   useCreateCounterpartyMutation,
+  useCreateRecurringIncomeMutation,
+  useCreateSubscriptionMutation,
 } from "../../../services/queries/workspace-data";
 
 const movementTextInputClassName = "field-dark";
@@ -147,7 +149,7 @@ export type MovementEditorDialogProps = {
   isSavingTemplate: boolean;
   handleDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
   handleUploadReceipt: (file: File) => Promise<void>;
-  handleSubmit: (event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null) => Promise<void>;
+  handleSubmit: (event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null, linkedRecurringIncomeId: number | null) => Promise<void>;
   isCreateMode: boolean;
   isSaving: boolean;
   isUploadingReceipt: boolean;
@@ -232,20 +234,26 @@ export function MovementEditorDialog({
   const editorRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
   useFocusTrap(editorRef, !isDeleteConfirmOpen);
+  const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
+  const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
+  const [linkedSubscriptionId, setLinkedSubscriptionId] = useState<number | null>(null);
+  const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
+  const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
+  const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
+  const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
+  const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
+  const isCreatingRecurrence = createSubscriptionMutation.isPending || createRecurringIncomeMutation.isPending;
+  const isBusy = isSaving || isCreatingRecurrence;
 
   useEffect(() => () => openerRef.current?.focus(), []);
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape" || event.defaultPrevented || isDeleteConfirmOpen) return;
+      if (event.key !== "Escape" || event.defaultPrevented || isDeleteConfirmOpen || isBusy) return;
       closeEditor();
     }
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [closeEditor, isDeleteConfirmOpen]);
-  const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
-  const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
-  const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
-  const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
+  }, [closeEditor, isBusy, isDeleteConfirmOpen]);
 
   useEffect(() => {
     if (invalidFields.size === 0) return;
@@ -522,10 +530,82 @@ export function MovementEditorDialog({
     }
   }
 
+  async function applyRecurringSuggestion() {
+    const suggestion = insights.recurring;
+    if (
+      !isCreateMode || !suggestion || displayAmount <= 0 ||
+      linkedSubscriptionId || linkedRecurringIncomeId ||
+      createSubscriptionMutation.isPending || createRecurringIncomeMutation.isPending
+    ) return;
+    const { frequency, intervalCount } = recurringFrequencyFields(suggestion.frequency);
+    const startDate = formState.occurredAt.slice(0, 10);
+    const parsedDate = new Date(`${startDate}T12:00:00`);
+    const dayOfMonth = Math.max(1, Math.min(31, Number(startDate.slice(8, 10)) || 1));
+    const dayOfWeek = Number.isNaN(parsedDate.getTime()) ? null : parsedDate.getDay();
+    onErrorMessage("");
+
+    try {
+      if (suggestion.type === "subscription") {
+        const result = await createSubscriptionMutation.mutateAsync({
+          workspaceId,
+          userId,
+          name: suggestion.name,
+          vendorPartyId: selectedCounterparty?.id ?? null,
+          accountId: selectedSourceAccount?.id ?? null,
+          categoryId: selectedCategory?.id ?? null,
+          currencyCode: displayCurrencyCode,
+          amount: displayAmount,
+          frequency,
+          intervalCount,
+          dayOfMonth: ["monthly", "quarterly", "yearly"].includes(frequency) ? dayOfMonth : null,
+          dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
+          startDate,
+          nextDueDate: startDate,
+          endDate: null,
+          status: "active",
+          autoCreateMovement: false,
+          remindDaysBefore: 3,
+          description: formState.description.trim() || null,
+          notes: `Creada desde sugerencia recurrente (${Math.round(suggestion.confidence * 100)}%).`,
+        });
+        setLinkedSubscriptionId(result.id);
+        updateFormState("subscriptionId", String(result.id));
+      } else {
+        const result = await createRecurringIncomeMutation.mutateAsync({
+          workspaceId,
+          userId,
+          name: suggestion.name,
+          payerPartyId: selectedCounterparty?.id ?? null,
+          accountId: selectedDestinationAccount?.id ?? null,
+          categoryId: selectedCategory?.id ?? null,
+          currencyCode: displayCurrencyCode,
+          amount: displayAmount,
+          frequency,
+          intervalCount,
+          dayOfMonth: ["monthly", "quarterly", "yearly"].includes(frequency) ? dayOfMonth : null,
+          dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
+          startDate,
+          nextExpectedDate: startDate,
+          endDate: null,
+          status: "active",
+          remindDaysBefore: 3,
+          description: formState.description.trim() || null,
+          notes: `Creado desde sugerencia recurrente (${Math.round(suggestion.confidence * 100)}%).`,
+        });
+        setLinkedRecurringIncomeId(result.id);
+        onDirty();
+      }
+    } catch (error) {
+      onErrorMessage(getQueryErrorMessage(error, "No pudimos crear la recurrencia."));
+    }
+  }
+
   useEffect(() => {
     setIsDeleteConfirmOpen(false);
     setActivePanel("main");
     setSplitLines(null);
+    setLinkedSubscriptionId(null);
+    setLinkedRecurringIncomeId(null);
   }, [isCreateMode, selectedMovement?.id]);
 
   const movementTypePickerOptions = useMemo(
@@ -644,7 +724,7 @@ export function MovementEditorDialog({
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-[80] isolate bg-black/75"
       onMouseDown={(e) => { (e.currentTarget as HTMLDivElement).dataset.pressStart = String(Date.now()); }}
-      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0) closeEditor(); }}
+      onMouseUp={(e) => { const t0 = Number((e.currentTarget as HTMLDivElement).dataset.pressStart || "0"); delete (e.currentTarget as HTMLDivElement).dataset.pressStart; if (t0 && !isBusy) closeEditor(); }}
       role="dialog"
     >
       <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
@@ -690,6 +770,7 @@ export function MovementEditorDialog({
               <button
                 aria-label="Cerrar editor de movimiento"
                 className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
+                disabled={isBusy}
                 onClick={closeEditor}
                 type="button"
               >
@@ -700,7 +781,10 @@ export function MovementEditorDialog({
             <form
               className="mt-6 flex flex-1 flex-col"
               noValidate
-              onSubmit={(event) => void handleSubmit(event, splitLines)}
+              onSubmit={(event) => {
+                if (isBusy) { event.preventDefault(); return; }
+                void handleSubmit(event, splitLines, linkedRecurringIncomeId);
+              }}
             >
               {errorMessage ? (
                 <FormFeedbackBanner
@@ -890,12 +974,23 @@ export function MovementEditorDialog({
                             value={suggestions.account.accountName}
                           />
                         ) : null}
-                        {insights.recurring ? (
+                        {isCreateMode && insights.recurring && !linkedSubscriptionId && !linkedRecurringIncomeId ? (
                           <MovementInsightRow
+                            actionDisabled={isBusy}
+                            actionLabel={isCreatingRecurrence ? "Creando…" : "Crear"}
                             description={insights.recurring.reasons[0] ?? "Coincide con un patrón que ya aparece en tus movimientos."}
                             kind="recurring"
                             label="Posible recurrencia"
+                            onAction={() => void applyRecurringSuggestion()}
                             title={`${insights.recurring.name} · ${recurringFrequencyLabel(insights.recurring.frequency)}`}
+                          />
+                        ) : null}
+                        {linkedSubscriptionId || linkedRecurringIncomeId ? (
+                          <MovementInsightRow
+                            description="La recurrencia ya está guardada. Se asociará a este movimiento al guardarlo."
+                            kind="recurring"
+                            label="Recurrencia creada"
+                            title={linkedSubscriptionId ? "Suscripción vinculada" : "Ingreso fijo vinculado"}
                           />
                         ) : null}
                         {insights.risk ? (
@@ -1584,7 +1679,7 @@ export function MovementEditorDialog({
                   ) : null}
                   <Button
                     className={isCreateMode ? "w-full justify-center" : "min-w-[155px] justify-center"}
-                    disabled={isSaving}
+                    disabled={isBusy}
                     type="submit"
                   >
                     {isSaving ? (
