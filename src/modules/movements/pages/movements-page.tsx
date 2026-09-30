@@ -73,6 +73,7 @@ import {
   parseOptionalNumber,
 } from "../lib/movement-form";
 import { normalizeInsightText } from "../lib/movement-insights";
+import { buildMovementDescription } from "../lib/movement-description";
 import {
   buildSplitDescription,
   buildSplitMetadata,
@@ -643,7 +644,6 @@ export function MovementsPage() {
     const movErrors: string[] = [];
     const occurredAt = new Date(formState.occurredAt);
 
-    if (!formState.description.trim()) movErrors.push("description");
     if (!formState.occurredAt || Number.isNaN(occurredAt.getTime())) movErrors.push("occurredAt");
 
     const sourceAccountId = parseOptionalInteger(formState.sourceAccountId);
@@ -751,7 +751,13 @@ export function MovementsPage() {
       movementType: formState.movementType,
       status: formState.status,
       occurredAt: occurredAt.toISOString(),
-      description: formState.description,
+      description: buildMovementDescription({
+        description: formState.description,
+        movementType: formState.movementType,
+        categoryName: snapshot.catalogs.categories.find((category) => category.id === categoryId)?.name,
+        counterpartyName: snapshot.catalogs.counterparties.find((counterparty) => counterparty.id === counterpartyId)?.name,
+        accountName: (incomeLikeMovementTypes.has(formState.movementType) ? destinationAccount : sourceAccount)?.name,
+      }),
       notes: formState.notes,
       sourceAccountId,
       sourceAmount,
@@ -779,7 +785,7 @@ export function MovementsPage() {
       void persistLearningFeedbackMutation.mutateAsync({
         movementId,
         feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
-        normalizedDescription: normalizeInsightText(formState.description) || null,
+        normalizedDescription: normalizeInsightText(payload.description) || null,
         previousCategoryId,
         acceptedCategoryId: categoryId,
         confidence: categoryFeedbackIntent?.confidence ?? null,

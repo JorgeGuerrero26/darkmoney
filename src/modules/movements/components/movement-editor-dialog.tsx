@@ -878,7 +878,7 @@ export function MovementEditorDialog({
                     description={formState.description}
                     destinationAmount={formState.destinationAmount}
                     destinationCurrencyCode={selectedDestinationAccount?.currencyCode}
-                    helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
+                    helperText="Si dejas la descripción vacía, se genera con la categoría, la contraparte y la cuenta."
                     invalidFields={invalidFields}
                     isTransfer={formState.movementType === "transfer"}
                     navigationRows={

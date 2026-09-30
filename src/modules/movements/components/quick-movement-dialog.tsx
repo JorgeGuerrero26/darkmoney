@@ -35,6 +35,7 @@ import { MovementSplitPanel } from "./movement-split-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
 import { normalizeInsightText, recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
+import { buildMovementDescription } from "../lib/movement-description";
 import {
   buildSplitDescription,
   buildSplitMetadata,
@@ -43,7 +44,6 @@ import {
   type MovementSplitLine,
 } from "../lib/split-movement";
 import type {
-  AccountSummary,
   CategorySummary,
   CounterpartySummary,
   MovementStatus,
@@ -249,41 +249,6 @@ function filterQuickCategories(
       return category.kind === "income" || category.kind === "both";
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
-}
-
-function buildQuickMovementDescription(
-  kind: QuickMovementKind,
-  account: AccountSummary | null,
-  sourceAccount: AccountSummary | null,
-  destinationAccount: AccountSummary | null,
-  category: CategorySummary | null,
-  counterparty: CounterpartySummary | null,
-) {
-  if (kind === "transfer") {
-    if (sourceAccount && destinationAccount) {
-      return `Transferencia ${sourceAccount.name} -> ${destinationAccount.name}`;
-    }
-
-    return "Transferencia interna";
-  }
-
-  if (category?.name && counterparty?.name) {
-    return `${category.name} · ${counterparty.name}`;
-  }
-
-  if (category?.name) {
-    return category.name;
-  }
-
-  if (counterparty?.name) {
-    return `${kind === "expense" ? "Pago" : "Ingreso"} · ${counterparty.name}`;
-  }
-
-  if (account?.name) {
-    return `${kind === "expense" ? "Gasto" : "Ingreso"} en ${account.name}`;
-  }
-
-  return kind === "expense" ? "Gasto rapido" : "Ingreso rapido";
 }
 
 function QuickField({ children, errorKey, hint, invalidFields, label }: QuickFieldProps) {
@@ -741,16 +706,13 @@ export function QuickMovementDialog({
           return;
         }
 
-        const description =
-          formState.description.trim() ||
-          buildQuickMovementDescription(
-            kind,
-            selectedAccount,
-            null,
-            null,
-            selectedCategory,
-            selectedCounterparty,
-          );
+        const description = buildMovementDescription({
+          description: formState.description,
+          movementType: kind,
+          categoryName: selectedCategory?.name,
+          counterpartyName: selectedCounterparty?.name,
+          accountName: selectedAccount?.name,
+        });
 
         if (splitLines && (kind === "expense" || kind === "income")) {
           const splitError = validateMovementSplit(splitLines, amount ?? 0);
@@ -908,16 +870,11 @@ export function QuickMovementDialog({
         return;
       }
 
-      const description =
-        formState.description.trim() ||
-        buildQuickMovementDescription(
-          kind,
-          null,
-          selectedSourceAccount,
-          selectedDestinationAccount,
-          null,
-          null,
-        );
+      const description = buildMovementDescription({
+        description: formState.description,
+        movementType: kind,
+        accountName: selectedSourceAccount?.name,
+      });
 
       const createdMovementId = await createMovementMutation.mutateAsync({
         categoryId: null,
@@ -1260,7 +1217,7 @@ export function QuickMovementDialog({
                   <div className="mt-5"><ResourceEditorDestination onClick={() => setActivePanel("details")} summary="Categoría, contraparte, fecha y comprobante" /></div>
 
                   <p className="mt-4 text-xs leading-5 text-storm/70">
-                    Con el monto y la cuenta ya puedes guardar. Si dejas la descripción vacía, se genera con la categoría y la fecha.
+                    Con el monto y la cuenta ya puedes guardar. Si dejas la descripción vacía, se genera con la categoría, la contraparte y la cuenta.
                   </p>
                 </>
               )}
@@ -1279,7 +1236,7 @@ export function QuickMovementDialog({
                     description={formState.description}
                     destinationAmount={formState.destinationAmount}
                     destinationCurrencyCode={selectedDestinationAccount?.currencyCode}
-                    helperText="Si dejas la descripción vacía, se genera automáticamente con la categoría y la fecha."
+                    helperText="Si dejas la descripción vacía, se genera con la categoría, la contraparte y la cuenta."
                     invalidFields={invalidFields}
                     isTransfer={isTransfer}
                     navigationRows={!isTransfer ? (
