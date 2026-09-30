@@ -34,7 +34,8 @@ import {
 import { MovementSplitPanel } from "./movement-split-panel";
 import { useMovementSuggestions } from "../hooks/use-movement-suggestions";
 import { useMovementInsights } from "../hooks/use-movement-insights";
-import { normalizeInsightText, recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
+import { normalizeAnalyticsText } from "@darkmoney/shared/movement-features";
+import { recurringFrequencyFields, recurringFrequencyLabel } from "../lib/movement-insights";
 import { buildMovementDescription } from "../lib/movement-description";
 import { movementSpendTypeId, movementSpendTypeLabel } from "../lib/movement-spend-type";
 import {
@@ -820,7 +821,7 @@ export function QuickMovementDialog({
           void persistLearningFeedbackMutation.mutateAsync({
             movementId: createdMovementId,
             feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
-            normalizedDescription: normalizeInsightText(description) || null,
+            normalizedDescription: normalizeAnalyticsText(description) || null,
             previousCategoryId: null,
             acceptedCategoryId: categoryId,
             confidence: categoryFeedbackIntent?.confidence ?? null,
@@ -1361,6 +1362,11 @@ export function QuickMovementDialog({
                             label="Presupuesto"
                             title={insights.budget.title}
                           />
+                        ) : null}
+                        {suggestions.learningUnavailable ? (
+                          <p role="status" className="border-t border-white/10 px-4 py-3 text-xs text-storm">
+                            No pudimos consultar tus correcciones anteriores. Las sugerencias del historial siguen disponibles.
+                          </p>
                         ) : null}
                         {suggestions.aiUnavailable || insights.aiUnavailable ? (
                           <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4 py-2">

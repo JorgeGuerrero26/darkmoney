@@ -72,7 +72,7 @@ import {
   parseOptionalInteger,
   parseOptionalNumber,
 } from "../lib/movement-form";
-import { normalizeInsightText } from "../lib/movement-insights";
+import { normalizeAnalyticsText } from "@darkmoney/shared/movement-features";
 import { buildMovementDescription } from "../lib/movement-description";
 import { movementSpendTypeId } from "../lib/movement-spend-type";
 import {
@@ -800,7 +800,7 @@ export function MovementsPage() {
       void persistLearningFeedbackMutation.mutateAsync({
         movementId,
         feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
-        normalizedDescription: normalizeInsightText(payload.description) || null,
+        normalizedDescription: normalizeAnalyticsText(payload.description) || null,
         previousCategoryId,
         acceptedCategoryId: categoryId,
         confidence: categoryFeedbackIntent?.confidence ?? null,

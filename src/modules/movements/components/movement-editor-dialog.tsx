@@ -1019,6 +1019,11 @@ export function MovementEditorDialog({
                             title={insights.budget.title}
                           />
                         ) : null}
+                        {suggestions.learningUnavailable ? (
+                          <p role="status" className="border-t border-white/10 px-4 py-3 text-xs text-storm">
+                            No pudimos consultar tus correcciones anteriores. Las sugerencias del historial siguen disponibles.
+                          </p>
+                        ) : null}
                         {suggestions.aiUnavailable || insights.aiUnavailable ? (
                           <div className="flex min-h-[54px] items-center gap-3 border-t border-white/10 px-4 py-2">
                             <LoaderCircle className="h-4 w-4 shrink-0 text-storm" />

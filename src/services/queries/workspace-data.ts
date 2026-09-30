@@ -5080,6 +5080,7 @@ async function resolveNextObligationInstallmentNo(
 }
 
 export function usePersistLearningFeedbackMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: PersistLearningFeedbackInput) => {
       if (!workspaceId) return { persisted: false };
@@ -5098,6 +5099,9 @@ export function usePersistLearningFeedbackMutation(workspaceId?: number, userId?
       });
       if (error && !isMissingRelationError(error, "movement_learning_feedback")) throw error;
       return { persisted: !error };
+    },
+    onSuccess: async () => {
+      if (workspaceId) await queryClient.invalidateQueries({ queryKey: ["movement-learning-feedback", workspaceId] });
     },
   });
 }

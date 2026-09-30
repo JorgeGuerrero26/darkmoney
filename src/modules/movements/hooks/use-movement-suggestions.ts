@@ -22,10 +22,13 @@ import {
   suggestDescriptionCleanupLocally,
 } from "../lib/movement-suggestions";
 import type { AccountSuggestion } from "../lib/movement-suggestions";
+import { LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD } from "../lib/local-category-suggestion";
+import { useMovementLearningQuery } from "../../../services/queries/movement-learning";
 
 type MovementSuggestions = {
   account: AccountSuggestion | null;
   aiUnavailable: boolean;
+  learningUnavailable: boolean;
   category: CategorySuggestion | null;
   counterparty: CounterpartySuggestion | null;
   description: DescriptionSuggestion | null;
@@ -57,6 +60,7 @@ export function useMovementSuggestions(input: {
   movements: MovementRecord[];
   editingMovementId?: number;
 }): MovementSuggestions {
+  const learningQuery = useMovementLearningQuery(input.workspaceId, input.enabled);
   const localAccount = useMemo(
     () =>
       suggestAccountLocally({
@@ -86,10 +90,18 @@ export function useMovementSuggestions(input: {
             categories: input.categories,
             movements: input.movements,
             excludedMovementId: input.editingMovementId,
+            accountId: input.accountId,
+            amount: input.amount,
+            occurredAt: input.occurredAt,
+            learningFeedback: learningQuery.data,
           })
         : null,
     [
       input.categories,
+      input.accountId,
+      input.amount,
+      input.occurredAt,
+      learningQuery.data,
       input.categoryId,
       input.counterpartyId,
       input.description,
@@ -143,6 +155,12 @@ export function useMovementSuggestions(input: {
       input.workspaceId,
     ],
   );
+  const categoryRequestKey = JSON.stringify({
+    requestKey, accountId: input.accountId, occurredOn: input.occurredAt.slice(0, 10),
+    categories: input.categories.map(({ id, name, kind, isActive }) => ({ id, name, kind, isActive })),
+    localCategory,
+  });
+  const [resolvedCategoryKey, setResolvedCategoryKey] = useState("");
 
   useEffect(() => {
     const description = input.description.trim();
@@ -162,11 +180,11 @@ export function useMovementSuggestions(input: {
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      const categoryKey = `category:${requestKey}`;
+      const categoryKey = `category:${categoryRequestKey}`;
       const counterpartyKey = `counterparty:${requestKey}`;
       const descriptionKey = `description:${requestKey}`;
       const categoryPromise =
-        input.categoryId === null && (!localCategory || localCategory.confidence < 0.6)
+        input.categoryId === null && (!localCategory || localCategory.confidence < LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD)
           ? categoryCache.has(categoryKey)
             ? Promise.resolve(categoryCache.get(categoryKey) ?? null)
             : requestCategorySuggestion({
@@ -224,6 +242,7 @@ export function useMovementSuggestions(input: {
       setAiUnavailable(false);
       void Promise.allSettled([categoryPromise, counterpartyPromise, descriptionPromise]).then((results) => {
         if (cancelled) return;
+        setResolvedCategoryKey(categoryRequestKey);
         setRemote({
           category: results[0].status === "fulfilled" ? results[0].value : null,
           counterparty: results[1].status === "fulfilled" ? results[1].value : null,
@@ -255,12 +274,18 @@ export function useMovementSuggestions(input: {
     localCounterparty,
     localDescription,
     requestKey,
+    categoryRequestKey,
   ]);
 
   return {
     account: localAccount,
     aiUnavailable,
-    category: input.categoryId === null ? remote.category ?? localCategory : null,
+    learningUnavailable: learningQuery.isError,
+    category: input.categoryId === null
+      ? localCategory && localCategory.confidence >= LOCAL_CATEGORY_AI_CONFIDENCE_THRESHOLD
+        ? localCategory
+        : resolvedCategoryKey === categoryRequestKey ? remote.category ?? localCategory : localCategory
+      : null,
     counterparty: input.counterpartyId === null ? remote.counterparty ?? localCounterparty : null,
     description: remote.description ?? localDescription,
     isLoading,

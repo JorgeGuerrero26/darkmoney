@@ -1,16 +1,14 @@
 import type {
   AccountSummary,
-  CategorySummary,
   CounterpartySummary,
   MovementRecord,
-  MovementType,
 } from "../../../types/domain";
 import type {
-  CategorySuggestion,
   CounterpartySuggestion,
   DescriptionSuggestion,
 } from "../../../services/queries/movement-ai";
 import { movementActsAsIncome } from "./movement-form";
+export { suggestCategoryLocally } from "./local-category-suggestion";
 
 export type AccountSuggestion = {
   accountId: number;
@@ -27,90 +25,6 @@ function normalizeText(value: string) {
     .replace(/[^a-z0-9ñ\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function tokens(value: string) {
-  return new Set(normalizeText(value).split(" ").filter((token) => token.length >= 3));
-}
-
-function similarity(left: string, right: string) {
-  const leftTokens = tokens(left);
-  const rightTokens = tokens(right);
-  const union = new Set([...leftTokens, ...rightTokens]);
-  if (union.size === 0) return 0;
-  let matches = 0;
-  union.forEach((token) => {
-    if (leftTokens.has(token) && rightTokens.has(token)) matches += 1;
-  });
-  return matches / union.size;
-}
-
-function isCompatibleCategory(category: CategorySummary, movementType: MovementType) {
-  if (category.kind === "both") return true;
-  if (movementType === "income") return category.kind === "income";
-  return category.kind === "expense";
-}
-
-export function suggestCategoryLocally(input: {
-  description: string;
-  counterpartyId: number | null;
-  movementType: MovementType;
-  categories: CategorySummary[];
-  movements: MovementRecord[];
-  excludedMovementId?: number;
-}): CategorySuggestion | null {
-  const normalizedDescription = normalizeText(input.description);
-  if (normalizedDescription.length < 3 || input.movementType === "transfer") return null;
-
-  const categories = new Map(
-    input.categories
-      .filter((category) => category.isActive && isCompatibleCategory(category, input.movementType))
-      .map((category) => [category.id, category]),
-  );
-  const scores = new Map<number, { score: number; exact: boolean; sameCounterparty: boolean }>();
-
-  input.movements.forEach((movement) => {
-    if (
-      movement.id === input.excludedMovementId ||
-      movement.categoryId == null ||
-      !categories.has(movement.categoryId) ||
-      movement.movementType === "transfer" ||
-      movement.status === "voided" ||
-      movementActsAsIncome(movement) !== (input.movementType === "income")
-    ) {
-      return;
-    }
-    const exact = normalizeText(movement.description) === normalizedDescription;
-    const sameCounterparty =
-      input.counterpartyId !== null && movement.counterpartyId === input.counterpartyId;
-    const textScore = similarity(input.description, movement.description);
-    const score = exact ? 0.95 : sameCounterparty ? 0.78 : textScore >= 0.5 ? 0.58 + textScore * 0.28 : 0;
-    if (!score) return;
-    const previous = scores.get(movement.categoryId);
-    if (!previous || score > previous.score) {
-      scores.set(movement.categoryId, { score, exact, sameCounterparty });
-    }
-  });
-
-  const best = [...scores.entries()].sort((left, right) => right[1].score - left[1].score)[0];
-  if (!best) return null;
-  const category = categories.get(best[0]);
-  if (!category) return null;
-  return {
-    type: "existing_category",
-    categoryId: category.id,
-    categoryName: category.name,
-    newCategoryName: null,
-    confidence: best[1].score,
-    reasons: [
-      best[1].exact
-        ? "la usaste antes con esta descripción"
-        : best[1].sameCounterparty
-          ? "la usaste antes con esta contraparte"
-          : "coincide con movimientos anteriores",
-    ],
-    source: "local",
-  };
 }
 
 export function suggestCounterpartyLocally(input: {

@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "check:dashboard-help": "node scripts/check-dashboard-help-keys.mjs",
     "test:parity": "tsc -p tsconfig.parity-tests.json && node scripts/run-parity-smoke.mjs",
-    "test:movement-save": "node --experimental-strip-types scripts/test-movement-save-parity.mjs && node --experimental-strip-types scripts/test-movement-idempotency.mjs",
+    "test:movement-save": "node --experimental-strip-types scripts/test-movement-save-parity.mjs && node --experimental-strip-types scripts/test-movement-idempotency.mjs && node scripts/test-movement-category-parity.mjs",
     "test:date-format": "node --experimental-strip-types scripts/test-date-format.mjs",
     "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
