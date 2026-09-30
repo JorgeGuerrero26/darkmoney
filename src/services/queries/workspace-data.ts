@@ -42,6 +42,7 @@ import type {
   WorkspaceRole,
 } from "../../types/domain";
 import { supabase } from "../supabase/client";
+import { runIdempotentInsert } from "../../lib/idempotent-write";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -588,6 +589,7 @@ export type MovementFormInput = {
   obligationId?: number | null;
   subscriptionId?: number | null;
   metadata?: JsonValue | null;
+  dedupeKey?: string | null;
 };
 
 export type PersistLearningFeedbackInput = {
@@ -5106,19 +5108,25 @@ export function useCreateMovementMutation(workspaceId?: number, userId?: string)
   return useMutation({
     mutationFn: async (input: MovementMutationInput) => {
       const client = getClient();
-      const { data, error } = await client
-        .from("movements")
-        .insert({
-          workspace_id: input.workspaceId,
-          created_by_user_id: input.userId,
-          ...buildMovementMutationPayload(input, input.userId),
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        throw error;
-      }
+      const { data, created } = await runIdempotentInsert<{ id: number }>({
+        dedupeKey: input.dedupeKey,
+        insert: () => client
+          .from("movements")
+          .insert({
+            workspace_id: input.workspaceId,
+            created_by_user_id: input.userId,
+            client_dedupe_key: input.dedupeKey ?? null,
+            ...buildMovementMutationPayload(input, input.userId),
+          })
+          .select("id")
+          .single(),
+        lookup: (signal) => client.from("movements")
+          .select("id")
+          .eq("workspace_id", input.workspaceId)
+          .eq("client_dedupe_key", input.dedupeKey!)
+          .abortSignal(signal)
+          .maybeSingle(),
+      });
 
       const createdMovementId = data.id as number;
 
@@ -5131,11 +5139,13 @@ export function useCreateMovementMutation(workspaceId?: number, userId?: string)
           movement: input,
         });
       } catch (syncError) {
-        await client
-          .from("movements")
-          .delete()
-          .eq("id", createdMovementId)
-          .eq("workspace_id", input.workspaceId);
+        if (created) {
+          await client
+            .from("movements")
+            .delete()
+            .eq("id", createdMovementId)
+            .eq("workspace_id", input.workspaceId);
+        }
 
         throw syncError;
       }

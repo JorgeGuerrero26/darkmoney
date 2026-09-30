@@ -304,6 +304,8 @@ export function QuickMovementDialog({
   const [inlineCounterparties, setInlineCounterparties] = useState<CounterpartySummary[]>([]);
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
+  const submitDedupeKeyRef = useRef(crypto.randomUUID());
+  const submittingRef = useRef(false);
   const openerRef = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement | null);
   useFocusTrap(editorRef, !isContactDialogOpen && !showUnsavedDialog);
   useEffect(() => () => openerRef.current?.focus(), []);
@@ -428,6 +430,7 @@ export function QuickMovementDialog({
   });
 
   useEffect(() => {
+    submitDedupeKeyRef.current = crypto.randomUUID();
     setKind(initialKind);
     setActivePanel("main");
     setErrorMessage("");
@@ -618,7 +621,7 @@ export function QuickMovementDialog({
   }
 
   function requestClose() {
-    if (isSaving) return;
+    if (isSaving || submittingRef.current) return;
     if (isDirty) {
       setShowUnsavedDialog(true);
     } else {
@@ -683,7 +686,7 @@ export function QuickMovementDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSaving) return;
+    if (isSaving || submittingRef.current) return;
     setErrorMessage("");
 
     const occurredAt = new Date(formState.occurredAt);
@@ -695,6 +698,7 @@ export function QuickMovementDialog({
       return;
     }
 
+    submittingRef.current = true;
     try {
       if (kind === "expense" || kind === "income") {
         const accountId = parseOptionalInteger(formState.accountId);
@@ -727,12 +731,13 @@ export function QuickMovementDialog({
             return;
           }
 
-          const splitGroupId = crypto.randomUUID();
+          const splitGroupId = submitDedupeKeyRef.current;
           let firstMovementId: number | null = null;
           for (const [index, line] of splitLines.entries()) {
             const lineAmount = Number(line.amount);
             const lineCategoryId = Number(line.categoryId);
             const movementId = await createMovementMutation.mutateAsync({
+              dedupeKey: `${splitGroupId}:split-${index + 1}`,
               categoryId: lineCategoryId,
               spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")),
               counterpartyId:
@@ -783,6 +788,7 @@ export function QuickMovementDialog({
         }
 
         const createdMovementId = await createMovementMutation.mutateAsync({
+          dedupeKey: submitDedupeKeyRef.current,
           categoryId: categoryId !== null && Number.isFinite(categoryId) ? categoryId : null,
           spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(formState.spendTypeId)),
           counterpartyId:
@@ -884,6 +890,7 @@ export function QuickMovementDialog({
       });
 
       const createdMovementId = await createMovementMutation.mutateAsync({
+        dedupeKey: submitDedupeKeyRef.current,
         categoryId: null,
         counterpartyId: null,
         description,
@@ -930,6 +937,8 @@ export function QuickMovementDialog({
       setErrorMessage(
         getQueryErrorMessage(error, "No pudimos registrar este movimiento rapido."),
       );
+    } finally {
+      submittingRef.current = false;
     }
   }
 

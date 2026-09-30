@@ -4,7 +4,7 @@
   MoreVertical,
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
@@ -156,6 +156,8 @@ export function MovementsPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const { schedule } = useUndoQueue();
   const [formState, setFormState] = useState<MovementFormState>(() => createDefaultMovementFormState());
+  const submitDedupeKeyRef = useRef(crypto.randomUUID());
+  const submittingRef = useRef(false);
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -446,6 +448,7 @@ export function MovementsPage() {
   );
 
   function openCreateEditor() {
+    submitDedupeKeyRef.current = crypto.randomUUID();
     setFeedbackMessage("");
     setErrorMessage("");
     setEditorMode("create");
@@ -460,6 +463,7 @@ export function MovementsPage() {
   }
 
   function openEditEditor(movement: MovementRecord) {
+    submitDedupeKeyRef.current = crypto.randomUUID();
     setFeedbackMessage("");
     setErrorMessage("");
     setEditorMode("edit");
@@ -532,7 +536,7 @@ export function MovementsPage() {
   }
 
   function requestCloseEditor() {
-    if (isSaving) return;
+    if (isSaving || submittingRef.current) return;
     if (isDirty) {
       setShowUnsavedDialog(true);
     } else {
@@ -634,6 +638,7 @@ export function MovementsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>, splitLines: MovementSplitLine[] | null, linkedRecurringIncomeId: number | null) {
     event.preventDefault();
+    if (submittingRef.current) return;
 
     if (!activeWorkspace || !user || !snapshot) {
       return;
@@ -771,6 +776,7 @@ export function MovementsPage() {
       counterpartyId,
       obligationId,
       subscriptionId,
+      dedupeKey: submitDedupeKeyRef.current,
       metadata: {
         ...metadataObject,
         ...(editorMode === "create" && linkedRecurringIncomeId !== null
@@ -803,9 +809,10 @@ export function MovementsPage() {
       }).catch(() => undefined);
     };
 
+    submittingRef.current = true;
     try {
       if (splitLines) {
-        const splitGroupId = crypto.randomUUID();
+        const splitGroupId = submitDedupeKeyRef.current;
         let firstMovementId: number | null = null;
 
         for (const [index, line] of splitLines.entries()) {
@@ -819,6 +826,7 @@ export function MovementsPage() {
             obligationId: index === 0 ? payload.obligationId : null,
             sourceAmount: formState.movementType === "expense" ? lineAmount : null,
             subscriptionId: index === 0 ? payload.subscriptionId : null,
+            dedupeKey: `${splitGroupId}:split-${index + 1}`,
             metadata: {
               ...buildSplitMetadata(payload.metadata, splitGroupId, index, splitLines.length),
               ...(index > 0 && linkedRecurringIncomeId !== null ? { recurring_income_id: null } : {}),
@@ -914,6 +922,8 @@ export function MovementsPage() {
       setIsEditorOpen(false);
     } catch (error) {
       setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar el movimiento."));
+    } finally {
+      submittingRef.current = false;
     }
   }
 
@@ -939,6 +949,7 @@ export function MovementsPage() {
 
   function handleDuplicateMovement() {
     if (!selectedMovement) return;
+    submitDedupeKeyRef.current = crypto.randomUUID();
     const duplicated = buildFormStateFromMovement(selectedMovement);
     setEditorMode("create");
     setSelectedMovementId(null);
