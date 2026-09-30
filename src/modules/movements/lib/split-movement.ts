@@ -7,6 +7,15 @@ export type MovementSplitLine = {
   spendTypeId?: string;
 };
 
+/** Same edit restrictions as mobile: a split part or an obligation event stays a single movement. */
+export function canSplitMovement(movementType: string, metadata?: unknown): boolean {
+  if (movementType !== "expense" && movementType !== "income") return false;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return true;
+  const values = metadata as Record<string, unknown>;
+  const eventId = Number(values.obligation_event_id ?? 0);
+  return !values.split_group && !(Number.isFinite(eventId) && eventId > 0);
+}
+
 export function createMovementSplitLines(initialCategoryId = ""): MovementSplitLine[] {
   return [createMovementSplitLine(initialCategoryId), createMovementSplitLine()];
 }

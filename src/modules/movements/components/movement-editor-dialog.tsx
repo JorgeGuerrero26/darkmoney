@@ -77,6 +77,7 @@ import { recurringFrequencyFields, recurringFrequencyLabel } from "../lib/moveme
 import { movementSpendTypeLabel } from "../lib/movement-spend-type";
 import { MovementSplitPanel } from "./movement-split-panel";
 import {
+  canSplitMovement,
   createMovementSplitLines,
   type MovementSplitLine,
 } from "../lib/split-movement";
@@ -239,6 +240,7 @@ export function MovementEditorDialog({
   useFocusTrap(editorRef, !isDeleteConfirmOpen);
   const [activePanel, setActivePanel] = useState<MovementEditorPanel>("main");
   const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
+  const splitEnabled = canSplitMovement(formState.movementType, isCreateMode ? undefined : selectedMovement?.metadata);
   const [linkedSubscriptionId, setLinkedSubscriptionId] = useState<number | null>(null);
   const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
@@ -894,7 +896,7 @@ export function MovementEditorDialog({
                           onClick={() => setActivePanel("destinationAccount")}
                           value={selectedDestinationAccount?.name ?? "Selecciona destino"}
                         />
-                      ) : formState.movementType === "expense" || formState.movementType === "income" ? (
+                      ) : splitEnabled ? (
                         <MovementDetailsNavigationRow
                           label="Dividir en categorías"
                           onClick={() => {
@@ -1120,7 +1122,7 @@ export function MovementEditorDialog({
                   />
                 ) : null}
 
-                {activePanel === "split" && splitLines ? (
+                {activePanel === "split" && splitEnabled && splitLines ? (
                   <MovementSplitPanel
                     categories={filteredCategories}
                     spendTypes={spendTypes}

@@ -78,6 +78,7 @@ import { movementSpendTypeId } from "../lib/movement-spend-type";
 import {
   buildSplitDescription,
   buildSplitMetadata,
+  canSplitMovement,
   validateMovementSplit,
   type MovementSplitLine,
 } from "../lib/split-movement";
@@ -664,8 +665,8 @@ export function MovementsPage() {
     const manualFxRate = parseOptionalNumber(formState.fxRate);
 
     if (splitLines) {
-      if (formState.movementType !== "expense" && formState.movementType !== "income") {
-        setErrorMessage("Solo los gastos e ingresos se pueden dividir por categorías.");
+      if (!canSplitMovement(formState.movementType, editorMode === "edit" ? selectedMovement?.metadata : undefined)) {
+        setErrorMessage("Solo puedes dividir gastos e ingresos que no estén divididos ni vinculados a un evento de crédito o deuda.");
         return;
       }
       const splitAmount = formState.movementType === "income" ? destinationAmount : sourceAmount;
@@ -730,6 +731,11 @@ export function MovementsPage() {
       metadata = parseMetadataValue(formState.metadata);
     } catch {
       setErrorMessage("Metadata JSON no es valido. Revisa comillas, llaves y formato.");
+      return;
+    }
+
+    if (splitLines && !canSplitMovement(formState.movementType, metadata)) {
+      setErrorMessage("Un movimiento dividido o vinculado a un evento de crédito o deuda no se puede volver a dividir.");
       return;
     }
 

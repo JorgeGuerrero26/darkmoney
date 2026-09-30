@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildMovementDescription } from "../src/modules/movements/lib/movement-description.ts";
 import { movementSpendTypeId, movementSpendTypeLabel } from "../src/modules/movements/lib/movement-spend-type.ts";
+import { canSplitMovement } from "../src/modules/movements/lib/split-movement.ts";
 
 assert.equal(buildMovementDescription({ description: "  Taxi  ", movementType: "expense", accountName: "Cuenta Principal" }), "Taxi");
 assert.equal(buildMovementDescription({ description: "", movementType: "expense", categoryName: "Transporte", counterpartyName: "Lucía", accountName: "Cuenta Principal" }), "Transporte · Lucía · Cuenta Principal");
@@ -17,3 +18,13 @@ assert.equal(movementSpendTypeLabel(types, null, 1), "Necesidad · De categoría
 assert.equal(movementSpendTypeLabel(types, 2, 1), "Deseo");
 assert.equal(movementSpendTypeLabel(types, null, null), "Sin tipo");
 console.log("movement-save-parity: OK");
+
+assert.equal(canSplitMovement("expense"), true);
+assert.equal(canSplitMovement("income", {}), true);
+assert.equal(canSplitMovement("transfer"), false);
+assert.equal(canSplitMovement("expense", { split_group: "group-1" }), false);
+assert.equal(canSplitMovement("income", { split_group: "group-1" }), false);
+assert.equal(canSplitMovement("expense", { obligation_event_id: 4 }), false);
+assert.equal(canSplitMovement("income", { obligation_event_id: "4" }), false);
+assert.equal(canSplitMovement("expense", { obligation_event_id: 0, split_group: null }), true);
+assert.equal(canSplitMovement("expense", { obligation_event_id: "invalid" }), true);
