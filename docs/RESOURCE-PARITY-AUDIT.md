@@ -46,10 +46,29 @@ Evidencia local adicional:
 - Web: `npm run build`, `npm run test:catalog-parity` y `npm run test:parity` pasan. Móvil: `npm run test:parity` también pasa.
 - No se midió el tiempo de carga con un espacio de decenas de miles de movimientos. El historial ahora es completo y paginado, pero el tamaño total del caché puede crecer.
 
+## Suscripciones y Notificaciones — seguimiento del 2 de octubre
+
+La comparación con los módulos móviles actuales cerró estas diferencias en la web:
+
+- **Suscripciones:** detalle en filas compactas con fecha inicial/final, aviso, cuenta, categoría, registro automático, notas y fijado; barra fija de Editar y Registrar pago, con acciones secundarias en el menú. La lista distingue activas, pausadas y canceladas sin prometer cobros de una cancelada. La cadencia visible respeta `intervalCount` y el último día del mes.
+- **Notificaciones:** búsqueda combinable con prioridad, tipo y lectura; selección de guardadas, lectura/no lectura por lote, eliminación confirmada con deshacer y restauración visual ante error. La lista abre en Todas, agrupada por fecha. Las prioridades se contrastan con las constantes reales del checkout móvil.
+- **Fuentes de la bandeja:** los conteos de lectura corresponden a las notificaciones persistidas del usuario, incluidas las archivadas. Los recordatorios calculados solo en web se muestran en Avisos web; no se suman a los conteos compartidos. Las invitaciones pendientes conservan acceso en Piden algo.
+- **Destinos:** el snapshot lee `related_entity_id` y `payload`; los avisos dejan de abrir siempre la propia bandeja. Suscripciones, Cuentas, Créditos y deudas y Presupuestos pueden abrir el recurso cargado desde un enlace interno, sin guardar borradores. Los enlaces de invitación usan su token; se ignoran URLs arbitrarias del payload.
+
+Verificación: `npx tsc -b`, `npm run build`, `npm run test:notification-parity`, `npm run test:subscription-parity` y `npm run test:parity` pasan. Las escrituras de lectura se probaron con cliente simulado, incluyendo alcance por usuario e IDs, duplicados, selección vacía e indisponibilidad de red. En el navegador se comprobaron búsqueda + tipo, selección sin ejecutar acciones, diseño del detalle de Suscripciones y apertura del registro Sergio Teclado desde una notificación ya leída. No se marcaron nuevas lecturas ni se eliminaron registros reales.
+
+La comparación detectó problemas adicionales que **no se consideran cerrados** por estas correcciones visuales:
+
+- El estado de Suscripciones se deriva del historial de ocurrencias cuando está cargado: puede decir Al día y a la vez mostrar una fecha de cobro anterior a hoy como Próximo cobro. Se observó en web y la regla existe también en `DarkMoneyApp/features/subscriptions/lib/subscriptionStanding.ts`. Deben concordar estado, fecha y acción, sin fabricar atrasos cuando el historial indica pagos.
+- La normalización mensual de Suscripciones debe auditar `intervalCount` y el caso de moneda extranjera sin conversión. Cambiar la frase de cadencia no prueba la suma mensual: los caminos existentes que usan monto base o monto nativo como fallback no certifican equivalencia de moneda.
+- Los enlaces avanzados de Notificaciones aún no reproducen todos los destinos móviles: solicitud/evento concreto de una obligación, formulario de movimiento detectado, filtros de fecha/categoría de alertas y día concreto del resumen. Abrir el recurso correcto es solo el primer nivel.
+- El móvil clasifica `obligation_share_invite` como Obligaciones antes de comprobar Invitaciones; la web corregida prioriza Invitaciones. Hay que corregir y probar la clasificación móvil, no copiar el defecto para hacerlos coincidir.
+- El indicador de la campana web cuenta solicitudes que piden acción, mientras la bandeja muestra lectura de guardadas. No se certificó equivalencia de ese indicador con el móvil ni se cambió su regla en esta unidad.
+
 ## Pendientes; no declarar paridad total
 
 1. **Integración en dispositivos:** no se ejecutó guardar/cobrar/pagar con dos clientes reales ni pruebas multiusuario. El usuario no dispone de un espacio de pruebas. Las pruebas locales no certifican esas operaciones contra RLS, Storage o una red real.
 2. **Distribución:** la corrección del código móvil no fue publicada por OTA ni instalada en el teléfono. No se modificaron publicaciones de Realtime ni migraciones del servidor; el respaldo web cubre publicaciones incompletas, pero no demuestra entrega instantánea de todos los eventos.
-3. **Diseño reciente:** aún debe compararse el diseño móvil actualizado de Suscripciones y Notificaciones con web. Las modificaciones móviles simultáneas en otros módulos se preservaron fuera de estos commits.
+3. **Reglas y destinos adicionales:** resolver y probar los casos de Suscripciones y Notificaciones enumerados arriba. La revisión visual principal ya se realizó, pero no certifica esos comportamientos. Las modificaciones móviles simultáneas en otros módulos se preservaron fuera de estos commits.
 
 La equivalencia de fuentes se comprobó en el código local, no contra el estado de una versión móvil instalada. Los cambios preexistentes de configuración local, archivos temporales de Supabase y respaldos móviles se conservaron fuera de los commits.
