@@ -27,10 +27,11 @@ type TypeFilter = "all" | ContactFilter;
 function canDelete(contact: CounterpartyOverview, subscriptions: number, recurringIncome: number) {
   return !contact.movementCount && !contact.receivableCount && !contact.payableCount && !subscriptions && !recurringIncome;
 }
-function downloadCsv(rows: CounterpartyOverview[], links: Map<number, { subscriptions: number; income: number }>) {
+function downloadContactCsv(rows: CounterpartyOverview[], links: Map<number, { subscriptions: number; income: number }>, exposure: Map<number, ReturnType<typeof contactExposure>>, baseCurrency: string) {
   const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const amounts = (items: CurrencyAmount[] | undefined) => (items ?? [{ amount: 0, currencyCode: baseCurrency }]).map((item) => formatCurrency(item.amount, item.currencyCode)).join(" · ");
   const headers = ["Nombre", "Tipo", "Telefono", "Email", "Documento", "Fijado", "Archivado", "Movimientos", "Por cobrar", "Por pagar", "Suscripciones", "Ingresos fijos", "Notas"];
-  const csv = `\ufeff${[headers.join(","), ...rows.map((item) => [item.name, getTypeDefinition(item.type).label, item.phone, item.email, item.documentNumber, item.isPinned ? "Si" : "No", item.isArchived ? "Si" : "No", item.movementCount, item.receivablePendingTotal, item.payablePendingTotal, links.get(item.id)?.subscriptions ?? 0, links.get(item.id)?.income ?? 0, item.notes].map(escape).join(","))].join("\n")}`;
+  const csv = `\ufeff${[headers.join(","), ...rows.map((item) => [item.name, getTypeDefinition(item.type).label, item.phone, item.email, item.documentNumber, item.isPinned ? "Si" : "No", item.isArchived ? "Si" : "No", item.movementCount, amounts(exposure.get(item.id)?.receivable), amounts(exposure.get(item.id)?.payable), links.get(item.id)?.subscriptions ?? 0, links.get(item.id)?.income ?? 0, item.notes].map(escape).join(","))].join("\n")}`;
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a"); link.href = url; link.download = `contactos-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
 }
@@ -77,6 +78,13 @@ export function ContactsPage() {
     return new Map([...ids].map((id) => [id, contactExposure(obligations, id, activeWorkspace?.baseCurrencyCode ?? "PEN")]));
   }, [snapshot.data, activeWorkspace?.baseCurrencyCode]);
   const money = (amounts: CurrencyAmount[] | undefined) => (amounts ?? [{ amount: 0, currencyCode: activeWorkspace?.baseCurrencyCode ?? "PEN" }]).map((item) => formatCurrency(item.amount, item.currencyCode)).join(" · ");
+  function downloadCsv(rows: CounterpartyOverview[], contactLinks: Map<number, { subscriptions: number; income: number }>) {
+    if (!snapshot.data || snapshot.error) {
+      setError("Espera a que se carguen los saldos completos antes de exportar.");
+      return;
+    }
+    downloadContactCsv(rows, contactLinks, exposure, activeWorkspace?.baseCurrencyCode ?? "PEN");
+  }
   const scheduled = (id: number, income: boolean) => {
     const items = income ? (snapshot.data?.recurringIncome ?? []).filter((item) => item.payerPartyId === id) : (snapshot.data?.subscriptions ?? []).filter((item) => item.vendorPartyId === id);
     return money(currencyTotals(items.filter((item) => item.status === "active"), activeWorkspace?.baseCurrencyCode ?? "PEN"));

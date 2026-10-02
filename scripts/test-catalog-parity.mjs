@@ -66,6 +66,12 @@ const usageClient = { from(table) {
 } };
 assert.deepEqual((await usage.fetchCategoryMovementUsage(usageClient, 42)).data, usageRows);
 assert.equal(usageRequests, 4);
+const contactPagePath = resolve(root, "src/modules/contacts/pages/contacts-redesign-page.tsx");
+const contactPageAst = ts.createSourceFile(contactPagePath, readFileSync(contactPagePath, "utf8"), ts.ScriptTarget.Latest, true);
+const downloadBody = contactPageAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "downloadContactCsv").getText(contactPageAst);
+assert.ok(downloadBody.includes("exposure.get(item.id)?.receivable"));
+assert.ok(downloadBody.includes("exposure.get(item.id)?.payable"));
+assert.ok(!downloadBody.includes("item.receivablePendingTotal"));
 
 const accounts = await import(compile(resolve(root, "src/modules/accounts/lib/account-validation.ts")));
 const defaultAccount = accounts.createDefaultFormState("PEN");
