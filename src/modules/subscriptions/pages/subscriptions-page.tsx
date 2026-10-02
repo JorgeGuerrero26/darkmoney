@@ -14,6 +14,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useResourceLink } from "../../../hooks/use-resource-link";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -567,6 +568,7 @@ export function SubscriptionsPage() {
       ? null
       : subscriptions.find((subscription) => subscription.id === deleteTargetId) ?? null;
   const detailSubscription = detailSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === detailSubscriptionId) ?? null;
+  useResourceLink(subscriptions, setDetailSubscriptionId);
   const cancelSubscription = cancelSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === cancelSubscriptionId) ?? null;
 
   const hasActiveFilters =

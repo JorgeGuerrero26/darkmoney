@@ -1,8 +1,15 @@
-import { CheckCheck, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCheck, ChevronRight, MoreVertical, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { DataState } from "../../../components/ui/data-state";
+import { Button } from "../../../components/ui/button";
+import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
+import { Modal } from "../../../components/ui/modal";
+import { ModalBody } from "../../../components/ui/modal-body";
+import { ResourceEditorHeader } from "../../../components/ui/resource-editor";
+import { SearchablePicker } from "../../../components/ui/searchable-picker";
+import { useUndoQueue } from "../../../components/ui/undo-queue";
 import { useToast } from "../../../components/ui/toast-provider";
 import { formatRelativeTime } from "../../../lib/formatting/dates";
 import { formatNotificationKindLabel } from "../../../lib/formatting/labels";
@@ -11,6 +18,9 @@ import {
   useCurrentUserEntitlementQuery,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
+  useMarkNotificationsUnreadMutation,
+  useMarkNotificationsReadMutation,
+  useDeleteNotificationsMutation,
   useNotificationsQuery,
   usePendingNotificationInvitesQuery,
   useWorkspaceSnapshotQuery,
@@ -22,14 +32,17 @@ import {
   useNotificationInbox,
   type InboxNotification,
 } from "../use-notification-inbox";
+import { groupNotificationsByDate } from "../lib/notifications-presenters";
+import { filterNotificationList, notificationKindOptions, notificationPriorityOptions, notificationReadingCounts, type NotificationKindGroup, type NotificationPriority } from "../lib/notification-list-model";
 
-type NotificationFilter = "action" | "unread" | "all" | "archived";
+type NotificationFilter = "action" | "unread" | "all" | "archived" | "calculated";
 
 const filterOptions: Array<{ key: NotificationFilter; label: string }> = [
   { key: "action", label: "Piden algo" },
   { key: "unread", label: "Sin leer" },
   { key: "all", label: "Todas" },
   { key: "archived", label: "Archivadas" },
+  { key: "calculated", label: "Avisos web" },
 ];
 
 function getNotificationActionLabel(kind: string) {
@@ -51,9 +64,13 @@ function getNotificationActionLabel(kind: string) {
 function NotificationRow({
   notification,
   onOpen,
+  selected,
+  onToggleSelect,
 }: {
   notification: InboxNotification;
   onOpen: (notification: InboxNotification) => void;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const needsAction = isActionRequiredNotificationKind(notification.kind);
   const isUnread = notification.status !== "read";
@@ -61,6 +78,7 @@ function NotificationRow({
   return (
     <article className="grid gap-3 border-t border-white/[0.08] py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 gap-3">
+        {notification.source === "database" ? <span className="pt-1"><SelectionCheckbox ariaLabel={`Seleccionar ${notification.title}`} checked={selected} onChange={onToggleSelect} /></span> : null}
         <span
           aria-label={isUnread ? "Sin leer" : "Leída"}
           className={`mt-2 h-2 w-2 shrink-0 rounded-full ${
@@ -71,7 +89,7 @@ function NotificationRow({
           <h3 className="text-[15px] font-semibold leading-6 text-ink">{notification.title}</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-storm">{notification.body}</p>
           <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-storm/65">
-            {formatNotificationKindLabel(notification.kind)} · {formatRelativeTime(notification.scheduledFor)}
+            {formatNotificationKindLabel(notification.kind)} · {formatRelativeTime(notification.scheduledFor)}{notification.source === "smart" ? " · Aviso calculado en web" : ""}
           </p>
         </div>
       </div>
@@ -97,13 +115,25 @@ export function NotificationsPage() {
   const { activeWorkspace } = useActiveWorkspace();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<NotificationFilter>("action");
+  const [filter, setFilter] = useState<NotificationFilter>("all");
+  const [search, setSearch] = useState("");
+  const [priority, setPriority] = useState<"all" | NotificationPriority>("all");
+  const [kind, setKind] = useState<NotificationKindGroup>("all");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const [deleteIds, setDeleteIds] = useState<number[] | null>(null);
+  const [isBatchPending, setIsBatchPending] = useState(false);
+  const { schedule } = useUndoQueue();
   const notificationsQuery = useNotificationsQuery(user?.id);
   const pendingInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllReadMutation = useMarkAllNotificationsReadMutation(user?.id);
   const markSingleReadMutation = useMarkNotificationReadMutation(user?.id);
+  const unreadMutation = useMarkNotificationsUnreadMutation(user?.id);
+  const readMutation = useMarkNotificationsReadMutation(user?.id);
+  const deleteMutation = useDeleteNotificationsMutation(user?.id);
   const inbox = useNotificationInbox({
     databaseNotifications: notificationsQuery.data ?? [],
     entitlement: entitlementQuery.data,
@@ -114,7 +144,7 @@ export function NotificationsPage() {
   });
 
   const activeNotifications = useMemo(
-    () => inbox.notifications.filter((notification) => !notification.isArchived),
+    () => inbox.notifications.filter((notification) => !notification.isArchived && (notification.source === "database" || isActionRequiredNotificationKind(notification.kind))),
     [inbox.notifications],
   );
   const actionRequired = useMemo(
@@ -124,7 +154,8 @@ export function NotificationsPage() {
       ),
     [activeNotifications],
   );
-  const filteredNotifications = useMemo(() => {
+  const scopedNotifications = useMemo(() => {
+    if (filter === "calculated") return inbox.notifications.filter((notification) => notification.source === "smart" && !isActionRequiredNotificationKind(notification.kind));
     if (filter === "archived") {
       return inbox.notifications.filter((notification) => notification.isArchived);
     }
@@ -136,12 +167,46 @@ export function NotificationsPage() {
     }
     return activeNotifications;
   }, [actionRequired, activeNotifications, filter, inbox.notifications]);
-  const actionItems = filteredNotifications.filter((notification) =>
-    isActionRequiredNotificationKind(notification.kind),
-  );
-  const informativeItems = filteredNotifications.filter(
-    (notification) => !isActionRequiredNotificationKind(notification.kind),
-  );
+  const filteredNotifications = useMemo(() => filterNotificationList(scopedNotifications, { search, priority, kind }).filter((item) => !item.databaseId || !hiddenIds.has(item.databaseId)), [scopedNotifications, search, priority, kind, hiddenIds]);
+  const databaseItems = (notificationsQuery.data ?? []).filter((item) => !hiddenIds.has(item.id));
+  const counts = notificationReadingCounts(databaseItems);
+  const visibleDatabaseIds = filteredNotifications.flatMap((item) => item.databaseId ? [item.databaseId] : []);
+  const selectedItems = databaseItems.filter((item) => selectedIds.has(item.id));
+  const groups = groupNotificationsByDate(filteredNotifications);
+  const busy = isBatchPending || markAllReadMutation.isPending || markSingleReadMutation.isPending || readMutation.isPending || unreadMutation.isPending || deleteMutation.isPending;
+  useEffect(() => {
+    const visible = new Set(filteredNotifications.flatMap((item) => item.databaseId ? [item.databaseId] : []));
+    setSelectedIds((current) => { const next = new Set([...current].filter((id) => visible.has(id))); return next.size === current.size ? current : next; });
+  }, [filteredNotifications]);
+
+  function toggleSelection(id: number) {
+    setSelectedIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+
+  async function markReadState(ids: number[], read: boolean) {
+    if (busy || !ids.length) return;
+    setIsBatchPending(true);
+    try {
+      if (read) await readMutation.mutateAsync(ids);
+      else await unreadMutation.mutateAsync(ids);
+      setSelectedIds(new Set());
+    } catch (error) {
+      showToast({ title: "No pudimos cambiar la lectura", description: getQueryErrorMessage(error, "Inténtalo de nuevo."), tone: "error" });
+    } finally { setIsBatchPending(false); }
+  }
+
+  function confirmDelete() {
+    const ids = deleteIds;
+    if (!ids?.length || busy) return;
+    setDeleteIds(null);
+    setSelectedIds(new Set());
+    setHiddenIds((current) => new Set([...current, ...ids]));
+    const restore = () => setHiddenIds((current) => new Set([...current].filter((id) => !ids.includes(id))));
+    schedule({ label: `${ids.length} notificaciones eliminadas`, onUndo: restore, onCommit: async () => {
+      try { await deleteMutation.mutateAsync(ids); }
+      catch (error) { restore(); showToast({ title: "No pudimos eliminar las notificaciones", description: getQueryErrorMessage(error, "Inténtalo de nuevo."), tone: "error" }); }
+    } });
+  }
 
   async function handleOpen(notification: InboxNotification) {
     try {
@@ -193,14 +258,14 @@ export function NotificationsPage() {
             Notificaciones
           </h1>
           <p className="mt-2 text-sm text-storm">
-            <span className="font-semibold text-ink">{actionRequired.length}</span>{" "}
-            {actionRequired.length === 1 ? "pide" : "piden"} algo tuyo. Las demás son avisos y se archivan a los 30 días.
+            <span className="font-semibold text-ink">{counts.unread}</span> sin leer · {counts.read} leídas en tu cuenta.
+            {inbox.smartNotifications.some((item) => !isActionRequiredNotificationKind(item.kind)) ? " Los avisos locales están separados en «Avisos web»." : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <button
             className="inline-flex items-center gap-2 font-semibold text-storm transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={inbox.unreadCount === 0 || markAllReadMutation.isPending}
+            disabled={inbox.unreadCount === 0 || busy}
             onClick={() => void handleMarkAllRead()}
             type="button"
           >
@@ -210,8 +275,28 @@ export function NotificationsPage() {
           <Link className="font-semibold text-storm transition hover:text-ink" to="/app/settings?section=notifications">
             Qué me avisa
           </Link>
+          <div className="relative" onKeyDown={(event) => {
+            if (event.key === "Escape" && menuOpen) {
+              event.stopPropagation();
+              setMenuOpen(false);
+              event.currentTarget.querySelector("button")?.focus();
+            }
+          }}>
+            <button aria-label="Más acciones de notificaciones" aria-expanded={menuOpen} className="grid h-10 w-10 place-items-center rounded-lg border border-white/[0.08] text-storm hover:bg-white/[0.04]" onClick={() => setMenuOpen((open) => !open)} type="button"><MoreVertical className="h-4 w-4" /></button>
+            {menuOpen ? <><button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setMenuOpen(false)} type="button" /><div className="absolute right-0 top-12 z-40 w-64 rounded-xl border border-white/10 bg-[#1b1a18] py-1">
+              <button className="min-h-11 w-full px-4 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!counts.read || busy} onClick={() => { setMenuOpen(false); void markReadState(databaseItems.filter((item) => item.status === "read").map((item) => item.id), false); }} type="button">Marcar guardadas como no leídas</button>
+              <button className="flex min-h-11 w-full items-center gap-2 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] disabled:opacity-40" disabled={!counts.read || busy} onClick={() => { setMenuOpen(false); setDeleteIds(databaseItems.filter((item) => item.status === "read").map((item) => item.id)); }} type="button"><Trash2 className="h-4 w-4" />Eliminar las leídas</button>
+            </div></> : null}
+          </div>
         </div>
       </header>
+
+      <section aria-label="Buscar y filtrar notificaciones" className="grid gap-2 pt-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_1fr_1fr]">
+        <input aria-label="Buscar notificaciones" className="field-dark !h-14" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título o contenido..." type="search" value={search} />
+        <SearchablePicker appearance="toolbar" emptyMessage="No hay prioridades." onChange={(value) => setPriority(value as typeof priority)} options={notificationPriorityOptions.map((option) => ({ ...option, description: "", leadingLabel: "" }))} placeholderLabel="Todas las prioridades" placeholderDescription="Prioridad" queryPlaceholder="Buscar prioridad" showSearch={false} value={priority} />
+        <SearchablePicker appearance="toolbar" emptyMessage="No hay tipos." onChange={(value) => setKind(value as NotificationKindGroup)} options={notificationKindOptions.map((option) => ({ ...option, description: "", leadingLabel: "" }))} placeholderLabel="Todos los tipos" placeholderDescription="Tipo" queryPlaceholder="Buscar tipo" showSearch={false} value={kind} />
+      </section>
+      {search || priority !== "all" || kind !== "all" ? <div className="flex flex-wrap items-center gap-3 pt-3 text-xs text-storm">{search ? <button onClick={() => setSearch("")} type="button">Búsqueda: {search} ×</button> : null}{priority !== "all" ? <button onClick={() => setPriority("all")} type="button">{notificationPriorityOptions.find((option) => option.value === priority)?.label} ×</button> : null}{kind !== "all" ? <button onClick={() => setKind("all")} type="button">{notificationKindOptions.find((option) => option.value === kind)?.label} ×</button> : null}<button className="ml-auto text-ink hover:underline" onClick={() => { setSearch(""); setPriority("all"); setKind("all"); setFilter("all"); }} type="button">Quitar filtros</button></div> : null}
 
       <nav aria-label="Filtros de notificaciones" className="flex gap-1 overflow-x-auto border-b border-white/[0.09] py-4">
         {filterOptions.map((option) => (
@@ -229,41 +314,29 @@ export function NotificationsPage() {
         ))}
       </nav>
 
+      {visibleDatabaseIds.length ? <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.08] py-3 text-xs text-storm"><SelectionCheckbox ariaLabel="Seleccionar notificaciones guardadas en esta vista" checked={visibleDatabaseIds.every((id) => selectedIds.has(id))} indeterminate={visibleDatabaseIds.some((id) => selectedIds.has(id)) && !visibleDatabaseIds.every((id) => selectedIds.has(id))} onChange={() => setSelectedIds(visibleDatabaseIds.every((id) => selectedIds.has(id)) ? new Set() : new Set(visibleDatabaseIds))} />Seleccionar guardadas{selectedIds.size ? <><span className="text-ink">{selectedIds.size} seleccionadas</span><button disabled={busy || !selectedItems.some((item) => item.status !== "read")} onClick={() => void markReadState(selectedItems.filter((item) => item.status !== "read").map((item) => item.id), true)} type="button">Marcar leídas</button><button disabled={busy || !selectedItems.some((item) => item.status === "read")} onClick={() => void markReadState(selectedItems.filter((item) => item.status === "read").map((item) => item.id), false)} type="button">Marcar no leídas</button><button disabled={busy} onClick={() => setDeleteIds([...selectedIds])} type="button">Eliminar</button><button aria-label="Cancelar selección" onClick={() => setSelectedIds(new Set())} type="button"><X className="h-4 w-4" /></button></> : null}</div> : null}
+
       {notificationsQuery.isLoading && !inbox.notifications.length ? (
         <p className="py-12 text-center text-sm text-storm">Cargando notificaciones...</p>
       ) : filteredNotifications.length ? (
         <div>
-          {actionItems.length ? (
-            <section aria-labelledby="notifications-action-heading" className="pt-7">
-              <h2 id="notifications-action-heading" className="font-public-mono text-[11px] uppercase tracking-[0.2em] text-[#d6b69b]">
-                Piden algo
-              </h2>
+          {groups.map((group) => (
+            <section aria-labelledby={`notifications-${group.key}`} className="pt-7" key={group.key}>
+              <h2 id={`notifications-${group.key}`} className="font-public-mono text-[11px] uppercase tracking-[0.14em] text-storm">{group.label}</h2>
               <div className="mt-3">
-                {actionItems.map((notification) => (
-                  <NotificationRow key={notification.id} notification={notification} onOpen={(item) => void handleOpen(item)} />
+                {group.items.map((notification) => (
+                  <NotificationRow key={notification.id} notification={notification} selected={Boolean(notification.databaseId && selectedIds.has(notification.databaseId))} onToggleSelect={() => { if (notification.databaseId) toggleSelection(notification.databaseId); }} onOpen={(item) => void handleOpen(item)} />
                 ))}
               </div>
             </section>
-          ) : null}
-
-          {informativeItems.length ? (
-            <section aria-labelledby="notifications-info-heading" className="pt-7">
-              <h2 id="notifications-info-heading" className="font-public-mono text-[11px] uppercase tracking-[0.2em] text-storm/70">
-                {filter === "archived" ? "Archivadas" : "Para saber"}
-              </h2>
-              <div className="mt-3">
-                {informativeItems.map((notification) => (
-                  <NotificationRow key={notification.id} notification={notification} onOpen={(item) => void handleOpen(item)} />
-                ))}
-              </div>
-            </section>
-          ) : null}
+          ))}
         </div>
       ) : (
         <p className="border-b border-white/[0.08] py-14 text-center text-sm text-storm">
           No hay notificaciones en esta vista.
         </p>
       )}
+      {deleteIds ? <Modal labelledBy="notification-delete-title" onClose={() => { if (!busy) setDeleteIds(null); }} size="sm"><ResourceEditorHeader disabled={busy} onClose={() => setDeleteIds(null)} title={`Eliminar ${deleteIds.length} notificaciones`} titleId="notification-delete-title" /><ModalBody><p className="text-sm leading-6 text-storm">Solo se eliminan las notificaciones guardadas seleccionadas, no los avisos calculados ni los registros financieros. Tendrás unos segundos para deshacer.</p></ModalBody><footer className="flex justify-end gap-3 border-t border-white/10 px-6 py-4"><Button disabled={busy} onClick={() => setDeleteIds(null)} variant="secondary">Cancelar</Button><Button disabled={busy} onClick={confirmDelete}>Eliminar</Button></footer></Modal> : null}
     </div>
   );
 }

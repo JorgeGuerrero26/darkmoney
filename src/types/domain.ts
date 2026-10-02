@@ -492,6 +492,9 @@ export type NotificationItem = {
   channel?: string;
   readAt?: string | null;
   archivedAt?: string | null;
+  relatedEntityType?: string | null;
+  relatedEntityId?: number | null;
+  payload?: JsonValue | null;
 };
 
 export type AttachmentSummary = {

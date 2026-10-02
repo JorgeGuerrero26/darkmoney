@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Download, MoreHorizontal, Pin, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useResourceLink } from "../../../hooks/use-resource-link";
 
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -108,6 +109,7 @@ export function BudgetsPage() {
     });
   }, [snapshot, activeWorkspace, scopeMovementsQuery.data]);
   const metricMap = useMemo(() => snapshot && activeWorkspace && scopeMovementsQuery.data ? buildBudgetMetricsMap(snapshot.budgets, scopeMovementsQuery.data, { workspaceBaseCurrencyCode: activeWorkspace.baseCurrencyCode, exchangeRates: snapshot.exchangeRates }) : new Map(), [snapshot, activeWorkspace, scopeMovementsQuery.data]);
+  useResourceLink(budgets, setAnalyticsId);
   const visibleBudgets = useMemo(() => budgets.filter((budget) => !hiddenIds.has(budget.id) && [budget.name, budget.scopeLabel, budget.categoryName, budget.accountName, budget.spendTypeName].some((part) => part?.toLocaleLowerCase("es-PE").includes(search.trim().toLocaleLowerCase("es-PE")))), [budgets, hiddenIds, search]);
   const rules = useMemo(() => groupBudgetRules(visibleBudgets, today), [visibleBudgets, today]);
   const active = useMemo(() => rules.flatMap((rule) => rule.current?.isActive ? [rule.current] : []).sort((left, right) => Number(right.isPinned) - Number(left.isPinned) || left.name.localeCompare(right.name, "es")), [rules]);

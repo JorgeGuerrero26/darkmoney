@@ -17,6 +17,7 @@ import type {
 import type { PendingInvite } from "../auth/invite-resume";
 import { usePendingInvite } from "../auth/invite-resume";
 import { useNotificationReads } from "./notification-reads-context";
+import { notificationHref } from "./lib/notification-navigation";
 
 type SmartNotificationTone = "info" | "success" | "warning" | "danger" | "neutral";
 
@@ -34,6 +35,7 @@ export type InboxNotification = {
   tone: SmartNotificationTone;
   href: string;
   isArchived?: boolean;
+  payload?: NotificationItem["payload"];
 };
 
 function startOfDay(date: Date) {
@@ -191,7 +193,8 @@ function buildDatabaseNotifications(notifications: NotificationItem[]): InboxNot
     channel: notification.channel,
     readAt: notification.readAt,
     tone: getDatabaseNotificationTone(notification),
-    href: "/app/notifications",
+    href: notificationHref(notification),
+    payload: notification.payload,
     isArchived: Boolean(notification.archivedAt),
   }));
 }

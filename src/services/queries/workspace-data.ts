@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCategoryMovementUsage } from "./category-usage";
+import { updateNotificationReading } from "./notification-reading";
 
 import type { AppProfile } from "../../modules/auth/auth-context";
 import type {
@@ -380,6 +381,8 @@ type NotificationRow = {
   related_entity_type: string | null;
   read_at: string | null;
   archived_at?: string | null;
+  related_entity_id?: number | null;
+  payload?: JsonValue | null;
 };
 
 type AttachmentRow = {
@@ -2324,9 +2327,9 @@ async function upsertWorkspaceFinancialGoal(input: {
 }
 
 const notificationsSelectWithArchived =
-  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, read_at, archived_at";
+  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, related_entity_id, payload, read_at, archived_at";
 const notificationsSelectWithKind =
-  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, read_at";
+  "id, channel, status, title, body, scheduled_for, kind, related_entity_type, related_entity_id, payload, read_at";
 const notificationsSelectLegacy =
   "id, channel, status, title, body, scheduled_for, related_entity_type, read_at";
 const notificationsPageSize = 1000;
@@ -2342,6 +2345,9 @@ function mapNotificationRow(row: NotificationRow) {
     channel: row.channel,
     readAt: row.read_at,
     archivedAt: row.archived_at ?? null,
+    relatedEntityType: row.related_entity_type,
+    relatedEntityId: row.related_entity_id ?? null,
+    payload: row.payload ?? null,
   } satisfies NotificationItem;
 }
 
@@ -2355,6 +2361,7 @@ async function fetchNotificationsPage(userId: string, selectColumns: string, pag
     .select(selectColumns)
     .eq("user_id", userId)
     .order("scheduled_for", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, to);
 
   if (error) {
@@ -3682,29 +3689,19 @@ export function useUnlinkObligationShareMutation(workspaceId?: number, userId?: 
   });
 }
 
+export function useMarkNotificationsReadMutation(userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => updateNotificationReading(getClient(), userId, ids, true),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["notifications", userId] }); },
+  });
+}
+
 export function useMarkNotificationsUnreadMutation(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (notificationIds: number[]) => {
-      if (!userId) {
-        throw new Error("No hay sesion activa.");
-      }
-      if (notificationIds.length === 0) {
-        return;
-      }
-
-      const client = getClient();
-      const { error } = await client
-        .from("notifications")
-        .update({ status: "sent" as NotificationItem["status"], read_at: null })
-        .eq("user_id", userId)
-        .in("id", notificationIds);
-
-      if (error) {
-        throw error;
-      }
-    },
+    mutationFn: (notificationIds: number[]) => updateNotificationReading(getClient(), userId, notificationIds, false),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["notifications", userId] });
     },

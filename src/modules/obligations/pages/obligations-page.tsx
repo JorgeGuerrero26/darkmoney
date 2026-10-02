@@ -23,6 +23,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useResourceLink } from "../../../hooks/use-resource-link";
 
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -3171,6 +3172,7 @@ export function ObligationsPage() {
     detailObligationId === null
       ? null
       : obligations.find((obligation) => obligation.id === detailObligationId) ?? null;
+  useResourceLink(obligations, setDetailObligationId);
   const attachmentsQuery = useEntityAttachmentsQuery(
     activeWorkspace?.id,
     "obligation",

@@ -2,6 +2,7 @@ import { Archive, Check, Download, MoreVertical, Plus, RefreshCw } from "lucide-
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useResourceLink } from "../../../hooks/use-resource-link";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -162,6 +163,7 @@ export function AccountsPage() {
     [hiddenIds, snapshot?.accounts],
   );
   const availableTypes = useMemo(() => getAvailableAccountTypes(accounts), [accounts]);
+  useResourceLink(accounts, setDetailAccountId);
   const availableCurrencyCodes = useMemo(
     () => getAvailableCurrencyCodes(accounts),
     [accounts],
