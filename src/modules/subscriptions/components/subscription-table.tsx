@@ -5,7 +5,7 @@ import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { SubscriptionSummary } from "../../../types/domain";
-import { getFrequencyOption, getStatusOption } from "../lib/subscriptions-presenters";
+import { subscriptionRecurrencePhrase, subscriptionRowSubtitle } from "../lib/subscription-detail-presentation";
 
 type SubscriptionTableProps = {
   subscriptions: SubscriptionSummary[];
@@ -72,20 +72,19 @@ export function SubscriptionTable({
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-sm font-medium text-ink">{subscription.name}</p>
               {subscription.isPinned ? <Pin aria-label="Fijada" className="h-3 w-3 shrink-0 text-storm" /> : null}
-              {subscription.status !== "active" ? <span className="shrink-0 text-xs text-storm">{getStatusOption(subscription.status).label}</span> : null}
             </div>
-            <p className="mt-0.5 truncate text-[13px] text-storm">{subscription.vendor} · {getFrequencyOption(subscription.frequency).label} · {formatDate(subscription.nextDueDate)}</p>
+            <p className={`mt-0.5 truncate text-[13px] ${subscription.status === "active" && subscription.nextDueDate < today ? "text-[#d6b69b]" : "text-storm"}`}>{subscriptionRowSubtitle(subscription, today, formatDate)}</p>
           </div>
           <p className="hidden text-right text-[13px] text-storm sm:block">{subscription.accountName ?? subscription.categoryName ?? ""}</p>
           <div className="flex items-center gap-1 py-3 text-right">
-            <p className="mr-1 whitespace-nowrap text-sm font-semibold tabular-nums text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p>
+            <div className="mr-1"><p className={`whitespace-nowrap text-sm font-semibold tabular-nums ${subscription.status === "active" ? "text-ink" : "text-storm"}`}>{formatCurrency(subscription.amount, subscription.currencyCode)}</p><p className="mt-0.5 text-xs text-storm">{subscriptionRecurrencePhrase(subscription).toLocaleLowerCase("es")}</p></div>
             <div className="relative" onClick={(event) => event.stopPropagation()}>
               <button aria-expanded={openActionsId === subscription.id} aria-label={"Opciones de " + subscription.name} className="grid h-9 w-9 place-items-center rounded-lg text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={() => setOpenActionsId((current) => current === subscription.id ? null : subscription.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>
               {openActionsId === subscription.id ? <>
                 <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenActionsId(null)} type="button" />
                 <div className="absolute right-0 top-10 z-50 w-44 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onOpen(subscription); }} type="button"><ChevronRight className="h-4 w-4" />Ver detalle</button>
-                  {subscription.status === "active" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onPay(subscription); }} type="button"><CircleCheck className="h-4 w-4" />Marcar como pagada</button> : null}
+                  {subscription.status === "active" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onPay(subscription); }} type="button"><CircleCheck className="h-4 w-4" />Registrar pago</button> : null}
                   {subscription.status === "paused" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onReactivate(subscription); }} type="button"><Play className="h-4 w-4" />Reactivar</button> : null}
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onAnalytics(subscription.id); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onEdit(subscription); }} type="button"><PencilLine className="h-4 w-4" />Editar</button>

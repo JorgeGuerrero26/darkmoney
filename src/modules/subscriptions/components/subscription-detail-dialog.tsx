@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { Modal } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { ResourceEditorHeader } from "../../../components/ui/resource-editor";
+import { DetailFieldRow } from "../../../components/ui/detail-field-row";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, CategorySummary, MovementRecord, SubscriptionSummary } from "../../../types/domain";
-import { computeNextRecurringDate, getFrequencyOption } from "../lib/subscriptions-presenters";
+import { computeNextRecurringDate } from "../lib/subscriptions-presenters";
 import { type SubscriptionOccurrence, useSubscriptionOccurrences } from "../lib/subscription-actions";
+import { subscriptionRecurrencePhrase } from "../lib/subscription-detail-presentation";
 
 type Props = {
   subscription: SubscriptionSummary;
@@ -64,6 +66,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
   const [accountId, setAccountId] = useState(subscription.accountId ? String(subscription.accountId) : "");
   const [error, setError] = useState("");
   const [showAllPayments, setShowAllPayments] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     setPanel(initialPanel);
     setAmount(String(subscription.amount));
@@ -71,6 +74,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
     setAccountId(subscription.accountId ? String(subscription.accountId) : "");
     setError("");
     setShowAllPayments(false);
+    setMenuOpen(false);
   }, [subscription.id, initialPanel]);
   const eligibleAccounts = accounts.filter((account) => !account.isArchived);
   const eligibleCategories = categories.filter((category) => category.isActive && (category.kind === "expense" || category.kind === "both"));
@@ -95,25 +99,34 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
   }
 
   return <Modal className="!max-w-[640px]" labelledBy="subscription-detail-title" onClose={onClose} size="lg">
-      <ResourceEditorHeader onBack={panel !== "detail" ? () => setPanel("detail") : undefined} onClose={onClose} title={panel === "pay" ? `${subscription.name} · pago` : panel === "account" ? "Se paga con" : panel === "category" ? "Categoría" : subscription.name} titleId="subscription-detail-title" />
+      <ResourceEditorHeader disabled={isPending} accessory={panel === "detail" ? <div className="relative"><button aria-label="Más acciones de suscripción" aria-expanded={menuOpen} className="grid h-9 w-9 place-items-center rounded-lg text-storm hover:bg-white/[0.04]" onClick={() => setMenuOpen((open) => !open)} type="button"><MoreVertical className="h-4 w-4" /></button>{menuOpen ? <><button aria-label="Cerrar acciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setMenuOpen(false)} type="button" /><div className="absolute left-0 top-10 z-50 w-52 rounded-xl border border-white/10 bg-[#1b1a18] py-1 text-sm">{[
+        { label: "Ver analítica", action: onAnalytics },
+        { label: subscription.isPinned ? "Quitar de fijadas" : "Fijar en la lista", action: onPin },
+        ...(subscription.status === "active" ? [{ label: "Pausar suscripción", action: () => onStatus("paused") }] : []),
+        ...(subscription.status !== "cancelled" ? [{ label: "Cancelar suscripción", action: () => onStatus("cancelled") }] : []),
+        { label: "Eliminar suscripción", action: onDelete },
+      ].map(({ label, action }) => <button className="flex min-h-11 w-full items-center px-4 text-left text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={isPending} key={label} onClick={() => { setMenuOpen(false); action(); }} type="button">{label}</button>)}</div></> : null}</div> : undefined} onBack={panel !== "detail" ? () => setPanel("detail") : undefined} onClose={onClose} title={panel === "pay" ? `${subscription.name} · pago` : panel === "account" ? "Se paga con" : panel === "category" ? "Categoría" : subscription.name} titleId="subscription-detail-title" />
       <ModalBody className="space-y-5">
         {panel === "detail" ? <>
-          <div><p className="text-xs uppercase tracking-[0.14em] text-storm">{standing.label}</p><p className="mt-1 font-display text-3xl font-semibold text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p><p className="mt-1 text-sm text-storm">{getFrequencyOption(subscription.frequency).label} · {standing.detail}</p></div>
-          {subscription.status === "active" ? <Button className="w-full" onClick={() => setPanel("pay")}>{subscription.nextDueDate < new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10) ? "Ponerla al día" : "Marcar como pagada"}</Button> : <Button className="w-full" disabled={isPending} onClick={() => onStatus("active")}>Reactivar</Button>}
-          <div className="divide-y divide-white/[0.08] border-y border-white/[0.08] text-sm">
-            <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left transition-colors duration-150 hover:bg-white/[0.03]" onClick={() => setPanel("account")} type="button"><span className="text-storm">Se paga con</span><span className="flex min-w-0 items-center gap-2 text-ink"><span className="truncate">{subscription.accountName ?? "Sin cuenta"}</span><ChevronRight className="h-4 w-4 shrink-0 text-storm" /></span></button>
-            <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left transition-colors duration-150 hover:bg-white/[0.03]" onClick={() => setPanel("category")} type="button"><span className="text-storm">Categoría</span><span className="flex min-w-0 items-center gap-2 text-ink"><span className="truncate">{subscription.categoryName ?? "Sin categoría"}</span><ChevronRight className="h-4 w-4 shrink-0 text-storm" /></span></button>
-            <div className="flex justify-between gap-4 py-3"><span className="text-storm">Proveedor</span><span className="text-ink">{subscription.vendor}</span></div>
-            <div className="flex justify-between gap-4 py-3"><span className="text-storm">Recordatorio</span><span className="text-ink">{subscription.remindDaysBefore} días antes</span></div>
+          <div className="border-b border-white/[0.08] pb-5 text-center"><p className="text-xs uppercase tracking-[0.12em] text-storm">Suscripción · {standing.label}</p><p className="mt-2 font-display text-3xl font-semibold tabular-nums text-ink">{formatCurrency(subscription.amount, subscription.currencyCode)}</p><p className="mt-1 text-sm text-storm">{subscriptionRecurrencePhrase(subscription)}</p><p className="mt-2 text-sm leading-6 text-storm">{standing.detail}</p></div>
+          <div>
+            <DetailFieldRow label="Nombre" value={subscription.name} />
+            {subscription.vendor?.trim() ? <DetailFieldRow label="Proveedor" value={subscription.vendor} /> : null}
+            <DetailFieldRow label="Estado" value={{ active: "Activa", paused: "Pausada", cancelled: "Cancelada" }[subscription.status]} />
+            <DetailFieldRow label="Moneda" value={subscription.currencyCode} />
+            <DetailFieldRow label="Se repite" value={subscriptionRecurrencePhrase(subscription)} />
+            <DetailFieldRow label="Fecha de inicio" value={formatDate(subscription.startDate)} />
+            <DetailFieldRow label="Próximo cobro" value={formatDate(subscription.nextDueDate)} />
+            {subscription.endDate ? <DetailFieldRow label="Fecha de fin" value={formatDate(subscription.endDate)} /> : null}
+            <DetailFieldRow label="Avisarme antes" value={subscription.remindDaysBefore > 0 ? `${subscription.remindDaysBefore} ${subscription.remindDaysBefore === 1 ? "día" : "días"}` : "Sin aviso"} />
+            <DetailFieldRow disabled={isPending} label="Se paga con" onClick={() => setPanel("account")} value={subscription.accountName ?? "Sin cuenta"} />
+            <DetailFieldRow disabled={isPending} label="Categoría" onClick={() => setPanel("category")} value={subscription.categoryName ?? "Sin categoría"} />
+            <DetailFieldRow label="Anotar gasto solo" value={subscription.autoCreateMovement ? (subscription.accountId ? "Sí" : "Requiere cuenta") : "No"} />
+            {subscription.description?.trim() ? <DetailFieldRow label="Descripción" value={subscription.description} /> : null}
+            {subscription.notes?.trim() ? <DetailFieldRow label="Notas" value={subscription.notes} /> : null}
+            <DetailFieldRow label="Fijada en la lista" value={subscription.isPinned ? "Sí" : "No"} />
           </div>
           <section><h3 className="mb-2 text-xs uppercase tracking-[0.14em] text-storm">Pagos anotados · {payments.length}</h3>{payments.length ? <div className="divide-y divide-white/[0.08]">{(showAllPayments ? payments : payments.slice(0, 12)).map((payment) => <button aria-label={`Abrir movimiento del ${formatDate(payment.occurredAt)}`} className="flex w-full justify-between gap-4 py-3 text-left text-sm hover:bg-white/[0.03]" key={payment.id} onClick={() => onOpenMovement(payment.id)} type="button"><span className="text-storm">{formatDate(payment.occurredAt)} ›</span><span className="font-semibold text-ink">{formatCurrency(payment.sourceAmount ?? payment.destinationAmount ?? 0, payment.sourceCurrencyCode ?? subscription.currencyCode)}</span></button>)}</div> : <p className="text-sm text-storm">Ninguno todavía. Cada vez que la marques como pagada, el gasto aparece aquí.</p>}{payments.length > 12 ? <button className="mt-3 text-sm text-ink underline-offset-4 hover:underline" onClick={() => setShowAllPayments((value) => !value)} type="button">{showAllPayments ? "Mostrar menos" : `Ver los ${payments.length - 12} restantes`}</button> : null}</section>
-          {subscription.description || subscription.notes ? <section className="space-y-2 border-t border-white/[0.08] pt-4 text-sm text-storm">{subscription.description ? <p>{subscription.description}</p> : null}{subscription.notes ? <p>{subscription.notes}</p> : null}</section> : null}
-          <div className="flex flex-wrap gap-x-5 gap-y-3 border-t border-white/[0.08] pt-4 text-sm">
-            <button className="text-ink hover:underline" onClick={onEdit} type="button">Editar</button><button className="text-ink hover:underline" onClick={onAnalytics} type="button">Analizar</button><button className="text-ink hover:underline" disabled={isPending} onClick={onPin} type="button">{subscription.isPinned ? "Quitar de fijadas" : "Fijar en la lista"}</button>
-            {subscription.status === "active" ? <button className="text-ink hover:underline" disabled={isPending} onClick={() => onStatus("paused")} type="button">Pausar</button> : null}
-            {subscription.status !== "cancelled" ? <button className="text-ink hover:underline" disabled={isPending} onClick={() => onStatus("cancelled")} type="button">Cancelar</button> : null}
-            <button className="text-storm hover:text-ink hover:underline" onClick={onDelete} type="button">Eliminar</button>
-          </div>
         </> : panel === "pay" ? <>
           <label className="block text-[13px] font-medium text-storm" htmlFor="subscription-paid-amount">Cuánto pagaste</label>
           <input className="field-dark !h-16 w-full text-2xl font-semibold" id="subscription-paid-amount" min="0.01" onChange={(event) => { setAmount(event.target.value); setError(""); }} step="0.01" type="number" value={amount} />
@@ -126,6 +139,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
           {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
         </> : panel === "account" ? <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]"><button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-storm" disabled={isPending} onClick={() => { onAssignAccount(null); setPanel("detail"); }} type="button">Sin cuenta</button>{eligibleAccounts.map((account) => <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left" disabled={isPending} key={account.id} onClick={() => { onAssignAccount(account.id); setPanel("detail"); }} type="button"><span className="text-ink">{account.name}</span><span className="text-sm text-storm">{account.currencyCode}</span></button>)}</div> : <div className="divide-y divide-white/[0.08] border-y border-white/[0.08]"><button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-storm" disabled={isPending} onClick={() => { onAssignCategory(null); setPanel("detail"); }} type="button">Sin categoría</button>{eligibleCategories.map((category) => <button className="flex min-h-[54px] w-full items-center justify-between gap-4 py-3 text-left text-ink" disabled={isPending} key={category.id} onClick={() => { onAssignCategory(category.id); setPanel("detail"); }} type="button">{category.name}<span className="text-storm">›</span></button>)}</div>}
       </ModalBody>
+      {panel === "detail" ? <footer className="grid shrink-0 grid-cols-2 gap-3 border-t border-white/[0.08] px-6 py-4"><Button disabled={isPending} onClick={onEdit} variant="secondary">Editar</Button>{subscription.status === "active" ? <Button disabled={isPending} onClick={() => setPanel("pay")}>{subscription.nextDueDate < new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10) ? "Poner al día" : "Registrar pago"}</Button> : <Button disabled={isPending} onClick={() => onStatus("active")}>Reactivar</Button>}</footer> : null}
       {panel === "pay" ? <div className="border-t border-white/[0.08] px-6 py-4"><p className="mb-3 text-xs text-storm">{selectedAccount ? `Se anotará un gasto en ${selectedAccount.name} y avanzará el próximo cobro.` : "Elige la cuenta para registrar el gasto."}</p><Button className="w-full" disabled={isPending || !eligibleAccounts.length} onClick={() => void confirmPayment()}>{isPending ? "Registrando..." : selectedAccount ? "Confirmar pago" : "Elige la cuenta"}</Button></div> : null}
   </Modal>;
 }
