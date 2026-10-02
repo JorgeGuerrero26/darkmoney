@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchCategoryMovementUsage } from "./category-usage";
 
 import type { AppProfile } from "../../modules/auth/auth-context";
 import type {
@@ -2851,11 +2852,7 @@ async function fetchCategoriesOverview(workspaceId: number) {
       .eq("workspace_id", workspaceId)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true }),
-    client
-      .from("movements")
-      .select("category_id, occurred_at")
-      .eq("workspace_id", workspaceId)
-      .not("category_id", "is", null),
+    fetchCategoryMovementUsage(client, workspaceId),
     client
       .from("subscriptions")
       .select("category_id, updated_at")

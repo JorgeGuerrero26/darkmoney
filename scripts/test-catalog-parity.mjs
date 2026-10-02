@@ -51,6 +51,22 @@ assert.deepEqual(categories.categoryParentCandidates(parents, "income").map((ite
 assert.deepEqual(categories.categoryParentCandidates(parents, "both").map((item) => item.id), [1, 2, 3, 4, 5]);
 console.log("catalog-parity: OK — cobros, monedas, cancelados, filtros, padres y doce meses en Lima");
 
+const usage = await import(compile(resolve(root, "src/services/queries/category-usage.ts")));
+const usageRows = Array.from({ length: 1501 }, (_, id) => ({ id, category_id: 7, occurred_at: "2020-01-01" }));
+let usageRequests = 0;
+const usageClient = { from(table) {
+  assert.equal(table, "movements");
+  const query = {};
+  for (const method of ["select", "eq", "not", "order"]) query[method] = (...args) => {
+    if (method === "eq") assert.deepEqual(args, ["workspace_id", 42]);
+    return query;
+  };
+  query.range = async (from, to) => { usageRequests++; return { data: usageRows.slice(from, to + 1), error: null }; };
+  return query;
+} };
+assert.deepEqual((await usage.fetchCategoryMovementUsage(usageClient, 42)).data, usageRows);
+assert.equal(usageRequests, 4);
+
 const accounts = await import(compile(resolve(root, "src/modules/accounts/lib/account-validation.ts")));
 const defaultAccount = accounts.createDefaultFormState("PEN");
 assert.equal(defaultAccount.statementDay, "");
