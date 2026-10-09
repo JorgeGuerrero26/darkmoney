@@ -21,7 +21,7 @@ Esta nota no reemplaza las correcciones anteriores de Suscripciones e Invitacion
 
 ## Pendiente: no hay paridad total
 
-1. **Movimientos detectados:** registro simple implementado en la continuación descrita abajo. Siguen pendientes división, deshacer el registro, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
+1. **Movimientos detectados:** registro simple implementado. Deshacer el registro está preparado en código en ambos clientes y probado localmente, pero requiere desplegar `202610090002_detected_movement_undo.sql`. Siguen pendientes crear divisiones en web, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
 2. **Asistente:** falta el destino de `assistant_insight` y revisar el contrato de los resúmenes de IA. No se implementó un envío automático de prompts.
 3. **Espacio del aviso:** no se añadió cambio automático de espacio. Los destinos usan los recursos del espacio activo; falta resolver avisos de otro espacio con permisos y estados de carga/error explícitos.
 4. **Historial/detalle:** el nuevo resumen diario permite consultar el día, pero no reproduce todos los subtotales y grupos del DaySheet móvil. Las solicitudes y eventos se probaron con reglas puras; faltan pruebas de interfaz con casos reales o fixtures de integración.
@@ -50,3 +50,22 @@ Los commits de esta continuación separan campana y navegación. Se conservaron 
 Pasaron `npm run build` (incluye `tsc -b`), `test:detected-movement-parity`, `test:notification-parity`, `test:movement-save`, `test:subscription-parity` y `test:parity`. También se prueban los retornos desde Pendientes y desde un aviso directo, conservando parámetros y descartando orígenes arbitrarios. No se ejecutaron typecheck ni Jest del proyecto móvil en esta continuación: sus archivos no se modificaron, y la comparación usa su función pura real.
 
 No se abrió una detección real durante esta prueba: la conciliación puede actualizar el estado canónico en el servidor incluso sin crear movimientos. Falta verificar interfaz y concurrencia con fixtures de integración o un espacio de pruebas. El flujo requiere los contratos del servidor presentes en DarkMoneyApp (`202610070002_detected_movement_resolution.sql` y `202610090001_detected_movement_reconciliation.sql`); no se desplegaron migraciones ni se comprobó aquí su estado remoto.
+
+## Continuación: deshacer el registro completo
+
+- Hallazgo móvil: deshacer borraba solo el primer movimiento y reabría la detección mediante otra petición. En una división quedaban partes aplicadas; un fallo entre peticiones podía dejar un estado inconsistente.
+- Ambos clientes llaman a la misma RPC y usan un contrato puro idéntico. Web reutiliza la acción Deshacer existente después del registro y ofrece confirmación desde una detección registrada. Móvil sustituye el borrado seguido de actualización por una única transacción.
+- Se captura el espacio y movimiento originales. Un aviso conservado tras cambiar de espacio no elimina un registro del espacio nuevo. El ID esperado impide deshacer una inscripción posterior de la detección.
+- La RPC respeta RLS (`security invoker`) y verifica propietario, membresía, Aplicado, procedencia, claves y PRO por correo. Borra todas las partes de una división completa, no solo la primera; un fallo revierte borrados y estado. Los locks siguen el orden movimiento → detección.
+- Por seguridad se rechazan grupos incompletos/contaminados, partes sueltas fuera del grupo, ediciones, vínculos a obligaciones, comprobantes y referencias de otras detecciones. El helper de solo lectura consulta referencias ocultas por RLS sin exponer datos del otro usuario. Estos casos requieren revisión desde Movimientos, no un borrado parcial.
+- `metadata.registrationUndo` permite confirmar un reintento después de perder la respuesta. El estado de lectura/archivo y el payload de los avisos no se cambian. Consultas financieras y de detecciones se invalidan incluso ante una respuesta incierta; los fallos no usan un fallback de delete/update.
+- No se activó aún crear divisiones detectadas en web: la vía móvil actual registra las partes secuencialmente. Falta cerrar un contrato de lote seguro antes de habilitar esa misma superficie.
+
+### Validación y despliegue pendiente
+
+- `test:detected-movement-undo` ejecuta la migración real en [Postgres en memoria mediante PGlite](https://pglite.dev/docs/), con fixtures de RLS, FK, divisiones, rechazos, permisos, fallos a mitad de operación y reintentos. Compara byte a byte el SQL y el contrato puro de ambos repositorios. No lee credenciales ni abre conexiones remotas.
+- Pasaron build/TypeScript web, `test:detected-movement-parity`, `test:notification-parity`, `test:movement-save`, `test:parity` y el test SQL. Typecheck móvil y 19 pruebas Jest en dos suites de detecciones pasaron; no se ejecutó Jest completo.
+- PGlite tiene una sola conexión: estas pruebas no certifican contención real entre dos sesiones, triggers completos del entorno desplegado ni la interfaz en teléfonos. No se guardaron o borraron registros reales.
+- Se añadió PGlite solo como dependencia de desarrollo. `npm audit` informa 20 vulnerabilidades en otras dependencias (ninguna atribuida a PGlite); no se aplicaron actualizaciones automáticas fuera del alcance de esta unidad.
+- La migración está en ambos repositorios, documentada en sus diccionarios. El diccionario móvil está ignorado por Git; se conserva localmente y la nota pública está en `DarkMoneyApp/docs/DETECTED-MOVEMENT-UNDO-2026-10-09.md`, sin forzar la publicación del diccionario privado.
+- **No desplegado:** el servidor requiere aplicar una sola vez `202610090002_detected_movement_undo.sql`, con los contratos previos de detecciones. Hasta entonces Deshacer informa que falta la migración y no elimina movimientos. Móvil también requiere publicar su actualización; no se hizo OTA. No hay paridad total.

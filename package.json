@@ -15,6 +15,7 @@
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:detected-movement-parity": "node --experimental-strip-types scripts/test-detected-movement-parity.mjs",
+    "test:detected-movement-undo": "node --experimental-strip-types scripts/test-detected-movement-undo.mjs",
     "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",
     "test:catalog-parity": "node scripts/test-catalog-parity.mjs",
@@ -32,6 +33,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.0.2",

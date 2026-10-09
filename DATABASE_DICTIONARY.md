@@ -691,6 +691,23 @@ Detalle puntual por vencimiento de suscripciones.
 
 Libro mayor operativo del sistema.
 
+**Deshacer detecciones (202610090002):** RPC autenticada
+`undo_detected_movement_registration(p_workspace_id, p_suggestion_id, p_expected_movement_id)`.
+Se ejecuta como `security invoker`, con RLS, propietario de la detección y membresía del espacio.
+En una transacción elimina el registro propio sin ediciones (o todas las partes de una división
+completa con claves `suggestion:<id>` / `suggestion:<id>:split-N`) y reabre su detección como
+`pending`, con `movement_id = null`. Verifica procedencia, estado Aplicado y permiso PRO por correo.
+No elimina registros manuales/duplicados, grupos incompletos, movimientos editados, vinculados
+a obligaciones, con comprobantes o referenciados por otra detección. El helper de solo lectura
+`detected_registration_has_other_links` usa `security definer` para detectar referencias ocultas
+por RLS, pero solo devuelve un booleano sobre un registro propio y no revela datos del otro usuario.
+Cualquier fallo revierte todas las eliminaciones.
+`metadata.registrationUndo` en la detección conserva el ID anterior, IDs eliminados y fecha;
+permite reintentar tras perder la respuesta sin borrar un registro posterior.
+No modifica la lectura, el archivo ni el payload de los avisos. No añade tablas o columnas.
+Requiere la tabla de detecciones y el contrato PRO del servidor móvil; crear esta migración
+en el repositorio no la despliega al servidor.
+
 | Campo | Tipo | Nulo | Descripcion |
 |---|---|---|---|
 | `id` | `bigint` | No | Identificador del movimiento |

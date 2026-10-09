@@ -15,12 +15,23 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
     return (data ?? []).map((row) => ({ financialAppKey: row.financial_app_key, enabled: row.enabled, defaultAccountId: row.default_account_id == null ? null : Number(row.default_account_id) }));
   } });
   function invalidate() { void queryClient.invalidateQueries({ queryKey: key }); void queryClient.invalidateQueries({ queryKey: ["notifications"] }); }
-  return { store, key, pending, settings, invalidate };
+  async function invalidateFinances() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: key }),
+      queryClient.invalidateQueries({ queryKey: ["workspace-snapshot", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["categories-overview", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["counterparties-overview", workspaceId] }),
+      queryClient.invalidateQueries({ queryKey: ["movements"] }),
+      queryClient.invalidateQueries({ queryKey: ["detection-learning", userId, workspaceId] }),
+    ]);
+  }
+  return { store, key, pending, settings, invalidate, invalidateFinances };
 }
 
 export function useDetectedMovementReviewQuery(userId: string, workspaceId: number, id: number) {
-  const { store, key, settings, invalidate } = useDetectedMovements(userId, workspaceId, false, true);
+  const { store, key, settings, invalidate, invalidateFinances } = useDetectedMovements(userId, workspaceId, false, true);
   const review = useQuery({ queryKey: [...key, "review", id], enabled: Boolean(store), queryFn: () => store!.review(id), refetchOnWindowFocus: true });
   const resolve = useMutation({ mutationFn: (input: Parameters<NonNullable<typeof store>["resolve"]>) => store!.resolve(...input), onSuccess: invalidate });
-  return { store, review, settings, resolve, invalidate };
+  const undo = useMutation({ mutationFn: (movementId: number) => store!.undoRegistration(id, movementId), onSettled: invalidateFinances });
+  return { store, review, settings, resolve, undo, invalidate, invalidateFinances };
 }

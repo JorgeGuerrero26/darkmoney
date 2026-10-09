@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountSummary, CategorySummary, JsonValue, MovementRecord } from "../../types/domain";
+import { requestDetectedRegistrationUndo } from "../../modules/notifications/lib/detection-undo.ts";
 import { detectionObject, detectionPending, detectedWriteInput, validateDetectedMovement,
   type DetectedMovement, type DetectionMovementInput, type DetectionStatus } from "../../modules/notifications/lib/detected-movement.ts";
 
@@ -132,5 +133,8 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
     if (suggestion.status !== "registered" || suggestion.movementId !== movementId) throw new Error("La detección cambió en otro dispositivo. Actualiza para comprobar el movimiento.");
     return { movementId, readingUpdated: await read(id) };
   }
-  return { get, review, pending, resolve, register, restoreDiscarded };
+  async function undoRegistration(suggestionId: number, movementId: number) {
+    return requestDetectedRegistrationUndo(client, { workspaceId: scope.workspaceId, suggestionId, movementId });
+  }
+  return { get, review, pending, resolve, register, restoreDiscarded, undoRegistration };
 }
