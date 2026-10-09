@@ -53,6 +53,7 @@ import {
 } from "../../modules/notifications/use-notification-inbox";
 import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
 import { notificationReadingCounts } from "../../modules/notifications/lib/notification-list-model";
+import { notificationDefersRead } from "../../modules/notifications/lib/notification-navigation";
 import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import { useWorkspaceDataSync } from "../../modules/workspaces/use-workspace-data-sync";
@@ -483,7 +484,7 @@ function AppShellContent() {
 
   async function handleOpenNotification(notification: InboxNotification) {
     try {
-      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind)) {
+      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
         if (notification.source === "database" && notification.databaseId) {
           await markNotificationReadMutation.mutateAsync(notification.databaseId);
         } else {

@@ -21,7 +21,7 @@ Esta nota no reemplaza las correcciones anteriores de Suscripciones e Invitacion
 
 ## Pendiente: no hay paridad total
 
-1. **Movimientos detectados:** web todavía no tiene el flujo canónico de revisión/confirmación del móvil. Abrir la lista no equivale a revisar una sugerencia. Deben verificarse reconciliación, deduplicación y lectura diferida hasta resolverla.
+1. **Movimientos detectados:** registro simple implementado en la continuación descrita abajo. Siguen pendientes división, deshacer el registro, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
 2. **Asistente:** falta el destino de `assistant_insight` y revisar el contrato de los resúmenes de IA. No se implementó un envío automático de prompts.
 3. **Espacio del aviso:** no se añadió cambio automático de espacio. Los destinos usan los recursos del espacio activo; falta resolver avisos de otro espacio con permisos y estados de carga/error explícitos.
 4. **Historial/detalle:** el nuevo resumen diario permite consultar el día, pero no reproduce todos los subtotales y grupos del DaySheet móvil. Las solicitudes y eventos se probaron con reglas puras; faltan pruebas de interfaz con casos reales o fixtures de integración.
@@ -30,3 +30,23 @@ Esta nota no reemplaza las correcciones anteriores de Suscripciones e Invitacion
 ## Límites
 
 Los commits de esta continuación separan campana y navegación. Se conservaron las ediciones previas no confirmadas de Suscripciones, la auditoría principal y otros archivos ajenos. Las pruebas pasando cubren los casos enumerados, no certifican por sí solas la paridad de todos los módulos ni todos los tipos de aviso.
+
+## Continuación: revisión de movimientos detectados en web
+
+- Los avisos individuales abren la detección por ID; el aviso de pendientes abre una lista canónica del espacio activo. El `payload.status` es solo una foto del aviso, no decide si se puede registrar.
+- Al cerrar una revisión abierta desde Pendientes se vuelve a esa lista; una abierta directamente desde un aviso vuelve a Avisos. Se conserva el resto de parámetros y no se aceptan URLs de retorno arbitrarias. Android/iOS no se modificaron en este cambio web.
+- Se reutiliza `QuickMovementDialog`: monto, cuenta y saldo después, tipo, destino Detalles, fecha, comprobante y las sugerencias existentes de Movimientos. No hay un segundo formulario con un diseño diferente.
+- Los borradores siguen las reglas conservadoras del móvil: cuenta explícita del comprobante/configuración antes que un default; solo una cuenta compatible permite autoselección; no se inventa un destino de transferencia. No se cambia la moneda del importe detectado al escoger la cuenta.
+- Abrir/cerrar desde bandeja o campana no marca leído el aviso de una detección. Registrar, confirmar que era el mismo movimiento u omitir sí intenta marcar sus avisos relacionados. Si ese cambio de lectura falla, no convierte un registro guardado en un fallo financiero.
+- Antes de registrar se consulta el estado actual, el permiso PRO de correo y `reconcile_detected_movements`. Sin conciliación no se guarda. Se usa la misma clave `suggestion:<id>` y metadatos que móvil. El trigger de registro simple resuelve la sugerencia; se conserva el cierre compatible si hace falta confirmar el estado posteriormente.
+- Un candidato incierto exige elegir «Es el mismo movimiento» o permitir guardar otro. Cambiar datos del borrador invalida esa autorización. No se usa solo el monto para resolver duplicados.
+- La omisión requiere confirmación, usa actualización condicional y puede deshacerse en la revisión. Deshacer una omisión no cambia por sí solo el estado de lectura ni toca un saldo.
+- La lista usa paginación completa y filtra `pending/needs_review` independientemente de la lectura del aviso. Las claves y lecturas incluyen usuario y espacio. Un ID de otro espacio no abre ni modifica esa detección.
+
+### Pruebas y límites de esta continuación
+
+`test:detected-movement-parity` compara 16 casos contra `buildDetectionDraft` del código real de DarkMoneyApp. Verifica usuario/espacio, cuenta archivada, moneda, transferencia, cambio de día en Perú, borradores con husos distintos, lectura diferida, omisión/deshacer, permisos PRO, actualización concurrente, lista de más de 500 filas, conciliación fallida y reintento con la clave móvil. Los clientes y escrituras son simulados; no se confirma con ello el locking real de Postgres.
+
+Pasaron `npm run build` (incluye `tsc -b`), `test:detected-movement-parity`, `test:notification-parity`, `test:movement-save`, `test:subscription-parity` y `test:parity`. También se prueban los retornos desde Pendientes y desde un aviso directo, conservando parámetros y descartando orígenes arbitrarios. No se ejecutaron typecheck ni Jest del proyecto móvil en esta continuación: sus archivos no se modificaron, y la comparación usa su función pura real.
+
+No se abrió una detección real durante esta prueba: la conciliación puede actualizar el estado canónico en el servidor incluso sin crear movimientos. Falta verificar interfaz y concurrencia con fixtures de integración o un espacio de pruebas. El flujo requiere los contratos del servidor presentes en DarkMoneyApp (`202610070002_detected_movement_resolution.sql` y `202610090001_detected_movement_reconciliation.sql`); no se desplegaron migraciones ni se comprobó aquí su estado remoto.

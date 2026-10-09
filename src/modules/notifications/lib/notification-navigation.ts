@@ -19,6 +19,11 @@ function internalLink(path: string, values: Record<string, string | number | nul
   return params.size ? `${path}?${params}` : path;
 }
 
+/** These notices stay unread when merely opening their destination. */
+export function notificationDefersRead(kind: string) {
+  return ["obligation_payment_request", "obligation_event_delete_request", "obligation_event_edit_request", "detected_movement_suggestion"].includes(kind);
+}
+
 /** Never follow a URL from payload; map known kinds to internal product destinations. */
 export function notificationHref(notification: Pick<NotificationItem, "kind" | "relatedEntityType" | "relatedEntityId" | "payload">, now = new Date()) {
   const { kind, relatedEntityType, relatedEntityId } = notification;
@@ -29,6 +34,11 @@ export function notificationHref(notification: Pick<NotificationItem, "kind" | "
   const month = getCurrentMonthDateRange(now);
   const movements = (label: string, type?: string, from = month.from, to = month.to, categoryId?: number | null) =>
     internalLink("/app/movements", { from, to, type, categoryId, notice: label });
+  if (kind === "detected_movement_suggestion") {
+    const suggestionId = notificationId(payload.suggestionId) ?? (relatedEntityType === "detected_movement_suggestion" ? id : null);
+    return internalLink("/app/notifications", { detected: suggestionId ?? "pending" });
+  }
+  if (kind === "detected_suggestions_pending" || kind === "detected_movements_pending") return "/app/notifications?detected=pending";
   if (["daily_digest", "daily_ai_digest", "daily_workspace_summary"].includes(kind)) {
     return internalLink("/app", { day: notificationDate(payload.todayKey) ?? movementDateInPeru(now.toISOString()) });
   }
@@ -68,6 +78,5 @@ export function notificationHref(notification: Pick<NotificationItem, "kind" | "
   if (kind === "weekly_ai_digest") return "/app";
   if (relatedEntityType === "movement" && id) return `/app/movements?period=all&movement=${id}`;
   if (kind === "net_worth_negative") return "/app/accounts";
-  if (["daily_cashflow_check", "no_income_month", "high_expense_month", "category_spending_spike", "expense_income_imbalance", "savings_rate_low", "no_movements_week", "possible_duplicate_charge", "detected_movements_pending", "detected_suggestions_pending", "detected_movement_suggestion"].includes(kind)) return "/app/movements";
   return "/app/notifications";
 }

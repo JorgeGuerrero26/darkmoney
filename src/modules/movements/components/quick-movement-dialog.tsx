@@ -59,6 +59,7 @@ import {
   useBudgetSpendTypesQuery,
   usePersistLearningFeedbackMutation,
   getQueryErrorMessage,
+  type MovementFormInput,
   type WorkspaceSnapshot,
   useCreateMovementMutation,
 } from "../../../services/queries/workspace-data";
@@ -66,6 +67,15 @@ import {
 export type QuickMovementKind = "expense" | "income" | "transfer";
 
 type QuickMovementDialogProps = {
+  initialDraft?: Partial<QuickMovementFormState>;
+  title?: string;
+  context?: ReactNode;
+  allowSplit?: boolean;
+  postedOnly?: boolean;
+  sourceCurrencyCode?: string;
+  onDraftChange?: () => void;
+  isSubmitting?: boolean;
+  submitMovement?: (input: MovementFormInput & { workspaceId: number; userId: string }) => Promise<number>;
   initialAccountId?: number | null;
   initialKind: QuickMovementKind;
   onClose: () => void;
@@ -76,7 +86,7 @@ type QuickMovementDialogProps = {
   proAccessEnabled?: boolean;
 };
 
-type QuickMovementFormState = {
+export type QuickMovementFormState = {
   accountId: string;
   amount: string;
   categoryId: string;
@@ -282,6 +292,15 @@ function QuickInput({ className = "", ...props }: InputHTMLAttributes<HTMLInputE
 
 
 export function QuickMovementDialog({
+  initialDraft,
+  title = "Nuevo movimiento",
+  context,
+  allowSplit = true,
+  postedOnly = false,
+  sourceCurrencyCode,
+  onDraftChange,
+  isSubmitting = false,
+  submitMovement,
   initialAccountId,
   initialKind,
   onClose,
@@ -294,9 +313,10 @@ export function QuickMovementDialog({
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
   const [kind, setKind] = useState<QuickMovementKind>(initialKind);
   const [formState, setFormState] = useState<QuickMovementFormState>(() =>
-    createDefaultQuickMovementFormState(initialKind, initialAccountId),
+    ({ ...createDefaultQuickMovementFormState(initialKind, initialAccountId), ...initialDraft }),
   );
   const [isDirty, setIsDirty] = useState(false);
+  useEffect(() => { onDraftChange?.(); }, [formState, kind, onDraftChange]);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [activePanel, setActivePanel] = useState<QuickMovementPanel>("main");
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
@@ -315,6 +335,7 @@ export function QuickMovementDialog({
   const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
   const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
   const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
+  const saveMovement = submitMovement ?? createMovementMutation.mutateAsync;
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(workspaceId, userId);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
@@ -367,6 +388,7 @@ export function QuickMovementDialog({
     ) ?? null;
   const selectedMode = getQuickMovementMode(kind);
   const isSaving =
+    isSubmitting ||
     createMovementMutation.isPending ||
     createAttachmentRecordMutation.isPending ||
     createCategoryMutation.isPending ||
@@ -387,6 +409,7 @@ export function QuickMovementDialog({
       ? computedDestinationAmount / computedAmount
       : null;
   const suggestionCurrencyCode =
+    sourceCurrencyCode ??
     selectedAccount?.currencyCode ??
     selectedSourceAccount?.currencyCode ??
     selectedDestinationAccount?.currencyCode ??
@@ -726,6 +749,7 @@ export function QuickMovementDialog({
         });
 
         if (splitLines && (kind === "expense" || kind === "income")) {
+          if (!allowSplit) throw new Error("La detección no admite dividir el registro en este formulario todavía.");
           const splitError = validateMovementSplit(splitLines, amount ?? 0);
           if (splitError) {
             setActivePanel("split");
@@ -738,7 +762,7 @@ export function QuickMovementDialog({
           for (const [index, line] of splitLines.entries()) {
             const lineAmount = Number(line.amount);
             const lineCategoryId = Number(line.categoryId);
-            const movementId = await createMovementMutation.mutateAsync({
+            const movementId = await saveMovement({
               dedupeKey: `${splitGroupId}:split-${index + 1}`,
               categoryId: lineCategoryId,
               spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")),
@@ -789,7 +813,7 @@ export function QuickMovementDialog({
           return;
         }
 
-        const createdMovementId = await createMovementMutation.mutateAsync({
+        const createdMovementId = await saveMovement({
           dedupeKey: submitDedupeKeyRef.current,
           categoryId: categoryId !== null && Number.isFinite(categoryId) ? categoryId : null,
           spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(formState.spendTypeId)),
@@ -891,7 +915,7 @@ export function QuickMovementDialog({
         accountName: selectedSourceAccount?.name,
       });
 
-      const createdMovementId = await createMovementMutation.mutateAsync({
+      const createdMovementId = await saveMovement({
         dedupeKey: submitDedupeKeyRef.current,
         categoryId: null,
         counterpartyId: null,
@@ -946,7 +970,7 @@ export function QuickMovementDialog({
 
   const accountOptions = useMemo(
     () =>
-      visibleAccounts.map((account) => ({
+      visibleAccounts.filter((account) => !sourceCurrencyCode || account.currencyCode === sourceCurrencyCode).map((account) => ({
         value: String(account.id),
         label: account.name,
         description: `${account.currencyCode} · saldo ${formatCurrency(account.currentBalance, account.currencyCode)}`,
@@ -954,7 +978,7 @@ export function QuickMovementDialog({
         leadingColor: account.color,
         searchText: `${account.name} ${account.currencyCode} ${account.type}`,
       })),
-    [visibleAccounts],
+    [visibleAccounts, sourceCurrencyCode],
   );
   const categoryOptions = useMemo(
     () => [
@@ -1006,7 +1030,7 @@ export function QuickMovementDialog({
 
   return (
     <div
-      aria-label={activePanel === "main" ? "Nuevo movimiento" : "Detalles del movimiento"}
+      aria-label={activePanel === "main" ? title : "Detalles del movimiento"}
       aria-modal="true"
       className="animate-fade-in fixed inset-0 z-[80] bg-black/75"
       onMouseDown={(event) => {
@@ -1027,7 +1051,7 @@ export function QuickMovementDialog({
           onMouseDown={(event) => event.stopPropagation()}
           onMouseUp={(event) => event.stopPropagation()}
         >
-          <ResourceEditorHeader disabled={isSaving} onBack={activePanel === "main" ? undefined : () => setActivePanel(activePanel === "category" || activePanel === "spendType" || activePanel === "counterparty" || activePanel === "split" ? "details" : "main")} onClose={requestClose} title={activePanel === "main" ? "Nuevo movimiento" : activePanel === "details" ? "Detalles" : activePanel === "category" ? "Categoría" : activePanel === "spendType" ? "Tipo de gasto" : activePanel === "counterparty" ? "Contraparte" : "Dividir en categorías"} />
+          <ResourceEditorHeader disabled={isSaving} onBack={activePanel === "main" ? undefined : () => setActivePanel(activePanel === "category" || activePanel === "spendType" || activePanel === "counterparty" || activePanel === "split" ? "details" : "main")} onClose={requestClose} title={activePanel === "main" ? title : activePanel === "details" ? "Detalles" : activePanel === "category" ? "Categoría" : activePanel === "spendType" ? "Tipo de gasto" : activePanel === "counterparty" ? "Contraparte" : "Dividir en categorías"} />
 
           <form
             className="flex min-h-0 flex-1 flex-col"
@@ -1035,6 +1059,7 @@ export function QuickMovementDialog({
             onSubmit={(event) => void handleSubmit(event)}
           >
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              {context ? <div className="mb-5 text-sm text-storm">{context}</div> : null}
               <div className={activePanel === "main" ? "" : "hidden"}>
                 <div className="grid grid-cols-3 gap-2">
                 {quickMovementModes.map((mode) => {
@@ -1055,6 +1080,13 @@ export function QuickMovementDialog({
                         setLinkedRecurringIncomeId(null);
                         setCategoryFeedbackIntent(null);
                         if (mode.kind === "transfer") setSplitLines(null);
+                        if (mode.kind !== kind) {
+                          setFormState((current) => ({
+                            ...current,
+                            categoryId: snapshot.catalogs.categories.some((category) => category.id === parseOptionalInteger(current.categoryId) && category.isActive && (category.kind === mode.kind || category.kind === "both")) ? current.categoryId : "",
+                            spendTypeId: mode.kind === "expense" ? current.spendTypeId : "",
+                          }));
+                        }
                         setIsDirty(true);
                       }}
                       type="button"
@@ -1095,13 +1127,7 @@ export function QuickMovementDialog({
                     <QuickField errorKey="amount" invalidFields={invalidFields} label="Monto">
                       <div className="relative">
                         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-storm">
-                          {isTransfer
-                            ? selectedSourceAccount?.currencyCode === "USD"
-                              ? "$"
-                              : "S/"
-                            : selectedAccount?.currencyCode === "USD"
-                              ? "$"
-                              : "S/"}
+                          {suggestionCurrencyCode === "USD" ? "$" : "S/"}
                         </span>
                         <QuickInput
                           autoFocus
@@ -1210,6 +1236,7 @@ export function QuickMovementDialog({
 
                   <div className="mt-5">
                     <p className={quickFieldLabelClassName}>Estado</p>
+                    {postedOnly ? <p className="mt-2 text-sm text-ink">Aplicado · confirmado por ti al guardar</p> : (
                     <div className="mt-3 grid grid-cols-3 rounded-xl border border-white/10 bg-[#141311] p-1">
                       {([
                         ["posted", "Confirmado"],
@@ -1230,6 +1257,7 @@ export function QuickMovementDialog({
                         </button>
                       ))}
                     </div>
+                    )}
                   </div>
 
                   <div className="mt-5"><ResourceEditorDestination onClick={() => setActivePanel("details")} summary="Categoría, contraparte, fecha y comprobante" /></div>
@@ -1257,7 +1285,7 @@ export function QuickMovementDialog({
                     helperText="Si dejas la descripción vacía, se genera con la categoría, la contraparte y la cuenta."
                     invalidFields={invalidFields}
                     isTransfer={isTransfer}
-                    navigationRows={!isTransfer ? (
+                    navigationRows={!isTransfer && allowSplit ? (
                       <MovementDetailsNavigationRow
                         label="Dividir en categorías"
                         onClick={() => {

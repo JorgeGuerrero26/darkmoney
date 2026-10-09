@@ -1,11 +1,15 @@
 import { CheckCheck, ChevronRight, MoreVertical, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { notificationDefersRead, notificationId } from "../lib/notification-navigation";
+import { closeDetectedReviewParams, detectedReviewParams } from "../lib/detected-movement";
+import { DetectedMovementInbox } from "../components/detected-movement-inbox";
+import { DetectedMovementReview } from "../components/detected-movement-review";
 
 import { DataState } from "../../../components/ui/data-state";
 import { Button } from "../../../components/ui/button";
 import { SelectionCheckbox } from "../../../components/ui/bulk-action-bar";
-import { Modal } from "../../../components/ui/modal";
+import { Modal, ModalHeader } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
@@ -46,6 +50,7 @@ const filterOptions: Array<{ key: NotificationFilter; label: string }> = [
 ];
 
 function getNotificationActionLabel(kind: string) {
+  if (kind === "detected_movement_suggestion") return "Revisar detección";
   if (kind.includes("invite") || kind.includes("share")) {
     return "Revisar invitación";
   }
@@ -72,7 +77,7 @@ function NotificationRow({
   selected: boolean;
   onToggleSelect: () => void;
 }) {
-  const needsAction = isActionRequiredNotificationKind(notification.kind);
+  const needsAction = isActionRequiredNotificationKind(notification.kind) || notification.kind === "detected_movement_suggestion";
   const isUnread = notification.status !== "read";
 
   return (
@@ -111,6 +116,10 @@ function NotificationRow({
 }
 
 export function NotificationsPage() {
+  const [params, setParams] = useSearchParams();
+  const detectedId = notificationId(params.get("detected"));
+  const showDetectedInbox = params.get("detected") === "pending";
+  function closeDetection() { setParams(closeDetectedReviewParams, { replace: true }); }
   const { profile, user } = useAuth();
   const { activeWorkspace } = useActiveWorkspace();
   const { showToast } = useToast();
@@ -210,7 +219,7 @@ export function NotificationsPage() {
 
   async function handleOpen(notification: InboxNotification) {
     try {
-      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind)) {
+      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
         if (notification.source === "database" && notification.databaseId) {
           await markSingleReadMutation.mutateAsync(notification.databaseId);
         } else {
@@ -240,7 +249,7 @@ export function NotificationsPage() {
     }
   }
 
-  if (notificationsQuery.isError) {
+  if (notificationsQuery.isError && !detectedId && !showDetectedInbox) {
     return (
       <DataState
         description={getQueryErrorMessage(notificationsQuery.error, "No pudimos cargar tu bandeja.")}
@@ -263,6 +272,7 @@ export function NotificationsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
+          <Link className="font-semibold text-storm hover:text-ink" to={showDetectedInbox ? "/app/notifications" : "/app/notifications?detected=pending"}>{showDetectedInbox ? "Volver a avisos" : "Detecciones pendientes"}</Link>
           <button
             className="inline-flex items-center gap-2 font-semibold text-storm transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
             disabled={inbox.unreadCount === 0 || busy}
@@ -291,6 +301,8 @@ export function NotificationsPage() {
         </div>
       </header>
 
+      {showDetectedInbox && user?.id && activeWorkspace ? <DetectedMovementInbox userId={user.id} workspaceId={activeWorkspace.id} onOpen={(id) => setParams((current) => detectedReviewParams(current, id))} /> : null}
+      {!showDetectedInbox ? <>
       <section aria-label="Buscar y filtrar notificaciones" className="grid gap-2 pt-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_1fr_1fr]">
         <input aria-label="Buscar notificaciones" className="field-dark !h-14" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título o contenido..." type="search" value={search} />
         <SearchablePicker appearance="toolbar" emptyMessage="No hay prioridades." onChange={(value) => setPriority(value as typeof priority)} options={notificationPriorityOptions.map((option) => ({ ...option, description: "", leadingLabel: "" }))} placeholderLabel="Todas las prioridades" placeholderDescription="Prioridad" queryPlaceholder="Buscar prioridad" showSearch={false} value={priority} />
@@ -336,6 +348,9 @@ export function NotificationsPage() {
           No hay notificaciones en esta vista.
         </p>
       )}
+      </> : null}
+      {detectedId && user?.id && activeWorkspace && snapshotQuery.data?.workspace.id === activeWorkspace.id ? <DetectedMovementReview key={`${activeWorkspace.id}:${detectedId}`} id={detectedId} snapshot={snapshotQuery.data} userId={user.id} proAccessEnabled={entitlementQuery.data?.proAccessEnabled === true} onClose={closeDetection} /> : null}
+      {detectedId && !snapshotQuery.data ? <Modal labelledBy="detection-space-title" onClose={closeDetection} size="md"><ModalHeader title="Revisar movimiento detectado" titleId="detection-space-title" onClose={closeDetection} /><ModalBody>{snapshotQuery.isError ? <p role="alert" className="text-sm text-storm">No se pudo cargar el espacio para revisar la detección. <button className="text-ink underline" onClick={() => void snapshotQuery.refetch()} type="button">Reintentar</button></p> : <p role="status" className="text-sm text-storm">Preparando los datos del espacio...</p>}</ModalBody></Modal> : null}
       {deleteIds ? <Modal labelledBy="notification-delete-title" onClose={() => { if (!busy) setDeleteIds(null); }} size="sm"><ResourceEditorHeader disabled={busy} onClose={() => setDeleteIds(null)} title={`Eliminar ${deleteIds.length} notificaciones`} titleId="notification-delete-title" /><ModalBody><p className="text-sm leading-6 text-storm">Solo se eliminan las notificaciones guardadas seleccionadas, no los avisos calculados ni los registros financieros. Tendrás unos segundos para deshacer.</p></ModalBody><footer className="flex justify-end gap-3 border-t border-white/10 px-6 py-4"><Button disabled={busy} onClick={() => setDeleteIds(null)} variant="secondary">Cancelar</Button><Button disabled={busy} onClick={confirmDelete}>Eliminar</Button></footer></Modal> : null}
     </div>
   );
