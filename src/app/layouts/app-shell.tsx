@@ -52,6 +52,7 @@ import {
   type InboxNotification,
 } from "../../modules/notifications/use-notification-inbox";
 import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
+import { notificationReadingCounts } from "../../modules/notifications/lib/notification-list-model";
 import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import { useWorkspaceDataSync } from "../../modules/workspaces/use-workspace-data-sync";
@@ -430,7 +431,6 @@ function AppShellContent() {
   useWorkspaceDataSync(activeWorkspace?.id, user?.id);
   const notificationsQuery = useNotificationsQuery(user?.id);
   const pendingNotificationInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
-  const notificationPreferencesQuery = useNotificationPreferencesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllNotificationsReadMutation = useMarkAllNotificationsReadMutation(user?.id);
   const markNotificationReadMutation = useMarkNotificationReadMutation(user?.id);
@@ -465,10 +465,7 @@ function AppShellContent() {
       ),
     [visibleNotifications],
   );
-  const unreadNotificationsCount =
-    notificationPreferencesQuery.data?.inAppEnabled === false
-      ? 0
-      : actionRequiredNotifications.length;
+  const unreadNotificationsCount = notificationReadingCounts(notificationsQuery.data ?? []).unread;
   const currentUserName = profile?.fullName ?? user?.email?.split("@")[0] ?? "Usuario";
   const currentUserEmail = profile?.email ?? user?.email ?? "";
   const isAdminOverride = normalizeEmail(currentUserEmail) === normalizeEmail(PRO_ADMIN_EMAIL);
@@ -1119,14 +1116,14 @@ function AppShellContent() {
                     aria-label="Abrir notificaciones"
                     className="relative inline-flex h-9 w-9 items-center justify-center rounded-[7px] text-storm transition hover:bg-white/[0.05] hover:text-ink"
                     onClick={() => setIsNotificationsPanelOpen((isOpen) => !isOpen)}
-                    title="Notificaciones"
+                    title={`Notificaciones, ${unreadNotificationsCount} sin leer`}
                     type="button"
                   >
                     <Bell className="h-4 w-4" />
                     <span className="sr-only">Notificaciones</span>
                     {unreadNotificationsCount > 0 ? (
                       <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#e8ded3] px-1 text-[9px] font-bold text-[#141312]">
-                        {unreadNotificationsCount}
+                        {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
                       </span>
                     ) : null}
                   </button>
@@ -1141,9 +1138,7 @@ function AppShellContent() {
                         <div>
                           <h2 className="font-display text-lg font-semibold text-ink">Notificaciones</h2>
                           <p className="mt-0.5 text-xs text-storm">
-                            {actionRequiredNotifications.length
-                              ? `${actionRequiredNotifications.length} ${actionRequiredNotifications.length === 1 ? "pide" : "piden"} algo tuyo`
-                              : "Nada requiere tu atención"}
+                            {unreadNotificationsCount} sin leer en tu cuenta
                           </p>
                         </div>
                         <button

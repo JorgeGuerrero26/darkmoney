@@ -13,6 +13,9 @@ assert.deepEqual(filterNotificationList(rows, { search: "sueldo", priority: "imp
 assert.deepEqual(filterNotificationList(rows, { search: "préstamo", priority: "all", kind: "all" }).map((item) => item.id), [1]);
 assert.deepEqual(filterNotificationList(rows, { search: "sueldo", priority: "critical", kind: "all" }), []);
 assert.deepEqual(notificationReadingCounts(rows), { total: 3, unread: 2, read: 1 });
+assert.deepEqual(notificationReadingCounts([{ status: "read", readAt: null }, { status: "pending", readAt: "old" }]), { total: 2, unread: 1, read: 1 });
+const shell = readFileSync(new URL("../src/app/layouts/app-shell.tsx", import.meta.url), "utf8");
+assert.match(shell, /unreadNotificationsCount = notificationReadingCounts\(notificationsQuery.data \?\? \[\]\).unread/);
 assert.equal(notificationKindGroup("obligation_share_invite"), "invites");
 assert.equal(notificationKindGroup("weekly_ai_digest"), "digest");
 
