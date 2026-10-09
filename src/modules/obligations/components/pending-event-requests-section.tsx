@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNotificationFocus } from "../../../hooks/use-notification-focus";
 import { LoaderCircle, PencilLine, Trash2 } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
@@ -15,6 +16,7 @@ import { describeEditRequestChanges } from "../lib/obligation-event-requests";
 type ActiveRequest = { kind: "delete" | "edit"; eventId: number } | null;
 
 export type PendingEventRequestsSectionProps = {
+  focusRequest?: { kind: "delete" | "edit"; eventId: number } | null;
   deleteRequests: ObligationEventDeleteRequest[];
   editRequests: ObligationEventEditRequest[];
   isResolving: boolean;
@@ -38,11 +40,14 @@ export function PendingEventRequestsSection({
   onAcceptEdit,
   onRejectDelete,
   onRejectEdit,
+  focusRequest,
 }: PendingEventRequestsSectionProps) {
   const [activeRequest, setActiveRequest] = useState<ActiveRequest>(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
   const total = deleteRequests.length + editRequests.length;
+  const ready = (focusRequest?.kind === "delete" ? deleteRequests : editRequests).some((row) => row.payload.eventId === focusRequest?.eventId);
+  const focusedRow = useNotificationFocus<HTMLLIElement>(focusRequest?.eventId, ready);
 
   if (total === 0) {
     return null;
@@ -91,6 +96,8 @@ export function PendingEventRequestsSection({
             <li
               className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
               key={`edit-${request.notificationId}`}
+              ref={focusRequest?.kind === "edit" && request.payload.eventId === focusRequest.eventId ? focusedRow : undefined}
+              tabIndex={-1}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -203,6 +210,8 @@ export function PendingEventRequestsSection({
             <li
               className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
               key={`delete-${request.notificationId}`}
+              ref={focusRequest?.kind === "delete" && request.payload.eventId === focusRequest.eventId ? focusedRow : undefined}
+              tabIndex={-1}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">

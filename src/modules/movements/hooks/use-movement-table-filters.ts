@@ -52,8 +52,12 @@ export function useMovementTableFilters(viewMode: string) {
   const currentPage = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
 
   const writeFiltersToParams = useCallback(
-    (filters: MovementTableFilters, page: number) => {
+    (filters: MovementTableFilters, page: number, preserveNotification = true) => {
       const params = new URLSearchParams();
+      if (preserveNotification) {
+        if (!filters.category && searchParams.has("categoryId")) params.set("categoryId", searchParams.get("categoryId")!);
+        if (searchParams.has("notice")) params.set("notice", searchParams.get("notice")!);
+      }
       if (filters.description.trim()) params.set("q", filters.description);
       if (filters.type !== "all") params.set("type", filters.type);
       if (filters.status !== "all") params.set("status", filters.status);
@@ -69,7 +73,7 @@ export function useMovementTableFilters(viewMode: string) {
       if (page > 1) params.set("page", String(page));
       setSearchParams(params, { replace: true });
     },
-    [setSearchParams],
+    [searchParams, setSearchParams],
   );
 
   const setTableFilters = useCallback(
@@ -139,9 +143,9 @@ export function useMovementTableFilters(viewMode: string) {
   );
 
   const clearTableFilters = useCallback(() => {
-    setTableFilters(defaultMovementTableFilters());
+    writeFiltersToParams(defaultMovementTableFilters(), 1, false);
     setOpenTableFilter(null);
-  }, [setTableFilters]);
+  }, [writeFiltersToParams]);
 
   const toggleTableFilterMenu = useCallback((field: MovementTableFilterField) => {
     setOpenTableFilter((current) => (current === field ? null : field));

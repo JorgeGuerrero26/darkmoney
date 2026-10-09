@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNotificationFocus } from "../../../hooks/use-notification-focus";
 import {
   CircleDollarSign,
   LoaderCircle,
@@ -67,6 +68,7 @@ export type EventEditProposal = {
 };
 
 type SharedObligationDetailDialogProps = {
+  focusEventId?: number | null;
   accounts: AccountSummary[];
   eventRequests: ViewerEventRequestState;
   feedback: { tone: "success" | "error" | "info"; title: string; description: string } | null;
@@ -113,8 +115,11 @@ export function SharedObligationDetailDialog({
   requests,
   updateFormState,
   viewerLinks,
+  focusEventId,
 }: SharedObligationDetailDialogProps) {
-  const [activeTab, setActiveTab] = useState<"history" | "requests">("requests");
+  const [activeTab, setActiveTab] = useState<"history" | "requests">(focusEventId ? "history" : "requests");
+  const focusedRow = useNotificationFocus<HTMLLIElement>(focusEventId, activeTab === "history" && obligation.events.some((event) => event.id === focusEventId));
+  useEffect(() => { if (focusEventId) setActiveTab("history"); }, [focusEventId]);
   const [showFullPlan, setShowFullPlan] = useState(false);
   const [linkingEventId, setLinkingEventId] = useState<number | null>(null);
   const [linkAccountId, setLinkAccountId] = useState("");
@@ -461,6 +466,9 @@ export function SharedObligationDetailDialog({
                     workspace, no en el de {ownerName}.
                   </p>
 
+                  {focusEventId && !obligation.events.some((event) => event.id === focusEventId) ? (
+                    <p className="mt-4 text-sm text-storm">El evento de este aviso ya no está disponible. Puedes revisar el resto del historial.</p>
+                  ) : null}
                   {obligation.events.length === 0 ? (
                     <p className="mt-4 text-sm leading-7 text-storm">Aun no hay eventos.</p>
                   ) : (
@@ -476,6 +484,8 @@ export function SharedObligationDetailDialog({
                           <li
                             className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4"
                             key={event.id}
+                            ref={event.id === focusEventId ? focusedRow : undefined}
+                            tabIndex={event.id === focusEventId ? -1 : undefined}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex min-w-0 gap-3">

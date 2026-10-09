@@ -1,5 +1,6 @@
 import { Archive, ArchiveRestore, BarChart3, Pencil, Share2, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useNotificationFocus } from "../../../hooks/use-notification-focus";
 
 import { Button } from "../../../components/ui/button";
 import { Modal, ModalFooter, ModalHeader } from "../../../components/ui/modal";
@@ -13,6 +14,7 @@ import { coverPlan, describePlan, parsePaymentPlan } from "../lib/payment-plan";
 type PrincipalAdjustmentMode = "increase" | "decrease";
 
 type ObligationDetailDialogProps = {
+  focusEventId?: number | null;
   obligation: ObligationSummary;
   canShare: boolean;
   onClose: () => void;
@@ -40,7 +42,10 @@ export function ObligationDetailDialog({
   onArchive,
   onEditEvent,
   onDeleteEvent,
+  focusEventId,
 }: ObligationDetailDialogProps) {
+  const focusedRow = useNotificationFocus<HTMLDivElement>(focusEventId, obligation.events.some((event) => event.id === focusEventId));
+  const visibleEvents = focusEventId ? obligation.events : obligation.events.slice(0, 6);
   const currentPrincipal = obligation.currentPrincipalAmount ?? obligation.principalAmount;
   const paidAmount = Math.max(0, currentPrincipal - obligation.pendingAmount);
   const status = getStatusOption(obligation.status);
@@ -88,7 +93,12 @@ export function ObligationDetailDialog({
 
           <section className="py-5">
             <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Historial</h3><button className="text-sm text-storm underline-offset-4 hover:text-ink hover:underline" onClick={() => onAnalytics(obligation.id)} type="button">Ver análisis</button></div>
-            {obligation.events.length ? <div className="mt-3 divide-y divide-white/[0.07] border-y border-white/[0.08]">{obligation.events.slice(0, 6).map((event) => <div className="flex min-h-14 items-center gap-3 py-2" key={event.id}><div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{getEventLabel(event.eventType)}</p><p className="truncate text-xs text-storm">{formatDate(event.eventDate)}{event.description ? ` · ${event.description}` : ""}</p></div><p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(event.amount, obligation.currencyCode)}</p>{event.eventType === "payment" || event.eventType === "principal_increase" || event.eventType === "principal_decrease" ? <><button className="text-xs text-storm hover:text-ink" onClick={() => onEditEvent(obligation, event)} type="button">Editar</button><button aria-label="Eliminar evento" className="text-storm hover:text-ink" onClick={() => onDeleteEvent(obligation, event)} type="button"><Trash2 className="h-4 w-4" /></button></> : null}</div>)}</div> : <p className="mt-3 text-sm text-storm">Todavía no hay movimientos registrados.</p>}
+            {focusEventId && !obligation.events.some((event) => event.id === focusEventId) ? <p className="mt-3 text-sm text-storm">El evento de la notificación ya no está disponible.</p> : null}
+            {obligation.events.length ? <div className="mt-3 divide-y divide-white/[0.07] border-y border-white/[0.08]">{visibleEvents.map((event) => <div className="flex min-h-14 items-center gap-3 py-2 outline-ink/40" key={event.id} ref={event.id === focusEventId ? focusedRow : undefined} tabIndex={event.id === focusEventId ? -1 : undefined}>
+              <div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{getEventLabel(event.eventType)}</p>{event.id === focusEventId ? <p className="text-xs text-storm">Evento de la notificación</p> : null}<p className="truncate text-xs text-storm">{formatDate(event.eventDate)}{event.description ? ` · ${event.description}` : ""}</p></div>
+              <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(event.amount, obligation.currencyCode)}</p>
+              {event.eventType === "payment" || event.eventType === "principal_increase" || event.eventType === "principal_decrease" ? <><button className="text-xs text-storm hover:text-ink" onClick={() => onEditEvent(obligation, event)} type="button">Editar</button><button aria-label="Eliminar evento" className="text-storm hover:text-ink" onClick={() => onDeleteEvent(obligation, event)} type="button"><Trash2 className="h-4 w-4" /></button></> : null}
+            </div>)}</div> : <p className="mt-3 text-sm text-storm">Todavía no hay movimientos registrados.</p>}
           </section>
         </ModalBody>
 

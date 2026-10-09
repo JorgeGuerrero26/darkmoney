@@ -23,7 +23,8 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useResourceLink } from "../../../hooks/use-resource-link";
+import { useSearchParams } from "react-router-dom";
+import { resolveNotificationObligationTarget } from "../../notifications/lib/notification-obligation-target";
 
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -2985,6 +2986,10 @@ function canDeleteObligation(obligation: ObligationSummary) {
 }
 
 export function ObligationsPage() {
+  const [notificationParams, setNotificationParams] = useSearchParams();
+  const [notificationEventId, setNotificationEventId] = useState<number | null>(null);
+  const [notificationPaymentId, setNotificationPaymentId] = useState<number | null>(null);
+  const [notificationEventRequest, setNotificationEventRequest] = useState<{ kind: "delete" | "edit"; eventId: number } | null>(null);
   const { profile, user } = useAuth();
   const queryClient = useQueryClient();
   const { accessMessage, canUploadReceipts } = useReceiptFeatureAccess();
@@ -3172,7 +3177,33 @@ export function ObligationsPage() {
     detailObligationId === null
       ? null
       : obligations.find((obligation) => obligation.id === detailObligationId) ?? null;
-  useResourceLink(obligations, setDetailObligationId);
+  useEffect(() => {
+    if (!notificationParams.has("resource") || !snapshot || sharedObligationsQuery.isLoading) return;
+    const kind = notificationParams.get("notificationKind");
+    if (kind === "obligation_payment_request" && pendingPaymentRequestsQuery.isLoading) return;
+    if ((kind === "obligation_event_delete_request" || kind === "obligation_event_edit_request") && eventRequestsQuery.isLoading) return;
+    const target = resolveNotificationObligationTarget(notificationParams, {
+      owned: obligations, shared: sharedObligations, payments: pendingPaymentRequests,
+      deletes: eventRequestsQuery.data?.deleteRequests ?? [], edits: eventRequestsQuery.data?.editRequests ?? [],
+    });
+    setNotificationEventRequest(null);
+    setNotificationPaymentId(null);
+    setDetailObligationId(null);
+    setSharedDetailId(null);
+    if (!target) setPageFeedback({ tone: "error", title: "Registro no disponible", description: "El registro de este aviso no está disponible en este espacio o ya fue eliminado." });
+    else if (target.mode === "payment") setNotificationPaymentId(target.request);
+    else if (target.mode === "edit" || target.mode === "delete") setNotificationEventRequest({ kind: target.mode, eventId: target.event });
+    else {
+      setNotificationEventId(target.event);
+      if (target.mode === "shared") setSharedDetailId(target.id);
+      else setDetailObligationId(target.id);
+    }
+    setNotificationParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const key of ["resource", "paymentRequest", "event", "notificationKind"]) next.delete(key);
+      return next;
+    }, { replace: true });
+  }, [notificationParams, setNotificationParams, snapshot, obligations, sharedObligations, sharedObligationsQuery.isLoading, pendingPaymentRequests, pendingPaymentRequestsQuery.isLoading, eventRequestsQuery.data, eventRequestsQuery.isLoading]);
   const attachmentsQuery = useEntityAttachmentsQuery(
     activeWorkspace?.id,
     "obligation",
@@ -5138,8 +5169,8 @@ export function ObligationsPage() {
         <p className="text-storm">Por pagar <span className="ml-1 font-semibold tabular-nums text-ink">{filteredPayableDisplay}</span></p>
       </section>
 
-      <PendingPaymentRequestsSection accounts={accounts} isResolving={acceptPaymentRequestMutation.isPending || rejectPaymentRequestMutation.isPending} obligations={obligations} onAccept={handleAcceptPaymentRequest} onReject={handleRejectPaymentRequest} requests={pendingPaymentRequests} />
-      <PendingEventRequestsSection deleteRequests={eventRequestsQuery.data?.deleteRequests ?? []} editRequests={eventRequestsQuery.data?.editRequests ?? []} isResolving={acceptEventDeleteRequestMutation.isPending || rejectEventDeleteRequestMutation.isPending || acceptEventEditRequestMutation.isPending || rejectEventEditRequestMutation.isPending} obligations={obligations} onAcceptDelete={handleAcceptEventDeleteRequest} onAcceptEdit={handleAcceptEventEditRequest} onRejectDelete={handleRejectEventDeleteRequest} onRejectEdit={handleRejectEventEditRequest} />
+      <PendingPaymentRequestsSection focusRequestId={notificationPaymentId} accounts={accounts} isResolving={acceptPaymentRequestMutation.isPending || rejectPaymentRequestMutation.isPending} obligations={obligations} onAccept={handleAcceptPaymentRequest} onReject={handleRejectPaymentRequest} requests={pendingPaymentRequests} />
+      <PendingEventRequestsSection focusRequest={notificationEventRequest} deleteRequests={eventRequestsQuery.data?.deleteRequests ?? []} editRequests={eventRequestsQuery.data?.editRequests ?? []} isResolving={acceptEventDeleteRequestMutation.isPending || rejectEventDeleteRequestMutation.isPending || acceptEventEditRequestMutation.isPending || rejectEventEditRequestMutation.isPending} obligations={obligations} onAcceptDelete={handleAcceptEventDeleteRequest} onAcceptEdit={handleAcceptEventEditRequest} onRejectDelete={handleRejectEventDeleteRequest} onRejectEdit={handleRejectEventEditRequest} />
 
       {pageFeedback?.tone === "error" ? (
         <DataState
@@ -5193,6 +5224,7 @@ export function ObligationsPage() {
 
       {detailObligation ? (
         <ObligationDetailDialog
+          focusEventId={notificationEventId}
           canShare={canAccessProFeatures}
           obligation={detailObligation}
           onArchive={(obligation, archived) => void handleArchiveObligation(obligation, archived)}
@@ -5204,7 +5236,7 @@ export function ObligationsPage() {
             setDetailObligationId(null);
             setAnalyticsObligationId(id);
           }}
-          onClose={() => setDetailObligationId(null)}
+          onClose={() => { setDetailObligationId(null); setNotificationEventId(null); }}
           onDelete={(id) => {
             setDetailObligationId(null);
             setDeleteTargetId(id);
@@ -5313,6 +5345,7 @@ export function ObligationsPage() {
 
       {sharedDetailObligation ? (
         <SharedObligationDetailDialog
+          focusEventId={notificationEventId}
           accounts={accounts}
           eventRequests={viewerEventRequestsQuery.data ?? new Map()}
           feedback={sharedDetailFeedback}
@@ -5325,7 +5358,7 @@ export function ObligationsPage() {
           }
           isSendingRequest={createPaymentRequestMutation.isPending}
           obligation={sharedDetailObligation}
-          onClose={() => setSharedDetailId(null)}
+          onClose={() => { setSharedDetailId(null); setNotificationEventId(null); }}
           onLinkEvent={handleLinkSharedEvent}
           onRequestEventDelete={handleRequestEventDelete}
           onRequestEventEdit={handleRequestEventEdit}

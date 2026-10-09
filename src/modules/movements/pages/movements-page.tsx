@@ -88,6 +88,7 @@ import type {
 } from "../lib/movement-form";
 import { useMovementTableFilters } from "../hooks/use-movement-table-filters";
 import { getMovementDateRangeLabel, movementDateInPeru } from "../lib/movement-date-range";
+import { notificationId } from "../../notifications/lib/notification-navigation";
 
 const statusFilterPickerOptions: PickerOption[] = [
   { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
@@ -127,6 +128,8 @@ export function MovementsPage() {
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const snapshot = snapshotQuery.data;
+  const linkedCategoryId = notificationId(searchParams.get("categoryId"));
+  const notificationNotice = searchParams.get("notice")?.slice(0, 200);
   const movementColumns: ColumnDef[] = [
     { key: "categoria", label: "Categoría" },
     { key: "cuenta_origen", label: "Cuenta" },
@@ -275,7 +278,8 @@ export function MovementsPage() {
       const matchesStatus = tableFilters.status === "all" || movement.status === tableFilters.status;
       const matchesType = movementMatchesTypeFilter(movement, tableFilters.type);
       const matchesCategory =
-        !normalizedCategory || movement.category.toLowerCase().includes(normalizedCategory);
+        (!normalizedCategory || movement.category.toLowerCase().includes(normalizedCategory)) &&
+        (linkedCategoryId === null || movement.categoryId === linkedCategoryId);
       const matchesCounterparty =
         !normalizedCounterparty || movement.counterparty.toLowerCase().includes(normalizedCounterparty);
       const matchesSourceAccount =
@@ -304,7 +308,7 @@ export function MovementsPage() {
         matchesDateTo
       );
     });
-  }, [hiddenIds, snapshot, tableFilters]);
+  }, [hiddenIds, snapshot, tableFilters, linkedCategoryId]);
   const MOVEMENTS_PAGE_SIZE = 50;
   const totalFilteredPages = Math.max(1, Math.ceil(filteredMovements.length / MOVEMENTS_PAGE_SIZE));
   const safePage = Math.min(currentPage, totalFilteredPages);
@@ -433,6 +437,7 @@ export function MovementsPage() {
   );
   const filteredNet = filteredTotals.income - filteredTotals.expense;
   const hasActiveFilters = Boolean(
+    linkedCategoryId ||
     tableFilters.description.trim() ||
       tableFilters.category.trim() ||
       tableFilters.counterparty.trim() ||
@@ -1172,6 +1177,14 @@ export function MovementsPage() {
               value={tableFilters.type}
             />
         </section>
+
+        {notificationNotice || linkedCategoryId ? <div className="flex flex-wrap items-center gap-3 text-sm text-storm">
+          {notificationNotice ? <p>{notificationNotice}</p> : null}
+          {linkedCategoryId ? <button className="text-ink hover:underline" onClick={() => setSearchParams((current) => {
+            const next = new URLSearchParams(current); next.delete("categoryId"); next.delete("page"); return next;
+          }, { replace: true })} type="button">{snapshot.catalogs.categories.find((item) => item.id === linkedCategoryId)?.name ?? "Categoría de la alerta"} ×</button> : null}
+          <button className="ml-auto hover:text-ink" onClick={clearTableFilters} type="button">Quitar filtros</button>
+        </div> : null}
 
         <section aria-label="Resumen de movimientos filtrados" className="module-summary">
           <p className="mr-auto text-storm">

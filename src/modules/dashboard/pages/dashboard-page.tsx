@@ -1,5 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { notificationDate } from "../../notifications/lib/notification-navigation";
+import { NotificationDayDialog } from "../../notifications/components/notification-day-dialog";
 import {
   CalendarDays,
   ChevronRight,
@@ -192,6 +194,8 @@ function SectionLead({
 }
 
 export function DashboardPage() {
+  const [notificationParams, setNotificationParams] = useSearchParams();
+  const notificationDay = notificationDate(notificationParams.get("day"));
   const { profile, user } = useAuth();
   const { canAccessProFeatures, isAdminOverride, isLoadingEntitlement } = useProFeatureAccess();
   const dashboardAi = useDashboardAiSummary({ userId: user?.id, isAdmin: isAdminOverride });
@@ -1617,6 +1621,19 @@ export function DashboardPage() {
       ? buildExposureLeaders(carteraFilteredObligations, "payable").slice(0, topCount)
       : visiblePayableLeaders;
 
+  const notificationDayDialog = notificationDay && snapshot ? (
+    <NotificationDayDialog
+      day={notificationDay}
+      movements={snapshot.movements}
+      baseCurrency={snapshot.workspace.baseCurrencyCode}
+      onClose={() => setNotificationParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete("day");
+        return next;
+      }, { replace: true })}
+    />
+  ) : null;
+
   if (comparisonOptions.length > 0) {
     const coverageDays = healthScore.coverageMonths === null ? null : Math.round(healthScore.coverageMonths * 30);
 
@@ -1892,6 +1909,7 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
+        {notificationDayDialog}
       </div>
     );
   }
@@ -5294,6 +5312,7 @@ export function DashboardPage() {
         </div>
       ) : null}
     </div>
+    {notificationDayDialog}
     </DashboardHelpProvider>
   );
 }

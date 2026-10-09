@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNotificationFocus } from "../../../hooks/use-notification-focus";
 import { CircleDollarSign, LoaderCircle } from "lucide-react";
 
 import { Button } from "../../../components/ui/button";
@@ -13,6 +14,7 @@ import type {
 } from "../../../types/domain";
 
 export type PendingPaymentRequestsSectionProps = {
+  focusRequestId?: number | null;
   accounts: AccountSummary[];
   isResolving: boolean;
   obligations: ObligationSummary[];
@@ -41,6 +43,7 @@ export function PendingPaymentRequestsSection({
   onAccept,
   onReject,
   requests,
+  focusRequestId,
 }: PendingPaymentRequestsSectionProps) {
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [registerAccountMovement, setRegisterAccountMovement] = useState(true);
@@ -51,6 +54,16 @@ export function PendingPaymentRequestsSection({
   const resolvableRequests = requests.filter((request) =>
     obligations.some((obligation) => obligation.id === request.obligationId),
   );
+
+  const focusedRow = useNotificationFocus<HTMLLIElement>(focusRequestId, resolvableRequests.some((row) => row.id === focusRequestId));
+  const consumedFocus = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusRequestId) { consumedFocus.current = null; return; }
+    const request = requests.find((row) => row.id === focusRequestId);
+    if (!request || consumedFocus.current === focusRequestId) return;
+    consumedFocus.current = focusRequestId;
+    openRequest(request, "accept");
+  }, [focusRequestId, requests, obligations]);
 
   if (resolvableRequests.length === 0) {
     return null;
@@ -112,6 +125,8 @@ export function PendingPaymentRequestsSection({
             <li
               className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
               key={request.id}
+              ref={request.id === focusRequestId ? focusedRow : undefined}
+              tabIndex={request.id === focusRequestId ? -1 : undefined}
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
