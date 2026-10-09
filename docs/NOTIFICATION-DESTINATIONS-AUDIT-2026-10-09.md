@@ -21,7 +21,7 @@ Esta nota no reemplaza las correcciones anteriores de Suscripciones e Invitacion
 
 ## Pendiente: no hay paridad total
 
-1. **Movimientos detectados:** registro simple implementado. Deshacer el registro está preparado en código en ambos clientes y probado localmente, pero requiere desplegar `202610090002_detected_movement_undo.sql`. Siguen pendientes crear divisiones en web, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
+1. **Movimientos detectados:** registro simple implementado. Deshacer el registro está implementado en ambos clientes, probado localmente y con `202610090002_detected_movement_undo.sql` desplegada; falta publicar el cliente móvil. Siguen pendientes crear divisiones en web, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
 2. **Asistente:** falta el destino de `assistant_insight` y revisar el contrato de los resúmenes de IA. No se implementó un envío automático de prompts.
 3. **Espacio del aviso:** no se añadió cambio automático de espacio. Los destinos usan los recursos del espacio activo; falta resolver avisos de otro espacio con permisos y estados de carga/error explícitos.
 4. **Historial/detalle:** el nuevo resumen diario permite consultar el día, pero no reproduce todos los subtotales y grupos del DaySheet móvil. Las solicitudes y eventos se probaron con reglas puras; faltan pruebas de interfaz con casos reales o fixtures de integración.
@@ -61,11 +61,20 @@ No se abrió una detección real durante esta prueba: la conciliación puede act
 - `metadata.registrationUndo` permite confirmar un reintento después de perder la respuesta. El estado de lectura/archivo y el payload de los avisos no se cambian. Consultas financieras y de detecciones se invalidan incluso ante una respuesta incierta; los fallos no usan un fallback de delete/update.
 - No se activó aún crear divisiones detectadas en web: la vía móvil actual registra las partes secuencialmente. Falta cerrar un contrato de lote seguro antes de habilitar esa misma superficie.
 
-### Validación y despliegue pendiente
+### Validación local
 
 - `test:detected-movement-undo` ejecuta la migración real en [Postgres en memoria mediante PGlite](https://pglite.dev/docs/), con fixtures de RLS, FK, divisiones, rechazos, permisos, fallos a mitad de operación y reintentos. Compara byte a byte el SQL y el contrato puro de ambos repositorios. No lee credenciales ni abre conexiones remotas.
 - Pasaron build/TypeScript web, `test:detected-movement-parity`, `test:notification-parity`, `test:movement-save`, `test:parity` y el test SQL. Typecheck móvil y 19 pruebas Jest en dos suites de detecciones pasaron; no se ejecutó Jest completo.
 - PGlite tiene una sola conexión: estas pruebas no certifican contención real entre dos sesiones, triggers completos del entorno desplegado ni la interfaz en teléfonos. No se guardaron o borraron registros reales.
 - Se añadió PGlite solo como dependencia de desarrollo. `npm audit` informa 20 vulnerabilidades en otras dependencias (ninguna atribuida a PGlite); no se aplicaron actualizaciones automáticas fuera del alcance de esta unidad.
 - La migración está en ambos repositorios, documentada en sus diccionarios. El diccionario móvil está ignorado por Git; se conserva localmente y la nota pública está en `DarkMoneyApp/docs/DETECTED-MOVEMENT-UNDO-2026-10-09.md`, sin forzar la publicación del diccionario privado.
-- **No desplegado:** el servidor requiere aplicar una sola vez `202610090002_detected_movement_undo.sql`, con los contratos previos de detecciones. Hasta entonces Deshacer informa que falta la migración y no elimina movimientos. Móvil también requiere publicar su actualización; no se hizo OTA. No hay paridad total.
+- Al cerrar la implementación inicial, la migración aún no se había desplegado. El despliegue posterior autorizado se documenta abajo; móvil sigue sin actualización OTA y no hay paridad total.
+
+### Despliegue autorizado: 9 de octubre de 2026
+
+- Se aplicó únicamente `202610090002_detected_movement_undo.sql` al proyecto enlazado compartido por web y móvil. Se usó un directorio temporal con el historial remoto y solo esta migración nueva: el dry-run mostró exactamente ese archivo. No se incluyeron las migraciones locales pendientes de Suscripciones e Ingresos fijos ni se reparó el historial remoto.
+- Antes del despliegue se comprobaron las columnas requeridas, los contratos previos de membresía, PRO y conciliación, RLS activo y los triggers existentes. La función PRO admite `auth.uid()` como argumento por defecto.
+- Después se verificó la entrada `202610090002 / detected_movement_undo` en el historial, sus seis sentencias y que los cuerpos de ambas funciones coinciden con el SQL local de los dos repositorios. Una segunda simulación indicó que el directorio aislado ya estaba al día; eso no significa que todas las migraciones locales de web estén desplegadas.
+- Se confirmó `security invoker` para Deshacer, `security definer` solo para el helper de lectura, `search_path` vacío en ambos, ejecución permitida a `authenticated` y denegada a `anon` y PUBLIC.
+- Las comprobaciones remotas fueron lecturas de esquema, permisos e historial, sin invocar Deshacer ni acceder a registros financieros. La migración define funciones y permisos; no ejecuta borrados o registros por sí misma.
+- Sigue pendiente la validación con fixtures de integración, contención entre dos sesiones y dispositivos reales. No se publicó OTA. El teléfono con el cliente anterior no incorpora el nuevo flujo atómico por desplegar solo SQL.
