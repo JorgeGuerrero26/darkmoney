@@ -21,11 +21,11 @@ Esta nota no reemplaza las correcciones anteriores de Suscripciones e Invitacion
 
 ## Pendiente: no hay paridad total
 
-1. **Movimientos detectados:** registro simple implementado. Deshacer el registro está implementado en ambos clientes, probado localmente y con `202610090002_detected_movement_undo.sql` desplegada; falta publicar el cliente móvil. Siguen pendientes crear divisiones en web, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
+1. **Movimientos detectados:** registro simple implementado. Deshacer el registro está implementado en ambos clientes, probado localmente y con `202610090002_detected_movement_undo.sql` desplegada. La OTA móvil está disponible desde el 11 de octubre; falta verificar recepción y uso entre dispositivos. Siguen pendientes crear divisiones en web, aprendizaje personal específico, verificación IA de duplicados y las acciones avanzadas/masivas del inbox móvil. No se declara paridad completa de detecciones.
 2. **Asistente:** falta el destino de `assistant_insight` y revisar el contrato de los resúmenes de IA. No se implementó un envío automático de prompts.
 3. **Espacio del aviso:** no se añadió cambio automático de espacio. Los destinos usan los recursos del espacio activo; falta resolver avisos de otro espacio con permisos y estados de carga/error explícitos.
 4. **Historial/detalle:** el nuevo resumen diario permite consultar el día, pero no reproduce todos los subtotales y grupos del DaySheet móvil. Las solicitudes y eventos se probaron con reglas puras; faltan pruebas de interfaz con casos reales o fixtures de integración.
-5. **Validación entre dispositivos:** guardar/cobrar/pagar, concurrencia, fallos del servidor, notificaciones push y actualización OTA siguen sin probarse. El código móvil corregido no se publicó al teléfono.
+5. **Validación entre dispositivos:** guardar/cobrar/pagar, concurrencia, fallos del servidor y notificaciones push siguen sin probarse. El código móvil corregido está publicado por OTA, pero su recepción y ejecución en el teléfono no se han confirmado.
 
 ## Límites
 
@@ -78,3 +78,12 @@ No se abrió una detección real durante esta prueba: la conciliación puede act
 - Se confirmó `security invoker` para Deshacer, `security definer` solo para el helper de lectura, `search_path` vacío en ambos, ejecución permitida a `authenticated` y denegada a `anon` y PUBLIC.
 - Las comprobaciones remotas fueron lecturas de esquema, permisos e historial, sin invocar Deshacer ni acceder a registros financieros. La migración define funciones y permisos; no ejecuta borrados o registros por sí misma.
 - Sigue pendiente la validación con fixtures de integración, contención entre dos sesiones y dispositivos reales. No se publicó OTA. El teléfono con el cliente anterior no incorpora el nuevo flujo atómico por desplegar solo SQL.
+
+### Actualización móvil disponible: 11 de octubre de 2026
+
+- Se publicaron Deshacer y el conteo completo de la campana desde una copia aislada, sin las ediciones locales en curso. Typecheck, cinco pruebas del validador OTA y 88 casos en diez suites móviles pasaron. Se actualizó un mock desfasado del hook de revisión y se probaron Deshacer tras cambiar de espacio y el fallo después de cerrar la revisión.
+- Una publicación concurrente del Asistente y su corrección de errores de revisión incluía estos commits. Se dejó de publicar la versión anterior para no reemplazar esos cambios; se comprobó la disponibilidad de la versión posterior en los tres runtimes: 1.0.10, 1.0.9 y 1.0.8, para iOS y Android.
+- Los seis paquetes servidos por Expo conservan 63 recursos y 32 fuentes. Sus bundles de código pasan la verificación SHA-256 del manifiesto y contienen la RPC de Deshacer. No se invocó esa RPC en producción ni se alteraron registros financieros.
+- En la comprobación agregada de logs aún no había arranques registrados con esos seis IDs. Publicado no significa instalado ni probado en el teléfono. La prueba entre dispositivos y los demás pendientes de paridad continúan abiertos.
+- Grupos finales y detalle de la publicación en `DarkMoneyApp/docs/DETECTED-MOVEMENT-UNDO-2026-10-09.md`. Los paquetes de la copia aislada se retiraron; se conservan los commits y las OTAs publicadas.
+- Comprobación final: TypeScript web y móvil pasan; las diez suites móviles ejecutadas por rutas explícitas pasan 90 casos sobre la versión actual. No se ejecutó Jest completo ni una prueba financiera real entre dispositivos.
