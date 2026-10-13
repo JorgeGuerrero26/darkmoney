@@ -1626,6 +1626,10 @@ export function DashboardPage() {
       day={notificationDay}
       movements={snapshot.movements}
       baseCurrency={snapshot.workspace.baseCurrencyCode}
+      displayCurrency={displayCurrencyCode}
+      exchangeRateMap={exchangeRateMap}
+      workspaceId={snapshot.workspace.id}
+      userId={user?.id}
       onClose={() => setNotificationParams((current) => {
         const next = new URLSearchParams(current);
         next.delete("day");
