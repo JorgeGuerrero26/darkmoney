@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase/client";
 import { createDetectedMovementStore } from "./detected-movement-store";
+import { createDetectedDuplicateChecker } from "./detection-duplicates";
 import { detectionPending, type DetectedMovement, type DetectionSetting } from "../../modules/notifications/lib/detected-movement";
 import type { DetectionOmissionInput } from "../../modules/notifications/lib/detection-omissions";
 
@@ -49,8 +50,9 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
 
 export function useDetectedMovementReviewQuery(userId: string, workspaceId: number, id: number) {
   const { store, key, settings, invalidate, invalidateFinances } = useDetectedMovements(userId, workspaceId, false, true);
+  const duplicateChecker = useMemo(() => supabase ? createDetectedDuplicateChecker(supabase, { userId, workspaceId }) : null, [userId, workspaceId]);
   const review = useQuery({ queryKey: [...key, "review", id], enabled: Boolean(store), queryFn: () => store!.review(id), refetchOnWindowFocus: true });
   const resolve = useMutation({ mutationFn: (input: Parameters<NonNullable<typeof store>["resolve"]>) => store!.resolve(...input), onSuccess: invalidate });
   const undo = useMutation({ mutationFn: (movementId: number) => store!.undoRegistration(id, movementId), onSettled: invalidateFinances });
-  return { store, review, settings, resolve, undo, invalidate, invalidateFinances };
+  return { store, duplicateChecker, review, settings, resolve, undo, invalidate, invalidateFinances };
 }

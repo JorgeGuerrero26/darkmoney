@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
@@ -12,24 +12,28 @@ import { useCreateMovementMutation, getQueryErrorMessage, type WorkspaceSnapshot
 import { useDetectedMovementReviewQuery } from "../../../services/queries/detected-movements";
 import { useDetectionLearningQuery } from "../../../services/queries/detection-learning";
 import { QuickMovementDialog } from "../../movements/components/quick-movement-dialog";
-import { detectedInputSignature, detectedMovementDraft, detectionPending, possibleDetectedDuplicate,
-  reconciliationCandidateForDetectedInput, type DetectionMovementInput } from "../lib/detected-movement";
+import { detectedMovementDraft, detectionPending, type DetectionMovementInput } from "../lib/detected-movement";
+import type { DuplicatePermission } from "../../../services/queries/detection-duplicates";
+import type { DuplicateAiResult } from "../lib/duplicate-verdict";
 import type { MovementRecord } from "../../../types/domain";
 
 export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled, onClose }: {
   id: number; snapshot: WorkspaceSnapshot; userId: string; proAccessEnabled: boolean; onClose: () => void;
 }) {
-  const { store, review, settings, resolve, undo, invalidate, invalidateFinances } = useDetectedMovementReviewQuery(userId, snapshot.workspace.id, id);
+  const { store, duplicateChecker, review, settings, resolve, undo, invalidate, invalidateFinances } = useDetectedMovementReviewQuery(userId, snapshot.workspace.id, id);
   const create = useCreateMovementMutation(snapshot.workspace.id, userId);
   const { showToast } = useToast();
   const { schedule } = useUndoQueue();
   const registeredMovementId = useRef<number | null>(null);
-  const [duplicate, setDuplicate] = useState<{ movement: MovementRecord; signature: string } | null>(null);
-  const allowAnother = useRef<string | null>(null);
+  const [duplicate, setDuplicate] = useState<{ movement: MovementRecord; permission: DuplicatePermission; ai: DuplicateAiResult | null } | null>(null);
+  const allowAnother = useRef<DuplicatePermission | null>(null);
+  const checking = useRef<AbortController | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  useEffect(() => () => { checking.current?.abort(); allowAnother.current = null; }, [userId, snapshot.workspace.id, id]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmUndo, setConfirmUndo] = useState(false);
   const [actionError, setActionError] = useState("");
-  const clearDuplicate = useCallback(() => { setDuplicate(null); allowAnother.current = null; }, []);
+  const clearDuplicate = useCallback(() => { checking.current?.abort(); setDuplicate(null); allowAnother.current = null; }, []);
   const suggestion = review.data?.suggestion;
   const learning = useDetectionLearningQuery(userId, snapshot.workspace.id, Boolean(suggestion && detectionPending(suggestion)));
   const draft = useMemo(() => suggestion ? detectedMovementDraft(suggestion, snapshot.accounts, snapshot.catalogs.categories, settings.data ?? []) : null,
@@ -47,19 +51,29 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     financialAppKey: suggestion.financialAppKey, currencyCode: suggestion.currencyCode, metadata: suggestion.metadata,
   } : undefined, [suggestion, draft, learning.data, learning.isError, snapshot.accounts, snapshot.catalogs.categories, settings.data]);
   const register = useMutation({ mutationFn: async (input: DetectionMovementInput) => {
-    const result = await store!.register(id, input, snapshot.accounts, (value) => create.mutateAsync(value), async (fresh, candidate) => {
-      const matched = reconciliationCandidateForDetectedInput(fresh, input, snapshot.accounts, candidate)
-        ?? possibleDetectedDuplicate(input, snapshot.accounts, snapshot.movements);
-      const signature = detectedInputSignature(input);
-      if (matched && allowAnother.current !== signature) {
-        setDuplicate({ movement: matched, signature });
-        throw new Error("Hay un movimiento parecido. Confirma si es el mismo o si deseas registrar otro.");
-      }
-    }, snapshot.catalogs.categories);
+    const controller = new AbortController(); checking.current = controller;
+    let result;
+    try {
+      setCheckingDuplicate(true);
+      result = await store!.register(id, input, snapshot.accounts, (value) => {
+        if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
+        return create.mutateAsync(value);
+      }, async (fresh, candidate) => {
+        if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
+        const decision = await duplicateChecker.check(fresh, input, snapshot.accounts, candidate, proAccessEnabled, allowAnother.current, controller.signal);
+        if (!decision.allowed && decision.candidate && decision.permission) {
+          setDuplicate({ movement: decision.candidate, permission: decision.permission, ai: decision.ai });
+          throw new Error("Hay un movimiento parecido. Confirma si es el mismo o si deseas registrar otro.");
+        }
+      }, snapshot.catalogs.categories);
+    } finally {
+      if (checking.current === controller) checking.current = null;
+      setCheckingDuplicate(false);
+    }
     if (!result.readingUpdated) showToast({ title: "Movimiento confirmado", description: "El registro está guardado; el aviso no pudo marcarse leído. Puedes hacerlo desde la bandeja.", tone: "info" });
     registeredMovementId.current = result.movementId;
     return result.movementId;
-  }, onError: () => { void review.refetch(); } });
+  }, onError: (error) => { if (error.name !== "AbortError") void review.refetch(); } });
   const restore = useMutation({ mutationFn: () => store!.restoreDiscarded(id), onSuccess: invalidate });
   const busy = register.isPending || resolve.isPending || restore.isPending || undo.isPending;
 
@@ -166,9 +180,14 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     context={<div className="space-y-3">
       <p>{suggestion.appLabel}{suggestion.packageName === "email:inbound" ? " · por correo" : ""} · {formatDateTime(suggestion.occurredAt)}</p>
       <p>Revisa cuenta, tipo e importe antes de guardar. Cerrar no confirma ni marca leído el aviso.</p>
+      {checkingDuplicate ? <p role="status">Comprobando coincidencias antes de guardar…</p> : null}
       {learning.isError ? <p>No se pudo consultar tu historial para sugerir cuenta y categoría. Puedes elegirlas o <button disabled={learning.isFetching} className="underline underline-offset-4" onClick={() => void learning.refetch()} type="button">reintentar</button>.</p> : null}
       {suggestion.status === "needs_review" || suggestion.movementType === "unknown" ? <p className="text-ink">La detección necesita tu revisión; el tipo no se confirmó automáticamente.</p> : null}
-      {duplicate ? <div className="space-y-3 border-y border-white/10 py-3"><p className="font-semibold text-ink">Posible coincidencia: {duplicate.movement.description}</p><p>{formatDateTime(duplicate.movement.occurredAt)} · #{duplicate.movement.id}</p><div className="flex flex-wrap gap-4"><button disabled={busy} className="font-semibold text-ink underline underline-offset-4" onClick={() => void resolveDetection("duplicate", duplicate.movement.id)} type="button">Es el mismo movimiento</button><button disabled={busy} className="text-ink underline underline-offset-4" onClick={() => { allowAnother.current = duplicate.signature; setDuplicate(null); }} type="button">Es otro; permitir guardar</button></div></div> : null}
+      {duplicate ? <div className="space-y-3 border-y border-white/10 py-3"><p className="font-semibold text-ink">Posible coincidencia: {duplicate.movement.description}</p><p>{formatDateTime(duplicate.movement.occurredAt)} · #{duplicate.movement.id}</p>
+        {duplicate.ai?.verdict === "unknown" ? <p>No se pudo confirmar con IA que sea otro movimiento. Revisa la coincidencia antes de decidir.</p> : null}
+        {duplicate.ai?.reason ? <p>{duplicate.ai.reason.slice(0, 200)}</p> : null}
+        <Link className="text-ink underline underline-offset-4" to={`/app/movements?period=all&movement=${duplicate.movement.id}`}>Ver movimiento</Link>
+        <div className="flex flex-wrap gap-4"><button disabled={busy} className="font-semibold text-ink underline underline-offset-4" onClick={() => void resolveDetection("duplicate", duplicate.movement.id)} type="button">Es el mismo movimiento</button><button disabled={busy} className="text-ink underline underline-offset-4" onClick={() => { allowAnother.current = duplicate.permission; setDuplicate(null); }} type="button">Es otro; permitir guardar</button></div></div> : null}
       {actionError ? <p role="alert" className="text-ink">{actionError}</p> : null}
       {confirmDiscard ? <div className="space-y-2 border-t border-white/10 pt-3"><p>¿Omitir esta detección? No se creará un movimiento ni cambiarán tus saldos.</p><div className="flex gap-4"><button disabled={busy} className="font-semibold text-ink" onClick={() => void resolveDetection("discarded")} type="button">Confirmar omisión</button><button disabled={busy} onClick={() => setConfirmDiscard(false)} type="button">Cancelar</button></div></div> : <button disabled={busy} className="text-xs underline underline-offset-4" onClick={() => setConfirmDiscard(true)} type="button">Omitir detección</button>}
     </div>}

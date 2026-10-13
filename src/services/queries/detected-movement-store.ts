@@ -128,6 +128,12 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
     const reconciliation = await reconcile(id);
     if (reconciliation.resolvedIds.includes(id)) throw new Error("Esta detección ya coincide con un movimiento. Actualiza para verlo.");
     await checkDuplicate?.(suggestion, reconciliation.candidates.get(id) ?? null);
+    if (checkDuplicate) {
+      // A delayed AI response must not authorize saving a detection resolved/edited meanwhile.
+      const latest = await get(id);
+      if (!latest || !detectionPending(latest) || JSON.stringify(latest) !== JSON.stringify(suggestion))
+        throw new Error("La detección cambió durante la comprobación. Actualiza antes de guardar.");
+    }
     const movementId = await create(detectedWriteInput(suggestion, input));
     // The mobile transaction trigger resolves simple registrations. Never demote a concurrent result.
     suggestion = await get(id);

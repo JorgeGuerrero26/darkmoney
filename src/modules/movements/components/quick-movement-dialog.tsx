@@ -686,6 +686,7 @@ export function QuickMovementDialog({
     value: QuickMovementFormState[Field],
   ) {
     setIsDirty(true);
+    onDraftChange?.();
     if (field === "accountId" || field === "sourceAccountId") manualLearningFields.current.add("account");
     if (field === "destinationAccountId") manualLearningFields.current.add("destination");
     if (field === "categoryId") manualLearningFields.current.add("category");
@@ -1158,6 +1159,7 @@ export function QuickMovementDialog({
                       }`}
                       key={mode.kind}
                       onClick={() => {
+                        onDraftChange?.();
                         setKind(mode.kind);
                         setLinkedSubscriptionId(null);
                         setLinkedRecurringIncomeId(null);
