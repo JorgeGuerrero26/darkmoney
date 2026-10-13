@@ -32,6 +32,7 @@ function load(file) {
 const web = await import(load(resolve(root, "src/services/queries/detection-duplicates.ts")));
 const { parseDuplicateVerdict } = await import(load(resolve(root, "src/modules/notifications/lib/duplicate-verdict.ts")));
 const phoneVerdict = await import(load(resolve(mobile, "features/notifications/lib/duplicate-verdict.ts")));
+const phoneDay = await import(load(resolve(mobile, "features/detected-movements/lib/duplicate-day.ts")));
 for (const raw of [null, [], "distinct", {}, { verdict: "yes" }, ...["distinct", "duplicate", "unknown", "skipped"].flatMap(verdict => [{ verdict }, { verdict, reason: "  " }, { verdict, reason: "Remitentes distintos" }])])
   assert.deepEqual(parseDuplicateVerdict(raw), phoneVerdict.parseDuplicateVerdict(raw));
 const scope = { userId: "u", workspaceId: 8 };
@@ -88,7 +89,7 @@ const names = ["normalizeDescription", "findPossibleDuplicateMovement", "mapDupl
 const functions = source.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text));
 assert.equal(functions.length, names.length);
 const extracted = ts.transpileModule(functions.map(node => node.getText(source).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-const phone = client => new Function("supabase", "parseDuplicateVerdict", `const DUPLICATE_AI_TIMEOUT_MS=1;${extracted};return {findPossibleDuplicateMovement,countSameDayDetectionSignals,confirmDuplicateWithAi};`)(client, phoneVerdict.parseDuplicateVerdict);
+const phone = client => new Function("supabase", "parseDuplicateVerdict", "detectionDuplicateBounds", `const DUPLICATE_AI_TIMEOUT_MS=1;${extracted};return {findPossibleDuplicateMovement,countSameDayDetectionSignals,confirmDuplicateWithAi};`)(client, phoneVerdict.parseDuplicateVerdict, phoneDay.detectionDuplicateBounds);
 {
   const f = fixture(); const decision = await check(f, false);
   const reference = await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description });
@@ -100,7 +101,7 @@ for (const verdict of ["duplicate", "unknown", "skipped", "distinct", "yes"]) {
   assert.equal(decision.allowed, verdict === "distinct"); assert.equal(f.state.writes, 0);
   assert.equal(f.state.invocations.length, 1); assert.equal(f.state.invocations[0].name, "movement-duplicate-ai-check");
   const { body } = f.state.invocations[0];
-  const counts = await phone(f.client).countSameDayDetectionSignals({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt });
+  const counts = await phone(f.client).countSameDayDetectionSignals({ userId: "u", currencyCode: "PEN", workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt });
   assert.deepEqual(body, { workspaceId: 8, suggestion: { description: input.description, amountLabel: "20", occurredAt: input.occurredAt, sourceApp: "bcp", rawText: receipt.description },
     candidateMovement: { id: 20, description: "Taxi", occurredAt: movement.occurred_at, amount: 20 }, counts });
   assert.deepEqual(await phone(f.client).confirmDuplicateWithAi(body), decision.ai);
@@ -109,16 +110,19 @@ for (const verdict of ["duplicate", "unknown", "skipped", "distinct", "yes"]) {
 {
   const unrelated = Array.from({ length: 510 }, (_, index) => ({ ...movement, id: index + 100, description: "Otro comercio" }));
   const f = fixture(); f.state.movements = [...unrelated, movement]; assert.equal((await check(f, false)).candidate.id, 20);
+  assert.equal((await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description })).id, 20);
   f.state.error = "movements"; await assert.rejects(check(f), /consultar las coincidencias/); assert.equal(f.state.invocations.length, 0);
 }
 // Peru day, correct income leg, full transfer pair, and other spaces/currencies/users never become evidence.
 assert.deepEqual(web.detectionDuplicateBounds("2026-10-14T04:59:59Z"), { from: "2026-10-13T05:00:00.000Z", to: "2026-10-14T05:00:00.000Z" });
 assert.throws(() => web.detectionDuplicateBounds("bad"), /fecha/);
+for (const time of ["2026-10-13T04:59:59Z", "2026-10-13T05:00:00Z", "2026-10-14T04:59:59Z", "2026-10-14T05:00:00Z", "2026-12-31T23:59:59-05:00", "2026-01-01"])
+  assert.deepEqual(phoneDay.detectionDuplicateBounds(time), web.detectionDuplicateBounds(time));
 {
   const f = fixture(); f.state.movements[0].occurred_at = "2026-10-14T04:50:00Z";
   assert.equal((await check(f, false)).candidate.id, 20);
-  assert.equal(await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description }), null,
-    "Known mobile UTC-day defect is documented, not copied into web");
+  assert.equal((await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description })).id, 20,
+    "Both clients now find the same late-night Peru movement");
 }
 {
   const excluded = [{ ...suggestion, id: 91, user_id: "other" }, { ...suggestion, id: 92, workspace_id: 9 }, { ...suggestion, id: 93, currency_code: "USD" },
@@ -126,19 +130,25 @@ assert.throws(() => web.detectionDuplicateBounds("bad"), /fecha/);
   const registered = Array.from({ length: 1105 }, (_, index) => ({ ...suggestion, id: index + 100, status: "registered" }));
   const f = fixture([], [...excluded, ...registered]); await check(f);
   assert.deepEqual(f.state.invocations[0].body.counts, { sameDaySuggestions: 1106, sameDayRegisteredFromSuggestions: 1105, sameDayMatchingMovements: 1 });
+  assert.deepEqual(await phone(f.client).countSameDayDetectionSignals({ userId: "u", currencyCode: "PEN", workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt }), f.state.invocations[0].body.counts);
 }
 {
   const f = fixture(); f.state.error = "notification_detected_movement_suggestions";
   const decision = await check(f); assert.equal(decision.allowed, false); assert.equal(decision.ai.verdict, "unknown"); assert.equal(f.state.invocations.length, 0);
+  await assert.rejects(phone(f.client).countSameDayDetectionSignals({ userId: "u", currencyCode: "PEN", workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt }), /evidencia/);
 }
 {
   const f = fixture(); f.state.movements[0] = { ...movement, movement_type: "income", source_account_id: null, source_amount: null, destination_account_id: 1, destination_amount: 20 };
   const result = await f.checker.check({ ...receipt, movementType: "income" }, { ...input, movementType: "income", sourceAccountId: null, sourceAmount: null, destinationAccountId: 1, destinationAmount: 20 }, accounts, null, false, null);
   assert.equal(result.candidate.id, 20);
+  assert.equal((await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "income", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description })).id, 20);
   f.state.movements[0] = { ...movement, movement_type: "transfer", destination_account_id: 2, destination_amount: 5 };
   const transfer = { ...input, movementType: "transfer", destinationAccountId: 2, destinationAmount: 5, fxRate: 0.25 };
   assert.equal((await f.checker.check({ ...receipt, movementType: "transfer" }, transfer, accounts, null, false, null)).candidate.id, 20);
   assert.equal((await f.checker.check({ ...receipt, movementType: "transfer" }, { ...transfer, destinationAmount: 6 }, accounts, null, false, null)).candidate, null);
+  const mobileTransfer = { workspaceId: 8, movementType: "transfer", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description, destinationAccountId: 2, destinationAmount: 5 };
+  assert.equal((await phone(f.client).findPossibleDuplicateMovement(mobileTransfer)).id, 20);
+  assert.equal(await phone(f.client).findPossibleDuplicateMovement({ ...mobileTransfer, destinationAmount: 6 }), null);
 }
 // Explicit override is tied to the candidate and draft, not a blanket bypass of new coincidences.
 {
