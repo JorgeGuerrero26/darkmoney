@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountSummary, CategorySummary, JsonValue, MovementRecord } from "../../types/domain";
 import { requestDetectedRegistrationUndo } from "../../modules/notifications/lib/detection-undo.ts";
+import { omissionTargets, omissionGroups, type DetectionOmissionInput, type DetectionOmissionResult } from "../../modules/notifications/lib/detection-omissions.ts";
 import { detectionObject, detectionPending, detectedWriteInput, validateDetectedMovement,
   type DetectedMovement, type DetectionMovementInput, type DetectionStatus } from "../../modules/notifications/lib/detected-movement.ts";
 
@@ -22,7 +23,9 @@ export function mapDetectedMovement(value: unknown): DetectedMovement {
     appLabel: String(row.app_label ?? "App financiera"), movementType: row.movement_type as DetectedMovement["movementType"],
     description: String(row.description ?? ""), occurredAt: String(row.occurred_at), confidence: String(row.confidence ?? "low"),
     status: row.status as DetectionStatus, movementId: row.movement_id == null ? null : Number(row.movement_id),
-    metadata: (row.metadata ?? null) as JsonValue | null };
+    metadata: (row.metadata ?? null) as JsonValue | null,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+    createdAt: typeof row.created_at === "string" ? row.created_at : null };
 }
 
 export function mapDetectedCandidate(value: unknown): MovementRecord {
@@ -136,5 +139,44 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
   async function undoRegistration(suggestionId: number, movementId: number) {
     return requestDetectedRegistrationUndo(client, { workspaceId: scope.workspaceId, suggestionId, movementId });
   }
-  return { get, review, pending, resolve, register, restoreDiscarded, undoRegistration };
+  async function omissions(input: DetectionOmissionInput): Promise<DetectionOmissionResult> {
+    const targets = omissionTargets(scope.userId, scope.workspaceId, input);
+    const result: DetectionOmissionResult = { changes: [], failed: 0, skipped: 0, readingUpdated: true };
+    let emailAllowed = true;
+    const email = targets.find(({ before }) => before.packageName === "email:inbound");
+    if (email) { try { await pro(email.before); } catch { emailAllowed = false; } }
+    const eligible = targets.filter(({ before }) => emailAllowed || before.packageName !== "email:inbound");
+    result.failed = targets.length - eligible.length;
+    for (const group of omissionGroups(eligible, input.action)) {
+      try {
+        let update = client.from(TABLE).update({
+          status: input.action === "omit" ? "discarded" : group[0].before.status,
+          movement_id: null, updated_at: new Date().toISOString(),
+        }).eq("user_id", scope.userId).eq("workspace_id", scope.workspaceId)
+          .in("id", group.map(({ before }) => before.id)).is("movement_id", null);
+        update = input.action === "omit" ? update.eq("status", group[0].before.status)
+          : update.eq("status", "discarded").eq("updated_at", group[0].after.updatedAt!);
+        const { data, error } = await update.select("*");
+        if (error) throw error;
+        const originals = new Map(group.map(({ before }) => [before.id, before]));
+        const changes = (data ?? []).map((row) => {
+          const after = mapDetectedMovement(row), before = originals.get(after.id);
+          if (!before || after.userId !== scope.userId || after.workspaceId !== scope.workspaceId ||
+            after.movementId != null || after.status !== (input.action === "omit" ? "discarded" : before.status)) {
+            throw new Error("No se pudo confirmar el estado actualizado.");
+          }
+          return { before, after };
+        });
+        result.changes.push(...changes);
+      } catch { result.failed += group.length; }
+    }
+    result.skipped = targets.length - result.failed - result.changes.length;
+    if (input.action === "omit" && input.markNotificationsRead === true) {
+      for (const { after } of result.changes) {
+        if (!(await read(after.id))) result.readingUpdated = false;
+      }
+    }
+    return result;
+  }
+  return { get, review, pending, resolve, register, restoreDiscarded, undoRegistration, omissions };
 }

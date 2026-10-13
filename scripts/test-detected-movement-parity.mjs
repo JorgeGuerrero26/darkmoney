@@ -107,7 +107,7 @@ process.env.TZ = "America/Lima";
 // Fake Supabase: no network or real inbox/financial writes.
 function fixture(rows = [structuredClone(raw)]) {
   const db = { suggestions: rows, movements: [], notifications: [{ user_id: "u", kind: "detected_movement_suggestion", related_entity_type: "detected_movement_suggestion", related_entity_id: 90, status: "sent" }] };
-  const state = { rpcFail: false, pro: true, readFail: false, candidates: [], resolvedIds: [], beforeUpdate: null, rpcCalls: 0 };
+  const state = { rpcFail: false, pro: true, readFail: false, candidates: [], resolvedIds: [], beforeUpdate: null, rpcCalls: 0, failIds: [], updateCalls: 0 };
   class Query {
     constructor(table) { this.table = table; this.filters = []; this.patch = null; this.bounds = null; }
     select() { return this; }
@@ -119,10 +119,12 @@ function fixture(rows = [structuredClone(raw)]) {
     range(from, to) { this.bounds = [from, to]; return this; }
     update(patch) { this.patch = patch; return this; }
     async execute(single = false) {
+      if (this.patch) state.updateCalls++;
       if (this.patch && state.beforeUpdate) { state.beforeUpdate(); state.beforeUpdate = null; }
       if (this.patch && this.table === "notifications" && state.readFail === "throw") throw new Error("network failed");
       if (this.patch && this.table === "notifications" && state.readFail) return { data: null, error: new Error("offline") };
       let found = db[this.table === "notification_detected_movement_suggestions" ? "suggestions" : this.table].filter((row) => this.filters.every((test) => test(row)));
+      if (this.patch && found.some((row) => state.failIds.includes(row.id))) return { data: null, error: new Error("write denied") };
       if (this.bounds) found = found.slice(this.bounds[0], this.bounds[1] + 1);
       if (this.patch) for (const row of found) Object.assign(row, this.patch);
       return { data: structuredClone(single ? found[0] ?? null : found), error: null };
@@ -135,7 +137,7 @@ function fixture(rows = [structuredClone(raw)]) {
     if (state.rpcFail) return { data: null, error: new Error("RPC missing") };
     return { data: name === "has_email_detection_pro_access" ? state.pro : { resolvedIds: state.resolvedIds, candidates: state.candidates }, error: null };
   } };
-  return { db, state, store: createDetectedMovementStore(client, { userId: "u", workspaceId: 8 }) };
+  return { db, state, client, store: createDetectedMovementStore(client, { userId: "u", workspaceId: 8 }) };
 }
 {
   const { store, db } = fixture();
@@ -230,8 +232,115 @@ function fixture(rows = [structuredClone(raw)]) {
   assert.equal((await fixture(rows).store.pending()).length, 501);
 }
 
+// Mobile inbox parity: snapshots, partial failures, conditional undo and unchanged finances.
+{
+  const { store, db, state } = fixture([
+    { ...raw, updated_at: "2026-10-12T10:00:00Z" },
+    { ...raw, id: 91, status: "needs_review", updated_at: "2026-10-12T11:00:00Z" },
+  ]);
+  const confirmed = (await store.pending()).slice();
+  db.suggestions.push({ ...raw, id: 92 }); // Arrived after the confirmation opened.
+  const omitted = await store.omissions({ action: "omit", suggestions: confirmed, markNotificationsRead: false });
+  assert.equal(omitted.changes.length, 2);
+  assert.equal(db.suggestions[2].status, "pending");
+  assert.equal(db.notifications[0].status, "sent", "bulk omission preserves notification reading");
+  assert.equal(db.movements.length, 0);
+  const restored = await store.omissions({ action: "restore", changes: omitted.changes });
+  assert.deepEqual(restored.changes.map(({ after }) => after.status), ["pending", "needs_review"]);
+  assert.equal(db.notifications[0].status, "sent");
+  assert.equal((await store.omissions({ action: "restore", changes: omitted.changes })).skipped, 2);
+  assert.equal(state.updateCalls, 6, "groups by original state rather than resetting everything to pending");
+}
+{
+  const { store, db, state } = fixture([{ ...raw, updated_at: "2026-10-12T10:00:00Z" }]);
+  const confirmed = await store.pending();
+  state.beforeUpdate = () => Object.assign(db.suggestions[0], { status: "registered", movement_id: 70 });
+  const result = await store.omissions({ action: "omit", suggestions: confirmed });
+  assert.equal(result.changes.length, 0); assert.equal(result.skipped, 1);
+  assert.equal(db.suggestions[0].status, "registered");
+  assert.equal(db.suggestions[0].movement_id, 70);
+}
+{
+  const { store, db } = fixture([{ ...raw, updated_at: "2026-10-12T10:00:00Z" }]);
+  const omitted = await store.omissions({ action: "omit", suggestions: await store.pending() });
+  // A later omission of the same ID must not be undone by an old toast.
+  Object.assign(db.suggestions[0], { updated_at: "2026-10-13T20:00:00Z" });
+  const result = await store.omissions({ action: "restore", changes: omitted.changes });
+  assert.equal(result.changes.length, 0); assert.equal(result.skipped, 1);
+  assert.equal(db.suggestions[0].status, "discarded");
+  db.suggestions[0].movement_id = 70;
+  db.suggestions[0].updated_at = omitted.changes[0].after.updatedAt;
+  assert.equal((await store.omissions({ action: "restore", changes: omitted.changes })).changes.length, 0);
+  assert.equal(db.suggestions[0].movement_id, 70);
+}
+{
+  const { store, db, state } = fixture([
+    { ...raw }, { ...raw, id: 91, status: "needs_review" },
+    { ...raw, id: 92, user_id: "other" }, { ...raw, id: 93, workspace_id: 9 },
+    { ...raw, id: 94, status: "duplicate", movement_id: 70 },
+  ]);
+  state.failIds = [91];
+  const targets = db.suggestions.map(mapDetectedMovement);
+  const result = await store.omissions({ action: "omit", suggestions: [...targets, targets[0]] });
+  assert.equal(result.changes.length, 1); assert.equal(result.failed, 1); assert.equal(result.skipped, 0);
+  assert.deepEqual(db.suggestions.map(row => row.status), ["discarded", "needs_review", "pending", "pending", "duplicate"]);
+  assert.equal(db.notifications[0].status, "sent");
+}
+{
+  const { store, db, state } = fixture([{ ...raw, package_name: "email:inbound" }, { ...raw, id: 91 }]);
+  state.pro = false;
+  const result = await store.omissions({ action: "omit", suggestions: db.suggestions.map(mapDetectedMovement) });
+  assert.equal(result.failed, 1); assert.equal(result.changes.length, 1);
+  assert.equal(db.suggestions[0].status, "pending");
+}
+{
+  const { store, db, state } = fixture();
+  state.readFail = true;
+  const result = await store.omissions({ action: "omit", suggestions: [suggestion], markNotificationsRead: true });
+  assert.equal(result.changes.length, 1); assert.equal(result.readingUpdated, false);
+  assert.equal(db.suggestions[0].status, "discarded");
+  assert.equal(db.notifications[0].status, "sent");
+  assert.equal((await store.omissions({ action: "restore", changes: result.changes })).changes.length, 1);
+  assert.equal(db.notifications[0].status, "sent");
+}
+{
+  const { store, db, state } = fixture(Array.from({ length: 501 }, (_, i) => ({ ...raw, id: i + 1 })));
+  const result = await store.omissions({ action: "omit", suggestions: await store.pending() });
+  assert.equal(result.changes.length, 501);
+  assert.equal(state.updateCalls, 3, "bounded batches avoid truncating returned IDs");
+  assert.ok(db.suggestions.every(row => row.status === "discarded"));
+}
+
 for (const file of ["src/app/layouts/app-shell.tsx", "src/modules/notifications/pages/notifications-redesign-page.tsx"]) {
   assert.match(readFileSync(resolve(root, file), "utf8"), /!notificationDefersRead\(notification.kind\)/);
+}
+// Execute the actual mobile omission mutation with a fake client, not a hand-written oracle.
+const mobileDetectionFile = resolve(mobileRoot, "services/queries/notification-detection.ts");
+const mobileDetectionSource = ts.createSourceFile(mobileDetectionFile, readFileSync(mobileDetectionFile, "utf8"), ts.ScriptTarget.Latest, true);
+const declarations = ["mapSuggestion", "useDetectedMovementOmissionsMutation"].map(name => {
+  const node = mobileDetectionSource.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(node, `Actual mobile reference ${name} is required`);
+  return node.getText(mobileDetectionSource);
+});
+const mobileOmissionsJs = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const mobileOmissions = new Function("exports", "supabase", "useMutation", "useQueryClient", `${mobileOmissionsJs}\nreturn exports.useDetectedMovementOmissionsMutation('u',8);`);
+const normalizeChanges = result => result.changes.map(({ before, after }) => [before.id, before.status, after.status, after.movementId]).sort((a, b) => a[0] - b[0]);
+for (const markNotificationsRead of [true, false]) {
+  const rows = [{ ...raw, updated_at: "2026-10-12T10:00:00Z" }, { ...raw, id: 91, status: "needs_review", updated_at: "2026-10-12T11:00:00Z" }];
+  const webDb = fixture(structuredClone(rows)), phoneDb = fixture(structuredClone(rows));
+  const phone = mobileOmissions({}, phoneDb.client, options => options, () => ({}));
+  const targets = rows.map(mapDetectedMovement);
+  const webResult = await webDb.store.omissions({ action: "omit", suggestions: targets, markNotificationsRead });
+  const phoneResult = await phone.mutationFn({ action: "omit", suggestions: targets, markNotificationsRead });
+  assert.deepEqual(normalizeChanges(webResult), normalizeChanges(phoneResult));
+  assert.equal(webDb.db.notifications[0].status, phoneDb.db.notifications[0].status);
+  // Preserve a later edit on one of the discarded rows in both clients.
+  webDb.db.suggestions[0].updated_at = phoneDb.db.suggestions[0].updated_at = "2026-10-14T12:00:00Z";
+  assert.deepEqual(normalizeChanges(await webDb.store.omissions({ action: "restore", changes: webResult.changes })),
+    normalizeChanges(await phone.mutationFn({ action: "restore", changes: phoneResult.changes })));
+  assert.equal(webDb.db.suggestions[0].status, "discarded");
+  assert.equal(webDb.db.suggestions[1].status, "needs_review");
+  assert.equal(webDb.db.movements.length, 0); assert.equal(phoneDb.db.movements.length, 0);
 }
 assert.match(readFileSync(resolve(root, "src/modules/notifications/components/detected-movement-review.tsx"), "utf8"), /<QuickMovementDialog/);
 console.log("detected-movement-parity: OK (actual mobile draft, scoped fake queries/writes, no real records changed)");

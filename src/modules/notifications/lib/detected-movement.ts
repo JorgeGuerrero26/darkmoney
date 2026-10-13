@@ -8,6 +8,8 @@ export type DetectedMovement = {
   packageName: string; appLabel: string; movementType: "expense" | "income" | "transfer" | "unknown";
   amount: number; currencyCode: string; description: string; occurredAt: string;
   confidence: string; status: DetectionStatus; movementId: number | null; metadata: JsonValue | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
 };
 export type DetectionSetting = { financialAppKey: string; enabled: boolean; defaultAccountId: number | null };
 export type DetectionMovementInput = MovementFormInput & { userId: string; workspaceId: number };

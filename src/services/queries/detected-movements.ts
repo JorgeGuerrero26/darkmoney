@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase/client";
 import { createDetectedMovementStore } from "./detected-movement-store";
-import type { DetectionSetting } from "../../modules/notifications/lib/detected-movement";
+import { detectionPending, type DetectedMovement, type DetectionSetting } from "../../modules/notifications/lib/detected-movement";
+import type { DetectionOmissionInput } from "../../modules/notifications/lib/detection-omissions";
 
 export function useDetectedMovements(userId: string | undefined, workspaceId: number | undefined, enabled: boolean, settingsEnabled = enabled) {
   const queryClient = useQueryClient();
@@ -15,6 +16,20 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
     return (data ?? []).map((row) => ({ financialAppKey: row.financial_app_key, enabled: row.enabled, defaultAccountId: row.default_account_id == null ? null : Number(row.default_account_id) }));
   } });
   function invalidate() { void queryClient.invalidateQueries({ queryKey: key }); void queryClient.invalidateQueries({ queryKey: ["notifications"] }); }
+  const omissions = useMutation({
+    mutationFn: (input: DetectionOmissionInput) => {
+      if (!store) throw new Error("No hay una sesión disponible.");
+      return store.omissions(input);
+    },
+    onSuccess: ({ changes }) => {
+      const updated = new Map(changes.map(({ after }) => [after.id, after]));
+      queryClient.setQueryData<DetectedMovement[]>([...key, "pending"], (previous) => previous ? [
+        ...previous.filter((row) => !updated.has(row.id)),
+        ...[...updated.values()].filter(detectionPending),
+      ].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "") || b.id - a.id) : previous);
+    },
+    onSettled: invalidate,
+  });
   async function invalidateFinances() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: key }),
@@ -25,7 +40,7 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
       queryClient.invalidateQueries({ queryKey: ["detection-learning", userId, workspaceId] }),
     ]);
   }
-  return { store, key, pending, settings, invalidate, invalidateFinances };
+  return { store, key, pending, settings, invalidate, invalidateFinances, omissions };
 }
 
 export function useDetectedMovementReviewQuery(userId: string, workspaceId: number, id: number) {

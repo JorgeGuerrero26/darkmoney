@@ -301,7 +301,7 @@ export function NotificationsPage() {
         </div>
       </header>
 
-      {showDetectedInbox && user?.id && activeWorkspace ? <DetectedMovementInbox userId={user.id} workspaceId={activeWorkspace.id} onOpen={(id) => setParams((current) => detectedReviewParams(current, id))} /> : null}
+      {showDetectedInbox && user?.id && activeWorkspace ? <DetectedMovementInbox key={`${user.id}:${activeWorkspace.id}`} userId={user.id} workspaceId={activeWorkspace.id} onOpen={(id) => setParams((current) => detectedReviewParams(current, id))} /> : null}
       {!showDetectedInbox ? <>
       <section aria-label="Buscar y filtrar notificaciones" className="grid gap-2 pt-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_1fr_1fr]">
         <input aria-label="Buscar notificaciones" className="field-dark !h-14" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por título o contenido..." type="search" value={search} />
