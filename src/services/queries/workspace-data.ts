@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchCategoryMovementUsage } from "./category-usage";
 import { updateNotificationReading } from "./notification-reading";
+import { readSharedObligations } from "./shared-obligations";
 
 import type { AppProfile } from "../../modules/auth/auth-context";
 import type {
@@ -458,12 +459,6 @@ type AcceptWorkspaceInvitationFunctionResponse = {
   accepted?: boolean;
   alreadyAccepted?: boolean;
   workspaceId?: number | null;
-};
-
-type ListSharedObligationsFunctionResponse = {
-  ok: boolean;
-  error?: string | null;
-  obligations?: SharedObligationSummary[];
 };
 
 type AcceptObligationShareFunctionResponse = {
@@ -2570,17 +2565,9 @@ async function fetchObligationShareInviteDetails(token: string) {
   return response.invite;
 }
 
-async function fetchSharedObligations() {
-  const response = (await invokeAuthenticatedFunction<ListSharedObligationsFunctionResponse>(
-    "list-shared-obligations",
-    {},
-  )) as ListSharedObligationsFunctionResponse;
-
-  if (!response.ok) {
-    throw new Error(response.error ?? "No pudimos cargar los registros compartidos contigo.");
-  }
-
-  return response.obligations ?? [];
+async function fetchSharedObligations(userId: string, signal?: AbortSignal) {
+  return readSharedObligations(getClient(), userId,
+    () => invokeAuthenticatedFunction<unknown>("list-shared-obligations", {}), { signal });
 }
 
 async function fetchUserEntitlement(userId: string) {
@@ -3276,9 +3263,8 @@ export function useObligationShareInviteDetailsQuery(token?: string) {
 export function useSharedObligationsQuery(userId?: string) {
   return useQuery({
     queryKey: ["shared-obligations", userId ?? null],
-    queryFn: () => fetchSharedObligations(),
+    queryFn: ({ signal }) => fetchSharedObligations(userId as string, signal),
     enabled: Boolean(userId),
-    placeholderData: (previousData) => previousData,
   });
 }
 

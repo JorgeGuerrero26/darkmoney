@@ -1,5 +1,21 @@
 import { notificationId } from "./notification-navigation.ts";
 
+/** Which reads must finish before an opening link may be consumed? */
+export function notificationObligationReadState(params: URLSearchParams, data: {
+  owned: { id: number }[];
+  shared: "loading" | "error" | "ready";
+  payments: "loading" | "error" | "ready";
+  events: "loading" | "error" | "ready";
+}) {
+  const id = notificationId(params.get("resource"));
+  if (!id) return "ready";
+  if (!data.owned.some((row) => row.id === id)) return data.shared;
+  const kind = params.get("notificationKind");
+  if (kind === "obligation_payment_request" && notificationId(params.get("paymentRequest"))) return data.payments;
+  if ((kind === "obligation_event_delete_request" || kind === "obligation_event_edit_request") && notificationId(params.get("event"))) return data.events;
+  return "ready";
+}
+
 export function resolveNotificationObligationTarget(params: URLSearchParams, data: {
   owned: { id: number }[];
   shared: { id: number }[];

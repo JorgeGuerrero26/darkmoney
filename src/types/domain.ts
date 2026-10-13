@@ -276,6 +276,7 @@ export type ObligationEventSummary = {
   id: number;
   eventType: ObligationEventType;
   eventDate: string;
+  createdAt?: string | null;
   amount: number;
   installmentNo?: number | null;
   reason?: string | null;

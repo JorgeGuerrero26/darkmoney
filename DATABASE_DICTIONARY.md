@@ -601,6 +601,22 @@ Invitaciones y acceso compartido de creditos o deudas con otros usuarios existen
 | `created_at` | `timestamptz` | No | Fecha de creacion |
 | `updated_at` | `timestamptz` | No | Fecha de actualizacion |
 
+**Lectura de accesos compartidos:** la web consulta primero la RPC existente
+`list_shared_obligations()` (sin argumentos), igual que móvil. Su contrato es un
+array de `{ obligation: { ...campos_de_v_obligation_summary, events: [...] }, share }`.
+La RPC es de solo lectura, ejecutable por `authenticated`, y filtra shares
+aceptados por `auth.uid()` o el correo de `auth.users` de ese usuario. Compartir
+una obligación no concede membresía al espacio del propietario. Fuente del
+contrato: `DarkMoneyApp/supabase/migrations/202607290001_list_shared_obligations_rpc.sql`.
+Esta adaptación del cliente no despliega ni crea la función.
+
+Solo cuando esa RPC no existe se admite el endpoint autenticado anterior
+`list-shared-obligations`: `{ ok: true, obligations: [...] }` normalizado o
+`{ ok: true, items: [{ obligation, share }] }` crudo. Fallos de permisos/red,
+datos incompletos y respuestas ambiguas son errores, no una lista vacía.
+Los importes preservan la moneda original; no se consideran convertidos a la
+moneda base del destinatario por venir de la vista del propietario.
+
 ### `obligation_events`
 
 Detalle historico de eventos sobre una obligacion.

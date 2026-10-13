@@ -24,7 +24,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { resolveNotificationObligationTarget } from "../../notifications/lib/notification-obligation-target";
+import { notificationObligationReadState, resolveNotificationObligationTarget } from "../../notifications/lib/notification-obligation-target";
 
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -3178,10 +3178,18 @@ export function ObligationsPage() {
       ? null
       : obligations.find((obligation) => obligation.id === detailObligationId) ?? null;
   useEffect(() => {
-    if (!notificationParams.has("resource") || !snapshot || sharedObligationsQuery.isLoading) return;
-    const kind = notificationParams.get("notificationKind");
-    if (kind === "obligation_payment_request" && pendingPaymentRequestsQuery.isLoading) return;
-    if ((kind === "obligation_event_delete_request" || kind === "obligation_event_edit_request") && eventRequestsQuery.isLoading) return;
+    if (!notificationParams.has("resource") || !snapshot || snapshot.workspace.id !== activeWorkspace?.id || snapshotQuery.isPlaceholderData || snapshotQuery.isFetching) return;
+    const state = (query: { isLoading: boolean; isFetching: boolean; isPlaceholderData: boolean; isError: boolean }) =>
+      query.isLoading || query.isFetching || query.isPlaceholderData ? "loading" as const : query.isError ? "error" as const : "ready" as const;
+    const reads = notificationObligationReadState(notificationParams, {
+      owned: obligations, shared: state(sharedObligationsQuery), payments: state(pendingPaymentRequestsQuery), events: state(eventRequestsQuery),
+    });
+    if (reads === "loading") return;
+    if (reads === "error") {
+      setPageFeedback((current) => current?.title === "No se pudo abrir el aviso" ? current : { tone: "error", title: "No se pudo abrir el aviso", description: "No pudimos comprobar el registro o su solicitud. Reintenta la consulta; el enlace se conserva." });
+      return;
+    }
+    setPageFeedback((current) => current?.title === "No se pudo abrir el aviso" ? null : current);
     const target = resolveNotificationObligationTarget(notificationParams, {
       owned: obligations, shared: sharedObligations, payments: pendingPaymentRequests,
       deletes: eventRequestsQuery.data?.deleteRequests ?? [], edits: eventRequestsQuery.data?.editRequests ?? [],
@@ -3203,7 +3211,7 @@ export function ObligationsPage() {
       for (const key of ["resource", "paymentRequest", "event", "notificationKind"]) next.delete(key);
       return next;
     }, { replace: true });
-  }, [notificationParams, setNotificationParams, snapshot, obligations, sharedObligations, sharedObligationsQuery.isLoading, pendingPaymentRequests, pendingPaymentRequestsQuery.isLoading, eventRequestsQuery.data, eventRequestsQuery.isLoading]);
+  }, [notificationParams, setNotificationParams, snapshot, activeWorkspace?.id, snapshotQuery.isPlaceholderData, snapshotQuery.isFetching, obligations, sharedObligations, sharedObligationsQuery.isLoading, sharedObligationsQuery.isFetching, sharedObligationsQuery.isPlaceholderData, sharedObligationsQuery.isError, pendingPaymentRequests, pendingPaymentRequestsQuery.isLoading, pendingPaymentRequestsQuery.isFetching, pendingPaymentRequestsQuery.isPlaceholderData, pendingPaymentRequestsQuery.isError, eventRequestsQuery.data, eventRequestsQuery.isLoading, eventRequestsQuery.isFetching, eventRequestsQuery.isPlaceholderData, eventRequestsQuery.isError]);
   const attachmentsQuery = useEntityAttachmentsQuery(
     activeWorkspace?.id,
     "obligation",
@@ -5177,6 +5185,9 @@ export function ObligationsPage() {
           description={pageFeedback.description}
           title={pageFeedback.title}
           tone={pageFeedback.tone}
+          action={pageFeedback.title === "No se pudo abrir el aviso" ? <Button disabled={sharedObligationsQuery.isFetching || pendingPaymentRequestsQuery.isFetching || eventRequestsQuery.isFetching} onClick={() => {
+            void Promise.allSettled([sharedObligationsQuery.refetch(), pendingPaymentRequestsQuery.refetch(), eventRequestsQuery.refetch()]);
+          }}>Reintentar</Button> : undefined}
         />
       ) : null}
 
@@ -5331,6 +5342,7 @@ export function ObligationsPage() {
             )}
             title="No pudimos cargar lo compartido"
             tone="error"
+            action={<Button onClick={() => { void sharedObligationsQuery.refetch(); }}>Reintentar</Button>}
           />
         </SurfaceCard>
       ) : filteredSharedObligations.length > 0 ? (

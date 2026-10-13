@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Workspace, WorkspaceRole } from "../../types/domain";
+import type { SharedObligationSummary, Workspace, WorkspaceRole } from "../../types/domain";
 import { supabase } from "../supabase/client";
 import { notificationDefersRead, notificationHref, notificationId } from "../../modules/notifications/lib/notification-navigation";
+import { readLegacySharedObligations, readSharedObligations } from "./shared-obligations";
 
 export type NotificationDestination = {
   id: number;
@@ -33,7 +34,7 @@ async function permittedWorkspace(client: ReadClient, userId: string, workspaceI
 }
 
 /** Read-only preflight. Never guesses a space from the current UI or reconciles detections. */
-export async function fetchNotificationDestination(client: ReadClient, userId: string, noticeId: number): Promise<NotificationDestination> {
+export async function fetchNotificationDestination(client: ReadClient, userId: string, noticeId: number, readShared?: () => Promise<SharedObligationSummary[]>): Promise<NotificationDestination> {
   if (!userId || notificationId(noticeId) !== noticeId) throw new Error("Aviso inválido o sesión no disponible.");
   const { data: row, error } = await client.from("notifications")
     .select("id, kind, channel, status, related_entity_type, related_entity_id, payload")
@@ -74,6 +75,18 @@ export async function fetchNotificationDestination(client: ReadClient, userId: s
     if (resourceResponse.error) throw resourceResponse.error;
     const actualWorkspaceId = notificationId(resourceResponse.data?.workspace_id);
     if (table === "obligations") {
+      const ownWorkspace = actualWorkspaceId ? await permittedWorkspace(client, userId, actualWorkspaceId) : null;
+      if (ownWorkspace) {
+        if (declaredWorkspaceId && declaredWorkspaceId !== actualWorkspaceId) throw new Error("El recurso no pertenece al espacio del aviso.");
+        return { ...result, workspace: ownWorkspace, scope: "workspace" };
+      }
+      if (readShared) {
+        // The same authenticated RPC as the resource page also supports legacy email grants.
+        const shared = (await readShared()).find((item) => item.id === resourceId);
+        if (!shared) throw new Error("La obligación ya no está disponible o no tienes acceso.");
+        if ((declaredWorkspaceId && declaredWorkspaceId !== shared.workspaceId) || (actualWorkspaceId && actualWorkspaceId !== shared.workspaceId)) throw new Error("El recurso no pertenece al espacio del aviso.");
+        return { ...result, workspace: null, scope: "shared" };
+      }
       // Sharing one obligation does not grant membership in its owner's space.
       const share = await client.from("obligation_shares").select("id, workspace_id")
         .eq("invited_user_id", userId).eq("obligation_id", resourceId).eq("status", "accepted")
@@ -81,8 +94,6 @@ export async function fetchNotificationDestination(client: ReadClient, userId: s
       if (share.error) throw share.error;
       const originalSpace = actualWorkspaceId ?? notificationId(share.data?.workspace_id);
       if (declaredWorkspaceId && originalSpace && declaredWorkspaceId !== originalSpace) throw new Error("El recurso no pertenece al espacio del aviso.");
-      const ownWorkspace = originalSpace ? await permittedWorkspace(client, userId, originalSpace) : null;
-      if (ownWorkspace && actualWorkspaceId) return { ...result, workspace: ownWorkspace, scope: "workspace" };
       if (share.data && originalSpace) return { ...result, workspace: null, scope: "shared" };
       throw new Error("La obligación ya no está disponible o no tienes acceso.");
     }
@@ -104,9 +115,10 @@ export async function fetchNotificationDestination(client: ReadClient, userId: s
 export function useNotificationDestination(userId: string | undefined, noticeId: number | null) {
   return useQuery({
     queryKey: ["notification-destination", userId ?? null, noticeId],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!supabase || !userId || !noticeId) throw new Error("No se puede consultar este aviso.");
-      return fetchNotificationDestination(supabase, userId, noticeId);
+      return fetchNotificationDestination(supabase, userId, noticeId, () => readSharedObligations(supabase!, userId,
+        (legacySignal) => readLegacySharedObligations(supabase!, legacySignal), { signal }));
     },
     enabled: Boolean(userId && noticeId),
     staleTime: 0,
