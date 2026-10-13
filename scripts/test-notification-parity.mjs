@@ -36,6 +36,9 @@ for (const kind of ["budget_alert", "daily_ai_digest", "unknown"]) assert.equal(
 
 assert.equal(notificationHref({ kind: "subscription_reminder", relatedEntityId: 17 }), "/app/subscriptions?resource=17");
 assert.equal(notificationHref({ kind: "negative_balance", relatedEntityId: 4 }), "/app/accounts?resource=4");
+assert.equal(notificationHref({ kind: "negative_balance", relatedEntityType: "workspace", relatedEntityId: 4 }), "/app/accounts");
+assert.equal(notificationHref({ kind: "multiple_subscriptions_due", relatedEntityType: "workspace", relatedEntityId: 4 }), "/app/subscriptions");
+assert.equal(notificationHref({ kind: "subscription_cost_heavy", relatedEntityType: "workspace", relatedEntityId: 4 }), "/app/subscriptions");
 assert.equal(notificationHref({ kind: "obligation_due", payload: { obligationId: 9 } }), "/app/obligations?resource=9");
 assert.equal(notificationHref({ kind: "obligation_share_invite", payload: { token: "a/b" } }), "/share/obligations/a%2Fb");
 assert.equal(notificationHref({ kind: "custom", payload: { url: "https://evil.invalid" } }), "/app/notifications");

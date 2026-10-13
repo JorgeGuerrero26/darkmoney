@@ -17,7 +17,7 @@ import type {
 import type { PendingInvite } from "../auth/invite-resume";
 import { usePendingInvite } from "../auth/invite-resume";
 import { useNotificationReads } from "./notification-reads-context";
-import { notificationHref } from "./lib/notification-navigation";
+import { notificationDestinationHref, notificationHref } from "./lib/notification-navigation";
 
 type SmartNotificationTone = "info" | "success" | "warning" | "danger" | "neutral";
 
@@ -25,6 +25,7 @@ export type InboxNotification = {
   id: string;
   source: "database" | "smart";
   databaseId?: number;
+  workspaceId?: number;
   title: string;
   body: string;
   status: NotificationItem["status"];
@@ -193,7 +194,7 @@ function buildDatabaseNotifications(notifications: NotificationItem[]): InboxNot
     channel: notification.channel,
     readAt: notification.readAt,
     tone: getDatabaseNotificationTone(notification),
-    href: notificationHref(notification),
+    href: notificationDestinationHref(notificationHref(notification), notification.id),
     payload: notification.payload,
     isArchived: Boolean(notification.archivedAt),
   }));
@@ -678,7 +679,7 @@ function buildSmartNotifications(
     });
   }
 
-  return notifications;
+  return notifications.map((notification) => ({ ...notification, workspaceId: snapshot.workspace.id }));
 }
 
 function buildBillingNotifications(

@@ -15,6 +15,7 @@
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:notification-day": "node scripts/test-notification-day-ui.mjs",
+    "test:notification-destination": "node scripts/test-notification-destination.mjs",
     "test:detected-movement-parity": "node --experimental-strip-types scripts/test-detected-movement-parity.mjs",
     "test:detection-inbox-ui": "node scripts/test-detection-inbox-ui.mjs",
     "test:detection-learning": "node scripts/test-detection-learning.mjs",

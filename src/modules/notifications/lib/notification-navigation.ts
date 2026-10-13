@@ -19,9 +19,25 @@ function internalLink(path: string, values: Record<string, string | number | nul
   return params.size ? `${path}?${params}` : path;
 }
 
+/** Persisted notices go through a canonical, user-scoped destination preflight. */
+export function notificationDestinationHref(href: string, id: number) {
+  if (!notificationId(id)) throw new Error("Aviso inválido.");
+  if (/^\/share\/(obligations|workspaces)\//.test(href)) return href;
+  if (!/^\/app(?:\/|\?|$)/.test(href)) return "/app/notifications";
+  const url = new URL(href, "https://internal.invalid");
+  if (!/^\/app(?:\/|$)/.test(url.pathname)) return "/app/notifications";
+  url.searchParams.set("noticeId", String(id));
+  return `${url.pathname}${url.search}`;
+}
+
+/** Calculated notices have no server row: reject a stale snapshot rather than guessing. */
+export function notificationMatchesActiveSpace(notification: { source: string; workspaceId?: number }, activeWorkspaceId: number | null | undefined) {
+  return notification.source !== "smart" || notification.workspaceId == null || notification.workspaceId === activeWorkspaceId;
+}
+
 /** These notices stay unread when merely opening their destination. */
 export function notificationDefersRead(kind: string) {
-  return ["obligation_payment_request", "obligation_event_delete_request", "obligation_event_edit_request", "detected_movement_suggestion"].includes(kind);
+  return ["invite", "workspace_invite", "obligation_share_invite", "obligation_payment_request", "obligation_event_delete_request", "obligation_event_edit_request", "detected_movement_suggestion"].includes(kind);
 }
 
 /** Never follow a URL from payload; map known kinds to internal product destinations. */
@@ -52,8 +68,15 @@ export function notificationHref(notification: Pick<NotificationItem, "kind" | "
     const event = kind.startsWith("obligation_event_") ? notificationId(payload.eventId) ?? (relatedEntityType !== "obligation" ? id : null) : null;
     return internalLink("/app/obligations", { resource: obligationId, paymentRequest: request, event, notificationKind: request || event ? kind : null });
   }
-  if (kind.startsWith("subscription_") || kind === "multiple_subscriptions_due" || kind === "upcoming_annual_subscription") return id ? `/app/subscriptions?resource=${id}` : "/app/subscriptions";
-  if (kind === "low_balance" || kind === "negative_balance" || kind === "account_dormant") return id ? `/app/accounts?resource=${id}` : "/app/accounts";
+  if (kind === "multiple_subscriptions_due" || kind === "subscription_cost_heavy") return "/app/subscriptions";
+  if (kind.startsWith("subscription_") || kind === "upcoming_annual_subscription") {
+    const subscriptionId = notificationId(payload.subscriptionId) ?? (relatedEntityType == null || relatedEntityType === "subscription" ? id : null);
+    return subscriptionId ? `/app/subscriptions?resource=${subscriptionId}` : "/app/subscriptions";
+  }
+  if (kind === "low_balance" || kind === "negative_balance" || kind === "account_dormant") {
+    const accountId = notificationId(payload.accountId) ?? (relatedEntityType == null || relatedEntityType === "account" ? id : null);
+    return accountId ? `/app/accounts?resource=${accountId}` : "/app/accounts";
+  }
   if (kind === "budget_period_ended") return relatedEntityType === "budget" && id ? `/app/budgets?duplicateFrom=${id}` : "/app/budgets";
   if (kind.includes("budget")) return relatedEntityType === "budget" && id ? `/app/budgets?resource=${id}` : "/app/budgets";
   if (kind === "recurring_income_reminder" || kind === "expected_income_missed") return "/app/recurring-income";

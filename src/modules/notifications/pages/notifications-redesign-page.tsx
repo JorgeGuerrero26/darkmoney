@@ -1,7 +1,8 @@
 import { CheckCheck, ChevronRight, MoreVertical, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { notificationDefersRead, notificationId } from "../lib/notification-navigation";
+import { notificationDefersRead, notificationId, notificationMatchesActiveSpace } from "../lib/notification-navigation";
+import { useWorkspaceStore } from "../../../stores/workspace-store";
 import { closeDetectedReviewParams, detectedReviewParams } from "../lib/detected-movement";
 import { DetectedMovementInbox } from "../components/detected-movement-inbox";
 import { DetectedMovementReview } from "../components/detected-movement-review";
@@ -21,7 +22,6 @@ import {
   getQueryErrorMessage,
   useCurrentUserEntitlementQuery,
   useMarkAllNotificationsReadMutation,
-  useMarkNotificationReadMutation,
   useMarkNotificationsUnreadMutation,
   useMarkNotificationsReadMutation,
   useDeleteNotificationsMutation,
@@ -139,7 +139,6 @@ export function NotificationsPage() {
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllReadMutation = useMarkAllNotificationsReadMutation(user?.id);
-  const markSingleReadMutation = useMarkNotificationReadMutation(user?.id);
   const unreadMutation = useMarkNotificationsUnreadMutation(user?.id);
   const readMutation = useMarkNotificationsReadMutation(user?.id);
   const deleteMutation = useDeleteNotificationsMutation(user?.id);
@@ -148,7 +147,7 @@ export function NotificationsPage() {
     entitlement: entitlementQuery.data,
     pendingObligationShares: pendingInvitesQuery.data?.obligationShares,
     pendingWorkspaceInvitations: pendingInvitesQuery.data?.workspaceInvitations,
-    snapshot: snapshotQuery.data,
+    snapshot: snapshotQuery.data?.workspace.id === activeWorkspace?.id ? snapshotQuery.data : undefined,
     workspaceName: activeWorkspace?.name,
   });
 
@@ -182,7 +181,7 @@ export function NotificationsPage() {
   const visibleDatabaseIds = filteredNotifications.flatMap((item) => item.databaseId ? [item.databaseId] : []);
   const selectedItems = databaseItems.filter((item) => selectedIds.has(item.id));
   const groups = groupNotificationsByDate(filteredNotifications);
-  const busy = isBatchPending || markAllReadMutation.isPending || markSingleReadMutation.isPending || readMutation.isPending || unreadMutation.isPending || deleteMutation.isPending;
+  const busy = isBatchPending || markAllReadMutation.isPending || readMutation.isPending || unreadMutation.isPending || deleteMutation.isPending;
   useEffect(() => {
     const visible = new Set(filteredNotifications.flatMap((item) => item.databaseId ? [item.databaseId] : []));
     setSelectedIds((current) => { const next = new Set([...current].filter((id) => visible.has(id))); return next.size === current.size ? current : next; });
@@ -218,13 +217,13 @@ export function NotificationsPage() {
   }
 
   async function handleOpen(notification: InboxNotification) {
+    if (!notificationMatchesActiveSpace(notification, useWorkspaceStore.getState().activeWorkspaceId)) {
+      showToast({ title: "El espacio cambió", description: "Este aviso se calculó en el espacio anterior. Abre los avisos actualizados.", tone: "error" });
+      return;
+    }
     try {
-      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
-        if (notification.source === "database" && notification.databaseId) {
-          await markSingleReadMutation.mutateAsync(notification.databaseId);
-        } else {
-          inbox.markSmartNotificationsAsRead([notification.id]);
-        }
+      if (notification.source !== "database" && notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
+        inbox.markSmartNotificationsAsRead([notification.id]);
       }
     } catch {
       // Mantener disponible el destino aunque el cambio de lectura falle.

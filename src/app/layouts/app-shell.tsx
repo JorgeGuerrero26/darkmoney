@@ -53,14 +53,14 @@ import {
 } from "../../modules/notifications/use-notification-inbox";
 import { NotificationReadsProvider } from "../../modules/notifications/notification-reads-context";
 import { notificationReadingCounts } from "../../modules/notifications/lib/notification-list-model";
-import { notificationDefersRead } from "../../modules/notifications/lib/notification-navigation";
+import { notificationDefersRead, notificationMatchesActiveSpace } from "../../modules/notifications/lib/notification-navigation";
+import { NotificationDestinationBoundary } from "../../modules/notifications/components/notification-destination-boundary";
 import { UserPreferencesProvider } from "../../modules/notifications/user-preferences-context";
 import { useActiveWorkspace } from "../../modules/workspaces/use-active-workspace";
 import { useWorkspaceDataSync } from "../../modules/workspaces/use-workspace-data-sync";
 import {
   getQueryErrorMessage,
   useMarkAllNotificationsReadMutation,
-  useMarkNotificationReadMutation,
   useNotificationPreferencesQuery,
   useNotificationsQuery,
   usePendingNotificationInvitesQuery,
@@ -434,7 +434,6 @@ function AppShellContent() {
   const pendingNotificationInvitesQuery = usePendingNotificationInvitesQuery(user?.id);
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const markAllNotificationsReadMutation = useMarkAllNotificationsReadMutation(user?.id);
-  const markNotificationReadMutation = useMarkNotificationReadMutation(user?.id);
   const notificationsPanelRef = useOutsidePointerClose(
     isNotificationsPanelOpen,
     () => setIsNotificationsPanelOpen(false),
@@ -445,7 +444,7 @@ function AppShellContent() {
     entitlement: entitlementQuery.data,
     pendingObligationShares: pendingNotificationInvitesQuery.data?.obligationShares,
     pendingWorkspaceInvitations: pendingNotificationInvitesQuery.data?.workspaceInvitations,
-    snapshot: workspaceSnapshotQuery.data,
+    snapshot: workspaceSnapshotQuery.data?.workspace.id === activeWorkspace?.id ? workspaceSnapshotQuery.data : undefined,
     workspaceName: activeWorkspace?.name,
   });
   const visibleNotifications = useMemo(
@@ -483,13 +482,13 @@ function AppShellContent() {
   }
 
   async function handleOpenNotification(notification: InboxNotification) {
+    if (!notificationMatchesActiveSpace(notification, useWorkspaceStore.getState().activeWorkspaceId)) {
+      showToast({ title: "El espacio cambió", description: "Este aviso se calculó en el espacio anterior. Abre los avisos actualizados.", tone: "error" });
+      return;
+    }
     try {
-      if (notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
-        if (notification.source === "database" && notification.databaseId) {
-          await markNotificationReadMutation.mutateAsync(notification.databaseId);
-        } else {
-          notificationInbox.markSmartNotificationsAsRead([notification.id]);
-        }
+      if (notification.source !== "database" && notification.status !== "read" && !isActionRequiredNotificationKind(notification.kind) && !notificationDefersRead(notification.kind)) {
+        notificationInbox.markSmartNotificationsAsRead([notification.id]);
       }
     } catch {
       // La navegación no debe quedar bloqueada si falla el estado de lectura.
@@ -1260,7 +1259,16 @@ function AppShellContent() {
             </section>
           ) : null}
 
-          <Outlet />
+          <NotificationDestinationBoundary
+            userId={user?.id}
+            activeWorkspace={activeWorkspace}
+            snapshotWorkspaceId={workspaceSnapshotQuery.data?.workspace.id}
+            snapshotLoading={workspaceSnapshotQuery.isPending || workspaceSnapshotQuery.isFetching || workspaceSnapshotQuery.isPlaceholderData}
+            snapshotError={workspaceSnapshotQuery.error}
+            onRetrySnapshot={() => { void workspaceSnapshotQuery.refetch(); }}
+          >
+            <Outlet />
+          </NotificationDestinationBoundary>
           </div>
         </main>
       </div>
@@ -1283,7 +1291,7 @@ function AppShellContent() {
         />
       ) : null}
 
-      {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data ? (
+      {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data?.workspace.id === activeWorkspace.id && !workspaceSnapshotQuery.isPlaceholderData ? (
         <QuickMovementDialog
           initialAccountId={quickMovementAccountId}
           initialKind={quickMovementKind}
