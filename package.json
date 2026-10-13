@@ -16,6 +16,7 @@
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:detected-movement-parity": "node --experimental-strip-types scripts/test-detected-movement-parity.mjs",
     "test:detection-inbox-ui": "node scripts/test-detection-inbox-ui.mjs",
+    "test:detection-learning": "node scripts/test-detection-learning.mjs",
     "test:detected-movement-undo": "node --experimental-strip-types scripts/test-detected-movement-undo.mjs",
     "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",

@@ -15,7 +15,11 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
     if (error) throw new Error("No se pudo consultar la cuenta predeterminada de detección.");
     return (data ?? []).map((row) => ({ financialAppKey: row.financial_app_key, enabled: row.enabled, defaultAccountId: row.default_account_id == null ? null : Number(row.default_account_id) }));
   } });
-  function invalidate() { void queryClient.invalidateQueries({ queryKey: key }); void queryClient.invalidateQueries({ queryKey: ["notifications"] }); }
+  function invalidate() {
+    void queryClient.invalidateQueries({ queryKey: key });
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["detection-learning", userId, workspaceId] });
+  }
   const omissions = useMutation({
     mutationFn: (input: DetectionOmissionInput) => {
       if (!store) throw new Error("No hay una sesión disponible.");

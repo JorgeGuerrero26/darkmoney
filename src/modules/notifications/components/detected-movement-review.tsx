@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
@@ -10,6 +10,7 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import { formatDateTime } from "../../../lib/formatting/dates";
 import { useCreateMovementMutation, getQueryErrorMessage, type WorkspaceSnapshot } from "../../../services/queries/workspace-data";
 import { useDetectedMovementReviewQuery } from "../../../services/queries/detected-movements";
+import { useDetectionLearningQuery } from "../../../services/queries/detection-learning";
 import { QuickMovementDialog } from "../../movements/components/quick-movement-dialog";
 import { detectedInputSignature, detectedMovementDraft, detectionPending, possibleDetectedDuplicate,
   reconciliationCandidateForDetectedInput, type DetectionMovementInput } from "../lib/detected-movement";
@@ -30,6 +31,21 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
   const [actionError, setActionError] = useState("");
   const clearDuplicate = useCallback(() => { setDuplicate(null); allowAnother.current = null; }, []);
   const suggestion = review.data?.suggestion;
+  const learning = useDetectionLearningQuery(userId, snapshot.workspace.id, Boolean(suggestion && detectionPending(suggestion)));
+  const draft = useMemo(() => suggestion ? detectedMovementDraft(suggestion, snapshot.accounts, snapshot.catalogs.categories, settings.data ?? []) : null,
+    [suggestion, snapshot.accounts, snapshot.catalogs.categories, settings.data]);
+  const detectionLearning = useMemo(() => suggestion && draft ? {
+    history: learning.isError ? [] : learning.data ?? [],
+    baseline: { accountId: Number(draft.form.accountId || draft.form.sourceAccountId) || null,
+      destinationAccountId: Number(draft.form.destinationAccountId) || null, categoryId: Number(draft.form.categoryId) || null },
+    baselines: Object.fromEntries((["expense", "income", "transfer"] as const).map((kind) => {
+      const value = detectedMovementDraft({ ...suggestion, movementType: kind }, snapshot.accounts, snapshot.catalogs.categories, settings.data ?? []).form;
+      return [kind, { accountId: Number(value.accountId || value.sourceAccountId) || null,
+        destinationAccountId: Number(value.destinationAccountId) || null, categoryId: Number(value.categoryId) || null }];
+    })),
+    originalDescription: suggestion.description, movementType: suggestion.movementType,
+    financialAppKey: suggestion.financialAppKey, currencyCode: suggestion.currencyCode, metadata: suggestion.metadata,
+  } : undefined, [suggestion, draft, learning.data, learning.isError, snapshot.accounts, snapshot.catalogs.categories, settings.data]);
   const register = useMutation({ mutationFn: async (input: DetectionMovementInput) => {
     const result = await store!.register(id, input, snapshot.accounts, (value) => create.mutateAsync(value), async (fresh, candidate) => {
       const matched = reconciliationCandidateForDetectedInput(fresh, input, snapshot.accounts, candidate)
@@ -108,13 +124,14 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
       </ModalFooter>
     </Modal>;
   }
-  const draft = detectedMovementDraft(suggestion, snapshot.accounts, snapshot.catalogs.categories, settings.data ?? []);
   return <QuickMovementDialog
+    key={`${userId}:${snapshot.workspace.id}:${id}`}
     allowSplit={false}
     postedOnly
     sourceCurrencyCode={suggestion.currencyCode}
-    initialDraft={draft.form}
-    initialKind={draft.kind}
+    initialDraft={draft!.form}
+    initialKind={draft!.kind}
+    detectionLearning={detectionLearning}
     isSubmitting={busy}
     onDraftChange={clearDuplicate}
     onClose={close}
@@ -149,6 +166,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     context={<div className="space-y-3">
       <p>{suggestion.appLabel}{suggestion.packageName === "email:inbound" ? " · por correo" : ""} · {formatDateTime(suggestion.occurredAt)}</p>
       <p>Revisa cuenta, tipo e importe antes de guardar. Cerrar no confirma ni marca leído el aviso.</p>
+      {learning.isError ? <p>No se pudo consultar tu historial para sugerir cuenta y categoría. Puedes elegirlas o <button disabled={learning.isFetching} className="underline underline-offset-4" onClick={() => void learning.refetch()} type="button">reintentar</button>.</p> : null}
       {suggestion.status === "needs_review" || suggestion.movementType === "unknown" ? <p className="text-ink">La detección necesita tu revisión; el tipo no se confirmó automáticamente.</p> : null}
       {duplicate ? <div className="space-y-3 border-y border-white/10 py-3"><p className="font-semibold text-ink">Posible coincidencia: {duplicate.movement.description}</p><p>{formatDateTime(duplicate.movement.occurredAt)} · #{duplicate.movement.id}</p><div className="flex flex-wrap gap-4"><button disabled={busy} className="font-semibold text-ink underline underline-offset-4" onClick={() => void resolveDetection("duplicate", duplicate.movement.id)} type="button">Es el mismo movimiento</button><button disabled={busy} className="text-ink underline underline-offset-4" onClick={() => { allowAnother.current = duplicate.signature; setDuplicate(null); }} type="button">Es otro; permitir guardar</button></div></div> : null}
       {actionError ? <p role="alert" className="text-ink">{actionError}</p> : null}

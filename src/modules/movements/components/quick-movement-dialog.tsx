@@ -15,6 +15,9 @@ import { SearchablePicker as QuickPicker } from "../../../components/ui/searchab
 import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
+import { learningObject, proposeFromPersonalHistory } from "../../../lib/detection-personal-learning";
+import { applyPersonalSelection, detectionLearningDecision, type DetectionLearningContext, type LearningFields, type LearningSelection } from "../../../lib/detection-learning-draft";
+import { resolveExchangeRate } from "../../../lib/detection-exchange-rate";
 import {
   deleteStoredReceipt,
   prepareReceiptUpload,
@@ -73,6 +76,7 @@ type QuickMovementDialogProps = {
   allowSplit?: boolean;
   postedOnly?: boolean;
   sourceCurrencyCode?: string;
+  detectionLearning?: DetectionLearningContext;
   onDraftChange?: () => void;
   isSubmitting?: boolean;
   submitMovement?: (input: MovementFormInput & { workspaceId: number; userId: string }) => Promise<number>;
@@ -298,6 +302,7 @@ export function QuickMovementDialog({
   allowSplit = true,
   postedOnly = false,
   sourceCurrencyCode,
+  detectionLearning,
   onDraftChange,
   isSubmitting = false,
   submitMovement,
@@ -316,6 +321,9 @@ export function QuickMovementDialog({
     ({ ...createDefaultQuickMovementFormState(initialKind, initialAccountId), ...initialDraft }),
   );
   const [isDirty, setIsDirty] = useState(false);
+  const manualLearningFields = useRef(new Set<LearningFields>());
+  const appliedLearning = useRef<LearningSelection>({ accountId: null, destinationAccountId: null, categoryId: null });
+  const [detectedFxRate, setDetectedFxRate] = useState<number | null>(null);
   useEffect(() => { onDraftChange?.(); }, [formState, kind, onDraftChange]);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [activePanel, setActivePanel] = useState<QuickMovementPanel>("main");
@@ -466,6 +474,45 @@ export function QuickMovementDialog({
     setCategoryFeedbackIntent(null);
     setSplitLines(null);
   }, [initialKind]);
+
+  const learningSelection: LearningSelection = {
+    accountId: parseOptionalInteger(kind === "transfer" ? formState.sourceAccountId : formState.accountId),
+    destinationAccountId: parseOptionalInteger(formState.destinationAccountId), categoryId: parseOptionalInteger(formState.categoryId),
+  };
+  const personalProposal = detectionLearning ? proposeFromPersonalHistory({
+    ...detectionLearning, description: formState.description, movementType: kind,
+    accountHints: learningObject(detectionLearning.metadata).accountHints, accountId: learningSelection.accountId,
+    accounts: snapshot.accounts, categories: snapshot.catalogs.categories,
+  }) : null;
+  const learningHint = personalProposal && (
+    (personalProposal.accountId != null && personalProposal.accountId === learningSelection.accountId && !manualLearningFields.current.has("account")) ||
+    (personalProposal.categoryId != null && personalProposal.categoryId === learningSelection.categoryId && !manualLearningFields.current.has("category")) ||
+    (personalProposal.destinationAccountId != null && personalProposal.destinationAccountId === learningSelection.destinationAccountId && !manualLearningFields.current.has("destination"))
+  );
+  useEffect(() => {
+    if (!detectionLearning || !personalProposal || isSaving) return;
+    const originalBaseline = detectionLearning.baselines?.[kind] ?? detectionLearning.baseline;
+    const baseline = { ...originalBaseline, categoryId: snapshot.catalogs.categories.some((c) => c.id === originalBaseline.categoryId && c.isActive && (c.kind === kind || c.kind === "both")) ? originalBaseline.categoryId : null };
+    const { draft, applied } = applyPersonalSelection(learningSelection, kind, manualLearningFields.current, baseline,
+      personalProposal, appliedLearning.current, detectionLearning.metadata);
+    appliedLearning.current = applied;
+    const primaryField = kind === "transfer" ? "sourceAccountId" : "accountId";
+    const accountId = draft.accountId == null ? "" : String(draft.accountId);
+    const categoryId = draft.categoryId == null ? "" : String(draft.categoryId);
+    const destinationAccountId = draft.destinationAccountId == null ? "" : String(draft.destinationAccountId);
+    const pairChanged = accountId !== formState[primaryField] || destinationAccountId !== formState.destinationAccountId;
+    if (!pairChanged && categoryId === formState.categoryId) return;
+    let destinationAmount = formState.destinationAmount;
+    if (kind === "transfer" && pairChanged) {
+      const source = snapshot.accounts.find((a) => a.id === draft.accountId && !a.isArchived);
+      const destination = snapshot.accounts.find((a) => a.id === draft.destinationAccountId && !a.isArchived);
+      const rate = source && destination ? resolveExchangeRate(snapshot.exchangeRates, source.currencyCode, destination.currencyCode, snapshot.workspace.baseCurrencyCode)?.rate : null;
+      setDetectedFxRate(rate == null ? null : Number(rate.toFixed(6)));
+      const amount = parseOptionalNumber(formState.amount);
+      destinationAmount = rate != null && amount != null && amount > 0 ? (amount * rate).toFixed(2) : "";
+    }
+    setFormState({ ...formState, [primaryField]: accountId, categoryId, destinationAccountId, destinationAmount });
+  }, [detectionLearning, formState, kind, isSaving, snapshot.accounts, snapshot.catalogs.categories, snapshot.exchangeRates, snapshot.workspace.baseCurrencyCode]);
 
   async function applyRecurringSuggestion() {
     const suggestion = insights.recurring;
@@ -639,10 +686,41 @@ export function QuickMovementDialog({
     value: QuickMovementFormState[Field],
   ) {
     setIsDirty(true);
+    if (field === "accountId" || field === "sourceAccountId") manualLearningFields.current.add("account");
+    if (field === "destinationAccountId") manualLearningFields.current.add("destination");
+    if (field === "categoryId") manualLearningFields.current.add("category");
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
     }));
+    if (detectionLearning && kind === "transfer" && (field === "sourceAccountId" || field === "destinationAccountId")) {
+      setFormState((current) => {
+        const sourceId = parseOptionalInteger(current.sourceAccountId);
+        const destinationId = parseOptionalInteger(current.destinationAccountId);
+        const source = snapshot.accounts.find((a) => a.id === sourceId && !a.isArchived);
+        const destination = snapshot.accounts.find((a) => a.id === destinationId && !a.isArchived && a.id !== sourceId);
+        const rate = source && destination ? resolveExchangeRate(snapshot.exchangeRates, source.currencyCode, destination.currencyCode, snapshot.workspace.baseCurrencyCode)?.rate : null;
+        const amount = parseOptionalNumber(current.amount);
+        return { ...current, destinationAccountId: destination ? current.destinationAccountId : "",
+          destinationAmount: rate != null && amount != null && amount > 0 ? (amount * rate).toFixed(2) : "" };
+      });
+    }
+    if (detectionLearning && kind === "transfer") {
+      if (field === "sourceAccountId" || field === "destinationAccountId") {
+        const sourceId = parseOptionalInteger(field === "sourceAccountId" ? String(value) : formState.sourceAccountId);
+        const destinationId = parseOptionalInteger(field === "destinationAccountId" ? String(value) : formState.destinationAccountId);
+        const source = snapshot.accounts.find((a) => a.id === sourceId && !a.isArchived);
+        const destination = snapshot.accounts.find((a) => a.id === destinationId && !a.isArchived && a.id !== sourceId);
+        const rate = source && destination ? resolveExchangeRate(snapshot.exchangeRates, source.currencyCode, destination.currencyCode, snapshot.workspace.baseCurrencyCode)?.rate : null;
+        setDetectedFxRate(rate == null ? null : Number(rate.toFixed(6)));
+      } else if (field === "amount" && detectedFxRate != null) {
+        const amount = parseOptionalNumber(String(value));
+        if (amount != null && amount > 0) setFormState((current) => ({ ...current, destinationAmount: (amount * detectedFxRate).toFixed(2) }));
+      } else if (field === "destinationAmount") {
+        const amount = parseOptionalNumber(formState.amount), destinationAmount = parseOptionalNumber(String(value));
+        setDetectedFxRate(amount != null && amount > 0 && destinationAmount != null && destinationAmount > 0 ? Number((destinationAmount / amount).toFixed(6)) : null);
+      }
+    }
   }
 
   function requestClose() {
@@ -827,6 +905,7 @@ export function QuickMovementDialog({
             channel: "quick-entry",
             entryKind: kind,
             recurring_income_id: linkedRecurringIncomeId,
+            ...(detectionLearning ? { detectionLearning: detectionLearningDecision(detectionLearning, manualLearningFields.current) } : {}),
             riskAi: insights.risk?.source === "deepseek" ? insights.risk : null,
             budgetAi: insights.budget?.source === "deepseek" ? insights.budget : null,
           },
@@ -845,12 +924,12 @@ export function QuickMovementDialog({
         if (categoryId !== null && Number.isFinite(categoryId)) {
           void persistLearningFeedbackMutation.mutateAsync({
             movementId: createdMovementId,
-            feedbackKind: categoryFeedbackIntent?.kind ?? "manual_category_change",
+            feedbackKind: categoryFeedbackIntent?.kind ?? (detectionLearning && personalProposal?.categoryId === categoryId && !manualLearningFields.current.has("category") ? "accepted_category_suggestion" : "manual_category_change"),
             normalizedDescription: normalizeAnalyticsText(description) || null,
             previousCategoryId: null,
             acceptedCategoryId: categoryId,
             confidence: categoryFeedbackIntent?.confidence ?? null,
-            source: categoryFeedbackIntent?.source ?? "movement-form",
+            source: categoryFeedbackIntent?.source ?? (detectionLearning && personalProposal?.categoryId === categoryId && !manualLearningFields.current.has("category") ? "notification-personal-history" : "movement-form"),
             metadata: {
               movementType: kind,
               counterpartyId: counterpartyId ?? null,
@@ -922,11 +1001,12 @@ export function QuickMovementDialog({
         description,
         destinationAccountId,
         destinationAmount,
-        fxRate: transferFxRate,
+        fxRate: detectionLearning && hasTransferCurrencyMismatch ? detectedFxRate ?? transferFxRate : transferFxRate,
         metadata: {
           channel: "quick-entry",
           entryKind: kind,
           currenciesMatch: !hasTransferCurrencyMismatch,
+          ...(detectionLearning ? { detectionLearning: detectionLearningDecision(detectionLearning, manualLearningFields.current) } : {}),
         },
         movementType: "transfer",
         notes: null,
@@ -968,9 +1048,9 @@ export function QuickMovementDialog({
     }
   }
 
-  const accountOptions = useMemo(
+  const allAccountOptions = useMemo(
     () =>
-      visibleAccounts.filter((account) => !sourceCurrencyCode || account.currencyCode === sourceCurrencyCode).map((account) => ({
+      visibleAccounts.map((account) => ({
         value: String(account.id),
         label: account.name,
         description: `${account.currencyCode} · saldo ${formatCurrency(account.currentBalance, account.currencyCode)}`,
@@ -978,8 +1058,10 @@ export function QuickMovementDialog({
         leadingColor: account.color,
         searchText: `${account.name} ${account.currencyCode} ${account.type}`,
       })),
-    [visibleAccounts, sourceCurrencyCode],
+    [visibleAccounts],
   );
+  const accountOptions = allAccountOptions.filter((option) => !sourceCurrencyCode || visibleAccounts.find((a) => String(a.id) === option.value)?.currencyCode === sourceCurrencyCode);
+  const destinationAccountOptions = allAccountOptions.filter((option) => option.value !== formState.sourceAccountId);
   const categoryOptions = useMemo(
     () => [
       {
@@ -1060,6 +1142,7 @@ export function QuickMovementDialog({
           >
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
               {context ? <div className="mb-5 text-sm text-storm">{context}</div> : null}
+              {learningHint ? <p className="mb-4 text-xs text-storm">Según tus movimientos anteriores</p> : null}
               <div className={activePanel === "main" ? "" : "hidden"}>
                 <div className="grid grid-cols-3 gap-2">
                 {quickMovementModes.map((mode) => {
@@ -1081,8 +1164,11 @@ export function QuickMovementDialog({
                         setCategoryFeedbackIntent(null);
                         if (mode.kind === "transfer") setSplitLines(null);
                         if (mode.kind !== kind) {
+                          setDetectedFxRate(null);
                           setFormState((current) => ({
                             ...current,
+                            ...(detectionLearning ? { accountId: kind === "transfer" ? current.sourceAccountId : current.accountId,
+                              sourceAccountId: kind === "transfer" ? current.sourceAccountId : current.accountId } : {}),
                             categoryId: snapshot.catalogs.categories.some((category) => category.id === parseOptionalInteger(current.categoryId) && category.isActive && (category.kind === mode.kind || category.kind === "both")) ? current.categoryId : "",
                             spendTypeId: mode.kind === "expense" ? current.spendTypeId : "",
                           }));
@@ -1182,7 +1268,7 @@ export function QuickMovementDialog({
                               clearFieldError("destinationAccountId");
                               updateFormState("destinationAccountId", nextValue);
                             }}
-                            options={accountOptions}
+                            options={destinationAccountOptions}
                             placeholderDescription="Cuenta que recibe el dinero."
                             placeholderLabel="Cuenta de destino"
                             queryPlaceholder="Buscar cuenta..."
