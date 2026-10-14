@@ -14,6 +14,8 @@
     "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "test:subscription-receipts": "node --experimental-strip-types scripts/test-subscription-receipts.mjs",
+    "test:subscription-split-server": "node --experimental-strip-types scripts/test-subscription-split-server.mjs",
+    "test:detected-split-web": "node scripts/test-detected-split-web.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:notification-day": "node scripts/test-notification-day-ui.mjs",
     "test:notification-destination": "node scripts/test-notification-destination.mjs",

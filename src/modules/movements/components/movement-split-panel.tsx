@@ -127,7 +127,8 @@ export function MovementSplitPanel({
           </div>
         ))}
         <button
-          className="flex h-[54px] w-full items-center gap-2 border-t border-white/10 px-4 text-sm font-semibold text-ink hover:bg-white/[0.03]"
+          className="flex h-[54px] w-full items-center gap-2 border-t border-white/10 px-4 text-sm font-semibold text-ink hover:bg-white/[0.03] disabled:opacity-40"
+          disabled={lines.length >= 100}
           onClick={() => onChange([...lines, createMovementSplitLine()])}
           type="button"
         >

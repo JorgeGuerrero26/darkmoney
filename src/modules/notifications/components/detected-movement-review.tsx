@@ -16,6 +16,7 @@ import { detectedMovementDraft, detectionPending, type DetectionMovementInput } 
 import type { DuplicatePermission } from "../../../services/queries/detection-duplicates";
 import type { DuplicateAiResult } from "../lib/duplicate-verdict";
 import type { MovementRecord } from "../../../types/domain";
+import type { DetectionSplitSubmission } from "../lib/detection-split-submission";
 
 export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled, onClose }: {
   id: number; snapshot: WorkspaceSnapshot; userId: string; proAccessEnabled: boolean; onClose: () => void;
@@ -50,22 +51,40 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     originalDescription: suggestion.description, movementType: suggestion.movementType,
     financialAppKey: suggestion.financialAppKey, currencyCode: suggestion.currencyCode, metadata: suggestion.metadata,
   } : undefined, [suggestion, draft, learning.data, learning.isError, snapshot.accounts, snapshot.catalogs.categories, settings.data]);
-  const register = useMutation({ mutationFn: async (input: DetectionMovementInput) => {
+  const register = useMutation({ mutationFn: async (submission: DetectionMovementInput | DetectionSplitSubmission) => {
     const controller = new AbortController(); checking.current = controller;
     let result;
     try {
       setCheckingDuplicate(true);
-      result = await store!.register(id, input, snapshot.accounts, (value) => {
-        if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
-        return create.mutateAsync(value);
-      }, async (fresh, candidate) => {
-        if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
-        const decision = await duplicateChecker.check(fresh, input, snapshot.accounts, candidate, proAccessEnabled, allowAnother.current, controller.signal);
-        if (!decision.allowed && decision.candidate && decision.permission) {
-          setDuplicate({ movement: decision.candidate, permission: decision.permission, ai: decision.ai });
-          throw new Error("Hay un movimiento parecido. Confirma si es el mismo o si deseas registrar otro.");
-        }
-      }, snapshot.catalogs.categories);
+      if ("parts" in submission) {
+        if (!suggestion?.updatedAt) throw new Error("Actualiza la detección antes de dividirla; falta su versión.");
+        const assertActive = () => {
+          if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
+        };
+        result = await store!.registerSplit(id, suggestion.updatedAt, submission, snapshot.accounts, snapshot.catalogs.categories,
+          async (fresh, value) => {
+            if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
+            const decision = await duplicateChecker.checkSplit(fresh, value, allowAnother.current, controller.signal);
+            if (!decision.allowed && decision.candidate && decision.permission) {
+              setDuplicate({ movement: decision.candidate, permission: decision.permission, ai: decision.ai });
+              throw new Error("Hay un recibo parecido por el mismo total. Confirma si es el mismo o si deseas registrar otro.");
+            }
+          }, assertActive);
+        void invalidateFinances();
+      } else {
+        const input = submission;
+        result = await store!.register(id, input, snapshot.accounts, (value) => {
+          if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
+          return create.mutateAsync(value);
+        }, async (fresh, candidate) => {
+          if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
+          const decision = await duplicateChecker.check(fresh, input, snapshot.accounts, candidate, proAccessEnabled, allowAnother.current, controller.signal);
+          if (!decision.allowed && decision.candidate && decision.permission) {
+            setDuplicate({ movement: decision.candidate, permission: decision.permission, ai: decision.ai });
+            throw new Error("Hay un movimiento parecido. Confirma si es el mismo o si deseas registrar otro.");
+          }
+        }, snapshot.catalogs.categories);
+      }
     } finally {
       if (checking.current === controller) checking.current = null;
       setCheckingDuplicate(false);
@@ -73,7 +92,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     if (!result.readingUpdated) showToast({ title: "Movimiento confirmado", description: "El registro está guardado; el aviso no pudo marcarse leído. Puedes hacerlo desde la bandeja.", tone: "info" });
     registeredMovementId.current = result.movementId;
     return result.movementId;
-  }, onError: (error) => { if (error.name !== "AbortError") void review.refetch(); } });
+  }, onError: (error) => { if (error.name !== "AbortError") { void review.refetch(); void invalidateFinances(); } } });
   const restore = useMutation({ mutationFn: () => store!.restoreDiscarded(id), onSuccess: invalidate });
   const busy = register.isPending || resolve.isPending || restore.isPending || undo.isPending;
 
@@ -140,7 +159,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
   }
   return <QuickMovementDialog
     key={`${userId}:${snapshot.workspace.id}:${id}`}
-    allowSplit={false}
+    allowSplit
     postedOnly
     sourceCurrencyCode={suggestion.currencyCode}
     initialDraft={draft!.form}
@@ -174,6 +193,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     proAccessEnabled={proAccessEnabled}
     snapshot={snapshot}
     submitMovement={(input) => register.mutateAsync(input)}
+    submitSplit={(value) => register.mutateAsync(value)}
     title="Revisar movimiento detectado"
     userId={userId}
     workspaceId={snapshot.workspace.id}
@@ -183,7 +203,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
       {checkingDuplicate ? <p role="status">Comprobando coincidencias antes de guardar…</p> : null}
       {learning.isError ? <p>No se pudo consultar tu historial para sugerir cuenta y categoría. Puedes elegirlas o <button disabled={learning.isFetching} className="underline underline-offset-4" onClick={() => void learning.refetch()} type="button">reintentar</button>.</p> : null}
       {suggestion.status === "needs_review" || suggestion.movementType === "unknown" ? <p className="text-ink">La detección necesita tu revisión; el tipo no se confirmó automáticamente.</p> : null}
-      {duplicate ? <div className="space-y-3 border-y border-white/10 py-3"><p className="font-semibold text-ink">Posible coincidencia: {duplicate.movement.description}</p><p>{formatDateTime(duplicate.movement.occurredAt)} · #{duplicate.movement.id}</p>
+      {duplicate ? <div className="space-y-3 border-y border-white/10 py-3"><p className="font-semibold text-ink">Posible coincidencia: {duplicate.movement.description}</p><p>{formatCurrency((duplicate.movement.movementType === "income" ? duplicate.movement.destinationAmount : duplicate.movement.sourceAmount) ?? 0, suggestion.currencyCode)} · {formatDateTime(duplicate.movement.occurredAt)} · #{duplicate.movement.id}</p>
         {duplicate.ai?.verdict === "unknown" ? <p>No se pudo confirmar con IA que sea otro movimiento. Revisa la coincidencia antes de decidir.</p> : null}
         {duplicate.ai?.reason ? <p>{duplicate.ai.reason.slice(0, 200)}</p> : null}
         <Link className="text-ink underline underline-offset-4" to={`/app/movements?period=all&movement=${duplicate.movement.id}`}>Ver movimiento</Link>

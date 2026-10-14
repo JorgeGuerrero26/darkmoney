@@ -4,6 +4,9 @@ import { movementDateInPeru } from "../../modules/movements/lib/movement-date-ra
 import { detectedInputSignature, reconciliationCandidateForDetectedInput, type DetectedMovement, type DetectionMovementInput } from "../../modules/notifications/lib/detected-movement";
 import { parseDuplicateVerdict, type DuplicateAiResult } from "../../modules/notifications/lib/duplicate-verdict";
 import { mapDetectedCandidate } from "./detected-movement-store";
+import { checkDetectedSplitDuplicates } from "./detection-split-duplicates";
+import type { DetectionSplitSubmission } from "../../modules/notifications/lib/detection-split-submission";
+import { detectionDuplicateBounds as duplicateBounds } from "../../modules/notifications/lib/detection-duplicate-bounds";
 
 export type DuplicatePermission = { signature: string; candidateKey: string };
 export type DetectionDuplicateDecision = {
@@ -20,10 +23,7 @@ function active(signal?: AbortSignal) {
   if (signal?.aborted) throw Object.assign(new Error("La comprobación se canceló. Revisa el formulario antes de volver a guardar."), { name: "AbortError" });
 }
 export function detectionDuplicateBounds(occurredAt: string) {
-  const day = movementDateInPeru(occurredAt);
-  if (!day || !Number.isFinite(Date.parse(occurredAt))) throw new Error("Revisa la fecha para comprobar coincidencias.");
-  const from = new Date(`${day}T00:00:00-05:00`);
-  return { from: from.toISOString(), to: new Date(from.getTime() + 86400000).toISOString() };
+  return duplicateBounds(occurredAt);
 }
 export function duplicateCandidateKey(candidate: MovementRecord) {
   return JSON.stringify([candidate.id, candidate.workspaceId, candidate.movementType, candidate.status, candidate.description,
@@ -129,5 +129,6 @@ export function createDetectedDuplicateChecker(client: SupabaseClient, scope: { 
     }
     return { candidate: matched, allowed: ai.verdict === "distinct", permission: currentPermission, ai };
   }
-  return { check };
+  return { check, checkSplit: (suggestion: DetectedMovement, value: DetectionSplitSubmission, permission: DuplicatePermission | null, signal?: AbortSignal) =>
+    checkDetectedSplitDuplicates(client, scope, suggestion, value, permission, signal) };
 }

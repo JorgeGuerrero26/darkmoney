@@ -1,4 +1,10 @@
 import type { JsonValue } from "../../../types/domain";
+import type { MovementFormInput } from "../../../services/queries/workspace-data";
+
+export type MovementSplitSubmission = {
+  input: MovementFormInput & { userId: string; workspaceId: number };
+  parts: Array<{ amount: number; categoryId: number; spendTypeId?: number | null }>;
+};
 
 export type MovementSplitLine = {
   id: string;
@@ -37,14 +43,18 @@ export function validateMovementSplit(lines: MovementSplitLine[], totalAmount: n
     return "Ingresa primero el monto total del movimiento.";
   }
   if (lines.length < 2) return "Agrega al menos dos partes.";
-  if (lines.some((line) => !line.categoryId)) return "Elige una categoría para cada parte.";
+  if (lines.length > 100) return "La división admite hasta 100 partes.";
+  if (lines.some((line) => !line.categoryId || !Number.isSafeInteger(Number(line.categoryId)) || Number(line.categoryId) <= 0)) return "Elige una categoría para cada parte.";
   if (lines.some((line) => !Number.isFinite(Number(line.amount)) || Number(line.amount) <= 0)) {
     return "Cada parte debe tener un monto mayor a cero.";
   }
-  if (new Set(lines.map((line) => line.categoryId)).size !== lines.length) {
+  if (new Set(lines.map((line) => Number(line.categoryId))).size !== lines.length) {
     return "No repitas una categoría dentro de la división.";
   }
-  if (Math.abs(getMovementSplitTotal(lines) - totalAmount) > 0.009) {
+  if (![totalAmount, ...lines.map(line => Number(line.amount))].every(value => /^[0-9]+(\.[0-9]{1,2})?$/.test(String(value)) && Number.isSafeInteger(Math.round(value * 100)))) {
+    return "Usa importes con un máximo de dos decimales.";
+  }
+  if (lines.reduce((total, line) => total + Math.round(Number(line.amount) * 100), 0) !== Math.round(totalAmount * 100)) {
     return "La suma de las partes debe coincidir con el monto del movimiento.";
   }
   return null;

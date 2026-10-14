@@ -47,6 +47,7 @@ import {
   createMovementSplitLines,
   validateMovementSplit,
   type MovementSplitLine,
+  type MovementSplitSubmission,
 } from "../lib/split-movement";
 import type {
   CategorySummary,
@@ -80,6 +81,7 @@ type QuickMovementDialogProps = {
   onDraftChange?: () => void;
   isSubmitting?: boolean;
   submitMovement?: (input: MovementFormInput & { workspaceId: number; userId: string }) => Promise<number>;
+  submitSplit?: (value: MovementSplitSubmission) => Promise<number>;
   initialAccountId?: number | null;
   initialKind: QuickMovementKind;
   onClose: () => void;
@@ -306,6 +308,7 @@ export function QuickMovementDialog({
   onDraftChange,
   isSubmitting = false,
   submitMovement,
+  submitSplit,
   initialAccountId,
   initialKind,
   onClose,
@@ -342,6 +345,7 @@ export function QuickMovementDialog({
   const [linkedRecurringIncomeId, setLinkedRecurringIncomeId] = useState<number | null>(null);
   const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
   const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
+  useEffect(() => { onDraftChange?.(); }, [splitLines, onDraftChange]);
   const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
   const saveMovement = submitMovement ?? createMovementMutation.mutateAsync;
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(workspaceId, userId);
@@ -838,38 +842,54 @@ export function QuickMovementDialog({
 
           const splitGroupId = submitDedupeKeyRef.current;
           let firstMovementId: number | null = null;
-          for (const [index, line] of splitLines.entries()) {
-            const lineAmount = Number(line.amount);
-            const lineCategoryId = Number(line.categoryId);
-            const movementId = await saveMovement({
-              dedupeKey: `${splitGroupId}:split-${index + 1}`,
-              categoryId: lineCategoryId,
-              spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")),
-              counterpartyId:
-                counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
-              description: buildSplitDescription(description, index, splitLines.length),
-              destinationAccountId: kind === "income" ? accountId : null,
-              destinationAmount: kind === "income" ? lineAmount : null,
-              fxRate: null,
-              metadata: buildSplitMetadata({
-                channel: "quick-entry",
-                entryKind: kind,
-                recurring_income_id: index === 0 ? linkedRecurringIncomeId : null,
-                riskAi: insights.risk?.source === "deepseek" ? insights.risk : null,
-                budgetAi: insights.budget?.source === "deepseek" ? insights.budget : null,
-              }, splitGroupId, index, splitLines.length),
-              movementType: kind,
-              notes: null,
-              obligationId: null,
-              occurredAt: occurredAt.toISOString(),
-              sourceAccountId: kind === "expense" ? accountId : null,
-              sourceAmount: kind === "expense" ? lineAmount : null,
-              status: formState.status,
-              subscriptionId: index === 0 ? linkedSubscriptionId : null,
-              userId,
-              workspaceId,
-            });
-            firstMovementId ??= movementId;
+          if (submitSplit) {
+            firstMovementId = await submitSplit({ input: {
+              movementType: kind, status: formState.status, description, occurredAt: occurredAt.toISOString(),
+              sourceAccountId: kind === "expense" ? accountId : null, sourceAmount: kind === "expense" ? amount : null,
+              destinationAccountId: kind === "income" ? accountId : null, destinationAmount: kind === "income" ? amount : null,
+              counterpartyId, subscriptionId: linkedSubscriptionId, notes: null, fxRate: null, obligationId: null,
+              userId, workspaceId, metadata: { channel: "quick-entry", entryKind: kind,
+                recurring_income_id: linkedRecurringIncomeId,
+                ...(detectionLearning ? { detectionLearning: detectionLearningDecision(detectionLearning, manualLearningFields.current) } : {}),
+              },
+            }, parts: splitLines.map(line => ({ amount: Number(line.amount), categoryId: Number(line.categoryId),
+              spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")) })) });
+          } else {
+            // Custom review transports must never silently fall back to N individual writes.
+            if (submitMovement) throw new Error("Este formulario requiere un guardado atómico para dividir. No se envió ninguna parte.");
+            for (const [index, line] of splitLines.entries()) {
+              const lineAmount = Number(line.amount);
+              const lineCategoryId = Number(line.categoryId);
+              const movementId = await saveMovement({
+                dedupeKey: `${splitGroupId}:split-${index + 1}`,
+                categoryId: lineCategoryId,
+                spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(line.spendTypeId ?? "")),
+                counterpartyId:
+                  counterpartyId !== null && Number.isFinite(counterpartyId) ? counterpartyId : null,
+                description: buildSplitDescription(description, index, splitLines.length),
+                destinationAccountId: kind === "income" ? accountId : null,
+                destinationAmount: kind === "income" ? lineAmount : null,
+                fxRate: null,
+                metadata: buildSplitMetadata({
+                  channel: "quick-entry",
+                  entryKind: kind,
+                  recurring_income_id: index === 0 ? linkedRecurringIncomeId : null,
+                  riskAi: insights.risk?.source === "deepseek" ? insights.risk : null,
+                  budgetAi: insights.budget?.source === "deepseek" ? insights.budget : null,
+                }, splitGroupId, index, splitLines.length),
+                movementType: kind,
+                notes: null,
+                obligationId: null,
+                occurredAt: occurredAt.toISOString(),
+                sourceAccountId: kind === "expense" ? accountId : null,
+                sourceAmount: kind === "expense" ? lineAmount : null,
+                status: formState.status,
+                subscriptionId: index === 0 ? linkedSubscriptionId : null,
+                userId,
+                workspaceId,
+              });
+              firstMovementId ??= movementId;
+            }
           }
 
           let receiptPending = false;

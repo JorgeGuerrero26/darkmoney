@@ -253,8 +253,8 @@ try {
   }
   // Referential membership/currency/activity/kind checks belong to SQL, not this pure DTO validator.
   for(const h of invalidHeaders.filter(h=>h.accountId == null || h.accountId === 0)
-    .filter(h=>h.counterpartyId == null).filter(h=>h.currencyCode !== "USD")) {
-    await assert.rejects(requestDetectedSplit(noCall,{...input,header:{...header,...h}}),/Revisa|agrupado/);
+    .filter(h=>h.counterpartyId == null).filter(h=>h.currencyCode !== "USD"&&h.subscriptionId == null)) {
+    await assert.rejects(requestDetectedSplit(noCall,{...input,header:{...header,...h}}),/Revisa|vínculo|obligación/);
   }
   for(const p of invalidParts.filter(p=>!p.some(part=>part && ([32,33,34].includes(part.categoryId)||[51,52].includes(part.spendTypeId))))) {
     await assert.rejects(requestDetectedSplit(noCall,{...input,parts:p}),/Revisa|suma/);

@@ -725,6 +725,30 @@ Faltan el contrato de cobro agrupado, comprobación de duplicados por grupo e in
 de ambos formularios; no se habilitó la división web ni se cambió el guardado móvil.
 Solo probado en Postgres local con fixtures y contratos idénticos. No desplegado al servidor.
 
+**Ampliación local 202610140001/202610140002 (no desplegada):** la RPC permite
+`subscriptionId` solo en gasto e `recurringIncomeId` solo en ingreso, nunca ambos;
+referencias activas, misma cuenta/moneda nativa y espacio. Los vínculos de metadata deben
+coincidir con el encabezado. Todas las partes reciben la suscripción; el ingreso fijo
+queda asociado por metadata, sin crear por sí mismo una llegada confirmada.
+`guard_detected_split_commit` es un trigger de INSERT de restricción, diferido hasta
+el commit, que exige grupo canónico completo, petición conservada y detección registrada.
+Bloquea el guardado secuencial antiguo de detecciones. No sustituye la validación/RLS de
+la RPC ni protege las actualizaciones generales de cualquier división manual.
+El formulario web ya envía una petición atómica y comprueba duplicados por recibo completo.
+Si falta la RPC, falla explícitamente y no inserta partes sueltas. No desplegar los SQL
+sin coordinar la actualización del cliente móvil, que aún tenía guardado secuencial al
+revisar; no incluir automáticamente otras migraciones pendientes.
+
+**Ocurrencias agrupadas 202610140001:** `sync_subscription_occurrences` usa la vista
+`v_subscription_payment_receipts` para cerrar una sola ocurrencia por cabecera y total
+nativo confirmado. Reabre una ocurrencia cuyo recibo dejó de estar completo. Conserva
+cadencia, ventanas e indicaciones de vencimiento previas; no altera los movimientos
+originales ni hace un backfill global automático. `tg_movements_sync_subscription`
+incluye las suscripciones de los grupos anterior/nuevo, incluso si la parte editada o
+eliminada no estaba vinculada. La sincronización valida membresía del espacio para
+llamadas autenticadas, con excepción de servicio/admin; PUBLIC/anon no pueden ejecutarla.
+El trigger conserva su ejecución interna y no concede ejecución directa al cliente.
+
 **Deshacer detecciones (202610090002):** RPC autenticada
 `undo_detected_movement_registration(p_workspace_id, p_suggestion_id, p_expected_movement_id)`.
 Se ejecuta como `security invoker`, con RLS, propietario de la detección y membresía del espacio.
@@ -863,8 +887,32 @@ Historial compartido de acciones dentro de un workspace.
 | `v_counterparty_summary` | Resume por contacto sus roles, montos por cobrar, montos por pagar, flujo historico, ultima actividad y balance neto |
 | `v_budget_progress` | Calcula gasto ejecutado, saldo remanente, porcentaje usado, alcance derivado y alertas de cada presupuesto |
 | `v_subscription_upcoming` | Lista vencimientos proximos o vencidos con cuenta, categoria y proveedor |
+| `v_subscription_payment_receipts` | Proyección local 202610140001, no desplegada: cabecera y total nativo de recibos de suscripción completos; no es fuente de saldos |
 | `v_workspace_balances` | Totaliza saldos por workspace y moneda |
 | `v_latest_exchange_rates` | Devuelve el ultimo tipo de cambio disponible por par de monedas para conversiones agregadas |
+
+### `v_subscription_payment_receipts` (202610140001)
+
+Vista `security_invoker` con SELECT para `authenticated`/`service_role`; sin permiso
+PUBLIC/anon. Considera todas las partes (incluidas no vinculadas o anuladas), exige
+una cabecera e índices completos, misma cuenta/tipo/creador/fecha y vínculos compatibles.
+Un grupo incompleto conserva estado explícito y monto null; no cuenta como pago.
+No convierte monedas ni sustituye el libro mayor. Un pago simple aplicado conserva
+su importe nativo y una sola parte.
+
+| Campo | Tipo | Nulo | Descripción |
+|---|---|---|---|
+| `id` | `bigint` | No | Movimiento cabecera original, o ID del pago simple |
+| `workspace_id` | `bigint` | No | Espacio del recibo |
+| `subscription_id` | `bigint` | No | Suscripción vinculada en la cabecera |
+| `occurred_at` | `timestamptz` | No | Instante original de la cabecera |
+| `metadata` | `jsonb` | Sí | Metadatos originales, sin guardar un recibo ficticio |
+| `source_amount` | `numeric` | Sí | Total nativo completo; null si la división es incompatible |
+| `receipt_status` | `text` | No | `complete` o `incomplete` |
+| `receipt_part_ids` | `bigint[]` | No | IDs originales ordenados por índice; un ID en pagos simples |
+
+Estas dos migraciones solo se probaron en Postgres local. Despliegue, concurrencia real
+y clientes antiguos requieren entrega coordinada; no certifican paridad total.
 
 ## 7. Reglas funcionales recomendadas
 

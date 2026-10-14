@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountSummary, CategorySummary, JsonValue, MovementRecord } from "../../types/domain";
 import { requestDetectedRegistrationUndo } from "../../modules/notifications/lib/detection-undo.ts";
+import { requestDetectedSplit } from "../../modules/notifications/lib/detection-split.ts";
+import { detectionSplitRequest, type DetectionSplitSubmission } from "../../modules/notifications/lib/detection-split-submission.ts";
 import { omissionTargets, omissionGroups, type DetectionOmissionInput, type DetectionOmissionResult } from "../../modules/notifications/lib/detection-omissions.ts";
 import { detectionObject, detectionPending, detectedWriteInput, validateDetectedMovement,
   type DetectedMovement, type DetectionMovementInput, type DetectionStatus } from "../../modules/notifications/lib/detected-movement.ts";
@@ -145,6 +147,29 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
   async function undoRegistration(suggestionId: number, movementId: number) {
     return requestDetectedRegistrationUndo(client, { workspaceId: scope.workspaceId, suggestionId, movementId });
   }
+  async function registerSplit(id: number, expectedUpdatedAt: string, value: DetectionSplitSubmission, accounts: AccountSummary[], categories: CategorySummary[],
+    checkDuplicate: (suggestion: DetectedMovement, value: DetectionSplitSubmission) => Promise<void>, assertActive: () => void) {
+    // Snapshot before any I/O. Edits to the caller's parts cannot alter a pending save.
+    const captured = JSON.parse(JSON.stringify(value)) as DetectionSplitSubmission;
+    assertActive();
+    const suggestion = await get(id); assertActive();
+    if (!suggestion) throw new Error("La detección no está disponible en este espacio.");
+    validateDetectedMovement(suggestion, captured.input, accounts, categories);
+    const request = detectionSplitRequest(captured, id, expectedUpdatedAt, suggestion.currencyCode);
+    if (captured.parts.some(part => !categories.some(category => category.id === part.categoryId && category.isActive &&
+        (category.kind === captured.input.movementType || category.kind === "both")))) throw new Error("Revisa las categorías activas de cada parte.");
+    await pro(suggestion); assertActive();
+    if (suggestion.status !== "registered") {
+      if (!detectionPending(suggestion) || suggestion.updatedAt !== expectedUpdatedAt) throw new Error("La detección cambió. Actualiza antes de guardar.");
+      await checkDuplicate(suggestion, captured); assertActive();
+      const latest = await get(id); assertActive();
+      if (!latest || JSON.stringify(latest) !== JSON.stringify(suggestion)) throw new Error("La detección cambió durante la comprobación. Actualiza antes de guardar.");
+    }
+    // Exact registered retries are checked by the RPC, never accepted by ID alone.
+    const result = await requestDetectedSplit(client, request);
+    // A committed transaction is not cancelled retroactively; reading is separate.
+    return { ...result, readingUpdated: await read(id) };
+  }
   async function omissions(input: DetectionOmissionInput): Promise<DetectionOmissionResult> {
     const targets = omissionTargets(scope.userId, scope.workspaceId, input);
     const result: DetectionOmissionResult = { changes: [], failed: 0, skipped: 0, readingUpdated: true };
@@ -184,5 +209,5 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
     }
     return result;
   }
-  return { get, review, pending, resolve, register, restoreDiscarded, undoRegistration, omissions };
+  return { get, review, pending, resolve, register, registerSplit, restoreDiscarded, undoRegistration, omissions };
 }
