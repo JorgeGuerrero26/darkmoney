@@ -1,4 +1,4 @@
--- Requires 202610140001_subscription_split_receipts.sql and the atomic split RPC.
+-- Requires 202610150001_subscription_split_receipts.sql and the atomic split RPC.
 -- Recurring income links remain association metadata, not an implicit confirmed arrival.
 create or replace function public.register_detected_movement_split(
   p_workspace_id bigint, p_suggestion_id bigint, p_expected_updated_at timestamptz,

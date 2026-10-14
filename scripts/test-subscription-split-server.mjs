@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { buildSubscriptionPaymentReceipts } from "../src/modules/subscriptions/lib/payment-receipts.ts";
 import { requestDetectedSplit } from "../src/modules/notifications/lib/detection-split.ts";
 import { createDetectedMovementStore } from "../src/services/queries/detected-movement-store.ts";
+import "./check-migration-versions.mjs";
 
 // The schema is an explicit local fixture, not the deployed project. No credentials/network.
 const baseSource=readFileSync("scripts/test-detected-movement-split.mjs","utf8");
@@ -12,10 +13,19 @@ const schemaEnd=baseSource.indexOf("\n  `);",schemaStart)+"\n  `".length;
 assert.ok(schemaStart>0&&schemaEnd>schemaStart);
 const schema=Function(`return ${baseSource.slice(schemaStart,schemaEnd)}`)(); // static fixture literal owned by this test suite
 const originalSync=readFileSync("../DarkMoneyApp/supabase/migrations/202609020001_subscription_occurrences_sync.sql","utf8");
-const path="supabase/migrations/202610140001_subscription_split_receipts.sql";
-const migration=readFileSync(path,"utf8");assert.equal(migration,readFileSync(`../DarkMoneyApp/${path}`,"utf8"));
-const linkPath="supabase/migrations/202610140002_detected_split_links.sql";
-const links=readFileSync(linkPath,"utf8");assert.equal(links,readFileSync(`../DarkMoneyApp/${linkPath}`,"utf8"));
+const path="supabase/migrations/202610150001_subscription_split_receipts.sql";
+const linkPath="supabase/migrations/202610150002_detected_split_links.sql";
+// The mobile developer owns its rename. A legacy file is a source comparison ONLY,
+// never a deployment/version fallback or permission to use the colliding timestamp.
+const normalizeSource=sql=>sql.replace(/\r\n/g,"\n").replaceAll("202610140001_subscription_split_receipts.sql","202610150001_subscription_split_receipts.sql");
+function compareMobileSource(webPath,legacyPath) {
+  const target=`../DarkMoneyApp/${webPath}`,reference=existsSync(target)?target:`../DarkMoneyApp/${legacyPath}`;
+  const sql=readFileSync(webPath,"utf8");assert.equal(normalizeSource(sql),normalizeSource(readFileSync(reference,"utf8")),"Web/mobile SQL bodies must match");
+  if(reference!==target)console.log(`Source parity only: mobile still needs rename ${legacyPath} -> ${webPath}; no deployment`);
+  return sql;
+}
+const migration=compareMobileSource(path,"supabase/migrations/202610140001_subscription_split_receipts.sql");
+const links=compareMobileSource(linkPath,"supabase/migrations/202610140002_detected_split_links.sql");
 const db=new PGlite();
 const owner="11111111-1111-1111-1111-111111111111";
 try {

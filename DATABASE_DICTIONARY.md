@@ -725,7 +725,7 @@ Faltan el contrato de cobro agrupado, comprobación de duplicados por grupo e in
 de ambos formularios; no se habilitó la división web ni se cambió el guardado móvil.
 Solo probado en Postgres local con fixtures y contratos idénticos. No desplegado al servidor.
 
-**Ampliación local 202610140001/202610140002 (no desplegada):** la RPC permite
+**Ampliación local 202610150001/202610150002 (no desplegada):** la RPC permite
 `subscriptionId` solo en gasto e `recurringIncomeId` solo en ingreso, nunca ambos;
 referencias activas, misma cuenta/moneda nativa y espacio. Los vínculos de metadata deben
 coincidir con el encabezado. Todas las partes reciben la suscripción; el ingreso fijo
@@ -739,7 +739,7 @@ Si falta la RPC, falla explícitamente y no inserta partes sueltas. No desplegar
 sin coordinar la actualización del cliente móvil, que aún tenía guardado secuencial al
 revisar; no incluir automáticamente otras migraciones pendientes.
 
-**Ocurrencias agrupadas 202610140001:** `sync_subscription_occurrences` usa la vista
+**Ocurrencias agrupadas 202610150001:** `sync_subscription_occurrences` usa la vista
 `v_subscription_payment_receipts` para cerrar una sola ocurrencia por cabecera y total
 nativo confirmado. Reabre una ocurrencia cuyo recibo dejó de estar completo. Conserva
 cadencia, ventanas e indicaciones de vencimiento previas; no altera los movimientos
@@ -887,11 +887,11 @@ Historial compartido de acciones dentro de un workspace.
 | `v_counterparty_summary` | Resume por contacto sus roles, montos por cobrar, montos por pagar, flujo historico, ultima actividad y balance neto |
 | `v_budget_progress` | Calcula gasto ejecutado, saldo remanente, porcentaje usado, alcance derivado y alertas de cada presupuesto |
 | `v_subscription_upcoming` | Lista vencimientos proximos o vencidos con cuenta, categoria y proveedor |
-| `v_subscription_payment_receipts` | Proyección local 202610140001, no desplegada: cabecera y total nativo de recibos de suscripción completos; no es fuente de saldos |
+| `v_subscription_payment_receipts` | Proyección local 202610150001, no desplegada: cabecera y total nativo de recibos de suscripción completos; no es fuente de saldos |
 | `v_workspace_balances` | Totaliza saldos por workspace y moneda |
 | `v_latest_exchange_rates` | Devuelve el ultimo tipo de cambio disponible por par de monedas para conversiones agregadas |
 
-### `v_subscription_payment_receipts` (202610140001)
+### `v_subscription_payment_receipts` (202610150001)
 
 Vista `security_invoker` con SELECT para `authenticated`/`service_role`; sin permiso
 PUBLIC/anon. Considera todas las partes (incluidas no vinculadas o anuladas), exige
