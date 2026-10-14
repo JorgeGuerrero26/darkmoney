@@ -48,7 +48,7 @@ export async function fetchNotificationDestination(client: ReadClient, userId: s
   const result = { id: noticeId, href, shouldMarkRead: row.status !== "read" && !notificationDefersRead(kind) };
   const url = new URL(href, "https://internal.invalid");
   // Tokens are handled by the invitation destination; an unknown kind stays in the personal inbox.
-  if (url.pathname.startsWith("/share/") || (url.pathname === "/app/notifications" && !url.searchParams.has("detected"))) {
+  if (kind === "assistant_insight" || url.pathname.startsWith("/share/") || (url.pathname === "/app/notifications" && !url.searchParams.has("detected"))) {
     return { ...result, workspace: null, scope: "global" };
   }
   const rawWorkspace = payload.workspaceId ?? payload.workspace_id;

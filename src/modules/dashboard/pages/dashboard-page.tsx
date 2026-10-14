@@ -198,7 +198,6 @@ export function DashboardPage() {
   const notificationDay = notificationDate(notificationParams.get("day"));
   const { profile, user } = useAuth();
   const { canAccessProFeatures, isAdminOverride, isLoadingEntitlement } = useProFeatureAccess();
-  const dashboardAi = useDashboardAiSummary({ userId: user?.id, isAdmin: isAdminOverride });
   const {
     activeWorkspace,
     error: workspaceError,
@@ -243,6 +242,7 @@ export function DashboardPage() {
     return storedCurrencyCode ? normalizeCurrencyCode(storedCurrencyCode) : "PEN";
   });
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "PEN";
+  const dashboardAi = useDashboardAiSummary({ userId:user?.id,workspaceId:activeWorkspace?.id,currencyCode:displayCurrencyCode,isAdmin:isAdminOverride });
   const exchangeRateMap = useMemo(
     () => buildDashboardExchangeRateMap(snapshot?.exchangeRates ?? []),
     [snapshot?.exchangeRates],
@@ -1406,10 +1406,20 @@ export function DashboardPage() {
     if (!activeWorkspace) {
       return;
     }
+    const liquidAccounts=snapshot.accounts.filter(account=>!account.isArchived&&["cash","bank","savings"].includes(account.type));
+    const liquidBalances=liquidAccounts.map(account=>({name:account.name,amount:convertDashboardAmount({
+      amount:account.currentBalance,currencyCode:account.currencyCode,amountInBaseCurrency:account.currentBalanceInBaseCurrency,
+      baseCurrencyCode,targetCurrencyCode:displayCurrencyCode,exchangeRateMap,
+    })}));
     const payload = buildDashboardAiSummaryPayload({
       workspaceName: snapshot.workspace.name,
       displayCurrencyCode,
       netWorth: parityNetWorth.amount,
+      visibleBalance:liquidBalances.reduce((sum,row)=>sum+(row.amount??0),0),
+      unconvertedAccounts:liquidBalances.filter(row=>row.amount===null).length,
+      activeAccountsCount:snapshot.accounts.filter(account=>!account.isArchived).length,
+      upcomingSubscriptions:parityReviewInbox.subscriptionsAttentionCount,
+      visibleAccounts:liquidBalances.filter(row=>row.amount!==null).map(row=>`${row.name}: ${formatCurrency(row.amount!,displayCurrencyCode)}`).join(" · "),
       monthEndEstimate: monthEndEstimate.estimatedLiquidAtMonthEnd,
       monthEndIncomeToDate: monthEndEstimate.incomeMonthToDate,
       monthEndExpenseToDate: monthEndEstimate.expenseMonthToDate,
@@ -1428,7 +1438,7 @@ export function DashboardPage() {
         : null,
     });
 
-    void dashboardAi.requestSummary(activeWorkspace.id, payload);
+    void dashboardAi.requestSummary(activeWorkspace.id, payload).catch(()=>{});
   };
 
   const collaborationActivity = snapshot.activity.filter((item) =>

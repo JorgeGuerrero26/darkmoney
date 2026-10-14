@@ -55,6 +55,7 @@ export function notificationHref(notification: Pick<NotificationItem, "kind" | "
     return internalLink("/app/notifications", { detected: suggestionId ?? "pending" });
   }
   if (kind === "detected_suggestions_pending" || kind === "detected_movements_pending") return "/app/notifications?detected=pending";
+  if (kind === "assistant_insight") return "/app/assistant";
   if (["daily_digest", "daily_ai_digest", "daily_workspace_summary"].includes(kind)) {
     return internalLink("/app", { day: notificationDate(payload.todayKey) ?? movementDateInPeru(now.toISOString()) });
   }

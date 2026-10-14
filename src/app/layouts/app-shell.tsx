@@ -82,6 +82,7 @@ const compactNavigation = [
   { to: "/app/recurring-income", label: "Ingresos fijos", icon: TrendingUp },
   { to: "/app/budgets", label: "Presupuestos", icon: PiggyBank },
   { to: "/app/categories", label: "Categorías y contactos", icon: Shapes },
+  { to: "/app/assistant", label: "Asistente", icon: Sparkles },
   { to: "/app/settings", label: "Configuración", icon: Settings },
 ];
 

@@ -129,6 +129,8 @@ export function formatNotificationKindLabel(kind: string) {
       return "Semana sin movimientos";
     case "daily_ai_digest":
       return "Resumen IA diario";
+    case "assistant_insight":
+      return "Sugerencia del Asistente";
     case "daily_digest":
       return "Resumen diario";
     case "detected_movement_suggestion":

@@ -13,6 +13,11 @@ export type DashboardAiSummaryInputs = {
   workspaceName: string;
   displayCurrencyCode: string;
   netWorth: number;
+  visibleBalance?: number;
+  unconvertedAccounts?: number;
+  activeAccountsCount?: number;
+  upcomingSubscriptions?: number;
+  visibleAccounts?: string;
   monthEndEstimate: number;
   monthEndIncomeToDate: number;
   monthEndExpenseToDate: number;
@@ -42,8 +47,13 @@ export function buildDashboardAiSummaryPayload(
   return {
     workspaceName: inputs.workspaceName,
     currency,
-    visibleBalance: formatCurrency(inputs.netWorth, currency),
+    visibleBalance: formatCurrency(inputs.visibleBalance ?? inputs.netWorth, currency),
+    // The web projection still starts from net worth. Declare that basis rather
+    // than pretending it is the newer mobile liquid-cash projection.
+    projectionBasis: "net_worth",
+    projectionStartingBalance: formatCurrency(inputs.netWorth, currency),
     monthEndReading: formatCurrency(inputs.monthEndEstimate, currency),
+    monthEndDelta: formatCurrency(inputs.monthEndEstimate-inputs.netWorth,currency),
     monthEndIncomeToDate: formatCurrency(inputs.monthEndIncomeToDate, currency),
     monthEndExpenseToDate: formatCurrency(inputs.monthEndExpenseToDate, currency),
     monthStatus: moneyStatus(inputs.monthEndIncomeToDate - inputs.monthEndExpenseToDate),
@@ -57,6 +67,13 @@ export function buildDashboardAiSummaryPayload(
     uncategorizedMovements: inputs.uncategorizedCount,
     overdueObligations: inputs.overdueObligationsCount,
     activeSubscriptions: inputs.activeSubscriptionsCount,
+    upcomingSubscriptions: inputs.upcomingSubscriptions ?? null,
+    activeAccountsCount: inputs.activeAccountsCount ?? null,
+    visibleAccounts: inputs.visibleAccounts ?? null,
+    cashCushionDays: null,
+    cashCushionLabel: null,
+    collectionEfficiencyPct: null,
+    dataCoverage: {unconvertedAccounts:inputs.unconvertedAccounts??0, unavailableIndicators:["cashCushionDays","collectionEfficiencyPct"]},
     topFocusAction: inputs.topFocusAction
       ? { title: inputs.topFocusAction.title, body: inputs.topFocusAction.body ?? "" }
       : null,

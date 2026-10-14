@@ -213,6 +213,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "assistant",
+        lazy: lazyRoute(() => import("../../modules/assistant/pages/assistant-page"), "AssistantPage"),
+      },
+      {
         path: "settings",
         lazy: lazyRoute(() => import("../../modules/settings/pages/settings-page"), "SettingsPage"),
       },

@@ -1051,7 +1051,7 @@ function getClient() {
 
 type WorkspaceDataClient = ReturnType<typeof getClient>;
 
-export async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}) {
+export async function invokeAuthenticatedFunction<T>(functionName: string, body: Record<string, unknown> = {}, options: { signal?: AbortSignal } = {}) {
   const client = getClient();
   const {
     data: { session },
@@ -1060,6 +1060,7 @@ export async function invokeAuthenticatedFunction<T>(functionName: string, body:
   if (!session?.access_token) {
     throw new Error("No hay una sesion activa para continuar con esta accion.");
   }
+  options.signal?.throwIfAborted();
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -1076,6 +1077,7 @@ export async function invokeAuthenticatedFunction<T>(functionName: string, body:
       Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify(body),
+    signal: options.signal,
   });
 
   const responseBody = await response.json().catch(() => null);
@@ -7929,6 +7931,7 @@ export type DashboardAiSummaryInput = {
   workspaceId: number;
   summary: Record<string, unknown>;
   tone: "managerial" | "personal";
+  signal?: AbortSignal;
 };
 
 export type DashboardAiSummaryResponse = {
@@ -7958,7 +7961,8 @@ export function useDashboardAiSummaryMutation() {
 
       return invokeAuthenticatedFunction<DashboardAiSummaryResponse>(
         "dashboard-advanced-ai-summary",
-        input,
+        { workspaceId:input.workspaceId,summary:input.summary,tone:input.tone },
+        {signal:input.signal},
       );
     },
   });
