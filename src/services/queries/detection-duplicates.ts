@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountSummary, MovementRecord } from "../../types/domain";
 import { movementDateInPeru } from "../../modules/movements/lib/movement-date-range";
 import { detectedInputSignature, reconciliationCandidateForDetectedInput, type DetectedMovement, type DetectionMovementInput } from "../../modules/notifications/lib/detected-movement";
-import { parseDuplicateVerdict, type DuplicateAiResult } from "../../modules/notifications/lib/duplicate-verdict";
+import type { DuplicateAiResult } from "../../modules/notifications/lib/duplicate-verdict";
+import { confirmDuplicateWithAi } from "./detection-duplicate-ai";
+export { confirmDuplicateWithAi } from "./detection-duplicate-ai";
 import { mapDetectedCandidate } from "./detected-movement-store";
 import { checkDetectedSplitDuplicates } from "./detection-split-duplicates";
 import type { DetectionSplitSubmission } from "../../modules/notifications/lib/detection-split-submission";
@@ -40,25 +42,6 @@ function compatible(input: DetectionMovementInput, row: MovementRecord) {
     movementDateInPeru(row.occurredAt) === movementDateInPeru(input.occurredAt) &&
     (income ? row.destinationAccountId === input.destinationAccountId && row.destinationAmount === input.destinationAmount : row.sourceAccountId === input.sourceAccountId && row.sourceAmount === input.sourceAmount) &&
     (input.movementType !== "transfer" || (row.destinationAccountId === input.destinationAccountId && row.destinationAmount === input.destinationAmount));
-}
-
-/** Bounded wait, cancellable on navigation/draft edits. Late replies have no side effects. */
-export async function confirmDuplicateWithAi(client: SupabaseClient, body: DuplicateCheckBody, signal?: AbortSignal, timeoutMs = 8000): Promise<DuplicateAiResult> {
-  if (signal?.aborted) return unknown();
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
-  try {
-    const stopped = new Promise<DuplicateAiResult>((resolve) => {
-      const stop = () => { controller.abort(); resolve(unknown()); };
-      onAbort = stop; signal?.addEventListener("abort", stop, { once: true });
-      timer = setTimeout(stop, timeoutMs);
-    });
-    const request = client.functions.invoke("movement-duplicate-ai-check", { body, signal: controller.signal })
-      .then(({ data, error }) => error ? unknown() : parseDuplicateVerdict(data), () => unknown());
-    return await Promise.race([request, stopped]);
-  } catch { return unknown(); }
-  finally { clearTimeout(timer); if (onAbort) signal?.removeEventListener("abort", onAbort); }
 }
 
 export function createDetectedDuplicateChecker(client: SupabaseClient, scope: { userId: string; workspaceId: number }) {
@@ -129,6 +112,6 @@ export function createDetectedDuplicateChecker(client: SupabaseClient, scope: { 
     }
     return { candidate: matched, allowed: ai.verdict === "distinct", permission: currentPermission, ai };
   }
-  return { check, checkSplit: (suggestion: DetectedMovement, value: DetectionSplitSubmission, permission: DuplicatePermission | null, signal?: AbortSignal) =>
-    checkDetectedSplitDuplicates(client, scope, suggestion, value, permission, signal) };
+  return { check, checkSplit: (suggestion: DetectedMovement, value: DetectionSplitSubmission, permission: DuplicatePermission | null, signal?: AbortSignal, proAccessEnabled = false) =>
+    checkDetectedSplitDuplicates(client, scope, suggestion, value, permission, signal, proAccessEnabled) };
 }

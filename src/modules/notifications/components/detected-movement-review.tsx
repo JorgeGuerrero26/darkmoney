@@ -64,7 +64,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
         result = await store!.registerSplit(id, suggestion.updatedAt, submission, snapshot.accounts, snapshot.catalogs.categories,
           async (fresh, value) => {
             if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
-            const decision = await duplicateChecker.checkSplit(fresh, value, allowAnother.current, controller.signal);
+            const decision = await duplicateChecker.checkSplit(fresh, value, allowAnother.current, controller.signal, proAccessEnabled);
             if (!decision.allowed && decision.candidate && decision.permission) {
               setDuplicate({ movement: decision.candidate, permission: decision.permission, ai: decision.ai });
               throw new Error("Hay un recibo parecido por el mismo total. Confirma si es el mismo o si deseas registrar otro.");

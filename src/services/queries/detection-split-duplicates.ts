@@ -4,6 +4,8 @@ import type { DetectionSplitSubmission } from "../../modules/notifications/lib/d
 import type { DetectionDuplicateDecision, DuplicatePermission } from "./detection-duplicates";
 import { detectionDuplicateBounds } from "../../modules/notifications/lib/detection-duplicate-bounds";
 import { mapDetectedCandidate } from "./detected-movement-store";
+import { confirmDuplicateWithAi } from "./detection-duplicate-ai";
+import type { DuplicateAiResult } from "../../modules/notifications/lib/duplicate-verdict";
 
 const key = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").replace(/[^\p{L}\p{N}\s]/gu, "").trim();
 const positiveId = (value: unknown) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
@@ -44,10 +46,9 @@ async function pages(build: (offset: number) => PromiseLike<Page>, signal?: Abor
   }
 }
 
-/** Compare complete native receipts, not an amount-filtered subset of split parts. Manual confirmation:
- * the existing AI endpoint counts ledger rows, so its evidence is not safe for virtual group totals. */
+/** Compare complete native receipts, not an amount-filtered subset of split parts. */
 export async function checkDetectedSplitDuplicates(client: SupabaseClient, scope: { userId: string; workspaceId: number },
-  suggestion: DetectedMovement, value: DetectionSplitSubmission, permission: DuplicatePermission | null, signal?: AbortSignal): Promise<DetectionDuplicateDecision> {
+  suggestion: DetectedMovement, value: DetectionSplitSubmission, permission: DuplicatePermission | null, signal?: AbortSignal, proAccessEnabled = false): Promise<DetectionDuplicateDecision> {
   const { input, parts } = value;
   if (input.userId !== scope.userId || input.workspaceId !== scope.workspaceId || suggestion.userId !== scope.userId || suggestion.workspaceId !== scope.workspaceId)
     throw new Error("La comprobación no pertenece a este usuario y espacio.");
@@ -116,6 +117,32 @@ export async function checkDetectedSplitDuplicates(client: SupabaseClient, scope
     signature: JSON.stringify([input, parts, suggestion.updatedAt]),
     candidateKey: matched.fingerprint,
   };
-  return { candidate, allowed: permission?.signature === currentPermission.signature && permission.candidateKey === currentPermission.candidateKey,
-    permission: currentPermission, ai: { verdict: "skipped", reason: "Revisa el recibo completo: la coincidencia se compara por su total, no por una parte." } };
+  const permitted = permission?.signature === currentPermission.signature && permission.candidateKey === currentPermission.candidateKey;
+  let ai: DuplicateAiResult = { verdict: "skipped", reason: "Revisa el recibo completo: la coincidencia se compara por su total, no por una parte." };
+  if (proAccessEnabled && !permitted) {
+    try {
+      const build = () => client.from("notification_detected_movement_suggestions").select("id", { head: true, count: "exact" })
+        .eq("user_id", scope.userId).eq("workspace_id", scope.workspaceId).eq("currency_code", suggestion.currencyCode)
+        .eq("movement_type", input.movementType).eq("amount", amount / 100).in("status", ["pending", "needs_review", "registered"])
+        .gte("occurred_at", from).lt("occurred_at", to);
+      const counts = await Promise.all([build(), build().eq("status", "registered")].map(query => signal ? query.abortSignal(signal) : query));
+      active(signal);
+      if (counts.some(row => row.error || !Number.isSafeInteger(row.count) || row.count! < 0) || counts[1].count! > counts[0].count!) throw new Error("Evidencia incompleta.");
+      // The endpoint consumes supplied evidence, not SQL row counts of its own.
+      // Each complete group is one matching financial receipt, even with 100 ledger parts.
+      ai = await confirmDuplicateWithAi(client, { workspaceId: scope.workspaceId,
+        suggestion: { description: input.description, amountLabel: String(amount / 100), occurredAt: input.occurredAt,
+          sourceApp: suggestion.financialAppKey, rawText: suggestion.description || null },
+        candidateMovement: { id: candidate.id, description: candidate.description, occurredAt: candidate.occurredAt, amount: amount / 100 },
+        counts: { sameDaySuggestions: counts[0].count!, sameDayRegisteredFromSuggestions: counts[1].count!,
+          sameDayMatchingMovements: receipts.filter(({row}) => cents(row[`${side}_amount`]) === amount).length },
+      }, signal);
+    } catch { ai = { verdict: "unknown", reason: null }; }
+    active(signal);
+    if (ai.verdict === "distinct") {
+      const fresh = await checkDetectedSplitDuplicates(client, scope, suggestion, value, currentPermission, signal, false);
+      if (!fresh.candidate || !fresh.allowed) throw new Error("El recibo cambió durante la comprobación. Actualiza antes de guardar.");
+    }
+  }
+  return { candidate, allowed: permitted || ai.verdict === "distinct", permission: currentPermission, ai };
 }

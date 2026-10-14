@@ -50,7 +50,7 @@ function group(name = "g") {
     movement(22, { source_amount: 8, description: "Compra (2/2)", metadata: { split_group: name, split_index: 2, split_total: 2 } })];
 }
 function fixture(rows = []) {
-  const state = { rows, calls: [], queries: [], writes: 0, readFail: false, error: null, beforeQuery: null, gate: null,
+  const state = { rows, calls: [], queries: [], invocations: [], ai: "unknown", beforeAi: null, writes: 0, readFail: false, error: null, beforeQuery: null, gate: null,
     suggestion: { id: 90, user_id: "u", workspace_id: 8, financial_app_key: "bcp", package_name: "bcp.app", app_label: "BCP", movement_type: "expense",
       amount: 20, currency_code: "PEN", description: "Compra", occurred_at: input.occurredAt, confidence: "high", status: "pending", movement_id: null, metadata: null, updated_at: version } };
   class Query {
@@ -86,7 +86,8 @@ function fixture(rows = []) {
     if (name !== "register_detected_movement_split") throw Error(`Unexpected RPC ${name}`);
     state.suggestion.status = "registered"; state.suggestion.movement_id = 100;
     return { data: { workspaceId: 8, suggestionId: 90, status: "registered", movementId: 100, movementIds: [100, 101], alreadyRegistered: false }, error: null };
-  }, functions: { invoke: () => { throw Error("Grouped evidence must not be sent to row-count AI"); } } };
+  }, functions: { invoke: async (name, options) => { state.invocations.push({name,...options}); state.beforeAi?.();
+    return {data:{verdict:state.ai,reason:"Fixture: revisa el recibo completo"},error:null}; } } };
   return { state, store: createDetectedMovementStore(client, scope), checker: createDetectedDuplicateChecker(client, scope) };
 }
 const suggestion = f => mapDetectedMovement(f.state.suggestion);
@@ -119,6 +120,23 @@ for (const patch of [{ status: "voided" }, { source_account_id: 2 }, { occurred_
   const f = fixture(group()); Object.assign(f.state.rows[1], patch); await assert.rejects(check(f), /incompleta|incompatible/);
 }
 await assert.rejects(check(fixture([group()[0]])), /incompleta/);
+for (const verdict of ["distinct", "duplicate", "unknown", "invalid"]) {
+  const f = fixture(group()); f.state.ai = verdict;
+  const result = await f.checker.checkSplit(suggestion(f),submission(),null,undefined,true);
+  assert.equal(result.allowed,verdict==="distinct"); assert.equal(f.state.invocations.length,1);
+  const body=f.state.invocations[0].body;
+  assert.equal(body.candidateMovement.amount,20);assert.equal(body.candidateMovement.id,21);
+  assert.equal(body.counts.sameDayMatchingMovements,1);assert.equal(body.counts.sameDaySuggestions,1);
+}
+{
+  const f=fixture(group());f.state.ai="distinct";f.state.beforeAi=()=>{f.state.rows[1].source_amount=9;};
+  await assert.rejects(f.checker.checkSplit(suggestion(f),submission(),null,undefined,true),/recibo cambió/);
+}
+{
+  const f=fixture(group());f.state.error="notification_detected_movement_suggestions";
+  assert.equal((await f.checker.checkSplit(suggestion(f),submission(),null,undefined,true)).allowed,false);
+  assert.equal(f.state.invocations.length,0);
+}
 {
   const f = fixture(group()); let reads = 0;
   f.state.beforeQuery = query => { if (query.table === "movements" && ++reads === 2) f.state.rows = []; };
