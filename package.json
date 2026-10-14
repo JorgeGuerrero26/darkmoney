@@ -22,6 +22,7 @@
     "test:detection-learning": "node scripts/test-detection-learning.mjs",
     "test:detection-duplicates": "node scripts/test-detection-duplicates.mjs",
     "test:detected-movement-undo": "node --experimental-strip-types scripts/test-detected-movement-undo.mjs",
+    "test:detected-movement-split": "node --experimental-strip-types scripts/test-detected-movement-split.mjs",
     "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",
     "test:catalog-parity": "node scripts/test-catalog-parity.mjs",

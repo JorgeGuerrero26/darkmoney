@@ -707,6 +707,24 @@ Detalle puntual por vencimiento de suscripciones.
 
 Libro mayor operativo del sistema.
 
+**División detectada atómica, fase 1 (202610130002):**
+`register_detected_movement_split(p_workspace_id, p_suggestion_id, p_expected_updated_at, p_header, p_parts)`
+es una RPC `security invoker`, solo autenticados, con RLS, membresía, propietario y PRO de correo.
+Recibe gasto/ingreso Aplicado, cuenta activa en moneda original, descripción/fecha/contraparte y
+2–100 partes con categorías activas distintas y tipo de gasto opcional. Compara importes en
+centavos exactos; no redondea ni acepta diferencias por tolerancia. Una transacción crea todas
+las partes y marca la detección registrada, o revierte todo ante un fallo.
+La primera clave es `suggestion:<id>`; las otras, `suggestion:<id>:split-N`.
+Los metadatos de origen/grupo provienen del servidor; `metadata.detectedSplitRequest` en la
+primera fila conserva el encabezado, partes y versión original para comprobar reintentos.
+No completa grupos parciales ni reutiliza un registro simple, editado, ajeno o un intento
+distinto. Es compatible con Deshacer completo y una versión anterior no confirma un registro
+posterior. No cambia lectura/archivo/payload de avisos ni añade tablas/columnas.
+**Límite de esta fase:** rechaza vínculos con suscripciones/ingresos fijos/obligaciones.
+Faltan el contrato de cobro agrupado, comprobación de duplicados por grupo e integración
+de ambos formularios; no se habilitó la división web ni se cambió el guardado móvil.
+Solo probado en Postgres local con fixtures y contratos idénticos. No desplegado al servidor.
+
 **Deshacer detecciones (202610090002):** RPC autenticada
 `undo_detected_movement_registration(p_workspace_id, p_suggestion_id, p_expected_movement_id)`.
 Se ejecuta como `security invoker`, con RLS, propietario de la detección y membresía del espacio.
