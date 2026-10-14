@@ -1,4 +1,5 @@
-﻿import {
+﻿import { summarizeSubscriptionsMonthly } from "../lib/subscription-monthly";
+import {
   Download,
   LoaderCircle,
   MoreVertical,
@@ -697,17 +698,8 @@ export function SubscriptionsPage() {
   const nextUpcoming = subscriptions.find((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey);
   const activeInFilter = filteredSubscriptions.filter((subscription) => subscription.status === "active");
   const pausedInFilter = filteredSubscriptions.filter((subscription) => subscription.status === "paused").length;
-  const monthlyTotal = activeInFilter.reduce((total, subscription) => {
-    const amount = subscription.amountInBaseCurrency ?? subscription.amount;
-    switch (subscription.frequency) {
-      case "daily": return total + amount * 30;
-      case "weekly": return total + amount * 52 / 12;
-      case "quarterly": return total + amount / 3;
-      case "yearly": return total + amount / 12;
-      case "monthly": return total + amount;
-      case "custom": return total + amount;
-    }
-  }, 0);
+  const monthlySummary = summarizeSubscriptionsMonthly(activeInFilter, baseCurrencyCode);
+  const monthlyTotal = monthlySummary.total;
   const subscriptionVendors = useMemo(
     () =>
       Array.from(
@@ -1166,7 +1158,7 @@ export function SubscriptionsPage() {
 
       <section aria-label="Resumen de suscripciones filtradas" className="module-summary">
         <span className="mr-auto">Los <span className="font-semibold text-ink">{filteredSubscriptions.length}</span> del filtro{activeInFilter.length !== filteredSubscriptions.length ? ` · ${activeInFilter.length} activas` : ""}{pausedInFilter ? ` · ${pausedInFilter} pausadas, no suman` : ""}</span>
-        <span>Al mes <strong className="font-semibold text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong></span>
+        <span>Al mes <strong className="font-semibold text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong>{monthlySummary.unconvertedCount ? <span className="ml-2 text-storm">· {monthlySummary.unconvertedCount} sin conversión no {monthlySummary.unconvertedCount === 1 ? "suma" : "suman"}</span> : null}</span>
       </section>
 
       {feedback && feedback.tone !== "error" && !isEditorOpen ? (

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { computeNextRecurringDate, rollDueDateForward } from "../src/modules/subscriptions/lib/subscriptions-presenters.ts";
+import { subscriptionStandingCopy } from "../src/modules/subscriptions/lib/subscription-standing.ts";
+import { subscriptionMonthlyFactor, summarizeSubscriptionsMonthly } from "../src/modules/subscriptions/lib/subscription-monthly.ts";
 import { suggestSubscriptionFields } from "../src/modules/subscriptions/lib/subscription-patterns.ts";
 import { subscriptionRecurrencePhrase, subscriptionRowSubtitle } from "../src/modules/subscriptions/lib/subscription-detail-presentation.ts";
 
@@ -22,4 +26,48 @@ const previousPayments = [
 ];
 assert.deepEqual(suggestSubscriptionFields("Netflix", 4, previousPayments), { categoryId: 7, accountId: 3 });
 assert.deepEqual(suggestSubscriptionFields("Nuevo", null, previousPayments), { categoryId: null, accountId: null });
+
+const fmtDate = (ymd) => ymd.slice(8) + " " + ymd.slice(5, 7);
+const fmtMoney = (n) => `S/ ${n.toFixed(2)}`;
+const base = { status: "active", amount: 60.07, frequency: "monthly", intervalCount: 1, nextDueDate: "2026-06-04" };
+const paid = [{ dueDate: "2026-06-04", status: "paid", expectedAmount: 60.07 }];
+const settled = subscriptionStandingCopy({ subscription: base, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate, occurrences: paid });
+assert.equal(settled.daysUntilDue, 2);
+assert.match(settled.detail, /Próximo cobro el 04 09, en 2 días/);
+assert.doesNotMatch(settled.detail, /04 06/);
+const far = subscriptionStandingCopy({ subscription: { ...base, nextDueDate: "2026-08-20" }, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate, occurrences: paid });
+assert.equal(far.label, "Al día");
+assert.equal(far.daysUntilDue, 18);
+const late = subscriptionStandingCopy({ subscription: base, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate });
+assert.equal(late.label, "Atrasada");
+assert.equal(late.missedCharges, 3);
+assert.match(late.detail, /hace 90 días/);
+
+assert.ok(Math.abs(subscriptionMonthlyFactor("monthly", 2) - 0.5) < 1e-9);
+assert.ok(Math.abs(subscriptionMonthlyFactor("quarterly", 2) - 1 / 6) < 1e-9);
+assert.ok(Math.abs(subscriptionMonthlyFactor("custom", 30) - 365 / 12 / 30) < 1e-9);
+const sub = (o) => ({ status: "active", amount: 100, currencyCode: "PEN", amountInBaseCurrency: null, frequency: "monthly", intervalCount: 1, ...o });
+const monthly = summarizeSubscriptionsMonthly([
+  sub({}),
+  sub({ amount: 10, currencyCode: "USD" }),
+  sub({ amount: 10, currencyCode: "USD", amountInBaseCurrency: 37 }),
+  sub({ status: "paused", amount: 999 }),
+], "PEN");
+assert.ok(Math.abs(monthly.total - 137) < 1e-9);
+assert.equal(monthly.comparableCount, 2);
+assert.equal(monthly.unconvertedCount, 1);
+// Run the mobile pure factor/summary functions, without importing native hooks or editing mobile.
+const mobileSource = ts.createSourceFile("subscriptionFilters.ts", readFileSync("../DarkMoneyApp/features/subscriptions/lib/subscriptionFilters.ts", "utf8"), ts.ScriptTarget.Latest, true);
+const names = ["getSubscriptionMonthlyFactor", "summarizeSubscriptionsMonthly"];
+const declarations = mobileSource.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text));
+assert.equal(declarations.length, 2);
+const compiled = ts.transpileModule(declarations.map(node => node.getText(mobileSource).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const phone = new Function(`${compiled};return {getSubscriptionMonthlyFactor,summarizeSubscriptionsMonthly};`)();
+for (const frequency of ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"]) {
+  for (const intervalCount of [null, 1, 2, 7, 30]) {
+    assert.equal(subscriptionMonthlyFactor(frequency, intervalCount), phone.getSubscriptionMonthlyFactor(frequency, intervalCount));
+    const rows = [sub({frequency,intervalCount}), sub({frequency,intervalCount, currencyCode:"USD",amountInBaseCurrency:37}), sub({currencyCode:"USD"}), sub({status:"cancelled"})];
+    assert.deepEqual(summarizeSubscriptionsMonthly(rows,"PEN"), phone.summarizeSubscriptionsMonthly(rows,"PEN"));
+  }
+}
 console.log("subscription-parity: OK");
