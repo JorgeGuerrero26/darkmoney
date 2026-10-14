@@ -1293,6 +1293,7 @@ export function SubscriptionsPage() {
         const analyticsSub = subscriptions.find((s) => s.id === analyticsSubscriptionId);
         return analyticsSub ? (
           <SubscriptionAnalyticsModal
+            exchangeRates={snapshot?.exchangeRates ?? []}
             baseCurrencyCode={baseCurrencyCode}
             movements={snapshot?.movements ?? []}
             subscription={analyticsSub}

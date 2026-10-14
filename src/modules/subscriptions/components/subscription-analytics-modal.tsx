@@ -4,14 +4,12 @@ import { useMemo, useRef } from "react";
 import { useFocusTrap } from "../../../components/ui/use-focus-trap";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { formatDate } from "../../../lib/formatting/dates";
-import type { MovementRecord, SubscriptionSummary } from "../../../types/domain";
+import type { ExchangeRateSummary, MovementRecord, SubscriptionSummary } from "../../../types/domain";
 import { getFrequencyOption } from "../lib/subscriptions-presenters";
+import { analyticsMonthKey, analyticsMonthKeys } from "../../../lib/analytics-money";
+import { subscriptionPaymentMoney, subscriptionReceiptHistory } from "../lib/payment-money";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-function getMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function getMonthLabel(key: string) {
   const [year, month] = key.split("-");
@@ -19,17 +17,7 @@ function getMonthLabel(key: string) {
   return date.toLocaleDateString("es", { month: "short", year: "2-digit" });
 }
 
-function getLast12MonthKeys(): string[] {
-  const keys: string[] = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    keys.push(getMonthKey(d));
-  }
-  return keys;
-}
-
-function getAnnualCost(subscription: SubscriptionSummary): number {
+function getAnnualCost(subscription: SubscriptionSummary): number | null {
   const { amount, frequency, intervalCount } = subscription;
   const count = intervalCount || 1;
   switch (frequency) {
@@ -38,8 +26,8 @@ function getAnnualCost(subscription: SubscriptionSummary): number {
     case "monthly":   return (amount / count) * 12;
     case "quarterly": return (amount / count) * 4;
     case "yearly":    return amount / count;
-    // La frecuencia personalizada avanza por días, igual que el calendario.
-    default:          return (amount / count) * 365;
+    // La analítica móvil no anuncia una proyección anual para la cadencia personalizada.
+    default:          return null;
   }
 }
 
@@ -84,6 +72,7 @@ type SubscriptionAnalyticsModalProps = {
   subscription: SubscriptionSummary;
   movements: MovementRecord[];
   baseCurrencyCode: string;
+  exchangeRates: ExchangeRateSummary[];
   onClose: () => void;
 };
 
@@ -91,6 +80,7 @@ export function SubscriptionAnalyticsModal({
   subscription,
   movements,
   baseCurrencyCode,
+  exchangeRates,
   onClose,
 }: SubscriptionAnalyticsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -99,42 +89,44 @@ export function SubscriptionAnalyticsModal({
   const currencyCode = subscription.currencyCode;
 
   // ── filter movements linked to this subscription ───────────────────────────
+  const receiptHistory = useMemo(
+    () => subscriptionReceiptHistory(movements,subscription.workspaceId,baseCurrencyCode,exchangeRates),
+    [movements,subscription.workspaceId,baseCurrencyCode,exchangeRates],
+  );
+  const historyUnconfirmed = receiptHistory.issues.some(issue=>issue.subscriptionIds.includes(subscription.id));
   const subMovements = useMemo(
     () =>
-      movements.filter(
-        (m) => m.subscriptionId === subscription.id && m.status === "posted",
-      ),
-    [movements, subscription.id],
+      historyUnconfirmed ? [] : receiptHistory.payments.filter(m=>m.subscriptionId===subscription.id),
+    [receiptHistory, subscription.id,historyUnconfirmed],
   );
 
   // ── monthly spend last 12 months ───────────────────────────────────────────
   const monthlySpend = useMemo(() => {
-    const keys = getLast12MonthKeys();
+    const keys = analyticsMonthKeys();
     const map = new Map<string, number>(keys.map((k) => [k, 0]));
 
     for (const m of subMovements) {
-      const key = getMonthKey(new Date(m.occurredAt));
+      const key = analyticsMonthKey(m.occurredAt);
       if (!map.has(key)) continue;
-      const amount =
-        m.sourceAmountInBaseCurrency ??
-        m.sourceAmount ??
-        m.destinationAmount ??
-        0;
+      const amount = subscriptionPaymentMoney(m,baseCurrencyCode,subscription.currencyCode).comparable;
+      if (amount === null) continue;
       map.set(key, (map.get(key) ?? 0) + amount);
     }
 
     return keys.map((k) => ({ label: getMonthLabel(k), amount: map.get(k) ?? 0 }));
-  }, [subMovements]);
+  }, [subMovements,baseCurrencyCode,subscription.currencyCode]);
 
   const totalSpent = useMemo(
     () => subMovements.reduce((s, m) => {
-      const amount = m.sourceAmountInBaseCurrency ?? m.sourceAmount ?? m.destinationAmount ?? 0;
+      const amount = subscriptionPaymentMoney(m,baseCurrencyCode,subscription.currencyCode).comparable ?? 0;
       return s + amount;
     }, 0),
-    [subMovements],
+    [subMovements,baseCurrencyCode,subscription.currencyCode],
   );
 
   const annualCost = getAnnualCost(subscription);
+  const missingConversion = subMovements.filter(m=>subscriptionPaymentMoney(m,baseCurrencyCode,subscription.currencyCode).comparable===null).length;
+  const comparableCount = subMovements.length-missingConversion;
 
   const recentMovements = useMemo(
     () =>
@@ -160,18 +152,18 @@ export function SubscriptionAnalyticsModal({
       sub: "en historial",
     },
     {
-      label: "Total gastado",
-      value: formatCurrency(totalSpent, baseCurrencyCode),
-      sub: "acumulado",
+      label: missingConversion ? "Total comparable" : "Total gastado",
+      value: comparableCount ? formatCurrency(totalSpent, baseCurrencyCode) : "Sin conversión",
+      sub: missingConversion ? `${missingConversion} sin conversión no suman` : "acumulado",
     },
     {
       label: "Costo anual",
-      value: formatCurrency(annualCost, currencyCode),
+      value: annualCost===null ? "Sin estimación" : formatCurrency(annualCost, currencyCode),
       sub: "estimado",
     },
   ] : [
     { label: "Monto por cobro", value: formatCurrency(subscription.amount, currencyCode), sub: getFrequencyOption(subscription.frequency).label.toLowerCase() },
-    { label: "Costo anual", value: formatCurrency(annualCost, currencyCode), sub: "estimado" },
+    { label: "Costo anual", value: annualCost===null ? "Sin estimación" : formatCurrency(annualCost, currencyCode), sub: "estimado" },
   ];
 
   return (
@@ -208,6 +200,7 @@ export function SubscriptionAnalyticsModal({
 
         {/* scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {historyUnconfirmed ? <p className="text-sm text-storm" role="alert">Historial sin confirmar: hay una división incompleta o incompatible. Actualiza antes de usar sus totales.</p> : null}
 
           {/* metrics */}
           <div className={"grid grid-cols-2 border-y border-white/[0.08] " + (subMovements.length > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
@@ -251,7 +244,7 @@ export function SubscriptionAnalyticsModal({
           </div>
 
           {/* payments chart */}
-          {subMovements.length > 0 ? <div className="border-y border-white/[0.08] px-1 py-4">
+          {comparableCount > 0 ? <div className="border-y border-white/[0.08] px-1 py-4">
             <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos por mes (12 meses)</p>
             <PaymentsBarChart months={monthlySpend} currencyCode={baseCurrencyCode} />
           </div> : null}
@@ -262,11 +255,7 @@ export function SubscriptionAnalyticsModal({
               <p className="text-xs uppercase tracking-[0.18em] text-storm">Pagos recientes</p>
               <div className="mt-3 space-y-2">
                 {recentMovements.map((m) => {
-                  const amount =
-                    m.sourceAmountInBaseCurrency ??
-                    m.sourceAmount ??
-                    m.destinationAmount ??
-                    0;
+                  const nativeAmount = subscriptionPaymentMoney(m,baseCurrencyCode,subscription.currencyCode);
                   return (
                     <div
                       className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-1 py-3"
@@ -280,7 +269,7 @@ export function SubscriptionAnalyticsModal({
                         </p>
                       </div>
                       <p className="shrink-0 font-semibold text-ink">
-                        -{formatCurrency(amount, baseCurrencyCode)}
+                        -{formatCurrency(nativeAmount.amount,nativeAmount.currencyCode)}
                       </p>
                     </div>
                   );
@@ -289,7 +278,7 @@ export function SubscriptionAnalyticsModal({
             </div>
           )}
 
-          {subMovements.length === 0 && (
+          {!historyUnconfirmed && subMovements.length === 0 && (
             <div className="border-y border-white/[0.08] py-6 text-sm text-storm">
               No hay pagos registrados para esta suscripción aún.
             </div>

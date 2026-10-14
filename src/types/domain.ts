@@ -245,6 +245,7 @@ export type CounterpartyOverview = CounterpartySummary & {
 export type MovementRecord = {
   id: number;
   workspaceId: number;
+  createdByUserId?: string | null;
   movementType: MovementType;
   status: MovementStatus;
   description: string;

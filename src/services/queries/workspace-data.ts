@@ -204,6 +204,7 @@ type CounterpartySummaryRow = {
 
 type MovementRow = {
   id: number;
+  created_by_user_id?: string | null;
   workspace_id: number;
   movement_type: MovementRecord["movementType"];
   status: MovementRecord["status"];
@@ -1652,7 +1653,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
       const { data, error } = await client
         .from("movements")
         .select(
-          "id, workspace_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, spend_type_id, counterparty_id, obligation_id, subscription_id, metadata",
+          "id, workspace_id, created_by_user_id, movement_type, status, occurred_at, description, notes, source_account_id, source_amount, destination_account_id, destination_amount, fx_rate, category_id, spend_type_id, counterparty_id, obligation_id, subscription_id, metadata",
         )
         .eq("workspace_id", workspace.id)
         .order("occurred_at", { ascending: false })
@@ -1944,6 +1945,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     return {
       id: row.id,
       workspaceId: row.workspace_id,
+      createdByUserId: row.created_by_user_id ?? null,
       movementType: row.movement_type,
       status: row.status,
       description: row.description,

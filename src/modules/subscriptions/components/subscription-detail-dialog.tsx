@@ -13,6 +13,7 @@ import type { AccountSummary, CategorySummary, MovementRecord, SubscriptionSumma
 import { computeNextRecurringDate } from "../lib/subscriptions-presenters";
 import { type SubscriptionOccurrence, useSubscriptionOccurrences } from "../lib/subscription-actions";
 import { subscriptionRecurrencePhrase } from "../lib/subscription-detail-presentation";
+import { SubscriptionPaymentsHistory } from "./subscription-payments-history";
 
 type Props = {
   subscription: SubscriptionSummary;
@@ -65,7 +66,6 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
   const [paidDate, setPaidDate] = useState(subscription.nextDueDate);
   const [accountId, setAccountId] = useState(subscription.accountId ? String(subscription.accountId) : "");
   const [error, setError] = useState("");
-  const [showAllPayments, setShowAllPayments] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     setPanel(initialPanel);
@@ -73,14 +73,11 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
     setPaidDate(subscription.nextDueDate);
     setAccountId(subscription.accountId ? String(subscription.accountId) : "");
     setError("");
-    setShowAllPayments(false);
     setMenuOpen(false);
   }, [subscription.id, initialPanel]);
   const eligibleAccounts = accounts.filter((account) => !account.isArchived);
   const eligibleCategories = categories.filter((category) => category.isActive && (category.kind === "expense" || category.kind === "both"));
   const selectedAccount = eligibleAccounts.find((account) => String(account.id) === accountId);
-  const payments = movements.filter((movement) => movement.subscriptionId === subscription.id && movement.status === "posted")
-    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const nextDueDate = computeNextRecurringDate(subscription.nextDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth);
   const occurrencesQuery = useSubscriptionOccurrences(subscription.id);
   const standing = standingCopy(subscription, occurrencesQuery.data);
@@ -126,7 +123,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
             {subscription.notes?.trim() ? <DetailFieldRow label="Notas" value={subscription.notes} /> : null}
             <DetailFieldRow label="Fijada en la lista" value={subscription.isPinned ? "Sí" : "No"} />
           </div>
-          <section><h3 className="mb-2 text-xs uppercase tracking-[0.14em] text-storm">Pagos anotados · {payments.length}</h3>{payments.length ? <div className="divide-y divide-white/[0.08]">{(showAllPayments ? payments : payments.slice(0, 12)).map((payment) => <button aria-label={`Abrir movimiento del ${formatDate(payment.occurredAt)}`} className="flex w-full justify-between gap-4 py-3 text-left text-sm hover:bg-white/[0.03]" key={payment.id} onClick={() => onOpenMovement(payment.id)} type="button"><span className="text-storm">{formatDate(payment.occurredAt)} ›</span><span className="font-semibold text-ink">{formatCurrency(payment.sourceAmount ?? payment.destinationAmount ?? 0, payment.sourceCurrencyCode ?? subscription.currencyCode)}</span></button>)}</div> : <p className="text-sm text-storm">Ninguno todavía. Cada vez que la marques como pagada, el gasto aparece aquí.</p>}{payments.length > 12 ? <button className="mt-3 text-sm text-ink underline-offset-4 hover:underline" onClick={() => setShowAllPayments((value) => !value)} type="button">{showAllPayments ? "Mostrar menos" : `Ver los ${payments.length - 12} restantes`}</button> : null}</section>
+          <SubscriptionPaymentsHistory key={subscription.id} movements={movements} workspaceId={subscription.workspaceId} subscriptionId={subscription.id} currencyCode={subscription.currencyCode} onOpenMovement={onOpenMovement} />
         </> : panel === "pay" ? <>
           <label className="block text-[13px] font-medium text-storm" htmlFor="subscription-paid-amount">Cuánto pagaste</label>
           <input className="field-dark !h-16 w-full text-2xl font-semibold" id="subscription-paid-amount" min="0.01" onChange={(event) => { setAmount(event.target.value); setError(""); }} step="0.01" type="number" value={amount} />
