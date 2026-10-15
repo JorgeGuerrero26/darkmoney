@@ -1,5 +1,5 @@
 import { Check, ChevronRight } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
@@ -50,6 +50,7 @@ export function initialBudgetEditorValue(today: string, baseCurrency: string, bu
 
 type Option = { id: number; name: string };
 type Props = {
+  context?: ReactNode;
   value: BudgetEditorValue;
   onChange: (value: BudgetEditorValue) => void;
   onClose: () => void;
@@ -83,7 +84,7 @@ function RowSelect({ label, value, onChange, options, allLabel }: {
   );
 }
 
-export function BudgetEditorDialog({ value, onChange, onClose, onSubmit, categories, accounts, spendTypes, currencies, isCreate, isSaving, error }: Props) {
+export function BudgetEditorDialog({ context, value, onChange, onClose, onSubmit, categories, accounts, spendTypes, currencies, isCreate, isSaving, error }: Props) {
   const [panel, setPanel] = useState<"main" | "scope" | "recurrence" | "alert" | "details">("main");
   useEffect(() => setPanel("main"), [isCreate]);
   function patch(update: Partial<BudgetEditorValue>) { onChange({ ...value, ...update }); }
@@ -99,6 +100,7 @@ export function BudgetEditorDialog({ value, onChange, onClose, onSubmit, categor
       <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
         <ResourceEditorHeader disabled={isSaving} onBack={panel === "main" ? undefined : () => setPanel("main")} onClose={onClose} title={panel === "main" ? (isCreate ? "Nuevo presupuesto" : "Editar presupuesto") : panel === "scope" ? "Qué limitas" : panel === "recurrence" ? "Se renueva" : panel === "alert" ? "Avisarme al" : "Opcionales"} titleId="budget-editor-title" />
         <ModalBody className="!px-5 !py-5 sm:!px-6">
+          {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {error ? <p className="mb-4 text-sm text-[#e6b7aa]" role="alert">{error}</p> : null}
           {panel === "main" ? (
             <div className="space-y-5">

@@ -85,6 +85,7 @@ mock("src/modules/attachments/use-receipt-feature-access.ts", "export const useR
 mock("src/modules/attachments/receipt-utils.ts", "export const deleteStoredReceipt=()=>{},createReceiptSignedUrl=async()=>'',prepareReceiptUpload=()=>{throw Error('Fixture receipt upload failure')},uploadPreparedReceipt=()=>{};");
 mock("src/modules/movements/hooks/use-movement-suggestions.ts", "export const useMovementSuggestions=()=>({});");
 mock("src/modules/movements/hooks/use-movement-insights.ts", "export const useMovementInsights=()=>({});");
+mock("src/modules/assistant/components/assistant-budget-review.tsx", "export const AssistantBudgetReview=()=>null;");
 mock("src/modules/contacts/components/contact-quick-create-dialog.tsx", "export const ContactQuickCreateDialog=()=>null;");
 mock("src/components/ui/date-picker-field.tsx", `${h} export const DatePickerField=p=>h('input',{value:p.value,onChange:e=>p.onChange(e.target.value)});`);
 mock("src/components/ui/searchable-picker.tsx", `${h} export const SearchablePicker=p=>h('select',{'aria-label':p.placeholderLabel,value:p.value,onChange:e=>p.onChange(e.target.value)},h('option',{value:''},'Sin asignar'),...p.options.map(o=>h('option',{key:o.value,value:o.value},o.label)));`);

@@ -16,6 +16,7 @@ mock("src/modules/workspaces/use-active-workspace.ts",`const workspaces=[{id:8,n
 mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureAccess=()=>({canAccessProFeatures:true,isLoadingEntitlement:false});");
 // Conversation I/O is covered here; financial review has its own suite.
 mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
+mock("src/modules/assistant/components/assistant-budget-review.tsx","export const AssistantBudgetReview=()=>null;");
 const contract=await import(load("src/modules/assistant/lib/assistant-contract.ts"));
 const service=await import(load("src/services/queries/assistant.ts"));
 const {AssistantPage}=await import(load("src/modules/assistant/pages/assistant-page.tsx"));

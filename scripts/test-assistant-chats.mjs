@@ -54,6 +54,7 @@ globalThis.chatUser="page-user";globalThis.chatWorkspace=8;globalThis.chatCalls=
 mock("src/modules/auth/auth-context.tsx","export const useAuth=()=>({user:{id:globalThis.chatUser}});");
 mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureAccess=()=>({canAccessProFeatures:true,isLoadingEntitlement:false});");
 mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
+mock("src/modules/assistant/components/assistant-budget-review.tsx","export const AssistantBudgetReview=()=>null;");
 mock("src/modules/workspaces/use-active-workspace.ts","const workspaces=[{id:8,name:'Personal'},{id:9,name:'Compartido'}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:workspaces.find(w=>w.id===globalThis.chatWorkspace),setActiveWorkspaceId:id=>{globalThis.chatWorkspace=id},isFetching:false,isError:false});");
 mock("src/services/queries/assistant.ts","export const useAssistantInsight=()=>({data:null,isPending:false,isError:false});export async function askAssistant(message,history,workspaceId,signal){globalThis.chatCalls.push({message,history,workspaceId,signal});return globalThis.chatGate?await globalThis.chatGate:{reply:'Respuesta a '+message,evidence:[],proposals:[{label:'Gasto',href:'/app/movements',amount:20,currency:'PEN'}],remainingToday:3};}");
 const { AssistantPage }=await import(load("src/modules/assistant/pages/assistant-page.tsx"));

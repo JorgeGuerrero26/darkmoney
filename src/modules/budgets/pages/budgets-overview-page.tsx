@@ -19,7 +19,6 @@ import {
   usePinBudgetMutation,
   useUpdateBudgetMutation,
   useWorkspaceSnapshotQuery,
-  type BudgetFormInput,
 } from "../../../services/queries/workspace-data";
 import type { BudgetOverview, ExchangeRateSummary } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
@@ -29,7 +28,8 @@ import { BudgetEditorDialog, initialBudgetEditorValue, type BudgetEditorValue } 
 import { useBudgetScopeMovements } from "../hooks/use-budget-scope-movements";
 import { applyBudgetComputedMetrics, buildBudgetMetricsMap } from "../lib/budget-metrics";
 import { buildBudgetCSV } from "../lib/budget-csv";
-import { budgetRowNote, duplicateBudgetPeriod, firstBudgetPeriod, groupBudgetRules, nextBudgetPeriod } from "../lib/budget-periods";
+import { buildBudgetEditorInput, budgetEditorCurrencies } from "../lib/budget-editor-input";
+import { budgetRowNote, duplicateBudgetPeriod, groupBudgetRules, nextBudgetPeriod } from "../lib/budget-periods";
 
 function todayPeru() {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Lima", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -182,23 +182,10 @@ export function BudgetsPage() {
 
   async function submitEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editorValue || !activeWorkspace || !user?.id) return;
-    const amount = Number(editorValue.limitAmount);
-    if (!editorValue.scopeChosen) { setEditorError("Elige qué gasto limita este presupuesto. También puedes elegir todo el gasto."); return; }
-    if (!Number.isFinite(amount) || amount <= 0) { setEditorError("Ingresa un límite mayor a cero."); return; }
-    if (editorValue.periodEnd < editorValue.periodStart) { setEditorError("La fecha final debe ser posterior al inicio."); return; }
-    const period = !editing && editorValue.recurrence !== "none" ? firstPeriod(today, editorValue.recurrence) : { periodStart: editorValue.periodStart, periodEnd: editorValue.periodEnd };
-    const categoryName = snapshot?.catalogs.categories.find((item) => item.id === editorValue.categoryId)?.name;
-    const spendName = spendTypesQuery.data?.find((item) => item.id === editorValue.spendTypeId)?.name;
-    const name = editorValue.name.trim() || `${categoryName ?? spendName ?? "Presupuesto"} · ${recurrenceText(editorValue.recurrence)}`;
-    const payload: BudgetFormInput = {
-      name, ...period, currencyCode: editorValue.currencyCode, categoryId: editorValue.categoryId,
-      accountId: editorValue.accountId, spendTypeId: editorValue.spendTypeId, recurrence: editorValue.recurrence,
-      limitAmount: amount, alertPercent: editorValue.alertPercent, rolloverEnabled: editorValue.rolloverEnabled,
-      notes: editorValue.notes.trim() || null, isActive: editorValue.isActive,
-    };
+    if (!editorValue || !activeWorkspace || !user?.id || !snapshot) return;
     setEditorError(null);
     try {
+      const payload = buildBudgetEditorInput(editorValue, snapshot, spendTypesQuery.data ?? [], todayPeru(), !editing);
       if (editing) await updateMutation.mutateAsync({ ...payload, budgetId: editing.id, workspaceId: activeWorkspace.id, userId: user.id });
       else await createMutation.mutateAsync({ ...payload, workspaceId: activeWorkspace.id, userId: user.id });
       closeEditor();
@@ -266,19 +253,10 @@ export function BudgetsPage() {
     {closed.length ? <section className="mt-8"><button aria-expanded={showClosed || selectionMode} className="flex w-full items-center justify-between border-b border-white/10 py-3 text-left font-public-mono text-xs uppercase tracking-[0.16em] text-storm hover:text-ink" onClick={() => setShowClosed(!showClosed)} type="button"><span>Períodos cerrados · {closed.length} {closed.length === 1 ? "regla" : "reglas"}</span>{showClosed || selectionMode ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>{selectionMode ? closed.flatMap((rule) => rule.closed).map(budgetRow) : showClosed ? closed.map((rule) => <button className="flex min-h-[60px] w-full items-center justify-between border-b border-white/[0.08] py-3 text-left hover:bg-white/[0.02]" key={rule.key} onClick={() => setAnalyticsId(rule.closed[0].id)} type="button"><span><span className="block text-sm font-semibold text-ink">{rule.closed[0].name}</span><span className="mt-1 block text-xs text-storm">{ruleSummary(rule.closed)}</span></span><ChevronRight className="h-4 w-4 text-storm" /></button>) : null}</section> : null}
     {!visibleBudgets.length ? <div className="mt-8"><DataState action={<Button onClick={search ? () => setSearch("") : openCreate}>{search ? "Limpiar búsqueda" : "Crear presupuesto"}</Button>} description={search ? "Prueba con otro nombre, categoría o cuenta." : "Pon un límite a una categoría, un tipo de gasto, una cuenta o a todo tu gasto."} title={search ? "No hay coincidencias" : "Aún no tienes presupuestos"} /></div> : null}
 
-    {editorValue ? <BudgetEditorDialog accounts={snapshot.accounts.filter((account) => !account.isArchived).map((account) => ({ id: account.id, name: account.name }))} categories={snapshot.catalogs.categories} currencies={[...new Set([baseCurrency, "PEN", "USD", "EUR", ...snapshot.accounts.map((account) => account.currencyCode)])]} error={editorError} isCreate={!editing} isSaving={createMutation.isPending || updateMutation.isPending} onChange={(value) => { setEditorValue(value); setEditorDirty(true); setEditorError(null); }} onClose={requestCloseEditor} onSubmit={(event) => void submitEditor(event)} spendTypes={spendTypesQuery.data ?? []} value={editorValue} /> : null}
+    {editorValue ? <BudgetEditorDialog accounts={snapshot.accounts.filter((account) => !account.isArchived).map((account) => ({ id: account.id, name: account.name }))} categories={snapshot.catalogs.categories} currencies={budgetEditorCurrencies(snapshot)} error={editorError} isCreate={!editing} isSaving={createMutation.isPending || updateMutation.isPending} onChange={(value) => { setEditorValue(value); setEditorDirty(true); setEditorError(null); }} onClose={requestCloseEditor} onSubmit={(event) => void submitEditor(event)} spendTypes={spendTypesQuery.data ?? []} value={editorValue} /> : null}
     {unsavedOpen ? <UnsavedChangesDialog onDiscard={closeEditor} onKeepEditing={() => setUnsavedOpen(false)} /> : null}
     {analyticsId !== null ? (() => { const budget = budgets.find((item) => item.id === analyticsId); return budget ? <BudgetDetailDialog allBudgets={budgets} budget={budget} metrics={metricMap.get(budget.id) ?? null} onClose={() => setAnalyticsId(null)} onEdit={() => { setAnalyticsId(null); openEdit(budget); }} onQuickSave={async (limitAmount, alertPercent) => { if (!user?.id) throw new Error("No hay sesión activa."); await adjustMutation.mutateAsync({ budgetId: budget.id, limitAmount, alertPercent }); }} /> : null; })() : null}
     {deleteTarget ? <DeleteConfirmDialog badge="Eliminar presupuesto" description="Se elimina este período, no sus movimientos. Puedes deshacer la acción durante unos segundos." isDeleting={deleteMutation.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => deleteWithUndo(deleteTarget)}><p className="text-lg font-semibold text-ink">{deleteTarget.name}</p></DeleteConfirmDialog> : null}
     {bulkDelete ? <DeleteConfirmDialog badge="Eliminar presupuestos" description={`Se eliminarán ${selected.size} períodos. Tus movimientos no se borrarán.`} isDeleting={false} onCancel={() => setBulkDelete(false)} onConfirm={() => { visibleBudgets.filter((budget) => selected.has(budget.id)).forEach(deleteWithUndo); setBulkDelete(false); setSelectionMode(false); setSelected(new Set()); }}><p className="text-lg font-semibold text-ink">{selected.size} seleccionados</p></DeleteConfirmDialog> : null}
   </div>;
-}
-
-function firstPeriod(today: string, recurrence: BudgetEditorValue["recurrence"]) {
-  // Se calcula en el momento de guardar: un diálogo abierto antes de medianoche no crea un período viejo.
-  return recurrence === "none" ? { periodStart: today, periodEnd: today } : firstBudgetPeriod(today, recurrence);
-}
-
-function recurrenceText(recurrence: BudgetEditorValue["recurrence"]) {
-  return recurrence === "none" ? "entre fechas" : recurrence === "monthly" ? "mensual" : recurrence === "weekly" ? "semanal" : recurrence === "biweekly" ? "quincenal" : recurrence === "quarterly" ? "trimestral" : "anual";
 }
