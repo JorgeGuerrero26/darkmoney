@@ -14,6 +14,7 @@ export type PlanCoverage = ScheduledPayment & {
   covered: number;
   remaining: number;
   status: "covered" | "partial" | "pending";
+  coveredAt: string | null;
 };
 
 const cents = (amount: number) => Math.round(amount * 100);
@@ -127,7 +128,16 @@ export function coverPlan(
   startDate: string,
   payments: readonly { amount: number; date: string }[],
 ): PlanCoverage[] {
-  const paid = payments.reduce((sum, payment) => sum + cents(payment.amount), 0);
+  // A plan agreed later only distributes the debt remaining when it starts.
+  // Earlier months reduce the principal; they cannot prepay the new installments.
+  const planMonth = (plan.firstDueDate ?? addMonthsIso(startDate, 1)).slice(0, 7);
+  const sorted = [...payments].sort((a, b) => a.date.localeCompare(b.date));
+  const before = sorted.filter(payment => payment.date.slice(0, 7) < planMonth);
+  const ordered = sorted.filter(payment => payment.date.slice(0, 7) >= planMonth);
+  const paidBefore = before.reduce((sum, payment) => sum + cents(payment.amount), 0);
+  openingPrincipal = money(Math.max(0, cents(openingPrincipal) - paidBefore));
+  currentDebt = money(Math.max(0, cents(currentDebt) - paidBefore));
+  const paid = ordered.reduce((sum, payment) => sum + cents(payment.amount), 0);
   let scheduled = expandPaymentPlan(plan, plan.mode === "custom" ? currentDebt : openingPrincipal, startDate);
   if (plan.mode === "equal" && cents(currentDebt) !== cents(openingPrincipal)) {
     let remainingPaid = paid;
@@ -151,15 +161,33 @@ export function coverPlan(
     }
   }
   let budget = paid;
+  let cursor = 0;
+  let spentFromCursor = 0;
   return scheduled.map((row) => {
     const amount = cents(row.amount);
     const covered = Math.max(0, Math.min(amount, budget));
     budget -= covered;
+    let coveredAt: string | null = null;
+    if (covered >= amount && amount > 0) {
+      let left = amount;
+      while (left > 0 && cursor < ordered.length) {
+        const available = cents(ordered[cursor].amount) - spentFromCursor;
+        const taken = Math.min(available, left);
+        left -= taken;
+        spentFromCursor += taken;
+        coveredAt = ordered[cursor].date;
+        if (spentFromCursor >= cents(ordered[cursor].amount)) {
+          cursor += 1;
+          spentFromCursor = 0;
+        }
+      }
+    }
     return {
       ...row,
       covered: money(covered),
       remaining: money(Math.max(0, amount - covered)),
       status: covered >= amount && amount > 0 ? "covered" as const : covered > 0 ? "partial" as const : "pending" as const,
+      coveredAt,
     };
   });
 }

@@ -46,6 +46,15 @@ assert.equal(covered[1].status, "partial");
 assert.equal(covered[1].covered, 63.33);
 assert.equal(covered[1].remaining, 103.34);
 assert.equal(covered[2].status, "pending");
+assert.equal(covered[0].coveredAt, "2026-09-17");
+assert.equal(covered[1].coveredAt, null);
+
+const laterPlan = coverPlan({ mode: "equal", count: 2, firstDueDate: "2026-09-15" }, 1000, 1000, "2026-03-15", [
+  { amount: 100, date: "2026-09-10" },
+  { amount: 300, date: "2026-08-31" },
+]);
+assert.deepEqual(laterPlan.map(row => [row.amount, row.covered, row.remaining]), [[350, 100, 250], [350, 0, 350]]);
+assert.equal(laterPlan.every(row => row.coveredAt === null), true);
 
 const adjusted = coverPlan({ mode: "equal", count: 4, firstDueDate: "2026-09-15" }, 400, 500, "2026-03-15", [
   { amount: 100, date: "2026-09-16" },
