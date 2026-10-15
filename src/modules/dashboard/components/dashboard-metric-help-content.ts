@@ -813,7 +813,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   dashboard_period_close: a({
     title: "Cierre estimado (mes calendario)",
     paragraphs: [
-      "Proyecta la liquidez (efectivo, banco y ahorros) al último día del mes en curso extrapolando el neto diario observado en el mes hasta hoy. No sustituye un flujo de caja formal ni incluye inversiones u otras cuentas fuera de liquidez inmediata.",
+      "Parte del saldo líquido de efectivo, banco y ahorros. Hasta el último día del mes suma ingresos fijos y cobros de cuotas, resta suscripciones, pagos y movimientos planificados con efecto en caja. Las tarjetas salen en su fecha de pago, no como saldo inicial negativo.",
+      "El gasto habitual es la mediana de seis meses terminados, prorrateada por los días restantes. Excluye compras únicas y gastos que ya tienen una línea propia. Los importes sin conversión no suman y se avisan. Es una estimación, no una promesa de cobro.",
     ],
   }),
 

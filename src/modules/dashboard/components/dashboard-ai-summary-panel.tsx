@@ -18,6 +18,7 @@ type DashboardAiSummaryPanelProps = {
   limitReached: boolean;
   errorMessage: string | null;
   onGenerate: () => void;
+  unavailableReason?: string | null;
 };
 
 function TermPopover({ term }: { term: DashboardAiComplexTerm }) {
@@ -67,6 +68,7 @@ export function DashboardAiSummaryPanel({
   limitReached,
   errorMessage,
   onGenerate,
+  unavailableReason,
 }: DashboardAiSummaryPanelProps) {
   const activeToneOption = DASHBOARD_AI_TONE_OPTIONS.find((option) => option.id === tone);
   const ctaLabel =
@@ -152,7 +154,7 @@ export function DashboardAiSummaryPanel({
         {/* CTA */}
         <button
           className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-void transition duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-          disabled={isPending || limitReached}
+          disabled={isPending || limitReached || Boolean(unavailableReason)}
           onClick={onGenerate}
           type="button"
         >
@@ -170,6 +172,7 @@ export function DashboardAiSummaryPanel({
             </>
           )}
         </button>
+        {unavailableReason ? <p role="status" className="mt-3 text-xs leading-5 text-storm">{unavailableReason}</p> : null}
 
         {/* Error */}
         {errorMessage ? (

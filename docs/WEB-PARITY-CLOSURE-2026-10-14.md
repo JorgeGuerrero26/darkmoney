@@ -34,4 +34,12 @@ El usuario delegó móvil a otro desarrollador. Esta continuación no modifica e
 
 ## Pendientes de entrega y alcance
 
-La entrega de SQL sigue coordinada con móvil y no se publicó web. Faltan servidor/dispositivos, no autorizados para operaciones financieras en esta ejecución. El motor actual de proyección móvil requiere nueva auditoría/port web, y las herramientas avanzadas de Asistente no tienen paridad completa. Estas unidades cierran los cambios concretos descritos, no la paridad total de toda la aplicación.
+La entrega de SQL sigue coordinada con móvil y no se publicó web. Faltan servidor/dispositivos, no autorizados para operaciones financieras en esta ejecución. Las herramientas avanzadas de Asistente no tienen paridad completa. Estas unidades cierran los cambios concretos descritos, no la paridad total de toda la aplicación.
+
+## Continuación del 15 de octubre: proyección de caja
+
+Se adaptó el calendario móvil actual a web: caja líquida, mediana de seis meses completos, exclusiones, cuotas con pagos reales, tarjetas, cambios programados y movimientos futuros. Cierre y ventanas consumen el mismo calendario; panel de desglose y estados de error sin cifra parcial. IA declara `liquid_cash` y no reutiliza textos del motor anterior.
+
+Se corrigió también el `coverPlan` compartido por detalle/formulario/proyección web para no adelantar cuotas nuevas con cobros de meses anteriores al plan. La documentación previa de este archivo que describe el motor desde patrimonio queda como diagnóstico histórico, no estado actual.
+
+Dos diferencias del móvil actual no se copiaron: `custom` interpretado como meses en calendario y doble conversión del gasto típico de tarjetas. Hay además riesgo de historial móvil truncado por falta de paginación. Evidencia, casos reproducibles y límites en [WEB-CASHFLOW-FINDINGS-2026-10-15.md](WEB-CASHFLOW-FINDINGS-2026-10-15.md). No hubo modificación móvil ni despliegue.

@@ -2954,6 +2954,7 @@ async function invalidateWorkspaceSnapshot(
 ) {
   await Promise.all([
     queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === "detection-learning" && query.queryKey[2] === workspaceId }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard-projection-inputs", workspaceId] }),
     queryClient.invalidateQueries({
       queryKey: ["workspace-snapshot", workspaceId],
       exact: false,

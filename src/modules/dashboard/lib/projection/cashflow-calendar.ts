@@ -1,0 +1,568 @@
+// Web adaptation of DarkMoneyApp/features/projection/lib/cashflow-calendar.ts.
+// Custom cadence follows registration (days), not the mobile calendar's monthly fallback.
+/**
+ * Calendario de flujo proyectado: mes a mes, de aquí al horizonte que se le pida.
+ *
+ * Existe porque la app solo sabía mirar hasta fin de mes. `buildFutureFlowWindows` (7/15/30
+ * días) lee la PRÓXIMA ocurrencia de cada compromiso y para ahí, así que nunca podía contestar
+ * "cuánto voy a tener en abril": ni repite el sueldo, ni sigue el cronograma de una deuda más
+ * allá de su siguiente cuota.
+ *
+ * Dos reglas que gobiernan todo lo de abajo:
+ *
+ * 1. **Lo pactado se expande; lo demás se estima.** Una cuota acordada tiene fecha y monto, y
+ *    entra tal cual. El gasto del día a día no: entra como una sola línea estimada por mes.
+ *    Cada línea dice de cuál de los dos lados viene (`source`), porque un total que mezcla
+ *    ambos sin distinguirlos se lee como si todo fuera igual de firme, y no lo es.
+ *
+ * 2. **El gasto típico se mide con la MEDIANA, no con el promedio.** Un mes con una compra
+ *    grande arrastra el promedio hacia arriba y la proyección cobra ese gasto único otra vez
+ *    cada mes que queda por delante. La mediana ignora al mes raro por construcción. Ver
+ *    `typicalMonthlySpend`.
+ *
+ * RN-free a propósito: solo datos y fechas. Quien lo llama convierte monedas y lo pinta.
+ */
+import { addDays, addMonths, addQuarters, addWeeks, addYears, format, getDaysInMonth, parseISO, startOfDay } from "date-fns";
+
+import { obligationViewerDirection } from "./projection-perspective";
+import { coverPlan, parsePaymentPlan } from "../../../obligations/lib/payment-plan";
+
+/** Tope de ocurrencias por compromiso. Una cadencia diaria a 12 meses son ~365 de una sola. */
+const MAX_OCCURRENCES = 500;
+/** Por debajo de esto un monto es ruido de redondeo y no merece una línea. */
+const EPSILON = 0.009;
+
+export type ProjectionLineKind =
+  | "recurring_income"
+  | "obligation_receivable"
+  | "obligation_payable"
+  | "subscription"
+  | "planned_movement"
+  | "credit_card_payment"
+  | "typical_spend";
+
+export type ProjectionLine = {
+  kind: ProjectionLineKind;
+  label: string;
+  /** Siempre positivo. El signo lo da el lado en el que vive: `inflows` u `outflows`. */
+  amount: number;
+  /**
+   * `scheduled`: alguien pactó esta fecha y este monto — una cuota, un sueldo, una suscripción.
+   * `estimated`: lo dedujo el motor del historial.
+   *
+   * La distinción es la que permite decir "de los 2.400 que salen en noviembre, 1.800 están
+   * pactados y 600 son estimación". Sin ella los dos números pesan igual en pantalla.
+   */
+  source: "scheduled" | "estimated";
+  /** Fecha del compromiso, `yyyy-MM-dd`. En una cuota atrasada es la fecha en que venció. */
+  dueDate?: string;
+  /** El registro del que sale la línea, para poder abrirlo al tocarla. */
+  refId?: number;
+};
+
+export type ProjectedMonth = {
+  /** `yyyy-MM`. */
+  monthKey: string;
+  openingBalance: number;
+  inflows: ProjectionLine[];
+  outflows: ProjectionLine[];
+  inflowTotal: number;
+  outflowTotal: number;
+  netFlow: number;
+  closingBalance: number;
+  /**
+   * Qué parte del movimiento del mes viene de compromisos con fecha (0..1). Es el indicador de
+   * confianza: 1 = todo pactado, 0 = todo estimado a partir del historial.
+   */
+  scheduledShare: number;
+  /** Compromisos cuyo monto no se pudo convertir a la moneda de la proyección: sumaron 0. */
+  unconvertedCount: number;
+  /** El mes en curso arranca hoy, no el día 1: su gasto típico va prorrateado. */
+  isPartial: boolean;
+};
+
+export type ProjectionRecurringIncome = {
+  id?: number;
+  name: string;
+  amount: number;
+  currencyCode: string;
+  frequency: string;
+  intervalCount?: number | null;
+  nextExpectedDate: string;
+  endDate?: string | null;
+  status: string;
+  /**
+   * Cambios de monto ya acordados: desde `effectiveDate` llegan `amount`, hasta el cambio
+   * siguiente. Sin esto un aumento a futuro no aparece en ningún mes. Mismo monto neto que
+   * `amount`: lo que ENTRA a la cuenta.
+   */
+  scheduledChanges?: readonly { effectiveDate: string; amount: number }[] | null;
+};
+
+export type ProjectionSubscription = {
+  id?: number;
+  name: string;
+  amount: number;
+  currencyCode: string;
+  frequency: string;
+  intervalCount?: number | null;
+  nextDueDate: string;
+  endDate?: string | null;
+  status: string;
+};
+
+export type ProjectionObligation = {
+  id?: number;
+  title: string;
+  direction: string;
+  status: string;
+  currencyCode: string;
+  pendingAmount: number;
+  /** Principal vigente: la deuda de hoy, apertura + aumentos − reducciones. */
+  principalCurrentAmount: number;
+  /** Principal de apertura. Lo necesita un plan de cuotas iguales para saber a qué precio se pactó. */
+  openingPrincipal?: number | null;
+  startDate: string | null;
+  dueDate: string | null;
+  paymentPlan: unknown;
+  installmentAmount?: number | null;
+  /**
+   * Los cobros o pagos reales, con fecha. Con ellos el plan se cruza EXACTAMENTE igual que en el
+   * detalle de la deuda (`coverPlan`): lo cobrado antes del mes del primer vencimiento no adelanta
+   * cuotas. Sin ellos no hay forma de saber cuáles cuotas quedan.
+   */
+  payments: readonly { amount: number; date: string }[];
+  /** Último pago. Coloca la próxima cuota de una deuda SIN plan. */
+  lastPaymentDate?: string | null;
+};
+
+export type ProjectionPlannedMovement = {
+  id?: number;
+  description: string;
+  /** Positivo entra, negativo sale. */
+  signedAmount: number;
+  currencyCode: string;
+  occurredAt: string;
+};
+
+/**
+ * Una tarjeta de crédito, que es lo único del calendario que gasta en un mes y cobra en otro.
+ *
+ * Sin esto, lo que compras con la tarjeta se resta **un mes antes de tiempo**: el gasto se
+ * registra el día de la compra, pero del banco no sale nada hasta el día de pago del mes
+ * siguiente. El saldo de la tarjeta tampoco entra en el saldo de partida —es deuda, no caja— así
+ * que la única forma de que aparezca es como pagos con fecha.
+ *
+ * El dato que coloca los pagos es `paymentDay`. `statementDay` no hace falta aquí: define qué
+ * compras caen en qué estado de cuenta, y esa precisión se aproxima (ver `currentDebt`). Vive en
+ * la cuenta para mostrárselo al usuario y para avisarle.
+ */
+export type ProjectionCreditCard = {
+  id?: number;
+  name: string;
+  currencyCode: string;
+  /**
+   * Lo que se debe hoy, en positivo. Es lo que sale en el PRÓXIMO día de pago, y por eso esa
+   * primera línea va como `scheduled`: el monto ya está gastado, no es una suposición.
+   *
+   * Aproxima por abajo: entre hoy y el corte todavía caben compras que también entrarán en ese
+   * estado de cuenta. Preferimos quedarnos cortos en la deuda antes que inventarla.
+   */
+  currentDebt: number;
+  /** Día del mes del pago (1-31). Sin él la tarjeta no se puede colocar en ningún mes. */
+  paymentDay: number | null;
+  /** Mediana de lo que se carga a ESTA tarjeta al mes. Es lo que sale en los pagos siguientes. */
+  typicalMonthlySpend: number;
+};
+
+export type ProjectionInput = {
+  /** Saldo líquido de hoy, ya convertido a la moneda de la proyección. */
+  startingBalance: number;
+  /** Desde cuándo se proyecta, `yyyy-MM-dd`. Normalmente hoy. */
+  fromDate: string;
+  /** Cuántos meses devolver, contando el mes en curso. */
+  months: number;
+  recurringIncome: readonly ProjectionRecurringIncome[];
+  subscriptions: readonly ProjectionSubscription[];
+  obligations: readonly ProjectionObligation[];
+  plannedMovements: readonly ProjectionPlannedMovement[];
+  /** Tarjetas de crédito con ciclo. Omitir equivale a no tener ninguna. */
+  creditCards?: readonly ProjectionCreditCard[];
+  /**
+   * Mediana del gasto mensual que NO está ya representado arriba.
+   *
+   * Quien lo calcula debe excluir los movimientos ligados a suscripciones y a deudas, o se
+   * cuentan dos veces: una en su línea pactada y otra dentro de este bulto. `typicalMonthlySpend`
+   * calcula la mediana; el filtrado es de quien reúne los meses.
+   *
+   * **También debe excluir lo que se carga a tarjetas de crédito**, que viaja por `creditCards`
+   * para salir en el mes en que se paga y no en el que se compró. Si se cuela aquí, se resta dos
+   * veces y además en el mes equivocado.
+   */
+  typicalDiscretionarySpend: number;
+  /** Conversor. Devuelve null cuando no hay tasa; ese ítem suma 0 y se cuenta aparte. */
+  convert: (amount: number, fromCurrency: string) => number | null;
+};
+
+export type ProjectionResult = {
+  months: ProjectedMonth[];
+  /** Saldo al final del último mes. El número que el usuario viene a buscar. */
+  endingBalance: number;
+  /** Promedio de `scheduledShare`. Baja mientras más lejos mire la proyección. */
+  overallScheduledShare: number;
+  unconvertedCount: number;
+};
+
+/**
+ * El mes típico, no el mes promedio.
+ *
+ * Con [780, 820, 850, 800, 2180, 810] el promedio da 1.040 y la mediana 815. Los 2.180 fueron
+ * una compra que no se repite; el promedio la reparte entre todos los meses futuros y la cobra
+ * una y otra vez. La mediana la deja donde estaba: arriba, sola, sin arrastrar a nadie.
+ *
+ * Con un número par de meses se promedian los dos del medio, que es la definición de mediana.
+ */
+export function typicalMonthlySpend(monthlyTotals: readonly number[]): number {
+  const values = monthlyTotals
+    .filter((value) => Number.isFinite(value))
+    .map((value) => Math.abs(value))
+    .sort((a, b) => a - b);
+  if (values.length === 0) return 0;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 === 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+}
+
+function monthKeyOf(date: Date): string {
+  return format(date, "yyyy-MM");
+}
+
+/** Custom cadence is measured in days, as in subscription/income registration. */
+function advance(date: Date, frequency: string, intervalCount: number | null | undefined): Date {
+  const step = Math.max(1, Math.floor(intervalCount ?? 1));
+  switch (frequency) {
+    case "daily":
+    case "custom":
+      return addDays(date, step);
+    case "weekly":
+      return addWeeks(date, step);
+    case "quarterly":
+      return addQuarters(date, step);
+    case "yearly":
+      return addYears(date, step);
+    case "monthly":
+    default:
+      return addMonths(date, step);
+  }
+}
+
+/** Fechas de una cadencia dentro de la ventana. Vacío si la fecha de arranque no se puede leer. */
+function occurrencesWithin(
+  startIso: string,
+  frequency: string,
+  intervalCount: number | null | undefined,
+  endIso: string | null | undefined,
+  fromDate: Date,
+  horizonDate: Date,
+): Date[] {
+  const first = parseISO(startIso);
+  if (Number.isNaN(first.getTime())) return [];
+  const hardEnd = endIso ? parseISO(endIso) : null;
+  const limit = hardEnd && !Number.isNaN(hardEnd.getTime()) && hardEnd < horizonDate ? hardEnd : horizonDate;
+
+  const dates: Date[] = [];
+  let cursor = first;
+  for (let i = 0; i < MAX_OCCURRENCES && cursor <= limit; i += 1) {
+    if (cursor >= fromDate) dates.push(cursor);
+    const next = advance(cursor, frequency, intervalCount);
+    // Una cadencia que no avanza colgaría el bucle hasta el tope. Mejor cortar aquí.
+    if (next <= cursor) break;
+    cursor = next;
+  }
+  return dates;
+}
+
+/**
+ * Las cuotas que TODAVÍA no se han cobrado o pagado, con su fecha.
+ *
+ * Con plan, manda `coverPlan`: la MISMA función que pinta el avance en el detalle de la deuda.
+ * Una regla propia aquí —antes se restaba "principal − pendiente" desde la primera cuota— daba
+ * por cobradas las cuotas de setiembre a enero de Kevin con dinero de marzo a agosto.
+ *
+ * Sin plan pero con cuota, la próxima es el mes siguiente al último pago, en el día del mes en
+ * que empezó la deuda. Antes se contaba desde la fecha de VENCIMIENTO, que es el final: a Sergio
+ * le ponía la cuota de octubre en noviembre.
+ *
+ * Sin plan ni cuota, el saldo entero en su vencimiento. Inventar un cronograma donde nadie
+ * acordó uno sería peor que no proyectar nada.
+ */
+function pendingInstallments(obligation: ProjectionObligation): Array<{ dueDate: Date; amount: number }> {
+  const plan = parsePaymentPlan(obligation.paymentPlan);
+  const pending = obligation.pendingAmount;
+  if (pending <= EPSILON) return [];
+
+  if (plan && obligation.startDate) {
+    const currentDebt = obligation.principalCurrentAmount;
+    const rows = coverPlan(plan, obligation.openingPrincipal ?? currentDebt,
+      currentDebt, obligation.startDate, obligation.payments);
+    return rows
+      .filter((row) => row.remaining > EPSILON)
+      .map((row) => ({ dueDate: parseISO(row.dueDate), amount: row.remaining }))
+      .filter((row) => !Number.isNaN(row.dueDate.getTime()));
+  }
+
+  if (obligation.installmentAmount && obligation.installmentAmount > EPSILON && obligation.startDate) {
+    const start = parseISO(obligation.startDate);
+    if (Number.isNaN(start.getTime())) return [];
+    const day = start.getDate();
+    const last = obligation.lastPaymentDate ? parseISO(obligation.lastPaymentDate) : null;
+    const firstMonth =
+      last && !Number.isNaN(last.getTime())
+        ? addMonths(new Date(last.getFullYear(), last.getMonth(), 1), 1)
+        : new Date(start.getFullYear(), start.getMonth(), 1);
+
+    const rows: Array<{ dueDate: Date; amount: number }> = [];
+    let remaining = pending;
+    for (let i = 0; i < MAX_OCCURRENCES && remaining > EPSILON; i += 1) {
+      const month = addMonths(firstMonth, i);
+      const amount = Math.min(obligation.installmentAmount, remaining);
+      rows.push({
+        dueDate: new Date(month.getFullYear(), month.getMonth(), Math.min(day, getDaysInMonth(month))),
+        amount,
+      });
+      remaining -= amount;
+    }
+    return rows;
+  }
+
+  if (!obligation.dueDate) return [];
+  const dueDate = parseISO(obligation.dueDate);
+  if (Number.isNaN(dueDate.getTime())) return [];
+  return [{ dueDate, amount: pending }];
+}
+
+type MonthBucket = {
+  monthKey: string;
+  inflows: ProjectionLine[];
+  outflows: ProjectionLine[];
+  unconvertedCount: number;
+};
+
+/**
+ * Cuánto llega en una fecha: el último cambio programado que ya empezó, o el monto de hoy.
+ * Las fechas son `yyyy-MM-dd`, así que comparar texto es comparar fechas.
+ */
+function incomeAmountOn(income: ProjectionRecurringIncome, isoDate: string): number {
+  let amount = income.amount;
+  let appliedFrom = "";
+  for (const change of income.scheduledChanges ?? []) {
+    if (change.effectiveDate <= isoDate && change.effectiveDate >= appliedFrom && Number.isFinite(change.amount)) {
+      amount = change.amount;
+      appliedFrom = change.effectiveDate;
+    }
+  }
+  return amount;
+}
+
+export function buildCashflowCalendar(input: ProjectionInput): ProjectionResult {
+  const fromDate = parseISO(input.fromDate);
+  const monthCount = Math.max(1, Math.floor(input.months));
+  if (Number.isNaN(fromDate.getTime())) {
+    return { months: [], endingBalance: input.startingBalance, overallScheduledShare: 0, unconvertedCount: 0 };
+  }
+
+  // Ventana: desde hoy hasta el último día del último mes proyectado.
+  const lastMonth = addMonths(fromDate, monthCount - 1);
+  const horizonDate = addDays(addMonths(new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1), 1), -1);
+
+  const buckets = new Map<string, MonthBucket>();
+  const orderedKeys: string[] = [];
+  for (let i = 0; i < monthCount; i += 1) {
+    const key = monthKeyOf(addMonths(fromDate, i));
+    orderedKeys.push(key);
+    buckets.set(key, { monthKey: key, inflows: [], outflows: [], unconvertedCount: 0 });
+  }
+
+  const push = (date: Date, line: ProjectionLine, into: "inflows" | "outflows", converted: number | null) => {
+    if (!line.dueDate) line.dueDate = format(date, "yyyy-MM-dd");
+    const bucket = buckets.get(monthKeyOf(date));
+    if (!bucket) return;
+    if (converted === null) bucket.unconvertedCount += 1;
+    if (line.amount <= EPSILON) return;
+    bucket[into].push(line);
+  };
+
+  for (const income of input.recurringIncome) {
+    if (income.status !== "active") continue;
+    for (const date of occurrencesWithin(
+      income.nextExpectedDate,
+      income.frequency,
+      income.intervalCount,
+      income.endDate,
+      fromDate,
+      horizonDate,
+    )) {
+      const converted = input.convert(incomeAmountOn(income, format(date, "yyyy-MM-dd")), income.currencyCode);
+      const amount = converted ?? 0;
+      push(date, { kind: "recurring_income", label: income.name, amount, source: "scheduled", refId: income.id }, "inflows", converted);
+    }
+  }
+
+  for (const subscription of input.subscriptions) {
+    if (subscription.status !== "active") continue;
+    const converted = input.convert(subscription.amount, subscription.currencyCode);
+    const amount = converted ?? 0;
+    for (const date of occurrencesWithin(
+      subscription.nextDueDate,
+      subscription.frequency,
+      subscription.intervalCount,
+      subscription.endDate,
+      fromDate,
+      horizonDate,
+    )) {
+      push(
+        date,
+        { kind: "subscription", label: subscription.name, amount, source: "scheduled", refId: subscription.id },
+        "outflows",
+        converted,
+      );
+    }
+  }
+
+  for (const obligation of input.obligations) {
+    if (obligation.status !== "active" && obligation.status !== "defaulted") continue;
+    const collects = obligationViewerDirection(obligation) === "receivable";
+    for (const installment of pendingInstallments(obligation)) {
+      if (installment.dueDate > horizonDate) continue;
+      // Una cuota vencida y sin cobrar se sigue debiendo: entra en el mes en curso, marcada.
+      // Va como estimada porque ya se incumplió una vez: no merece la confianza de una pactada.
+      const overdue = installment.dueDate < startOfDay(fromDate);
+      const converted = input.convert(installment.amount, obligation.currencyCode);
+      const line: ProjectionLine = {
+        kind: collects ? "obligation_receivable" : "obligation_payable",
+        label: overdue ? `${obligation.title} (atrasada)` : obligation.title,
+        amount: converted ?? 0,
+        source: overdue ? "estimated" : "scheduled",
+        refId: obligation.id,
+        dueDate: format(installment.dueDate, "yyyy-MM-dd"),
+      };
+      push(overdue ? fromDate : installment.dueDate, line, collects ? "inflows" : "outflows", converted);
+    }
+  }
+
+  /**
+   * Los pagos de tarjeta, uno por día de pago dentro del horizonte.
+   *
+   * El primero es lo que YA se debe —monto conocido, fecha conocida: `scheduled`—. Los
+   * siguientes son el gasto típico de esa tarjeta, que para entonces ya se habrá cargado:
+   * `estimated`. Esa es toda la corrección de mes que el brief pedía.
+   */
+  for (const card of input.creditCards ?? []) {
+    if (card.paymentDay == null) continue;
+    const day = Math.min(31, Math.max(1, Math.floor(card.paymentDay)));
+    // El primer pago posterior o igual a hoy. El día se recorta al mes corto en cada vuelta y
+    // NO se arrastra: con día 31, febrero paga el 28 y marzo vuelve al 31.
+    const firstMonth =
+      day >= fromDate.getDate()
+        ? { year: fromDate.getFullYear(), month: fromDate.getMonth() }
+        : (() => {
+            const next = addMonths(fromDate, 1);
+            return { year: next.getFullYear(), month: next.getMonth() };
+          })();
+
+    for (let i = 0; i < MAX_OCCURRENCES; i += 1) {
+      const anchor = addMonths(new Date(firstMonth.year, firstMonth.month, 1), i);
+      const due = new Date(anchor.getFullYear(), anchor.getMonth(), Math.min(day, getDaysInMonth(anchor)));
+      if (due > horizonDate) break;
+      const isFirst = i === 0;
+      const amount = isFirst ? card.currentDebt : card.typicalMonthlySpend;
+      if (amount > EPSILON) {
+        const converted = input.convert(amount, card.currencyCode);
+        push(
+          due,
+          {
+            kind: "credit_card_payment",
+            label: card.name,
+            refId: card.id,
+            amount: converted ?? 0,
+            source: isFirst ? "scheduled" : "estimated",
+          },
+          "outflows",
+          converted,
+        );
+      }
+    }
+  }
+
+  for (const planned of input.plannedMovements) {
+    const date = parseISO(planned.occurredAt);
+    if (Number.isNaN(date.getTime()) || date < fromDate || date > horizonDate) continue;
+    const converted = input.convert(Math.abs(planned.signedAmount), planned.currencyCode);
+    const line: ProjectionLine = {
+      kind: "planned_movement",
+      label: planned.description,
+      refId: planned.id,
+      amount: converted ?? 0,
+      source: "scheduled",
+    };
+    push(date, line, planned.signedAmount >= 0 ? "inflows" : "outflows", converted);
+  }
+
+  const months: ProjectedMonth[] = [];
+  let balance = input.startingBalance;
+  let unconvertedTotal = 0;
+
+  orderedKeys.forEach((key, index) => {
+    const bucket = buckets.get(key)!;
+    const isPartial = index === 0;
+
+    // El gasto típico: una línea estimada por mes. El mes en curso va prorrateado por los días
+    // que le quedan — a día 16 ya gastaste medio mes, y cobrarlo entero hunde la primera fila.
+    if (input.typicalDiscretionarySpend > EPSILON) {
+      const daysInMonth = getDaysInMonth(addMonths(fromDate, index));
+      const share = isPartial ? Math.max(0, daysInMonth - fromDate.getDate() + 1) / daysInMonth : 1;
+      const amount = input.typicalDiscretionarySpend * share;
+      if (amount > EPSILON) {
+        bucket.outflows.push({
+          kind: "typical_spend",
+          label: isPartial ? "Gasto típico (resto del mes)" : "Gasto típico",
+          amount,
+          source: "estimated",
+        });
+      }
+    }
+
+    const inflowTotal = bucket.inflows.reduce((sum, line) => sum + line.amount, 0);
+    const outflowTotal = bucket.outflows.reduce((sum, line) => sum + line.amount, 0);
+    const movement = inflowTotal + outflowTotal;
+    const scheduled = [...bucket.inflows, ...bucket.outflows]
+      .filter((line) => line.source === "scheduled")
+      .reduce((sum, line) => sum + line.amount, 0);
+
+    const openingBalance = balance;
+    const netFlow = inflowTotal - outflowTotal;
+    balance = openingBalance + netFlow;
+    unconvertedTotal += bucket.unconvertedCount;
+
+    months.push({
+      monthKey: key,
+      openingBalance,
+      inflows: bucket.inflows,
+      outflows: bucket.outflows,
+      inflowTotal,
+      outflowTotal,
+      netFlow,
+      closingBalance: balance,
+      scheduledShare: movement > EPSILON ? scheduled / movement : 1,
+      unconvertedCount: bucket.unconvertedCount,
+      isPartial,
+    });
+  });
+
+  return {
+    months,
+    endingBalance: balance,
+    overallScheduledShare:
+      months.length > 0 ? months.reduce((sum, month) => sum + month.scheduledShare, 0) / months.length : 0,
+    unconvertedCount: unconvertedTotal,
+  };
+}

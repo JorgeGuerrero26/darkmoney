@@ -15,6 +15,7 @@ export type DashboardAiSummaryInputs = {
   netWorth: number;
   visibleBalance?: number;
   unconvertedAccounts?: number;
+  unconvertedProjection?: number;
   activeAccountsCount?: number;
   upcomingSubscriptions?: number;
   visibleAccounts?: string;
@@ -48,12 +49,10 @@ export function buildDashboardAiSummaryPayload(
     workspaceName: inputs.workspaceName,
     currency,
     visibleBalance: formatCurrency(inputs.visibleBalance ?? inputs.netWorth, currency),
-    // The web projection still starts from net worth. Declare that basis rather
-    // than pretending it is the newer mobile liquid-cash projection.
-    projectionBasis: "net_worth",
-    projectionStartingBalance: formatCurrency(inputs.netWorth, currency),
+    projectionBasis: "liquid_cash",
+    projectionStartingBalance: formatCurrency(inputs.visibleBalance ?? inputs.netWorth, currency),
     monthEndReading: formatCurrency(inputs.monthEndEstimate, currency),
-    monthEndDelta: formatCurrency(inputs.monthEndEstimate-inputs.netWorth,currency),
+    monthEndDelta: formatCurrency(inputs.monthEndEstimate-(inputs.visibleBalance ?? inputs.netWorth),currency),
     monthEndIncomeToDate: formatCurrency(inputs.monthEndIncomeToDate, currency),
     monthEndExpenseToDate: formatCurrency(inputs.monthEndExpenseToDate, currency),
     monthStatus: moneyStatus(inputs.monthEndIncomeToDate - inputs.monthEndExpenseToDate),
@@ -73,7 +72,7 @@ export function buildDashboardAiSummaryPayload(
     cashCushionDays: null,
     cashCushionLabel: null,
     collectionEfficiencyPct: null,
-    dataCoverage: {unconvertedAccounts:inputs.unconvertedAccounts??0, unavailableIndicators:["cashCushionDays","collectionEfficiencyPct"]},
+    dataCoverage: {unconvertedAccounts:inputs.unconvertedAccounts??0, unconvertedProjection:inputs.unconvertedProjection??0, unavailableIndicators:["cashCushionDays","collectionEfficiencyPct"]},
     topFocusAction: inputs.topFocusAction
       ? { title: inputs.topFocusAction.title, body: inputs.topFocusAction.body ?? "" }
       : null,

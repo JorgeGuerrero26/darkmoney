@@ -45,8 +45,8 @@ import {
   getPeriodBounds as getParityPeriodBounds,
   selectPeriodTotals as selectParityPeriodTotals,
 } from "@darkmoney/shared/aggregations";
-import { buildFutureFlowWindows as buildParityFutureFlowWindows } from "@darkmoney/shared/future-flow";
-import { buildMonthProjection } from "../lib/calendar-month-projection";
+import { buildDashboardCashflow } from "../lib/projection/build-dashboard-cashflow";
+import { useProjectionSupplement } from "../../../services/queries/dashboard-projection";
 import { buildParityNetWorth } from "@darkmoney/shared/net-worth";
 import { buildReadiness as buildParityReadiness } from "@darkmoney/shared/readiness";
 import { buildReviewInboxSnapshot as buildParityReviewInbox } from "@darkmoney/shared/review-inbox";
@@ -55,6 +55,7 @@ import type { Period as ParityPeriod } from "@darkmoney/shared/types";
 import { useDashboardAiSummary } from "../hooks/use-dashboard-ai-summary";
 import { buildDashboardAiSummaryPayload } from "../lib/build-ai-summary-payload";
 import { DashboardAiSummaryPanel } from "../components/dashboard-ai-summary-panel";
+import { CashflowMonthPanel } from "../components/cashflow-month-panel";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -207,6 +208,7 @@ export function DashboardPage() {
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
   const upsertFinancialGoalMutation = useUpsertWorkspaceFinancialGoalMutation();
   const sharedObligationsQuery = useSharedObligationsQuery(user?.id);
+  const projectionQuery = useProjectionSupplement(activeWorkspace?.id, user?.id);
   const snapshot = snapshotQuery.data;
   const sharedObligations = sharedObligationsQuery.data ?? [];
 
@@ -461,7 +463,7 @@ export function DashboardPage() {
     );
   }
 
-  if (snapshotQuery.isLoading || !snapshot) {
+  if (snapshotQuery.isLoading || !snapshot || snapshot.workspace.id !== activeWorkspace.id || snapshotQuery.isPlaceholderData) {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader
@@ -506,6 +508,13 @@ export function DashboardPage() {
   });
   const parityInputs = buildParityInputs(snapshot, parityNow);
   const parityNetWorth = buildParityNetWorth(snapshot.accounts, parityCtx);
+  const projectionReady = !projectionQuery.isError && !projectionQuery.isPending &&
+    !sharedObligationsQuery.isError && !sharedObligationsQuery.isPending &&
+    snapshot.workspace.id === activeWorkspace.id &&
+    projectionQuery.data?.workspaceId === activeWorkspace.id;
+  const cashflow = buildDashboardCashflow(snapshot, sharedObligations, projectionQuery.data?.workspaceId === snapshot.workspace.id
+    ? projectionQuery.data : { workspaceId: snapshot.workspace.id, oneOffTypeIds: [], scheduledChanges: [] }, parityCtx, parityNow);
+  const projectionMoney = (value: number) => projectionReady ? formatCurrency(value, displayCurrencyCode) : "Sin estimación";
   const parityPeriod: ParityPeriod = comparisonPreset === "week" ? "week" : "month";
   const parityPeriodBounds = getParityPeriodBounds(parityPeriod, parityNow);
   const parityCurrentTotals = selectParityPeriodTotals(
@@ -520,25 +529,8 @@ export function DashboardPage() {
     parityPeriodBounds.prevEnd,
     parityCtx,
   );
-  const parityFutureWindows = buildParityFutureFlowWindows(
-    parityInputs.obligations,
-    parityInputs.subscriptions,
-    parityInputs.recurringIncome,
-    displayCurrencyCode,
-    parityCtx.exchangeRateMap,
-    parityNetWorth.amount,
-    baseCurrencyCode,
-    parityNow,
-  );
-  const parityMonthProjection = buildMonthProjection(
-    parityInputs.movements,
-    parityInputs.obligations,
-    parityInputs.subscriptions,
-    parityInputs.recurringIncome,
-    parityNetWorth.amount,
-    parityCtx,
-    parityNow,
-  );
+  const parityFutureWindows = cashflow.windows;
+  const parityMonthProjection = cashflow.monthEnd;
   const parityReviewInbox = buildParityReviewInbox(
     parityInputs.movements,
     parityInputs.subscriptions,
@@ -547,7 +539,7 @@ export function DashboardPage() {
   );
   const parityReadiness = buildParityReadiness(parityInputs.movements, parityNow);
   const parityUnconvertedCount =
-    parityNetWorth.unconvertedCount + parityFutureWindows[2].unconvertedCount;
+    parityNetWorth.unconvertedCount + parityFutureWindows[2].unconvertedCount + cashflow.projection.unconvertedCount;
 
   const displayAccounts = snapshot.accounts.map((account) => {
     const convertedBalance = convertDashboardAmount({
@@ -1090,10 +1082,7 @@ export function DashboardPage() {
     const occurredAt = new Date(movement.occurredAt).getTime();
     return occurredAt >= startOfDay(new Date()).getTime();
   });
-  const liquidAccountTypes = new Set(["cash", "bank", "savings"]);
-  const liquidMoneyTotal = visibleAccounts
-    .filter((account) => liquidAccountTypes.has(account.type))
-    .reduce((total, account) => total + account.currentBalance, 0);
+  const liquidMoneyTotal = cashflow.liquid.total;
   const totalCash = visibleAccounts
     .filter((account) => account.type === "cash")
     .reduce((total, account) => total + account.currentBalance, 0);
@@ -1103,14 +1092,12 @@ export function DashboardPage() {
   const totalSavings = visibleAccounts
     .filter((account) => account.type === "savings")
     .reduce((total, account) => total + account.currentBalance, 0);
-  // Flujo futuro con paridad móvil: solo agenda comprometida (obligaciones con
-  // lógica de cuota, suscripciones e ingresos fijos activos) sobre el patrimonio.
-  // Los movimientos planned/pending NO entran al inflow/outflow; se reportan
-  // aparte como dato informativo.
+  // Same dated calendar lines as month-end: installments, subscriptions, incomes,
+  // cards and planned cash effects; typical discretionary spend has no due date.
   const futureFlowWindows = parityFutureWindows;
   const scheduledMovementsCount = scheduledMovements.length;
   const projectedLiquidBalance30Days =
-    futureFlowWindows.find((window) => window.days === 30)?.estimatedBalance ?? parityNetWorth.amount;
+    futureFlowWindows.find((window) => window.days === 30)?.estimatedBalance ?? cashflow.liquid.total;
   const averageDailySpend = currentTotals.expense / Math.max(1, comparisonDaySpan);
   const averageWeeklySpend = currentTotals.expense / Math.max(1, comparisonDaySpan / 7);
   const averageMonthlySavings =
@@ -1342,9 +1329,7 @@ export function DashboardPage() {
     activeSubscriptions,
   );
 
-  // Cierre de mes con paridad móvil: parte del patrimonio (no del líquido) y
-  // suma flujos comprometidos a 30 días + proyección variable. Mantiene la forma
-  // del antiguo monthEndEstimate para no romper los consumidores de la UI.
+  // Todos los cierres leen el primer mes del calendario de caja, igual que móvil.
   const monthEndEstimate = {
     estimatedLiquidAtMonthEnd: parityMonthProjection.expectedBalance,
     incomeMonthToDate: parityMonthProjection.variableIncomeObserved,
@@ -1403,7 +1388,7 @@ export function DashboardPage() {
   // IA del dashboard: arma el payload con los datos ya calculados y dispara la
   // Edge Function. El panel maneja tono, caché y límite diario.
   const handleGenerateAiSummary = () => {
-    if (!activeWorkspace) {
+    if (!activeWorkspace || !projectionReady) {
       return;
     }
     const liquidAccounts=snapshot.accounts.filter(account=>!account.isArchived&&["cash","bank","savings"].includes(account.type));
@@ -1415,8 +1400,9 @@ export function DashboardPage() {
       workspaceName: snapshot.workspace.name,
       displayCurrencyCode,
       netWorth: parityNetWorth.amount,
-      visibleBalance:liquidBalances.reduce((sum,row)=>sum+(row.amount??0),0),
-      unconvertedAccounts:liquidBalances.filter(row=>row.amount===null).length,
+      visibleBalance:cashflow.liquid.total,
+      unconvertedAccounts:cashflow.liquid.unconvertedCount,
+      unconvertedProjection:cashflow.projection.unconvertedCount,
       activeAccountsCount:snapshot.accounts.filter(account=>!account.isArchived).length,
       upcomingSubscriptions:parityReviewInbox.subscriptionsAttentionCount,
       visibleAccounts:liquidBalances.filter(row=>row.amount!==null).map(row=>`${row.name}: ${formatCurrency(row.amount!,displayCurrencyCode)}`).join(" · "),
@@ -1658,10 +1644,10 @@ export function DashboardPage() {
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
             <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
-              {formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}
+              {formatCurrency(cashflow.liquid.total, displayCurrencyCode)}
             </p>
             <p className="mt-3 text-sm text-storm">
-              En {visibleAccounts.length} {visibleAccounts.length === 1 ? "cuenta" : "cuentas"}. Este período entraron{" "}
+              En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. Este período entraron{" "}
               <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> y salieron{" "}
               <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>.
             </p>
@@ -1724,27 +1710,9 @@ export function DashboardPage() {
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
-          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
-            <p className="text-[13px] font-medium text-storm">Cierre de mes estimado</p>
-            <p className="mt-3 font-display text-3xl font-semibold text-ink">
-              {formatCurrency(parityMonthProjection.expectedBalance, displayCurrencyCode)}
-            </p>
-            <p className="mt-1 text-sm text-storm">Estimación al final del mes con lo registrado hasta hoy.</p>
-            <dl className="mt-5 divide-y divide-white/[0.07] border-t border-white/[0.07]">
-              <div className="flex items-center justify-between gap-4 py-3 text-sm">
-                <dt className="text-storm">Saldo disponible hoy</dt>
-                <dd className="font-medium text-ink">{formatCurrency(totalMoneyDisplay.amount, totalMoneyDisplay.currencyCode)}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-3 text-sm">
-                <dt className="text-storm">Comprometido por pagar</dt>
-                <dd className="font-medium text-ink">− {formatCurrency(parityMonthProjection.committedOutflow, displayCurrencyCode)}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-3 text-sm">
-                <dt className="text-storm">Ritmo variable estimado</dt>
-                <dd className="font-medium text-ink">{formatCurrency(parityMonthProjection.variableIncomeProjection - parityMonthProjection.variableExpenseProjection, displayCurrencyCode)}</dd>
-              </div>
-            </dl>
-          </article>
+          <CashflowMonthPanel model={cashflow} currency={displayCurrencyCode} ready={projectionReady}
+            failed={projectionQuery.isError || sharedObligationsQuery.isError}
+            onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />
 
           <div className="grid gap-5">
             <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
@@ -2450,7 +2418,8 @@ export function DashboardPage() {
           limitReached={dashboardAi.limitReached}
           onGenerate={handleGenerateAiSummary}
           onToneChange={dashboardAi.setTone}
-          response={dashboardAi.currentResponse}
+          response={projectionReady ? dashboardAi.currentResponse : null}
+          unavailableReason={projectionReady ? null : "Comprueba los datos de proyección antes de solicitar una explicación."}
           tone={dashboardAi.tone}
         />
 
@@ -2546,7 +2515,7 @@ export function DashboardPage() {
               <DashboardKpiHelpWrap className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3" metricId="adv_projected_cash_30">
                 <p className="text-[0.58rem] uppercase tracking-[0.16em] text-pine">Caja estimada a 30 días</p>
                 <p className="mt-1.5 font-display text-base font-semibold text-ink">
-                  {formatCurrency(projectedLiquidBalance30Days, displayCurrencyCode)}
+                  {projectionMoney(projectedLiquidBalance30Days)}
                 </p>
                 <p className="mt-1 text-[0.65rem] leading-relaxed text-storm/85">
                   Toma tu liquidez actual y suma o resta cobros, pagos y movimientos programados que la app ya conoce para ese plazo. Cifra orientativa.
@@ -2709,12 +2678,12 @@ export function DashboardPage() {
 
         {/* ── Desglose del cierre de mes (waterfall) ──────────────── */}
         {(() => {
-          const baseAmount = parityNetWorth.amount;
+          const baseAmount = cashflow.liquid.total;
           const steps = [
             { label: "Saldo hoy", value: baseAmount, sign: "base" as const },
             { label: "Entra comprometido", value: parityMonthProjection.committedInflow, sign: "in" as const },
             { label: "Sale comprometido", value: parityMonthProjection.committedOutflow, sign: "out" as const },
-            { label: "Proyección variable", value: parityMonthProjection.variableIncomeProjection - parityMonthProjection.variableExpenseProjection, sign: "var" as const },
+            { label: "Gasto habitual restante", value: -parityMonthProjection.variableExpenseProjection, sign: "var" as const },
           ];
           const maxMagnitude = Math.max(
             Math.abs(baseAmount),
@@ -2742,21 +2711,21 @@ export function DashboardPage() {
                 De dónde sale el cierre de mes
               </p>
               <p className="mt-1 text-[0.65rem] text-storm/50">
-                Tu saldo de hoy, más lo comprometido por cobrar y por pagar en ~30 días, más la
-                proyección del ritmo variable del mes.
+                Caja disponible, más cobros y menos pagos previstos hasta el último día del mes,
+                menos el gasto habitual de los días que quedan. Inversiones no son caja; tarjetas salen en su fecha de pago.
               </p>
               <div className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                 {steps.map((step) => (
                   <div key={step.label}>
                     <p className="text-[0.6rem] uppercase tracking-[0.16em] text-storm">{step.label}</p>
                     <p className="mt-1.5 font-display text-base font-semibold text-ink">
-                      {signPrefix(step.sign, step.value)}
-                      {formatCurrency(Math.abs(step.value), displayCurrencyCode)}
+                      {projectionReady ? signPrefix(step.sign, step.value) : ""}
+                      {projectionMoney(Math.abs(step.value))}
                     </p>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                       <div
                         className={`h-full rounded-full ${barColor(step.sign, step.value)}`}
-                        style={{ width: `${Math.max(4, (Math.abs(step.value) / maxMagnitude) * 100)}%` }}
+                        style={{ width: projectionReady ? `${Math.max(4, (Math.abs(step.value) / maxMagnitude) * 100)}%` : "0%" }}
                       />
                     </div>
                   </div>
@@ -2764,7 +2733,7 @@ export function DashboardPage() {
                 <div className="rounded-[16px] border border-gold/22 bg-gold/10 px-4 py-3 lg:self-stretch lg:flex lg:flex-col lg:justify-center">
                   <p className="text-[0.6rem] uppercase tracking-[0.16em] text-gold">Cierre estimado</p>
                   <p className="mt-1.5 font-display text-lg font-semibold text-ink">
-                    {formatCurrency(parityMonthProjection.expectedBalance, displayCurrencyCode)}
+                    {projectionMoney(parityMonthProjection.expectedBalance)}
                   </p>
                 </div>
               </div>
@@ -2780,12 +2749,10 @@ export function DashboardPage() {
             </div>
             <p className="pr-10 text-[0.65rem] uppercase tracking-[0.2em] text-storm">Cierre estimado (mes calendario)</p>
             <p className="mt-3 font-display text-xl font-semibold leading-snug text-ink sm:text-2xl">
-              Si sigues el ritmo de ingresos y gastos de este mes, tu caja líquida rondaría{" "}
-              {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)} al cierre.
+              Caja prevista al cierre: {projectionMoney(monthEndEstimate.estimatedLiquidAtMonthEnd)}.
             </p>
             <p className="mt-3 text-sm leading-6 text-storm">
-              Proyección a partir del neto diario del mes en curso y saldos de efectivo, banco y ahorros (no incluye
-              cuentas fuera de liquidez inmediata).
+              Caja líquida más cobros y menos pagos previstos, menos el gasto habitual de los días restantes.
             </p>
           </div>
           {proMonthlyGoal !== null && proMonthlyGoal > 0 ? (
@@ -4218,25 +4185,22 @@ export function DashboardPage() {
                     <div className="rounded-[18px] border border-pine/18 bg-pine/10 p-3">
                       <p className="text-xs uppercase tracking-[0.16em] text-pine">Entra</p>
                       <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(proWeekPressure.expectedInflow, displayCurrencyCode)}
+                        {projectionMoney(proWeekPressure.expectedInflow)}
                       </p>
                     </div>
                     <div className="rounded-[18px] border border-ember/18 bg-ember/10 p-3">
                       <p className="text-xs uppercase tracking-[0.16em] text-ember">Sale</p>
                       <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(proWeekPressure.expectedOutflow, displayCurrencyCode)}
+                        {projectionMoney(proWeekPressure.expectedOutflow)}
                       </p>
                     </div>
                     <div className="rounded-[18px] border border-white/10 bg-white/[0.04] p-3">
                       <p className="text-xs uppercase tracking-[0.16em] text-storm">Balance neto</p>
                       <p className="mt-2 font-display text-lg font-semibold text-ink">
-                        {formatCurrency(
-                          proWeekPressure.expectedInflow - proWeekPressure.expectedOutflow,
-                          displayCurrencyCode,
-                        )}
+                        {projectionMoney(proWeekPressure.expectedInflow - proWeekPressure.expectedOutflow)}
                       </p>
                       <p className="mt-1 text-xs text-storm">
-                        Caja estimada después: {formatCurrency(proWeekPressure.estimatedBalance, displayCurrencyCode)}
+                        Caja estimada después: {projectionMoney(proWeekPressure.estimatedBalance)}
                       </p>
                     </div>
                   </div>
@@ -4246,13 +4210,11 @@ export function DashboardPage() {
                   <div className="rounded-[22px] border border-gold/20 bg-gold/10 p-4">
                     <p className="text-[0.65rem] uppercase tracking-[0.2em] text-gold">Caja estimada a fin de mes</p>
                     <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}
+                      {projectionMoney(monthEndEstimate.estimatedLiquidAtMonthEnd)}
                     </p>
                     <p className="mt-2 text-xs leading-5 text-storm">
-                      Extrapolación desde tu neto del mes (día {monthEndEstimate.daysElapsedInMonth}): ingresos{" "}
-                      {formatCurrency(monthEndEstimate.incomeMonthToDate, displayCurrencyCode)} · gastos{" "}
-                      {formatCurrency(monthEndEstimate.expenseMonthToDate, displayCurrencyCode)}. No incluye todo lo
-                      impredecible.
+                      Parte de tu caja líquida y aplica cuotas, suscripciones, ingresos fijos y movimientos
+                      planificados. Resta el gasto habitual medido en seis meses terminados, sin repetir cobros ya proyectados.
                     </p>
                   </div>
                   <div
@@ -4613,17 +4575,16 @@ export function DashboardPage() {
                   <div className="mb-4 rounded-[22px] border border-gold/20 bg-gold/8 p-4">
                     <p className="text-[0.65rem] uppercase tracking-[0.2em] text-storm">Lectura rápida (mes calendario)</p>
                     <p className="mt-2 font-display text-lg font-semibold text-ink sm:text-xl">
-                      Si mantienes el ritmo de este mes, al cierre tu caja líquida rondaría{" "}
-                      {formatCurrency(monthEndEstimate.estimatedLiquidAtMonthEnd, displayCurrencyCode)}.
+                      Caja prevista al cierre: {projectionMoney(monthEndEstimate.estimatedLiquidAtMonthEnd)}.
                     </p>
                     <p className="mt-2 text-xs text-storm">
                       Misma estimación que en Resumen principal; aquí abajo el detalle por ventana de días.
                     </p>
                     {scheduledMovementsCount > 0 ? (
                       <p className="mt-2 text-xs text-storm/80">
-                        Además tienes {scheduledMovementsCount}{" "}
+                        Tienes {scheduledMovementsCount}{" "}
                         {scheduledMovementsCount === 1 ? "movimiento planificado" : "movimientos planificados"} que
-                        no entran en esta proyección de compromisos.
+                        se revisan por su efecto en caja en el cierre y las ventanas de abajo. Los traspasos entre cuentas líquidas no cambian la caja.
                       </p>
                     ) : null}
                     {parityUnconvertedCount > 0 ? (
@@ -4649,7 +4610,7 @@ export function DashboardPage() {
                               Próximos {window.days} días
                             </p>
                             <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                              {formatCurrency(window.estimatedBalance, displayCurrencyCode)}
+                              {projectionMoney(window.estimatedBalance)}
                             </p>
                             <p className="mt-2 text-sm text-storm">Saldo estimado despues de compromisos.</p>
                           </div>
@@ -4662,13 +4623,13 @@ export function DashboardPage() {
                           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                             <p className="text-xs uppercase tracking-[0.18em] text-pine">Ingresos esperados</p>
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                              {formatCurrency(window.expectedInflow, displayCurrencyCode)}
+                              {projectionMoney(window.expectedInflow)}
                             </p>
                           </div>
                           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
                             <p className="text-xs uppercase tracking-[0.18em] text-ember">Pagos esperados</p>
                             <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                              {formatCurrency(window.expectedOutflow, displayCurrencyCode)}
+                              {projectionMoney(window.expectedOutflow)}
                             </p>
                           </div>
                           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">

@@ -660,7 +660,7 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   dashboard_period_close: S({
     paragraphs: [
-      "Mira el mes calendario actual (del 1 al último día del mes). Toma cuánto te sobra o falta por día en promedio hasta hoy y proyecta el último día.",
+      "Estima cuánto quedaría al final del mes: caja de hoy más cobros y menos pagos previstos, y menos el gasto habitual de los días restantes. El gasto habitual se mide con seis meses ya terminados, sin repetir suscripciones o cuotas.",
       "Solo usa cuentas “líquidas” (efectivo, banco, ahorros que la app trata como caja). No es un informe contable oficial.",
     ],
   }),

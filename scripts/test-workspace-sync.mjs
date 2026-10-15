@@ -5,12 +5,12 @@ import ts from "typescript";
 const source = readFileSync(new URL("../src/modules/workspaces/workspace-data-sync.ts", import.meta.url), "utf8");
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { startWorkspaceDataSync, isWorkspaceDataQuery, workspaceSyncTables } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
-for (const name of ["workspace-snapshot", "categories-overview", "counterparties-overview", "recurring_income_occurrences"]) {
+for (const name of ["workspace-snapshot", "dashboard-projection-inputs", "categories-overview", "counterparties-overview", "recurring_income_occurrences"]) {
   assert.equal(isWorkspaceDataQuery([name, 7, "user"], 7), true);
   assert.equal(isWorkspaceDataQuery([name, 8, "user"], 7), false);
 }
 assert.equal(isWorkspaceDataQuery(["notifications", 7], 7), false);
-for (const table of ["accounts", "movements", "categories", "counterparties", "subscriptions", "recurring_income", "budgets", "obligations"]) assert.ok(workspaceSyncTables.includes(table));
+for (const table of ["accounts", "movements", "categories", "counterparties", "subscriptions", "recurring_income", "budgets", "obligations", "spend_types"]) assert.ok(workspaceSyncTables.includes(table));
 let timer = null, changed, wake, poll;
 let visible = true, stale = false, calls = 0, cleanups = 0, reject = false;
 let release = null;
