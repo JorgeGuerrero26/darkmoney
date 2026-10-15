@@ -18,6 +18,7 @@
     "test:detected-split-web": "node scripts/test-detected-split-web.mjs",
     "test:web-assistant": "node scripts/test-web-assistant.mjs && node scripts/test-dashboard-ai-scope.mjs",
     "test:dashboard-cashflow": "node scripts/test-dashboard-cashflow.mjs",
+    "test:dashboard-health": "node scripts/test-dashboard-health.mjs",
     "test:obligation-notification-ui": "node scripts/test-obligation-notification-ui.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:notification-day": "node scripts/test-notification-day-ui.mjs",

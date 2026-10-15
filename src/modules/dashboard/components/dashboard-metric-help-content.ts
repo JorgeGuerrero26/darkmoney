@@ -166,9 +166,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   kpi_savings_rate: a({
     title: "Capacidad de ahorro (%)",
     paragraphs: [
-      "Misma idea que “Capacidad de ahorro” en el bloque avanzado: qué parte de tus ingresos del período seleccionado quedó como ahorro neto después de restar gastos aplicados.",
-      "Fórmula: (Ingresos del período − Gastos del período) ÷ Ingresos del período, en porcentaje. Si no hay ingresos o el resultado no es válido, verás “Sin dato”.",
-      "La tarjeta de Salud usa umbrales orientativos (por ejemplo sano por encima del ~10%); son guías, no reglas absolutas.",
+      "Usa los seis meses terminados anteriores al actual: ahorro total dividido por ingresos totales. No promedia porcentajes mensuales ni cambia al seleccionar una semana.",
+      "El mes en curso aparece aparte. Los ajustes de saldo no son ingresos ni gastos. Sin ingresos o conversiones completas se muestra “Sin dato”.",
     ],
     example: "Ingresos del mes S/ 4 000, gastos S/ 3 360 → ahorro neto S/ 640 → capacidad 16%.",
     chart: "savings-capacity",
@@ -177,8 +176,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   kpi_coverage_months: a({
     title: "Cobertura (meses)",
     paragraphs: [
-      "Estima cuántos meses podrías cubrir con tu liquidez “conservadora” si el gasto reciente del workspace se mantuviera parecido.",
-      "Combina saldos líquidos (efectivo, banco, ahorros tratados como caja) con una referencia de gasto mensual reciente. Si falta gasto o datos, muestra “Sin dato”.",
+      "Divide la caja líquida entre el gasto mensual medio de los meses terminados con actividad dentro de los últimos seis. Sin referencia histórica de gasto usa los últimos 30 días.",
+      "Banco, efectivo y ahorros activos son caja; inversiones y tarjetas no. Sin gasto o conversión muestra “Sin dato”. Los días con compromisos son una lectura adicional, no la reserva base.",
       "Valores en torno a 3 meses o más suelen interpretarse como colchón razonable en la tarjeta de Salud; depende de tu situación.",
     ],
     example: "Liquidez conservadora S/ 9 000 y gasto mensual de referencia S/ 3 000 → unos 3 meses de cobertura.",
@@ -187,9 +186,8 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   kpi_debt_income: a({
     title: "Ratio deuda / ingreso",
     paragraphs: [
-      "Relación entre pasivo relevante (lo que debes en obligaciones y deudas que el modelo considera) y los ingresos del período seleccionado.",
-      "Un porcentaje alto indica que gran parte de lo que entra ya está comprometida con deuda; uno bajo deja más margen operativo.",
-      "La tarjeta suele marcar como “sano” un valor por debajo del ~40%; es orientativo.",
+      "Saldo pendiente de obligaciones activas que te corresponde pagar, dividido por el ingreso mensual medio de meses terminados con actividad dentro de los últimos seis.",
+      "Las compartidas se leen desde tu perspectiva. Es deuda total frente a un mes de ingreso histórico: no es la cuota mensual ni el porcentaje del sueldo comprometido cada mes.",
     ],
   }),
 
@@ -732,7 +730,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
     paragraphs: [
       "Síntesis de liquidez ajustada, capacidad de ahorro, cobertura de meses con gasto actual, ratio deuda/ingreso y próximos pagos/cobros.",
       "Va de la mano de los KPI del resumen (en vista simple verás parte de ellos en la tarjeta Salud) pero aquí los agrupa con texto orientativo.",
-      "No usa el filtro cruzado de categoría/cuenta del encabezado: los ratios se calculan con la lógica global del workspace y el período del selector.",
+      "No usa los filtros de categoría ni período: usa meses terminados y caja líquida global. Sin historia o conversiones suficientes no muestra una nota favorable por defecto.",
     ],
   }),
 
@@ -746,7 +744,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   health_savings_capacity: a({
     title: "Capacidad de ahorro (centro de salud)",
     paragraphs: [
-      "Mismo ratio que en el bloque avanzado: qué fracción de los ingresos del período quedó como ahorro neto. Valores altos indican margen; negativos o cero, tensión.",
+      "Ahorro total dividido por ingresos totales de los últimos seis meses terminados. El porcentaje actual aparece aparte. Los meses con gasto y sin ingresos también reducen el ahorro histórico.",
     ],
     chart: "savings-capacity",
   }),
@@ -762,7 +760,7 @@ export const DASHBOARD_METRIC_HELP: Record<string, DashboardMetricArticle> = {
   health_debt_to_income: a({
     title: "Deuda / ingreso",
     paragraphs: [
-      "Relación entre lo que debes (pasivo relevante) y tus ingresos del período. Un ratio alto sugiere que gran parte de lo que entra ya está comprometida con deuda.",
+      "Deuda activa pendiente desde tu perspectiva dividida por el ingreso mensual medio histórico. Es saldo total, no cuota mensual, y no cambia al mirar una semana.",
     ],
   }),
 

@@ -47,8 +47,8 @@ export function useDashboardAiSummary({
   isAdmin?: boolean;
 }) {
   const toneKey = userId ? `${TONE_KEY_PREFIX}.${userId}` : null;
-  // Older scoped replies were based on net worth. Keep quota, never reuse that explanation.
-  const cacheKey = userId && workspaceId && currencyCode ? `${SUMMARY_CACHE_KEY_PREFIX}.${userId}.${workspaceId}.${currencyCode}.liquid-v1` : null;
+  // Previous replies used net worth or selected-period health. Preserve quota, not that interpretation.
+  const cacheKey = userId && workspaceId && currencyCode ? `${SUMMARY_CACHE_KEY_PREFIX}.${userId}.${workspaceId}.${currencyCode}.liquid-health-v2` : null;
   const usageKey = userId ? `${SUMMARY_CACHE_KEY_PREFIX}.usage.${userId}` : null;
   const expectedWorkspaceId=workspaceId;
 

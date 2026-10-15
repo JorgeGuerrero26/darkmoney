@@ -50,12 +50,13 @@ import { useProjectionSupplement } from "../../../services/queries/dashboard-pro
 import { buildParityNetWorth } from "@darkmoney/shared/net-worth";
 import { buildReadiness as buildParityReadiness } from "@darkmoney/shared/readiness";
 import { buildReviewInboxSnapshot as buildParityReviewInbox } from "@darkmoney/shared/review-inbox";
-import { buildHealthScore } from "@darkmoney/shared/health";
+import { buildDashboardHealth } from "../lib/dashboard-health";
 import type { Period as ParityPeriod } from "@darkmoney/shared/types";
 import { useDashboardAiSummary } from "../hooks/use-dashboard-ai-summary";
 import { buildDashboardAiSummaryPayload } from "../lib/build-ai-summary-payload";
 import { DashboardAiSummaryPanel } from "../components/dashboard-ai-summary-panel";
 import { CashflowMonthPanel } from "../components/cashflow-month-panel";
+import { DashboardHealthPanel } from "../components/dashboard-health-panel";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1151,20 +1152,14 @@ export function DashboardPage() {
     baseCurrencyCode,
     exchangeRateMap,
   );
-  // Salud financiera unificada (@darkmoney/shared): score 0-100 con los inputs
-  // correctos — dinero solo líquido, cobertura sobre promedio 6m, e ingresos/neto
-  // del mismo período de paridad que usa el resto del dashboard.
-  const healthScore = buildHealthScore({
-    liquidMoney: liquidMoneyTotal,
-    averageMonthlyExpense:
-      monthlyPulse.length > 0
-        ? monthlyPulse.reduce((total, item) => total + item.expense, 0) / monthlyPulse.length
-        : 0,
-    periodIncome: parityCurrentTotals.income,
-    periodNet: parityCurrentTotals.net,
-    totalPayable: payableDisplay.amount,
-    overdueCount: overdueObligations.length,
+  // History and health do not depend on the selected comparison period.
+  const dashboardHealth = buildDashboardHealth({
+    snapshot, shared: sharedObligations, ctx: parityCtx, liquid: cashflow.liquid,
+    commitmentsOutflow: projectionReady ? cashflow.windows[2].expectedOutflow : null,
+    obligationsReady: !sharedObligationsQuery.isPending && !sharedObligationsQuery.isError,
+    now: parityNow,
   });
+  const healthScore = dashboardHealth.health;
   // Dinero libre real: liquidez menos salidas comprometidas a 30 días (dato
   // derivado, ya no parte del score de salud).
   const realFreeMoney = liquidMoneyTotal - upcomingOutflows;
@@ -1388,7 +1383,7 @@ export function DashboardPage() {
   // IA del dashboard: arma el payload con los datos ya calculados y dispara la
   // Edge Function. El panel maneja tono, caché y límite diario.
   const handleGenerateAiSummary = () => {
-    if (!activeWorkspace || !projectionReady) {
+    if (!activeWorkspace || !projectionReady || !canUseAdvancedDashboard) {
       return;
     }
     const liquidAccounts=snapshot.accounts.filter(account=>!account.isArchived&&["cash","bank","savings"].includes(account.type));
@@ -1407,15 +1402,22 @@ export function DashboardPage() {
       upcomingSubscriptions:parityReviewInbox.subscriptionsAttentionCount,
       visibleAccounts:liquidBalances.filter(row=>row.amount!==null).map(row=>`${row.name}: ${formatCurrency(row.amount!,displayCurrencyCode)}`).join(" · "),
       monthEndEstimate: monthEndEstimate.estimatedLiquidAtMonthEnd,
-      monthEndIncomeToDate: monthEndEstimate.incomeMonthToDate,
-      monthEndExpenseToDate: monthEndEstimate.expenseMonthToDate,
+      monthEndIncomeToDate: dashboardHealth.unconvertedCurrent ? null : dashboardHealth.savings.months[6].income,
+      monthEndExpenseToDate: dashboardHealth.unconvertedCurrent ? null : dashboardHealth.savings.months[6].expense,
       weekExpectedInflow: futureFlowWindows[0]?.expectedInflow ?? 0,
       weekExpectedOutflow: futureFlowWindows[0]?.expectedOutflow ?? 0,
       weekNet:
         (futureFlowWindows[0]?.expectedInflow ?? 0) - (futureFlowWindows[0]?.expectedOutflow ?? 0),
       unresolvedIssues: reviewInboxTotalIssues,
       readinessScore: parityReadiness.readinessScore,
-      savingsRate: healthScore.savingsRate,
+      savingsRate: dashboardHealth.savings.currentPct === null ? null : dashboardHealth.savings.currentPct / 100,
+      savingsAveragePct: dashboardHealth.savings.averagePct,
+      cashCushionDays: dashboardHealth.cashCushion.days,
+      cashCushionLabel: dashboardHealth.cashCushion.days === null ? null : dashboardHealth.cashCushion.label,
+      collectionEfficiencyPct: dashboardHealth.collection.rate,
+      incomeStabilityScore: dashboardHealth.incomeStability.score,
+      unconvertedHealthHistory: dashboardHealth.unconvertedHistory,
+      unconvertedHealthPayables: dashboardHealth.unconvertedPayables,
       uncategorizedCount: uncategorizedMovements.length,
       overdueObligationsCount: overdueObligations.length,
       activeSubscriptionsCount: activeSubscriptions.length,
@@ -1634,9 +1636,16 @@ export function DashboardPage() {
     />
   ) : null;
 
-  if (comparisonOptions.length > 0) {
-    const coverageDays = healthScore.coverageMonths === null ? null : Math.round(healthScore.coverageMonths * 30);
+  const dashboardAiPanel = canUseAdvancedDashboard ? <DashboardAiSummaryPanel
+    errorMessage={dashboardAi.error instanceof Error ? dashboardAi.error.message : null}
+    isPending={dashboardAi.isPending} limitReached={dashboardAi.limitReached}
+    onGenerate={handleGenerateAiSummary} onToneChange={dashboardAi.setTone}
+    response={projectionReady ? dashboardAi.currentResponse : null}
+    unavailableReason={projectionReady ? null : "Comprueba los datos de proyección antes de solicitar una explicación."}
+    tone={dashboardAi.tone}
+  /> : null;
 
+  if (comparisonOptions.length > 0) {
     return (
       <div className="flex flex-col gap-7 pb-8">
         <h1 className="sr-only">Inicio</h1>
@@ -1709,7 +1718,7 @@ export function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+        <section className="grid items-start gap-5 lg:grid-cols-[1.25fr_1fr]">
           <CashflowMonthPanel model={cashflow} currency={displayCurrencyCode} ready={projectionReady}
             failed={projectionQuery.isError || sharedObligationsQuery.isError}
             onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />
@@ -1722,17 +1731,14 @@ export function DashboardPage() {
                 Entraron <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> · salieron <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>
               </p>
             </article>
-            <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
-              <p className="text-[13px] font-medium text-storm">Reserva</p>
-              <p className="mt-3 font-display text-3xl font-semibold text-ink">
-                {healthScore.coverageMonths === null ? "Sin dato" : `${healthScore.coverageMonths.toFixed(1)} meses`}
-              </p>
-              <p className="mt-2 text-sm text-storm">
-                {coverageDays === null ? "Aún faltan datos para estimar tu cobertura." : `Con lo que tienes hoy cubres aproximadamente ${coverageDays} días de gasto.`}
-              </p>
-            </article>
+            <DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />
           </div>
         </section>
+
+        {dashboardAiPanel ? <details className="border-t border-white/[0.07] pt-5">
+          <summary className="cursor-pointer text-sm font-medium text-ink">Explicar mi situación con IA</summary>
+          <div className="mt-4">{dashboardAiPanel}</div>
+        </details> : null}
 
         <section className="border-t border-white/[0.07] pt-7">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -1841,7 +1847,7 @@ export function DashboardPage() {
             <div className="mt-5 grid grid-cols-3 gap-3">
               {futureFlowWindows.map((window) => {
                 const maxFlow = Math.max(1, window.expectedInflow, window.expectedOutflow);
-                return <div className="rounded-[7px] border border-white/[0.07] p-3" key={window.days}><p className="font-public-mono text-[10px] uppercase text-storm">{window.days} días</p><div className="mt-3 flex h-24 items-end justify-center gap-1"><div className="w-5 rounded-t-[3px] bg-pine" style={{ height: `${Math.max(2, (window.expectedInflow / maxFlow) * 100)}%` }} /><div className="w-5 rounded-t-[3px] bg-[#f4f1ec]" style={{ height: `${Math.max(2, (window.expectedOutflow / maxFlow) * 100)}%` }} /></div><p className="mt-2 truncate text-center text-xs font-medium text-ink">{formatCurrency(window.estimatedBalance, displayCurrencyCode)}</p></div>;
+                return <div className="rounded-[7px] border border-white/[0.07] p-3" key={window.days}><p className="font-public-mono text-[10px] uppercase text-storm">{window.days} días</p><div className="mt-3 flex h-24 items-end justify-center gap-1"><div className="w-5 rounded-t-[3px] bg-pine" style={{ height: projectionReady ? `${Math.max(2, (window.expectedInflow / maxFlow) * 100)}%` : "0%" }} /><div className="w-5 rounded-t-[3px] bg-[#f4f1ec]" style={{ height: projectionReady ? `${Math.max(2, (window.expectedOutflow / maxFlow) * 100)}%` : "0%" }} /></div><p className="mt-2 truncate text-center text-xs font-medium text-ink">{projectionMoney(window.estimatedBalance)}</p></div>;
               })}
             </div>
           </article>
@@ -2401,7 +2407,7 @@ export function DashboardPage() {
                       : "text-rosewood"
                 }`}
               >
-                {healthScore.score}
+                {healthScore.score ?? "—"}
               </span>
               <span className="text-sm font-medium text-storm/60">/100</span>
             </div>
@@ -2410,18 +2416,7 @@ export function DashboardPage() {
         </div>
 
         {/* ── Panel de IA: "Tu situación explicada" ───────────────── */}
-        <DashboardAiSummaryPanel
-          errorMessage={
-            dashboardAi.error instanceof Error ? dashboardAi.error.message : null
-          }
-          isPending={dashboardAi.isPending}
-          limitReached={dashboardAi.limitReached}
-          onGenerate={handleGenerateAiSummary}
-          onToneChange={dashboardAi.setTone}
-          response={projectionReady ? dashboardAi.currentResponse : null}
-          unavailableReason={projectionReady ? null : "Comprueba los datos de proyección antes de solicitar una explicación."}
-          tone={dashboardAi.tone}
-        />
+        {dashboardAiPanel}
 
         {/* ── Salud financiera: detalle de los 4 indicadores ────────── */}
         <div className="glass-panel-soft rounded-[24px] p-5">
@@ -5177,7 +5172,7 @@ export function DashboardPage() {
             >
               {isWidgetVisible("health_center") ? (
                 <SurfaceCard
-                  action={<StatusBadge status={`Salud ${healthScore.score}/100`} tone={healthScore.tone} />}
+                  action={<StatusBadge status={healthScore.score === null ? "Sin valoración" : `Salud ${healthScore.score}/100`} tone={healthScore.tone} />}
                   description="Lectura rápida de liquidez, ahorro y presión financiera usando lo que ya pasó y lo que viene."
                   title="Centro de salud financiera"
                   titleAccessory={<DashboardHelpTrigger metricId="widget_health_center" />}
@@ -5197,7 +5192,7 @@ export function DashboardPage() {
                       <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_savings_capacity">
                         <p className="text-xs uppercase tracking-[0.18em] text-storm">Capacidad de ahorro</p>
                         <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                          {formatPercentage(Math.max(0, savingsCapacity))}
+                          {healthScore.savingsRate === null ? "Sin dato" : formatPercentage(healthScore.savingsRate)}
                         </p>
                       </DashboardKpiHelpWrap>
                       <DashboardKpiHelpWrap className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4" metricId="health_coverage_months">

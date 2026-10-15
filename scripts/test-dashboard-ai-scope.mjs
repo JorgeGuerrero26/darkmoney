@@ -10,7 +10,9 @@ async function render(p=props){if(!renderer){container=document.createElement("d
 const today=getDashboardAiUsageDate();
 window.localStorage.setItem("darkmoney.dashboard.aiSummaryCache.u",JSON.stringify({usageDate:today,lastUsedAt:new Date().toISOString(),responses:{personal:{reply:"UNSCOPED_LEGACY",complexTerms:[],generatedAt:new Date().toISOString()}}}));
 window.localStorage.setItem("darkmoney.dashboard.aiSummaryCache.u.8.PEN",JSON.stringify({usageDate:today,lastUsedAt:new Date().toISOString(),responses:{personal:{reply:"OLD_NET_WORTH",complexTerms:[],generatedAt:new Date().toISOString()}}}));
-await render();assert.doesNotMatch(container.textContent,/UNSCOPED_LEGACY|OLD_NET_WORTH/);
+window.localStorage.setItem("darkmoney.dashboard.aiSummaryCache.u.8.PEN.liquid-v1",JSON.stringify({usageDate:today,lastUsedAt:new Date().toISOString(),responses:{personal:{reply:"OLD_PERIOD_HEALTH",complexTerms:[],generatedAt:new Date().toISOString()}}}));
+await render();assert.doesNotMatch(container.textContent,/UNSCOPED_LEGACY|OLD_NET_WORTH|OLD_PERIOD_HEALTH/);
+await render({...props,isAdmin:false});assert.equal(globalThis.summaryHook.limitReached,true);await render(props);
 await assert.rejects(globalThis.summaryHook.requestSummary(9,{currency:"PEN"}),/espacio/);assert.equal(globalThis.summaryCalls.length,0);
 await act(async()=>globalThis.summaryHook.requestSummary(8,{currency:"PEN"}));assert.match(container.textContent,/Scoped explanation/);
 await render({...props,workspaceId:9});assert.doesNotMatch(container.textContent,/Scoped explanation/);
@@ -23,4 +25,8 @@ await act(async()=>{finish({ok:true,reply:"STALE_REPLY",complexTerms:[]});await 
 await render({...props,userId:"other"});assert.doesNotMatch(container.textContent,/Scoped explanation|STALE_REPLY/);
 const input={workspaceName:"Personal",displayCurrencyCode:"PEN",netWorth:1000,visibleBalance:250,monthEndEstimate:1200,monthEndIncomeToDate:100,monthEndExpenseToDate:50,weekExpectedInflow:80,weekExpectedOutflow:40,weekNet:40,unresolvedIssues:0,readinessScore:80,savingsRate:0.2,uncategorizedCount:0,overdueObligationsCount:0,activeSubscriptionsCount:2,topFocusAction:null,unconvertedAccounts:1};
 const payload=buildDashboardAiSummaryPayload(input);assert.match(payload.visibleBalance,/250/);assert.match(payload.monthEndDelta,/950/);assert.equal(payload.projectionBasis,"liquid_cash");assert.equal(payload.cashCushionDays,null);assert.equal(payload.dataCoverage.unconvertedAccounts,1);assert.equal(payload.savingsRatePct,20);
+const healthPayload=buildDashboardAiSummaryPayload({...input,savingsRate:0.625,savingsAveragePct:69,cashCushionDays:116,cashCushionLabel:"Sólido",collectionEfficiencyPct:0,incomeStabilityScore:50});
+assert.equal(healthPayload.savingsRatePct,62.5);assert.equal(healthPayload.savingsAveragePct,69);assert.equal(healthPayload.cashCushionDays,116);assert.equal(healthPayload.collectionEfficiencyPct,0);assert.equal(healthPayload.dataCoverage.unavailableIndicators.length,0);
+const partial=buildDashboardAiSummaryPayload({...input,monthEndIncomeToDate:null,monthEndExpenseToDate:null,savingsRate:null,unconvertedHealthHistory:1});
+assert.equal(partial.monthStatus,null);assert.equal(partial.monthEndIncomeToDate,null);assert.ok(partial.dataCoverage.unavailableIndicators.includes("monthStatus"));assert.equal(partial.dataCoverage.unconvertedHealthHistory,1);
 await act(async()=>renderer.unmount());container.remove();dom.window.close();console.log("dashboard-ai-scope: OK (workspace/currency/user cache isolation, legacy quota only, cancelled late reply, source balance/projection basis and missing indicators declared; no live AI)");

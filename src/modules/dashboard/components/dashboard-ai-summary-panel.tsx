@@ -4,7 +4,6 @@ import { InfoTip } from "../../../components/ui/info-tip";
 import {
   buildDashboardAiTextParts,
   DASHBOARD_AI_TONE_OPTIONS,
-  GEMINI_BRAND,
   type DashboardAiComplexTerm,
   type DashboardAiTone,
   type DashboardAiToneResponse,
@@ -46,7 +45,7 @@ function ReplyText({
       {parts.map((part, index) =>
         part.type === "term" ? (
           <span
-            className="inline-flex items-center gap-0.5 font-medium text-pine"
+            className="inline-flex items-center gap-0.5 font-medium text-ink underline decoration-dotted underline-offset-4"
             key={`term-${index}`}
           >
             {part.value}
@@ -72,46 +71,17 @@ export function DashboardAiSummaryPanel({
 }: DashboardAiSummaryPanelProps) {
   const activeToneOption = DASHBOARD_AI_TONE_OPTIONS.find((option) => option.id === tone);
   const ctaLabel =
-    tone === "managerial" ? "Ver informe gerencial" : "Hablar con mi asesor personal";
+    tone === "managerial" ? "Generar informe" : "Generar explicación";
 
   return (
     <section
-      className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(142,165,255,0.08),rgba(107,228,197,0.05)_45%,rgba(5,9,16,0.9))] p-5 sm:p-6"
+      className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5"
     >
-      {/* Glows de marca */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-        <div
-          className="absolute -left-12 -top-12 h-44 w-44 rounded-full blur-[90px]"
-          style={{ backgroundColor: `${GEMINI_BRAND.blue}26` }}
-        />
-        <div
-          className="absolute -right-10 top-10 h-40 w-40 rounded-full blur-[90px]"
-          style={{ backgroundColor: `${GEMINI_BRAND.coral}1f` }}
-        />
-        <div
-          className="absolute bottom-0 left-1/3 h-36 w-44 rounded-full blur-[90px]"
-          style={{ backgroundColor: `${GEMINI_BRAND.teal}1f` }}
-        />
-      </div>
-
       <div className="relative">
         {/* Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.05] px-3 py-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-pine" />
-          <span className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-ink">
-            Impulsado por IA
-          </span>
-          <span className="flex items-center gap-1">
-            {[GEMINI_BRAND.blue, GEMINI_BRAND.coral, GEMINI_BRAND.gold, GEMINI_BRAND.teal].map(
-              (color) => (
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  key={color}
-                  style={{ backgroundColor: color }}
-                />
-              ),
-            )}
-          </span>
+        <div className="flex items-center gap-2 text-xs text-storm">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Explicación con IA</span>
         </div>
 
         {/* Header */}
@@ -119,8 +89,7 @@ export function DashboardAiSummaryPanel({
           Tu situación explicada
         </h3>
         <p className="mt-1.5 text-sm leading-6 text-storm">
-          Una capa inteligente lee las señales de tu dashboard y las convierte en una explicación
-          accionable.
+          Revisa caja, cierre previsto, ahorro y pendientes del espacio actual. La consulta solo se envía al pulsar Generar.
         </p>
 
         {/* Selector de tono */}
@@ -129,9 +98,11 @@ export function DashboardAiSummaryPanel({
             const isActive = option.id === tone;
             return (
               <button
-                className={`flex-1 rounded-2xl border px-4 py-3 text-left transition duration-200 ${
+                aria-pressed={isActive}
+                disabled={isPending}
+                className={`flex-1 rounded-[9px] border px-4 py-3 text-left transition-colors duration-150 ${
                   isActive
-                    ? "border-pine/30 bg-pine/10"
+                    ? "border-white/25 bg-white/[0.08]"
                     : "border-white/10 bg-white/[0.03] hover:border-white/16"
                 }`}
                 key={option.id}
@@ -153,7 +124,7 @@ export function DashboardAiSummaryPanel({
 
         {/* CTA */}
         <button
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-void transition duration-200 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-[9px] bg-ink px-5 py-3 text-sm font-semibold text-void transition-colors duration-150 hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           disabled={isPending || limitReached || Boolean(unavailableReason)}
           onClick={onGenerate}
           type="button"
@@ -176,7 +147,7 @@ export function DashboardAiSummaryPanel({
 
         {/* Error */}
         {errorMessage ? (
-          <p className="mt-3 rounded-2xl border border-rosewood/20 bg-rosewood/[0.07] px-4 py-2.5 text-xs leading-5 text-rosewood">
+          <p role="alert" className="mt-3 text-xs leading-5 text-rosewood">
             {errorMessage}
           </p>
         ) : null}
@@ -192,9 +163,9 @@ export function DashboardAiSummaryPanel({
 
         {/* Respuesta generada */}
         {response ? (
-          <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+          <div className="mt-5 border-t border-white/[0.08] pt-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-pine/20 bg-pine/10 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-pine">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink">
                 <Sparkles className="h-3 w-3" />
                 IA · {activeToneOption?.label ?? "Resumen"}
               </span>
@@ -206,8 +177,7 @@ export function DashboardAiSummaryPanel({
           </div>
         ) : !isPending ? (
           <p className="mt-4 text-xs leading-6 text-storm/60">
-            La IA interpreta tu resumen del dashboard y te dice en lenguaje simple cómo estás
-            parado hoy y qué conviene atender primero. {limitReached ? "Vuelve mañana para una nueva lectura." : ""}
+            La IA interpreta el resumen; no registra movimientos ni cambia tus datos financieros. {limitReached ? "Vuelve mañana para una nueva lectura." : ""}
           </p>
         ) : null}
       </div>

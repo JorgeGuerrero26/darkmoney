@@ -20,14 +20,21 @@ export type DashboardAiSummaryInputs = {
   upcomingSubscriptions?: number;
   visibleAccounts?: string;
   monthEndEstimate: number;
-  monthEndIncomeToDate: number;
-  monthEndExpenseToDate: number;
+  monthEndIncomeToDate: number | null;
+  monthEndExpenseToDate: number | null;
   weekExpectedInflow: number;
   weekExpectedOutflow: number;
   weekNet: number;
   unresolvedIssues: number;
   readinessScore: number;
   savingsRate: number | null;
+  savingsAveragePct?: number | null;
+  cashCushionDays?: number | null;
+  cashCushionLabel?: string | null;
+  collectionEfficiencyPct?: number | null;
+  incomeStabilityScore?: number | null;
+  unconvertedHealthHistory?: number;
+  unconvertedHealthPayables?: number;
   uncategorizedCount: number;
   overdueObligationsCount: number;
   activeSubscriptionsCount: number;
@@ -53,9 +60,9 @@ export function buildDashboardAiSummaryPayload(
     projectionStartingBalance: formatCurrency(inputs.visibleBalance ?? inputs.netWorth, currency),
     monthEndReading: formatCurrency(inputs.monthEndEstimate, currency),
     monthEndDelta: formatCurrency(inputs.monthEndEstimate-(inputs.visibleBalance ?? inputs.netWorth),currency),
-    monthEndIncomeToDate: formatCurrency(inputs.monthEndIncomeToDate, currency),
-    monthEndExpenseToDate: formatCurrency(inputs.monthEndExpenseToDate, currency),
-    monthStatus: moneyStatus(inputs.monthEndIncomeToDate - inputs.monthEndExpenseToDate),
+    monthEndIncomeToDate: inputs.monthEndIncomeToDate === null ? null : formatCurrency(inputs.monthEndIncomeToDate, currency),
+    monthEndExpenseToDate: inputs.monthEndExpenseToDate === null ? null : formatCurrency(inputs.monthEndExpenseToDate, currency),
+    monthStatus: inputs.monthEndIncomeToDate === null || inputs.monthEndExpenseToDate === null ? null : moneyStatus(inputs.monthEndIncomeToDate - inputs.monthEndExpenseToDate),
     weekStatus: inputs.weekExpectedOutflow > inputs.weekExpectedInflow ? "presión" : "controlado",
     weekNet: formatCurrency(inputs.weekNet, currency),
     weekExpectedInflow: formatCurrency(inputs.weekExpectedInflow, currency),
@@ -69,10 +76,25 @@ export function buildDashboardAiSummaryPayload(
     upcomingSubscriptions: inputs.upcomingSubscriptions ?? null,
     activeAccountsCount: inputs.activeAccountsCount ?? null,
     visibleAccounts: inputs.visibleAccounts ?? null,
-    cashCushionDays: null,
-    cashCushionLabel: null,
-    collectionEfficiencyPct: null,
-    dataCoverage: {unconvertedAccounts:inputs.unconvertedAccounts??0, unconvertedProjection:inputs.unconvertedProjection??0, unavailableIndicators:["cashCushionDays","collectionEfficiencyPct"]},
+    cashCushionDays: inputs.cashCushionDays ?? null,
+    cashCushionLabel: inputs.cashCushionLabel ?? null,
+    collectionEfficiencyPct: inputs.collectionEfficiencyPct ?? null,
+    savingsAveragePct: inputs.savingsAveragePct ?? null,
+    incomeStabilityScore: inputs.incomeStabilityScore ?? null,
+    dataCoverage: {
+      unconvertedAccounts: inputs.unconvertedAccounts ?? 0,
+      unconvertedProjection: inputs.unconvertedProjection ?? 0,
+      unconvertedHealthHistory: inputs.unconvertedHealthHistory ?? 0,
+      unconvertedHealthPayables: inputs.unconvertedHealthPayables ?? 0,
+      unavailableIndicators: [
+        inputs.cashCushionDays == null ? "cashCushionDays" : null,
+        inputs.collectionEfficiencyPct == null ? "collectionEfficiencyPct" : null,
+        inputs.savingsRate === null ? "savingsRatePct" : null,
+        inputs.savingsAveragePct == null ? "savingsAveragePct" : null,
+        inputs.incomeStabilityScore == null ? "incomeStabilityScore" : null,
+        inputs.monthEndIncomeToDate === null || inputs.monthEndExpenseToDate === null ? "monthStatus" : null,
+      ].filter((item): item is string => item !== null),
+    },
     topFocusAction: inputs.topFocusAction
       ? { title: inputs.topFocusAction.title, body: inputs.topFocusAction.body ?? "" }
       : null,

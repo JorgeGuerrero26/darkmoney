@@ -124,8 +124,8 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   kpi_savings_rate: S({
     paragraphs: [
-      "El porcentaje responde: de todo lo que te entró en el período, ¿cuánto te quedó después de pagar gastos?",
-      "Se hace así: primero restás gastos a ingresos (eso es el “ahorro neto” del período). Después dividís ese resultado por los ingresos y lo pasás a porcentaje.",
+      "De todo lo que entró en los seis meses terminados, ¿cuánto quedó después del gasto? Se suman montos antes de dividir; no se promedian porcentajes de meses distintos.",
+      "Este mes aparece aparte porque aún no termina. Cambiar a una semana no cambia la nota histórica de Salud.",
       "Si no hubo ingresos o los números no alcanzan, la app muestra “Sin dato”.",
     ],
     example:
@@ -134,16 +134,16 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   kpi_coverage_months: S({
     paragraphs: [
-      "Imaginá cuántos meses podrías “pagar gastos” con la plata líquida que la app cree que tenés, si el gasto del mes se repitiera igual.",
-      "No es un pronóstico de la vida real: es un número redondo para ver si tenés colchón o no.",
+      "Divide la caja de efectivo, banco y ahorros entre el gasto mensual medio de meses terminados. Sin gasto histórico usa los últimos 30 días.",
+      "Si faltan conversiones o referencia de gasto aparece “Sin dato”, no una reserva inventada.",
     ],
     example: "Tenés unos S/ 9 000 listos y gastás unos S/ 3 000 por mes → más o menos 3 meses de cobertura.",
   }),
 
   kpi_debt_income: S({
     paragraphs: [
-      "Compara cuánto debés (deudas y obligaciones que la app cuenta) con cuánto te entró en el período.",
-      "Si el porcentaje es alto, mucho de lo que ingresa ya está “comprometido” con deuda.",
+      "Compara tu deuda activa total con un mes de ingreso medio histórico. No dice qué porcentaje del sueldo pagas como cuota mensual.",
+      "Una obligación compartida cuenta según si a ti te corresponde pagarla o cobrarla.",
     ],
   }),
 
@@ -597,7 +597,7 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
   widget_health_center: S({
     paragraphs: [
       "Junta varias “notas” sobre tu salud financiera: liquidez, ahorro, cuántos meses cubrís si dejás de ingresar, deuda vs ingreso, próximos pagos.",
-      "Esas cuentas miran todo el workspace y el período de arriba; no usan el filtro chico de una sola categoría que a veces prendés para otros gráficos.",
+      "La nota usa meses terminados de todo el espacio; no cambia con el filtro semanal o de categoría. Sin datos y conversiones suficientes no hay nota.",
     ],
   }),
 
@@ -609,7 +609,7 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   health_savings_capacity: S({
     paragraphs: [
-      "Misma idea que capacidad de ahorro: de lo que entró, qué parte te quedó. Se expresa en porcentaje.",
+      "De lo que entró en los seis meses terminados, qué parte quedó después del gasto. Este mes se identifica aparte.",
     ],
   }),
 
@@ -622,7 +622,7 @@ export const DASHBOARD_HELP_SIMPLE_WORDS: Record<string, DashboardMetricSimpleWo
 
   health_debt_to_income: S({
     paragraphs: [
-      "Compara lo que debés (grande) con lo que te entró en el período. Si la deuda es muy grande respecto a lo que entró, la señal es de alerta.",
+      "Compara la deuda activa que debes pagar con el ingreso mensual medio histórico. Es deuda total, no cuota mensual, y no cambia al mirar una semana.",
     ],
   }),
 

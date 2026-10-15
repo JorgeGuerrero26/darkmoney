@@ -43,3 +43,11 @@ Se adaptó el calendario móvil actual a web: caja líquida, mediana de seis mes
 Se corrigió también el `coverPlan` compartido por detalle/formulario/proyección web para no adelantar cuotas nuevas con cobros de meses anteriores al plan. La documentación previa de este archivo que describe el motor desde patrimonio queda como diagnóstico histórico, no estado actual.
 
 Dos diferencias del móvil actual no se copiaron: `custom` interpretado como meses en calendario y doble conversión del gasto típico de tarjetas. Hay además riesgo de historial móvil truncado por falta de paginación. Evidencia, casos reproducibles y límites en [WEB-CASHFLOW-FINDINGS-2026-10-15.md](WEB-CASHFLOW-FINDINGS-2026-10-15.md). No hubo modificación móvil ni despliegue.
+
+## Continuación del 15 de octubre: salud e IA visible
+
+Se conectan al panel real de Inicio la nota con meses terminados, ahorro histórico ponderado separado del mes actual, reserva de caja, estabilidad de ingresos y registros de cobro resueltos. Se declaran datos/FX ausentes sin nota favorable por defecto. La dirección de las deudas compartidas se corrige desde la perspectiva del invitado, coherente con el calendario; el callback móvil de Salud aún difiere en ese caso.
+
+La explicación IA, antes inaccesible por el retorno de la vista actual, queda disponible explícitamente para Pro en Inicio con superficie neutra. Usa el mismo componente y handler, sin envío automático ni registros financieros. El contexto IA y su caché se actualizan con los indicadores reales, sin confundir ahorro actual con histórico.
+
+Detalle, casos reproducibles, verificación local y pendientes en [WEB-HEALTH-PARITY-2026-10-15.md](WEB-HEALTH-PARITY-2026-10-15.md). No se modificó ni publicó móvil, web o SQL. Los análisis avanzados y herramientas del Asistente siguen abiertos; no es paridad total.
