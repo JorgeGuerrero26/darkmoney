@@ -1,10 +1,11 @@
 import { parseMovementProposal, type AssistantMovementDraft } from "./movement-proposal";
 import { parseBudgetProposal, type AssistantBudgetDraft } from "./budget-proposal";
+import { parseRecurringProposal, type AssistantRecurringDraft } from "./recurring-proposal";
 
 export type AssistantMessage = { role: "user" | "assistant"; content: string };
 export type AssistantEvidence = { label: string; movementIds: number[] };
 export type ProposalStatus = "pending" | "saved" | "discarded" | "unconfirmed";
-export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; status?: ProposalStatus; statusNote?: string };
+export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; recurringDraft?: AssistantRecurringDraft; status?: ProposalStatus; statusNote?: string };
 export type AssistantReply = { reply: string; evidence: AssistantEvidence[]; proposals: AssistantProposal[]; remainingToday: number | null };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const id = (value: unknown) => (typeof value==="number"||typeof value==="string")&&Number.isSafeInteger(Number(value))&&Number(value)>0;
@@ -43,8 +44,11 @@ export function parseAssistantReply(value: unknown): AssistantReply {
   const budgetDraft=parseBudgetProposal(raw.budgetDraft);
   if(budgetDraft&&proposals.length>budgetIndex)proposals[budgetIndex].budgetDraft=budgetDraft;
   add(raw.obligationDraft,"Crédito o deuda","/app/obligations","principalAmount");
+  const recurringIndex=proposals.length;
   if(object(raw.recurringDraft).kind==="subscription")add(raw.recurringDraft,"Suscripción","/app/subscriptions");
   if(object(raw.recurringDraft).kind==="recurring_income")add(raw.recurringDraft,"Ingreso fijo","/app/recurring-income");
+  const recurringDraft=parseRecurringProposal(raw.recurringDraft);
+  if(recurringDraft&&proposals.length>recurringIndex)proposals[recurringIndex].recurringDraft=recurringDraft;
   return {reply:raw.reply.trim(),evidence,proposals,remainingToday:typeof raw.remainingToday==="number"&&Number.isSafeInteger(raw.remainingToday)&&raw.remainingToday>=0?raw.remainingToday:null};
 }
 

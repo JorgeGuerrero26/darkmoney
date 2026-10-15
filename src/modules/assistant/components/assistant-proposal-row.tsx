@@ -6,6 +6,7 @@ import type { AssistantProposal, ProposalStatus } from "../lib/assistant-contrac
 import { proposalCanReview } from "../lib/proposal-memory";
 import { AssistantMovementReview, type AssistantMovementSession } from "./assistant-movement-review";
 import { AssistantBudgetReview, type AssistantBudgetSession } from "./assistant-budget-review";
+import { AssistantRecurringReview, type AssistantRecurringSession } from "./assistant-recurring-review";
 
 export function AssistantProposalRow({ proposal, intentKey, workspaceId, userId, busy, onOutcome }: {
   proposal: AssistantProposal; intentKey: string; workspaceId: number; userId: string; busy: boolean;
@@ -13,6 +14,7 @@ export function AssistantProposalRow({ proposal, intentKey, workspaceId, userId,
 }) {
   const [open, setOpen] = useState(false); const session = useRef<AssistantMovementSession>({});
   const budgetSession = useRef<AssistantBudgetSession>({});
+  const recurringSession = useRef<AssistantRecurringSession>({});
   const pending = !proposal.status || proposal.status === "pending";
   return <div className="border-b border-white/10 py-3">
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink">
@@ -28,6 +30,10 @@ export function AssistantProposalRow({ proposal, intentKey, workspaceId, userId,
       onSaved={note => { onOutcome("saved", note); setOpen(false); }} /> : null}
     {open && pending && proposal.budgetDraft ? <AssistantBudgetReview draft={proposal.budgetDraft}
       workspaceId={workspaceId} userId={userId} session={budgetSession.current} onClose={() => setOpen(false)}
+      onSaved={note => { onOutcome("saved", note); setOpen(false); }}
+      onUnconfirmed={note => { onOutcome("unconfirmed", note); setOpen(false); }} /> : null}
+    {open && pending && proposal.recurringDraft ? <AssistantRecurringReview draft={proposal.recurringDraft}
+      workspaceId={workspaceId} userId={userId} session={recurringSession.current} onClose={() => setOpen(false)}
       onSaved={note => { onOutcome("saved", note); setOpen(false); }}
       onUnconfirmed={note => { onOutcome("unconfirmed", note); setOpen(false); }} /> : null}
   </div>;

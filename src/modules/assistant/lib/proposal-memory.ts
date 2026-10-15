@@ -10,5 +10,5 @@ export function assistantHistoryTurn(turn: AssistantMessage & { response?: Assis
 }
 
 export function proposalCanReview(proposal: AssistantProposal) {
-  return Boolean(proposal.budgetDraft || proposal.movementDraft && ["expense", "income", "transfer"].includes(proposal.movementDraft.operation));
+  return Boolean(proposal.budgetDraft || proposal.recurringDraft || proposal.movementDraft && ["expense", "income", "transfer"].includes(proposal.movementDraft.operation));
 }
