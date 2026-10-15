@@ -62,6 +62,8 @@ import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
 import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
 import { DashboardPatternsPanel } from "../components/dashboard-patterns-panel";
 import { buildDashboardPatterns } from "../lib/dashboard-patterns";
+import { ProjectionHorizonPanel } from "../components/projection-horizon-panel";
+import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1675,6 +1677,16 @@ export function DashboardPage() {
           />
         </section>
 
+        <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard}
+          patterns={() => <DashboardPatternsPanel model={buildDashboardPatterns(snapshot, parityCtx, parityNow)} currency={displayCurrencyCode}
+            ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
+          history={() => <DashboardHistoryPanel snapshot={snapshot} ctx={parityCtx} now={parityNow}
+            ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
+          flow={() => <ProjectionHorizonPanel snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
+            ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
+            onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
+          health={() => <DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />}
+          summary={<>
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -1747,10 +1759,6 @@ export function DashboardPage() {
         </details> : null}
 
         {advancedReadings ? <AdvancedReadingsPanel model={advancedReadings} currency={displayCurrencyCode} /> : null}
-        {canUseAdvancedDashboard ? <DashboardPatternsPanel key={`patterns:${user?.id}:${snapshot.workspace.id}`} model={buildDashboardPatterns(snapshot, parityCtx, parityNow)} currency={displayCurrencyCode}
-          ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} /> : null}
-        {canUseAdvancedDashboard ? <DashboardHistoryPanel key={`${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
-          ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} /> : null}
 
         <section className="border-t border-white/[0.07] pt-7">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -1909,6 +1917,7 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
+          </>} />
         {notificationDayDialog}
       </div>
     );

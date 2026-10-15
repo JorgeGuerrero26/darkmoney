@@ -25,6 +25,8 @@
     "test:dashboard-readings": "node scripts/test-dashboard-readings.mjs",
     "test:dashboard-history": "node scripts/test-dashboard-history.mjs",
     "test:dashboard-patterns": "node scripts/test-dashboard-patterns.mjs",
+    "test:dashboard-horizon": "node scripts/test-dashboard-horizon.mjs",
+    "test:dashboard-navigation": "node scripts/test-dashboard-navigation.mjs",
     "test:obligation-notification-ui": "node scripts/test-obligation-notification-ui.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:notification-day": "node scripts/test-notification-day-ui.mjs",

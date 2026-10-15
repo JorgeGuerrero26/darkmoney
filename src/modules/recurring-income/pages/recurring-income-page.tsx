@@ -1,5 +1,6 @@
 import { buildRecurringIncomeEditorInput } from "../../shared/recurring-editor-input";
 import { RecurringIncomeEditorDialog as EditorDialog, Field, Input, Textarea, getCurrencyLabel, labelClassName, type RecurringIncomeFormState, type FeedbackState } from "../components/recurring-income-editor-dialog";
+import { useResourceLink } from "../../../hooks/use-resource-link";
 import {
   Download,
   MoreVertical,
@@ -588,6 +589,11 @@ export function RecurringIncomePage() {
     setIsDirty(false);
     setIsEditorOpen(true);
   }
+
+  useResourceLink(snapshot?.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError ? recurringIncome : [], id => {
+    const income = recurringIncome.find(row => row.id === id);
+    if (income) openEditEditor(income);
+  });
 
   const isSavingEditor = createMutation.isPending || updateMutation.isPending;
   const isDeleting = deleteMutation.isPending;
