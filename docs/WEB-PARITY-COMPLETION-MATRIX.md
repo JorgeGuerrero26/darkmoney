@@ -11,7 +11,7 @@ Objetivo completo: paridad funcional/financiera de web con los módulos móviles
 | Notificaciones, campana y destinos avanzados | Pruebas de destinos, día, solicitudes, gating y UI locales; sin consumir bandeja real. | Consolidar auditoría por cada tipo de aviso y camino de acción. |
 | Dashboard: caja, cierre, ventanas, salud | `test:dashboard-cashflow`, `test:dashboard-health`, callbacks móviles reales y paneles conectados a Inicio. | Diferencias móviles documentadas (custom, tarjeta FX, perspectiva compartida, paginación); falta validar entrega real. |
 | Dashboard: concentración y estacionalidad | Modelo/panel nuevos; `test:dashboard-readings` ejecuta selectores y callbacks móviles. | Resto del dashboard avanzado por inventariar: Historial anual/factores, patrones/anomalías/sugerencias, horizonte de flujo/escenarios/optimización y explicaciones por pestaña. No se considera cerrado todo Dashboard. |
-| Asistente: consulta, evidencia, avisos, límites y aislamiento | Página/servicio/contrato reales en `test:web-assistant`; IA de Inicio explícita en `test:dashboard-health`. | Varias conversaciones persistentes, nombres/búsqueda/eliminación, formularios prellenados y confirmación de borradores, resultado recordado por turno y capacidades de voz. |
+| Asistente: consulta, evidencia, avisos, límites, aislamiento y conversaciones | Página/servicio/contrato reales en `test:web-assistant`; IA de Inicio explícita en `test:dashboard-health`; modelo móvil y página real en `test:assistant-chats`. | Formularios prellenados y confirmación de borradores, resultado recordado por turno y capacidades de voz. |
 | Configuración y formularios compartidos | Rediseños previos. | Revisión final del alcance, preferencias y permisos actuales contra móvil. |
 | Entrega | Commits locales por unidad; compilación y pruebas de código. | Publicación web/SQL coordinada con móvil, versión instalada y pruebas multiusuario/Storage/red real. No autorizadas aquí para operaciones financieras. |
 
@@ -23,3 +23,11 @@ Objetivo completo: paridad funcional/financiera de web con los módulos móviles
 - `test:dashboard-readings` compara selectores/callbacks originales, HHI y umbrales, cortes, fechas bisiestas, ausencia de datos, registros no aplicados, conversiones faltantes y panel real en JSDOM. No prueba navegador real ni servidor.
 
 La matriz se mantiene abierta hasta verificar cada requisito. Los informes cronológicos (`RESOURCE-PARITY-AUDIT`, `WEB-PARITY-CLOSURE`, `WEB-CASHFLOW-FINDINGS`, `WEB-HEALTH-PARITY`) aportan casos y límites, no certifican por sí solos el estado de producción.
+
+## Conversaciones del Asistente
+
+Se porta el modelo puro móvil (20 conversaciones, 40 mensajes de texto por conversación, título automático/personalizado, búsqueda sin tildes, renombrado sin alterar orden y eliminación). La persistencia web usa una clave por usuario y espacio; no se mezclan contextos. Reabrir/seleccionar restaura solo texto y rol, nunca evidencia ni borradores financieros. Abrir un aviso prepara una conversación nueva y no lo envía automáticamente.
+
+La página incorpora listado, búsqueda, editor de nombre y eliminación confirmada que no borra registros financieros. Una lectura corrupta se conserva sin sobrescribir; si el navegador bloquea guardado se avisa y la sesión sigue en memoria. Cancelar una pregunta libera la interfaz y una respuesta tardía no invade otro usuario, espacio, chat o consulta.
+
+`test:assistant-chats` compara funciones móviles reales y ejecuta hook/panel/página web: límites, títulos, persistencia, restauración solo de texto, búsqueda, renombrado, confirmación de eliminación, almacenamiento roto/bloqueado, reintento y cancelación. El transporte de IA está simulado; no hay cuota ni dinero reales. Se añade a `test:web-assistant`. Esto cierra conversaciones, no herramientas de borradores ni voz ni todo el Asistente.
