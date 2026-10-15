@@ -59,6 +59,7 @@ import { CashflowMonthPanel } from "../components/cashflow-month-panel";
 import { DashboardHealthPanel } from "../components/dashboard-health-panel";
 import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
 import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
+import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1744,6 +1745,8 @@ export function DashboardPage() {
         </details> : null}
 
         {advancedReadings ? <AdvancedReadingsPanel model={advancedReadings} currency={displayCurrencyCode} /> : null}
+        {canUseAdvancedDashboard ? <DashboardHistoryPanel key={`${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
+          ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} /> : null}
 
         <section className="border-t border-white/[0.07] pt-7">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">

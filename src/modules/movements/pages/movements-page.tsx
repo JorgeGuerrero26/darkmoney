@@ -129,6 +129,7 @@ export function MovementsPage() {
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const snapshot = snapshotQuery.data;
   const linkedCategoryId = notificationId(searchParams.get("categoryId"));
+  const linkedUncategorized = searchParams.get("categoryId") === "none";
   const notificationNotice = searchParams.get("notice")?.slice(0, 200);
   const movementColumns: ColumnDef[] = [
     { key: "categoria", label: "Categoría" },
@@ -279,7 +280,8 @@ export function MovementsPage() {
       const matchesType = movementMatchesTypeFilter(movement, tableFilters.type);
       const matchesCategory =
         (!normalizedCategory || movement.category.toLowerCase().includes(normalizedCategory)) &&
-        (linkedCategoryId === null || movement.categoryId === linkedCategoryId);
+        (linkedCategoryId === null || movement.categoryId === linkedCategoryId) &&
+        (!linkedUncategorized || movement.categoryId == null);
       const matchesCounterparty =
         !normalizedCounterparty || movement.counterparty.toLowerCase().includes(normalizedCounterparty);
       const matchesSourceAccount =
@@ -308,7 +310,7 @@ export function MovementsPage() {
         matchesDateTo
       );
     });
-  }, [hiddenIds, snapshot, tableFilters, linkedCategoryId]);
+  }, [hiddenIds, snapshot, tableFilters, linkedCategoryId, linkedUncategorized]);
   const MOVEMENTS_PAGE_SIZE = 50;
   const totalFilteredPages = Math.max(1, Math.ceil(filteredMovements.length / MOVEMENTS_PAGE_SIZE));
   const safePage = Math.min(currentPage, totalFilteredPages);
@@ -437,7 +439,7 @@ export function MovementsPage() {
   );
   const filteredNet = filteredTotals.income - filteredTotals.expense;
   const hasActiveFilters = Boolean(
-    linkedCategoryId ||
+    linkedCategoryId || linkedUncategorized ||
     tableFilters.description.trim() ||
       tableFilters.category.trim() ||
       tableFilters.counterparty.trim() ||
@@ -1178,11 +1180,11 @@ export function MovementsPage() {
             />
         </section>
 
-        {notificationNotice || linkedCategoryId ? <div className="flex flex-wrap items-center gap-3 text-sm text-storm">
+        {notificationNotice || linkedCategoryId || linkedUncategorized ? <div className="flex flex-wrap items-center gap-3 text-sm text-storm">
           {notificationNotice ? <p>{notificationNotice}</p> : null}
-          {linkedCategoryId ? <button className="text-ink hover:underline" onClick={() => setSearchParams((current) => {
+          {linkedCategoryId || linkedUncategorized ? <button className="text-ink hover:underline" onClick={() => setSearchParams((current) => {
             const next = new URLSearchParams(current); next.delete("categoryId"); next.delete("page"); return next;
-          }, { replace: true })} type="button">{snapshot.catalogs.categories.find((item) => item.id === linkedCategoryId)?.name ?? "Categoría de la alerta"} ×</button> : null}
+          }, { replace: true })} type="button">{linkedUncategorized ? "Sin categoría" : snapshot.catalogs.categories.find((item) => item.id === linkedCategoryId)?.name ?? "Categoría de la alerta"} ×</button> : null}
           <button className="ml-auto hover:text-ink" onClick={clearTableFilters} type="button">Quitar filtros</button>
         </div> : null}
 

@@ -23,6 +23,7 @@
     "test:dashboard-cashflow": "node scripts/test-dashboard-cashflow.mjs",
     "test:dashboard-health": "node scripts/test-dashboard-health.mjs",
     "test:dashboard-readings": "node scripts/test-dashboard-readings.mjs",
+    "test:dashboard-history": "node scripts/test-dashboard-history.mjs",
     "test:obligation-notification-ui": "node scripts/test-obligation-notification-ui.mjs",
     "test:notification-parity": "node --experimental-strip-types scripts/test-notification-parity.mjs",
     "test:notification-day": "node scripts/test-notification-day-ui.mjs",
