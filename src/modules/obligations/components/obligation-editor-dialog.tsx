@@ -104,6 +104,7 @@ export function Textarea({ className = "", ...props }: TextareaHTMLAttributes<HT
 
 export type ObligationEditorProps = {
   context?: ReactNode;
+  saveBlocked?: boolean;
   accounts: AccountSummary[];
   accessMessage: string;
   attachments: AttachmentSummary[];
@@ -160,6 +161,7 @@ export function ObligationEditorDialog(props: ObligationEditorProps) {
     invalidFields,
     isCreateMode,
     isSaving,
+    saveBlocked = false,
     isUploadingReceipt,
     onSubmit,
     pendingReceiptFile,
@@ -242,7 +244,7 @@ export function ObligationEditorDialog(props: ObligationEditorProps) {
           </div>}
         </div>
 
-        {panel !== "plan" ? <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer> : null}
+        {panel !== "plan" ? <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving || saveBlocked} type="submit">{saveBlocked ? "Comprueba el registro en la cartera" : isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear crédito o deuda" : "Guardar cambios"}</Button></footer> : null}
       </form>
     </Modal>
   );

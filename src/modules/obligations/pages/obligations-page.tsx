@@ -1,4 +1,5 @@
 import { buildObligationEditorInput } from "../lib/obligation-editor-input";
+import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { ObligationEditorDialog as EditorDialog, Picker, Field, Input, Textarea, labelClassName } from "../components/obligation-editor-dialog";
 import { statusOptions, getOriginTypeOptions, getOpeningImpact, applyObligationFormRules, getCurrencyLabel, type ObligationFormState, type ShareInviteFormState, type FeedbackState } from "../lib/obligation-editor-model";
 import {
@@ -1406,6 +1407,8 @@ export function ObligationsPage() {
     createDefaultShareInviteFormState(),
   );
   const [pendingReceiptFile, setPendingReceiptFile] = useState<File | null>(null);
+  const editorWrite = useFinancialWriteGuard(`${user?.id}:${activeWorkspace?.id}:editor:${isEditorOpen}:${editorMode}:${selectedObligationId}`);
+  const paymentWrite = useFinancialWriteGuard(`${user?.id}:${activeWorkspace?.id}:payment:${paymentTargetId}:${paymentEditEventId}`);
   const [paymentFormState, setPaymentFormState] = useState<PaymentFormState>({
     amount: "",
     eventDate: toDateInputValue(new Date().toISOString()),
@@ -1544,7 +1547,7 @@ export function ObligationsPage() {
   }
 
   function closeEditorDialog() {
-    if (isSavingEditor) return;
+    if (isSavingEditor || editorWrite.pending) return;
     setIsEditorOpen(false);
     setSelectedObligationId(null);
     setPendingReceiptFile(null);
@@ -2507,12 +2510,13 @@ export function ObligationsPage() {
   }
 
   const isSavingEditor =
+    editorWrite.pending ||
     createMutation.isPending ||
     updateMutation.isPending ||
     createAttachmentRecordMutation.isPending ||
     shareInviteMutation.isPending;
   const isDeleting = deleteMutation.isPending;
-  const isRegisteringPayment = paymentMutation.isPending || eventUpdateMutation.isPending;
+  const isRegisteringPayment = paymentWrite.pending || paymentMutation.isPending || eventUpdateMutation.isPending;
   const isAdjustingPrincipal = principalAdjustmentMutation.isPending || (principalAdjustmentEditEventId !== null && eventUpdateMutation.isPending);
   const isSendingShareInvite = shareInviteMutation.isPending;
   const activeOwnObligations = obligations.filter((obligation) => obligation.status !== "cancelled");
@@ -2716,7 +2720,13 @@ export function ObligationsPage() {
 
   async function handleSubmitObligation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (editorWrite.blocked) return;
     setEditorFeedback(null);
+
+    if (!snapshot || snapshot.workspace.id !== activeWorkspace?.id || snapshotQuery.isFetching || snapshotQuery.isPlaceholderData || snapshotQuery.isError) {
+      setEditorFeedback({ tone: "error", title: "Espera la lectura del espacio", description: "Comprueba los datos actuales antes de guardar." });
+      return;
+    }
 
     if (!activeWorkspace || !user?.id) {
       setEditorFeedback({
@@ -2819,15 +2829,20 @@ export function ObligationsPage() {
         : null;
     const shouldUpdateSharedViewer = shouldResendShareInvite(currentEditorShare, createShareFormState);
 
+    let attempt: ReturnType<typeof editorWrite.begin> = null;
     try {
       if (!snapshot) throw new Error("Espera la lectura del espacio actual.");
       const payload = buildObligationEditorInput(formState, snapshot, editorMode === "create");
+      attempt = editorWrite.begin();
+      if (!attempt) return;
       if (editorMode === "create") {
         const createdObligationId = await createMutation.mutateAsync({
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
         });
+        if (!editorWrite.isCurrent(attempt)) return;
+        if (!Number.isSafeInteger(createdObligationId) || createdObligationId <= 0) throw new Error("El servidor no confirmó el identificador del registro.");
         let receiptUploaded = false;
         let shareInviteResult: Awaited<ReturnType<typeof sendShareInvite>> = null;
         let shareInviteErrorMessage: string | null = null;
@@ -2842,6 +2857,7 @@ export function ObligationsPage() {
         }
 
         if (createShareFormState.invitedEmail.trim()) {
+          if (!editorWrite.isCurrent(attempt)) return;
           try {
             shareInviteResult = await sendShareInvite(createdObligationId, createShareFormState);
           } catch (shareError) {
@@ -2874,6 +2890,8 @@ export function ObligationsPage() {
           descriptionParts.push(`El registro se creo bien, pero compartirlo quedo pendiente: ${shareInviteErrorMessage}`);
         }
 
+        if (!editorWrite.isCurrent(attempt)) return;
+        editorWrite.confirm(attempt);
         setPageFeedback({
           tone: "success",
           title: "Registro creado",
@@ -2889,6 +2907,7 @@ export function ObligationsPage() {
           userId: user.id,
           ...payload,
         });
+        if (!editorWrite.isCurrent(attempt)) return;
 
         if (shouldUpdateSharedViewer) {
           try {
@@ -2913,6 +2932,8 @@ export function ObligationsPage() {
           descriptionParts.push(`El registro se actualizo, pero la reasignacion quedo pendiente: ${shareInviteErrorMessage}`);
         }
 
+        if (!editorWrite.isCurrent(attempt)) return;
+        editorWrite.confirm(attempt);
         setPageFeedback({
           tone: "success",
           title: "Cambios guardados",
@@ -2925,17 +2946,25 @@ export function ObligationsPage() {
       setIsEditorOpen(false);
       setSelectedObligationId(null);
     } catch (error) {
+      if (attempt && !editorWrite.isCurrent(attempt)) return;
+      if (attempt) editorWrite.fail(attempt);
       setEditorFeedback({
         tone: "error",
-        title: "No pudimos guardar el registro",
-        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        title: attempt ? "Resultado por comprobar" : "Revisa el registro",
+        description: `${getQueryErrorMessage(error, "No pudimos confirmar el registro.")}${attempt ? " No repitas el envío: cierra y comprueba la cartera y la apertura en cuenta; alguna fase podría haberse guardado." : ""}`,
       });
     }
   }
 
   async function handleSubmitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (paymentWrite.blocked) return;
     setPaymentFeedback(null);
+
+    if (!snapshot || snapshot.workspace.id !== activeWorkspace?.id || snapshotQuery.isFetching || snapshotQuery.isPlaceholderData || snapshotQuery.isError) {
+      setPaymentFeedback({ tone: "error", title: "Espera la lectura del espacio", description: "Comprueba el saldo actual antes de registrar el abono." });
+      return;
+    }
 
     if (!activeWorkspace || !user?.id || !paymentTarget) {
       setPaymentFeedback({
@@ -2952,7 +2981,7 @@ export function ObligationsPage() {
     const amount = parseOptionalNumber(paymentFormState.amount);
     const installmentNo = parseOptionalInteger(paymentFormState.installmentNo);
 
-    if (amount === null || Number.isNaN(amount) || amount <= 0) {
+    if (amount === null || !Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(Math.round(amount * 100)) || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
       setPaymentFeedback({
         tone: "error",
         title: "Monto invalido",
@@ -2961,16 +2990,17 @@ export function ObligationsPage() {
       return;
     }
 
-    if (!paymentFormState.eventDate) {
+    const eventDay = new Date(`${paymentFormState.eventDate}T12:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentFormState.eventDate) || Number.isNaN(eventDay.getTime()) || eventDay.toISOString().slice(0, 10) !== paymentFormState.eventDate || paymentFormState.eventDate < paymentTarget.startDate) {
       setPaymentFeedback({
         tone: "error",
         title: "Falta la fecha",
-        description: `Selecciona la fecha en la que se realizó el ${paymentNoun}.`,
+        description: `Selecciona una fecha válida para el ${paymentNoun}, desde el inicio del registro.`,
       });
       return;
     }
 
-    if (installmentNo !== null && (Number.isNaN(installmentNo) || installmentNo <= 0)) {
+    if (installmentNo !== null && (!Number.isSafeInteger(installmentNo) || installmentNo <= 0)) {
       setPaymentFeedback({
         tone: "error",
         title: "Cuota invalida",
@@ -2983,10 +3013,10 @@ export function ObligationsPage() {
     const hasSelectableAccount = accounts.some(
       (account) => !account.isArchived && account.currencyCode === paymentTarget.currencyCode,
     );
-    // Sin cuentas en la moneda del registro el abono se guarda igual, solo sin movimiento.
-    const shouldRegisterMovement = paymentFormState.registerAccountMovement && hasSelectableAccount;
+    // Never silently drop the account movement when its account disappeared.
+    const shouldRegisterMovement = paymentFormState.registerAccountMovement;
 
-    if (shouldRegisterMovement && !accountId) {
+    if (shouldRegisterMovement && (!hasSelectableAccount || !accounts.some(account => account.id === accountId && account.workspaceId === activeWorkspace.id && !account.isArchived && account.currencyCode === paymentTarget.currencyCode))) {
       setPaymentFeedback({
         tone: "error",
         title: "Falta la cuenta",
@@ -3000,6 +3030,10 @@ export function ObligationsPage() {
       paymentEditEventId === null
         ? null
         : paymentTarget.events.find((event) => event.id === paymentEditEventId) ?? null;
+    if (paymentEditEventId !== null && !editingEvent) {
+      setPaymentFeedback({ tone: "error", title: "El abono ya no está disponible", description: "Cierra y revisa el historial. No se creará otro abono para reemplazar el que estabas editando." });
+      return;
+    }
     // Al editar hay que devolver el monto anterior antes de descontar el nuevo.
     const pendingBeforePayment = editingEvent
       ? paymentTarget.pendingAmount + editingEvent.amount
@@ -3012,6 +3046,8 @@ export function ObligationsPage() {
           ? "active"
           : paymentTarget.status;
 
+    const attempt = paymentWrite.begin();
+    if (!attempt) return;
     if (editingEvent) {
       try {
         await eventUpdateMutation.mutateAsync({
@@ -3029,6 +3065,8 @@ export function ObligationsPage() {
           accountId: shouldRegisterMovement ? accountId : null,
           nextStatus,
         });
+        if (!paymentWrite.isCurrent(attempt)) return;
+        paymentWrite.confirm(attempt);
         setPageFeedback({
           tone: "success",
           title: `${paymentNounTitle} actualizado`,
@@ -3038,10 +3076,12 @@ export function ObligationsPage() {
         setPaymentTargetId(null);
         setPaymentEditEventId(null);
       } catch (error) {
+        if (!paymentWrite.isCurrent(attempt)) return;
+        paymentWrite.fail(attempt);
         setPaymentFeedback({
           tone: "error",
           title: `No pudimos actualizar el ${paymentNoun}`,
-          description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+          description: `${getQueryErrorMessage(error, "No se pudo confirmar el abono.")} No repitas el envío: comprueba el historial y el saldo antes de volver a registrar.`,
         });
       }
 
@@ -3062,6 +3102,8 @@ export function ObligationsPage() {
         accountId: shouldRegisterMovement ? accountId : null,
         nextStatus,
       } satisfies ObligationPaymentFormInput & { workspaceId: number; userId: string });
+      if (!paymentWrite.isCurrent(attempt)) return;
+      if (!Number.isSafeInteger(created.eventId) || !created.eventId || created.eventId <= 0 || shouldRegisterMovement && (!Number.isSafeInteger(created.movementId) || !created.movementId || created.movementId <= 0)) throw new Error("El servidor no confirmó el abono completo.");
 
       // El comprobante va despues: el evento tiene que existir para colgarlo de el.
       let receiptFailed = false;
@@ -3078,6 +3120,8 @@ export function ObligationsPage() {
         }
       }
 
+      if (!paymentWrite.isCurrent(attempt)) return;
+      paymentWrite.confirm(attempt);
       setPendingPaymentReceiptFile(null);
       setPageFeedback({
         tone: "success",
@@ -3094,10 +3138,12 @@ export function ObligationsPage() {
       });
       setPaymentTargetId(null);
     } catch (error) {
+      if (!paymentWrite.isCurrent(attempt)) return;
+      paymentWrite.fail(attempt);
       setPaymentFeedback({
         tone: "error",
         title: `No pudimos registrar el ${paymentNoun}`,
-        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        description: `${getQueryErrorMessage(error, "No se pudo confirmar el abono.")} No repitas el envío: comprueba el historial y el saldo antes de volver a registrar.`,
       });
     }
   }
@@ -3660,6 +3706,7 @@ export function ObligationsPage() {
           invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
+          saveBlocked={editorWrite.status === "uncertain"}
           isUploadingReceipt={isUploadingReceipt}
           onDeleteEvent={(event) => {
             if (selectedObligation) {
@@ -3705,6 +3752,7 @@ export function ObligationsPage() {
           formState={paymentFormState}
           isEditMode={paymentEditEventId !== null}
           isSaving={isRegisteringPayment}
+          saveBlocked={paymentWrite.status === "uncertain"}
           isUploadingReceipt={isUploadingReceipt}
           obligation={paymentTarget}
           onCancel={() => {

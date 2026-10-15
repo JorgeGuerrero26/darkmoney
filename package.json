@@ -12,6 +12,7 @@
     "test:movement-suggestions": "node scripts/test-movement-suggestions-parity.mjs",
     "test:date-format": "node --experimental-strip-types scripts/test-date-format.mjs",
     "test:obligation-plan": "node --experimental-strip-types scripts/test-obligation-plan.mjs",
+    "test:obligation-write-guards": "node scripts/test-obligation-write-guards.mjs",
     "test:subscription-parity": "node --experimental-strip-types scripts/test-subscription-parity.mjs",
     "test:subscription-receipts": "node --experimental-strip-types scripts/test-subscription-receipts.mjs",
     "test:subscription-split-server": "node --experimental-strip-types scripts/test-subscription-split-server.mjs",

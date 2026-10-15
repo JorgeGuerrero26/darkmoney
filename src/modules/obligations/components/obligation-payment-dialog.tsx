@@ -45,6 +45,7 @@ export type ObligationPaymentDialogProps = {
     value: PaymentFormState[Field],
   ) => void;
   context?: ReactNode;
+  saveBlocked?: boolean;
 };
 export function ObligationPaymentDialog(props: ObligationPaymentDialogProps) {
   const { accessMessage, accounts, attachments, canManageReceipts, editEventAmount, feedback, formState, isEditMode, isSaving, isUploadingReceipt, obligation, onCancel, onDeleteReceipt, onSubmit, onUploadReceipt, pendingReceiptFile, updateFormState, updatePendingReceiptFile } = props;
@@ -87,6 +88,6 @@ export function ObligationPaymentDialog(props: ObligationPaymentDialogProps) {
       {formState.registerAccountMovement ? <><Field label={isReceivable ? "Cuenta de abono" : "Cuenta de débito"}><Picker disabled={!accountOptions.length} emptyMessage={`No hay cuentas en ${obligation.currencyCode}.`} onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta afectada." placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>{selectedAccount && balanceAfter !== null ? <div className="flex min-h-12 items-center justify-between border-b border-white/[0.09] text-sm"><span className="text-storm">Saldo después</span><strong className="tabular-nums text-ink">{formatCurrency(balanceAfter, selectedAccount.currencyCode)}</strong></div> : null}</> : null}
       <ResourceEditorDestination onClick={() => setPanel("details")} summary="Descripción, notas y comprobante" />
     </div> : <div className="space-y-5"><Field label="Descripción"><Input maxLength={120} onChange={(event) => updateFormState("description", event.target.value)} placeholder="Cuota del mes o referencia" value={formState.description} /></Field><Field label="Notas"><Textarea className="min-h-24" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Número de operación u otra nota" value={formState.notes} /></Field>{isEditMode ? <CompactAttachmentField accessMessage={accessMessage} attachments={attachments} canManage={canManageReceipts} isUploading={isUploadingReceipt} onDelete={(attachment) => void onDeleteReceipt(attachment)} onUpload={(file) => void onUploadReceipt(file)} /> : <CompactPendingAttachmentField canUpload={canManageReceipts} file={pendingReceiptFile} lockedMessage={accessMessage} onChange={updatePendingReceiptFile} />}</div>}</div>
-    <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isEditMode ? "Guardar cambios" : `Registrar ${paymentNoun}`}</Button></footer>
+    <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving || props.saveBlocked} type="submit">{props.saveBlocked ? "Comprueba el abono en el historial" : isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isEditMode ? "Guardar cambios" : `Registrar ${paymentNoun}`}</Button></footer>
   </form></div>;
 }
