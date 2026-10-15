@@ -60,6 +60,8 @@ import { DashboardHealthPanel } from "../components/dashboard-health-panel";
 import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
 import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
 import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
+import { DashboardPatternsPanel } from "../components/dashboard-patterns-panel";
+import { buildDashboardPatterns } from "../lib/dashboard-patterns";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1745,6 +1747,8 @@ export function DashboardPage() {
         </details> : null}
 
         {advancedReadings ? <AdvancedReadingsPanel model={advancedReadings} currency={displayCurrencyCode} /> : null}
+        {canUseAdvancedDashboard ? <DashboardPatternsPanel key={`patterns:${user?.id}:${snapshot.workspace.id}`} model={buildDashboardPatterns(snapshot, parityCtx, parityNow)} currency={displayCurrencyCode}
+          ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} /> : null}
         {canUseAdvancedDashboard ? <DashboardHistoryPanel key={`${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
           ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} /> : null}
 
