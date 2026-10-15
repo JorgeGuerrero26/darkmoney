@@ -24,7 +24,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { notificationObligationReadState, resolveNotificationObligationTarget } from "../../notifications/lib/notification-obligation-target";
+import { useObligationNotificationOpening } from "../../notifications/hooks/use-obligation-notification-opening";
 
 import { Button } from "../../../components/ui/button";
 import { DeleteConfirmDialog } from "../../../components/ui/delete-confirm-dialog";
@@ -3177,28 +3177,21 @@ export function ObligationsPage() {
     detailObligationId === null
       ? null
       : obligations.find((obligation) => obligation.id === detailObligationId) ?? null;
-  useEffect(() => {
-    if (!notificationParams.has("resource") || !snapshot || snapshot.workspace.id !== activeWorkspace?.id || snapshotQuery.isPlaceholderData || snapshotQuery.isFetching) return;
-    const state = (query: { isLoading: boolean; isFetching: boolean; isPlaceholderData: boolean; isError: boolean }) =>
-      query.isLoading || query.isFetching || query.isPlaceholderData ? "loading" as const : query.isError ? "error" as const : "ready" as const;
-    const reads = notificationObligationReadState(notificationParams, {
-      owned: obligations, shared: state(sharedObligationsQuery), payments: state(pendingPaymentRequestsQuery), events: state(eventRequestsQuery),
-    });
-    if (reads === "loading") return;
-    if (reads === "error") {
-      setPageFeedback((current) => current?.title === "No se pudo abrir el aviso" ? current : { tone: "error", title: "No se pudo abrir el aviso", description: "No pudimos comprobar el registro o su solicitud. Reintenta la consulta; el enlace se conserva." });
-      return;
-    }
-    setPageFeedback((current) => current?.title === "No se pudo abrir el aviso" ? null : current);
-    const target = resolveNotificationObligationTarget(notificationParams, {
-      owned: obligations, shared: sharedObligations, payments: pendingPaymentRequests,
-      deletes: eventRequestsQuery.data?.deleteRequests ?? [], edits: eventRequestsQuery.data?.editRequests ?? [],
-    });
+  const noticeReadState = (query: { isLoading: boolean; isFetching: boolean; isPlaceholderData: boolean; isError: boolean }) =>
+    query.isLoading || query.isFetching || query.isPlaceholderData ? "loading" as const : query.isError ? "error" as const : "ready" as const;
+  useObligationNotificationOpening({params:notificationParams,workspaceId:activeWorkspace?.id,snapshotWorkspaceId:snapshot?.workspace.id,
+    stale:snapshotQuery.isPlaceholderData||snapshotQuery.isFetching,
+    data:{owned:obligations,shared:sharedObligations,payments:pendingPaymentRequests,deletes:eventRequestsQuery.data?.deleteRequests??[],edits:eventRequestsQuery.data?.editRequests??[]},
+    reads:{shared:noticeReadState(sharedObligationsQuery),payments:noticeReadState(pendingPaymentRequestsQuery),events:noticeReadState(eventRequestsQuery)},
+    onError:kind=>setPageFeedback(current=>kind==="read"?(current?.title==="No se pudo abrir el aviso"?current:{tone:"error",title:"No se pudo abrir el aviso",description:"No pudimos comprobar el registro o su solicitud. Reintenta la consulta; el enlace se conserva."}):{tone:"error",title:"Registro no disponible",description:"El registro de este aviso no está disponible en este espacio o ya fue eliminado."}),
+    onTarget:target=>{
+    if(target)setPageFeedback((current) => current?.title === "No se pudo abrir el aviso" ? null : current);
     setNotificationEventRequest(null);
     setNotificationPaymentId(null);
     setDetailObligationId(null);
     setSharedDetailId(null);
-    if (!target) setPageFeedback({ tone: "error", title: "Registro no disponible", description: "El registro de este aviso no está disponible en este espacio o ya fue eliminado." });
+    setNotificationEventId(null);
+    if (!target) return;
     else if (target.mode === "payment") setNotificationPaymentId(target.request);
     else if (target.mode === "edit" || target.mode === "delete") setNotificationEventRequest({ kind: target.mode, eventId: target.event });
     else {
@@ -3206,12 +3199,11 @@ export function ObligationsPage() {
       if (target.mode === "shared") setSharedDetailId(target.id);
       else setDetailObligationId(target.id);
     }
-    setNotificationParams((current) => {
+    },onConsume:()=>setNotificationParams((current) => {
       const next = new URLSearchParams(current);
       for (const key of ["resource", "paymentRequest", "event", "notificationKind"]) next.delete(key);
       return next;
-    }, { replace: true });
-  }, [notificationParams, setNotificationParams, snapshot, activeWorkspace?.id, snapshotQuery.isPlaceholderData, snapshotQuery.isFetching, obligations, sharedObligations, sharedObligationsQuery.isLoading, sharedObligationsQuery.isFetching, sharedObligationsQuery.isPlaceholderData, sharedObligationsQuery.isError, pendingPaymentRequests, pendingPaymentRequestsQuery.isLoading, pendingPaymentRequestsQuery.isFetching, pendingPaymentRequestsQuery.isPlaceholderData, pendingPaymentRequestsQuery.isError, eventRequestsQuery.data, eventRequestsQuery.isLoading, eventRequestsQuery.isFetching, eventRequestsQuery.isPlaceholderData, eventRequestsQuery.isError]);
+    }, { replace: true })});
   const attachmentsQuery = useEntityAttachmentsQuery(
     activeWorkspace?.id,
     "obligation",
@@ -3877,8 +3869,9 @@ export function ObligationsPage() {
 
   async function handleAcceptEventDeleteRequest(request: ObligationEventDeleteRequest) {
     if (!activeWorkspace || !user?.id) {
-      return;
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === request.payload.obligationId && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     const obligation = obligations.find((item) => item.id === request.payload.obligationId);
     const eventAmount =
@@ -3909,6 +3902,7 @@ export function ObligationsPage() {
         title: "No pudimos eliminar el evento",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 
@@ -3916,9 +3910,10 @@ export function ObligationsPage() {
     request: ObligationEventDeleteRequest,
     rejectionReason: string,
   ) {
-    if (!user?.id) {
-      return;
+    if (!activeWorkspace || !user?.id) {
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === request.payload.obligationId && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     try {
       await rejectEventDeleteRequestMutation.mutateAsync({
@@ -3937,13 +3932,15 @@ export function ObligationsPage() {
         title: "No pudimos rechazar la solicitud",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 
   async function handleAcceptEventEditRequest(request: ObligationEventEditRequest) {
     if (!activeWorkspace || !user?.id) {
-      return;
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === request.payload.obligationId && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     const obligation = obligations.find((item) => item.id === request.payload.obligationId);
     const currentEvent =
@@ -3982,6 +3979,7 @@ export function ObligationsPage() {
         title: "No pudimos aplicar los cambios",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 
@@ -3989,9 +3987,10 @@ export function ObligationsPage() {
     request: ObligationEventEditRequest,
     rejectionReason: string,
   ) {
-    if (!user?.id) {
-      return;
+    if (!activeWorkspace || !user?.id) {
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === request.payload.obligationId && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     try {
       await rejectEventEditRequestMutation.mutateAsync({
@@ -4010,6 +4009,7 @@ export function ObligationsPage() {
         title: "No pudimos rechazar la propuesta",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 
@@ -4020,8 +4020,9 @@ export function ObligationsPage() {
     accountId: number | null;
   }) {
     if (!activeWorkspace || !user?.id) {
-      return;
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === input.obligation.id && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     const remainingAfterPayment = Math.max(
       0,
@@ -4057,6 +4058,7 @@ export function ObligationsPage() {
         title: "No pudimos aceptar la solicitud",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 
@@ -4066,8 +4068,9 @@ export function ObligationsPage() {
     rejectionReason: string;
   }) {
     if (!activeWorkspace || !user?.id) {
-      return;
+      throw new Error("La sesión o el espacio ya no están disponibles. Actualiza antes de responder.");
     }
+    if (!obligations.some(item => item.id === input.obligation.id && item.workspaceId === activeWorkspace.id)) throw new Error("La solicitud no pertenece al espacio actual.");
 
     try {
       await rejectPaymentRequestMutation.mutateAsync({
@@ -4089,6 +4092,7 @@ export function ObligationsPage() {
         title: "No pudimos rechazar la solicitud",
         description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
       });
+      throw error;
     }
   }
 

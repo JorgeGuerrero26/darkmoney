@@ -12,6 +12,7 @@ import type {
   ObligationEventEditRequest,
 } from "../../../services/queries/workspace-data";
 import { describeEditRequestChanges } from "../lib/obligation-event-requests";
+import { useRequestResolution } from "../hooks/use-request-resolution";
 
 type ActiveRequest = { kind: "delete" | "edit"; eventId: number } | null;
 
@@ -34,7 +35,7 @@ export type PendingEventRequestsSectionProps = {
 export function PendingEventRequestsSection({
   deleteRequests,
   editRequests,
-  isResolving,
+  isResolving:externalResolving,
   obligations,
   onAcceptDelete,
   onAcceptEdit,
@@ -42,9 +43,13 @@ export function PendingEventRequestsSection({
   onRejectEdit,
   focusRequest,
 }: PendingEventRequestsSectionProps) {
+  const resolution=useRequestResolution(externalResolving);
+  const isResolving=resolution.busy;
   const [activeRequest, setActiveRequest] = useState<ActiveRequest>(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
+  deleteRequests=deleteRequests.filter(row=>obligations.some(obligation=>obligation.id===row.payload.obligationId));
+  editRequests=editRequests.filter(row=>obligations.some(obligation=>obligation.id===row.payload.obligationId));
   const total = deleteRequests.length + editRequests.length;
   const ready = (focusRequest?.kind === "delete" ? deleteRequests : editRequests).some((row) => row.payload.eventId === focusRequest?.eventId);
   const focusedRow = useNotificationFocus<HTMLLIElement>(focusRequest?.eventId, ready);
@@ -56,6 +61,7 @@ export function PendingEventRequestsSection({
   function openRejection(kind: "delete" | "edit", eventId: number) {
     setActiveRequest({ kind, eventId });
     setRejectionReason("");
+    resolution.setError("");
   }
 
   function isRejecting(kind: "delete" | "edit", eventId: number) {
@@ -71,10 +77,10 @@ export function PendingEventRequestsSection({
   }
 
   return (
-    <section className="rounded-[28px] border border-sky-300/20 bg-sky-300/[0.04] p-5">
+    <section className="border-t border-white/10 py-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-sky-200/80">
+          <p className="text-sm font-semibold text-ink">
             Cambios propuestos
           </p>
           <p className="mt-2 text-sm leading-7 text-storm">
@@ -82,19 +88,20 @@ export function PendingEventRequestsSection({
             aplica hasta que respondas.
           </p>
         </div>
-        <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-sm text-sky-100">
+        <span className="text-sm text-storm">
           {total}
         </span>
       </div>
 
-      <ul className="mt-5 grid gap-4">
+      {resolution.error?<p role="alert" className="mt-3 text-sm text-ink">{resolution.error}</p>:null}
+      <ul className="mt-5 divide-y divide-white/10">
         {editRequests.map((request) => {
           const changes = describeEditRequestChanges(request.payload);
           const rejecting = isRejecting("edit", request.payload.eventId);
 
           return (
             <li
-              className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+              className="py-4"
               key={`edit-${request.notificationId}`}
               ref={focusRequest?.kind === "edit" && request.payload.eventId === focusRequest.eventId ? focusedRow : undefined}
               tabIndex={-1}
@@ -102,7 +109,7 @@ export function PendingEventRequestsSection({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="inline-flex items-center text-sm font-semibold text-ink">
-                    <PencilLine className="mr-2 h-4 w-4 text-sky-200" />
+                    <PencilLine className="mr-2 h-4 w-4 text-storm" />
                     Editar evento
                   </p>
                   <p className="mt-1 text-xs text-storm">
@@ -135,7 +142,7 @@ export function PendingEventRequestsSection({
               )}
 
               {rejecting ? (
-                <div className="mt-4 rounded-[18px] border border-white/10 bg-black/20 p-4">
+                <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="text-sm font-medium text-ink">Motivo del rechazo</p>
                   <Input
                     className="mt-3"
@@ -157,9 +164,7 @@ export function PendingEventRequestsSection({
                     <Button
                       disabled={isResolving}
                       onClick={() => {
-                        void onRejectEdit(request, rejectionReason).then(() =>
-                          setActiveRequest(null),
-                        );
+                        void resolution.run(()=>onRejectEdit(request,rejectionReason),()=>setActiveRequest(null));
                       }}
                       type="button"
                     >
@@ -179,7 +184,7 @@ export function PendingEventRequestsSection({
                   <Button
                     disabled={isResolving || changes.length === 0}
                     onClick={() => {
-                      void onAcceptEdit(request);
+                      void resolution.run(()=>onAcceptEdit(request));
                     }}
                     type="button"
                   >
@@ -208,7 +213,7 @@ export function PendingEventRequestsSection({
 
           return (
             <li
-              className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+              className="py-4"
               key={`delete-${request.notificationId}`}
               ref={focusRequest?.kind === "delete" && request.payload.eventId === focusRequest.eventId ? focusedRow : undefined}
               tabIndex={-1}
@@ -242,7 +247,7 @@ export function PendingEventRequestsSection({
               </p>
 
               {rejecting ? (
-                <div className="mt-4 rounded-[18px] border border-white/10 bg-black/20 p-4">
+                <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="text-sm font-medium text-ink">Motivo del rechazo</p>
                   <Input
                     className="mt-3"
@@ -264,9 +269,7 @@ export function PendingEventRequestsSection({
                     <Button
                       disabled={isResolving}
                       onClick={() => {
-                        void onRejectDelete(request, rejectionReason).then(() =>
-                          setActiveRequest(null),
-                        );
+                        void resolution.run(()=>onRejectDelete(request,rejectionReason),()=>setActiveRequest(null));
                       }}
                       type="button"
                     >
@@ -286,7 +289,7 @@ export function PendingEventRequestsSection({
                   <Button
                     disabled={isResolving}
                     onClick={() => {
-                      void onAcceptDelete(request);
+                      void resolution.run(()=>onAcceptDelete(request));
                     }}
                     type="button"
                   >

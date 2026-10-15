@@ -151,7 +151,9 @@ assert.equal(notificationObligationReadState(link, { owned: [{ id: 11 }], shared
 assert.equal(notificationObligationReadState(new URLSearchParams("resource=11&event=3&notificationKind=obligation_event_edit_request"), { owned: [{ id: 11 }], shared: "ready", payments: "ready", events: "error" }), "error");
 assert.equal(notificationObligationReadState(new URLSearchParams("resource=11&paymentRequest=20&notificationKind=obligation_payment_request"), { owned: [{ id: 11 }], shared: "ready", payments: "loading", events: "ready" }), "loading");
 const page = readFileSync(resolve(root, "src/modules/obligations/pages/obligations-page.tsx"), "utf8");
-assert.match(page, /if \(reads === "error"\)[\s\S]*?return;[\s\S]*?resolveNotificationObligationTarget/);
+assert.match(page, /useObligationNotificationOpening\(/);
+const openingHook=readFileSync(resolve(root,"src/modules/notifications/hooks/use-obligation-notification-opening.ts"),"utf8");
+assert.match(openingHook, /if\(reads==="error"\)[\s\S]*?return;[\s\S]*?resolveNotificationObligationTarget/);
 assert.match(page, /onClick=\{\(\) => \{ void sharedObligationsQuery.refetch\(\); \}\}/);
 const transportSource = readFileSync(resolve(root, "src/services/queries/workspace-data.ts"), "utf8");
 const hook = transportSource.match(/export function useSharedObligationsQuery[\s\S]*?\n\}/)[0];

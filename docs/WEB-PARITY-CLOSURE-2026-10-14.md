@@ -16,6 +16,22 @@ El usuario delegó móvil a otro desarrollador. Esta continuación no modifica e
 - Solo PRO y con candidato/evidencia válidos llama IA. Error/límite/veredicto desconocido exige confirmación manual. Un `distinct` obliga a releer grupos completos y comparar huella antes del registro atómico. No se consumió DeepSeek real en las pruebas.
 - Las pruebas de división web añaden veredictos, totales/conteos enviados, evidencia fallida y una parte modificada durante IA. La regresión del comprobador simple conserva sus pruebas móviles reales y timeout/cancelación.
 
-## Pendientes de esta continuación
+## Asistente y resumen IA
 
-Asistente (`assistant_insight`, contexto y resúmenes) y pruebas reales de interfaz de solicitudes/eventos. Entrega de SQL sigue coordinada con móvil; falta integración y validación remota/dispositivos, no autorizadas en esta ejecución. La sección nueva de IA actualiza el límite de confirmación manual del informe anterior; no certifica el servidor desplegado ni paridad total de toda la bandeja.
+- Ruta real `/app/assistant`, navegación y destino de `assistant_insight` mediante `noticeId` y lectura canónica por usuario. Ignora URLs y parámetros arbitrarios de preguntas. El aviso prepara el texto pero nunca envía automáticamente el prompt; los avisos antiguos no identifican espacio y exigen selección explícita.
+- Consulta manual al contrato `assistant-chat`, PRO y contexto/historial acotados como servidor móvil (4000 caracteres de pregunta, 16 turnos, 3000 caracteres por turno). Doble envío bloqueado, cancelación y respuestas antiguas no invaden otro espacio/usuario. El servidor mantiene la cuota y las herramientas de preferencias personales; no se invocó en pruebas.
+- Evidencia abre movimientos internos. Borradores se muestran como sugerencias **sin registrar**, con enlace al módulo para revisión manual: no se ejecutan comandos ni herramientas provenientes de la respuesta. La conversación web es efímera; no hay voz ni gestión/persistencia de múltiples chats equivalente a móvil en esta unidad.
+- Explicaciones del dashboard aisladas por usuario/espacio/moneda. El caché antiguo solo preserva uso diario, no entrega su texto en otro contexto. Petición cancelable y validación de respuesta; las tardías no contaminan el caché nuevo.
+- El resumen distingue saldo líquido convertible de patrimonio, declara conversiones ausentes e indicadores no disponibles en vez de inventarlos. **Nueva diferencia verificada:** el móvil actual usa proyección de caja líquida y su motor nuevo; web aún calcula el cierre desde patrimonio. El payload declara `projectionBasis: net_worth`. No se certifica equivalencia de esa aritmética ni se cambia el motor móvil. Hace falta portar/auditar el motor actual del dashboard como otra unidad.
+- `test:web-assistant` ejecuta página/servicio/contrato reales con I/O simulado, selección/enviar explícitos, alcance canónico, historial, borradores/evidencia, caché y respuesta tardía. Sin consumo de cuota IA ni consultas financieras remotas.
+
+## Solicitudes y eventos de créditos/deudas
+
+- Se extrae el flujo real de apertura a `useObligationNotificationOpening`, usado por la página: espera snapshot/lecturas correctas, mantiene el enlace ante error, consume una apertura una sola vez, valida recurso/solicitud/evento y no acepta acciones al enfocar.
+- Los formularios reales de abonos y solicitudes de editar/eliminar usan un bloqueo inmediato de confirmación y muestran errores conservando edición/motivo. Los seis callbacks de página ya propagan el fallo, en vez de resolver y hacer cerrar el formulario. Rechazan sesión/espacio y recurso que dejó de pertenecer al contexto.
+- Registrar movimiento exige cuenta activa del espacio y moneda; la inexistencia de cuentas no se transforma automáticamente en «sin movimiento». El usuario puede optar explícitamente por no registrarlo. Solicitudes ajenas/resueltas no abren el formulario de aceptación. Las listas de revisión usan líneas y colores neutros, sin tarjetas anidadas ni bordes azules/ámbar.
+- `test:obligation-notification-ui` ejecuta hook de apertura, formularios y callbacks originales extraídos de la página (solo transporte simulado): espera/error, espacio/snapshot antiguo, solicitudes inexistentes, abono/edición/eliminación, foco sin aceptar, fallo y reintento, dos clics, motivo de rechazo y cuenta inválida sin fallback silencioso. No monta el dashboard financiero entero de la página ni prueba RLS/servidor/dispositivos.
+
+## Pendientes de entrega y alcance
+
+La entrega de SQL sigue coordinada con móvil y no se publicó web. Faltan servidor/dispositivos, no autorizados para operaciones financieras en esta ejecución. El motor actual de proyección móvil requiere nueva auditoría/port web, y las herramientas avanzadas de Asistente no tienen paridad completa. Estas unidades cierran los cambios concretos descritos, no la paridad total de toda la aplicación.
