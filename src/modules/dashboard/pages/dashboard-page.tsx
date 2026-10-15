@@ -64,6 +64,7 @@ import { DashboardPatternsPanel } from "../components/dashboard-patterns-panel";
 import { buildDashboardPatterns } from "../lib/dashboard-patterns";
 import { ProjectionHorizonPanel } from "../components/projection-horizon-panel";
 import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
+import { DashboardCategorySuggestionsPanel } from "../components/dashboard-category-suggestions-panel";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1685,7 +1686,10 @@ export function DashboardPage() {
           flow={() => <ProjectionHorizonPanel snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
             ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
             onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
-          health={() => <DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />}
+          health={() => <><DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />
+            <DashboardCategorySuggestionsPanel key={`categories:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}
+              ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
+              canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} /></>}
           summary={<>
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
