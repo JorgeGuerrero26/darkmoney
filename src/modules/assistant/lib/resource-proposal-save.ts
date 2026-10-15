@@ -1,5 +1,5 @@
 /** Resources without server deduplication cannot be blindly retried after a lost response. */
-export function createAssistantResourceSaver<T>(options: { isCurrent: () => boolean; insert: (input: T) => Promise<void> }) {
+export function createAssistantResourceSaver<T>(options: { isCurrent: () => boolean; insert: (input: T) => Promise<void>; isDefiniteRejection?: (error: unknown, input: T) => boolean }) {
   let flight: Promise<void> | null = null, confirmed: T | null = null, uncertain = false;
   async function save(input: T) {
     if (!options.isCurrent()) throw new Error("Espera la lectura del espacio actual antes de guardar.");
@@ -15,7 +15,8 @@ export function createAssistantResourceSaver<T>(options: { isCurrent: () => bool
         confirmed = input;
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? String(error.code ?? "") : "";
-        if (sent && !/^(22|23|42)[A-Z0-9]{3}$/.test(code)) uncertain = true;
+        const rejected = options.isDefiniteRejection ? options.isDefiniteRejection(error, input) : /^(22|23|42)[A-Z0-9]{3}$/.test(code);
+        if (sent && !rejected) uncertain = true;
         throw error;
       } finally { flight = null; }
     });

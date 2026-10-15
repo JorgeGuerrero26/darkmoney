@@ -1,11 +1,12 @@
 import { parseMovementProposal, type AssistantMovementDraft } from "./movement-proposal";
 import { parseBudgetProposal, type AssistantBudgetDraft } from "./budget-proposal";
 import { parseRecurringProposal, type AssistantRecurringDraft } from "./recurring-proposal";
+import { parseObligationProposal, type AssistantObligationDraft } from "./obligation-proposal";
 
 export type AssistantMessage = { role: "user" | "assistant"; content: string };
 export type AssistantEvidence = { label: string; movementIds: number[] };
 export type ProposalStatus = "pending" | "saved" | "discarded" | "unconfirmed";
-export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; recurringDraft?: AssistantRecurringDraft; status?: ProposalStatus; statusNote?: string };
+export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; recurringDraft?: AssistantRecurringDraft; obligationDraft?: AssistantObligationDraft; status?: ProposalStatus; statusNote?: string };
 export type AssistantReply = { reply: string; evidence: AssistantEvidence[]; proposals: AssistantProposal[]; remainingToday: number | null };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const id = (value: unknown) => (typeof value==="number"||typeof value==="string")&&Number.isSafeInteger(Number(value))&&Number(value)>0;
@@ -43,7 +44,10 @@ export function parseAssistantReply(value: unknown): AssistantReply {
   add(raw.budgetDraft,"Presupuesto","/app/budgets","limitAmount");
   const budgetDraft=parseBudgetProposal(raw.budgetDraft);
   if(budgetDraft&&proposals.length>budgetIndex)proposals[budgetIndex].budgetDraft=budgetDraft;
+  const obligationIndex=proposals.length;
   add(raw.obligationDraft,"Crédito o deuda","/app/obligations","principalAmount");
+  const obligationDraft=parseObligationProposal(raw.obligationDraft);
+  if(obligationDraft&&proposals.length>obligationIndex)proposals[obligationIndex].obligationDraft=obligationDraft;
   const recurringIndex=proposals.length;
   if(object(raw.recurringDraft).kind==="subscription")add(raw.recurringDraft,"Suscripción","/app/subscriptions");
   if(object(raw.recurringDraft).kind==="recurring_income")add(raw.recurringDraft,"Ingreso fijo","/app/recurring-income");

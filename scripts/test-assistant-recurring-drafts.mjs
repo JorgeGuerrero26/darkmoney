@@ -62,6 +62,7 @@ mock("src/modules/shared/use-pro-feature-access.ts", "export const useProFeature
 mock("src/services/queries/assistant.ts", "export const useAssistantInsight=()=>({data:null});export const askAssistant=async(message,history)=>{globalThis.recCalls.push({message,history});return globalThis.recReply;};");
 mock("src/modules/assistant/components/assistant-movement-review.tsx", "export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-budget-review.tsx", "export const AssistantBudgetReview=()=>null;");
+mock("src/modules/assistant/components/assistant-obligation-review.tsx", "export const AssistantObligationReview=()=>null;");
 mock("src/components/ui/date-picker-field.tsx", `${h} export const DatePickerField=p=>h('input',{value:p.value,onChange:e=>p.onChange(e.target.value)});`);
 mock("src/components/ui/searchable-picker.tsx", `${h} export const SearchablePicker=p=>h('select',{'aria-label':p.placeholderLabel,value:p.value,onChange:e=>p.onChange(e.target.value)},h('option',{value:''},'Sin asignar'),...p.options.filter(o=>o.value!=='').map(o=>h('option',{key:o.value,value:o.value},o.label)));`);
 const { AssistantPage } = await import(load("src/modules/assistant/pages/assistant-page.tsx"));

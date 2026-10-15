@@ -64,6 +64,7 @@ mock("src/modules/shared/use-pro-feature-access.ts", "export const useProFeature
 mock("src/services/queries/assistant.ts", "export const useAssistantInsight=()=>({data:null});export const askAssistant=async(message,history)=>{globalThis.budgetCalls.push({message,history});return globalThis.budgetReply;};");
 mock("src/modules/assistant/components/assistant-movement-review.tsx", "export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-recurring-review.tsx", "export const AssistantRecurringReview=()=>null;");
+mock("src/modules/assistant/components/assistant-obligation-review.tsx", "export const AssistantObligationReview=()=>null;");
 mock("src/components/ui/date-picker-field.tsx", `${h} export const DatePickerField=p=>h('input',{value:p.value,onChange:e=>p.onChange(e.target.value)});`);
 const { AssistantPage } = await import(load("src/modules/assistant/pages/assistant-page.tsx"));
 const { AssistantBudgetReview } = await import(load("src/modules/assistant/components/assistant-budget-review.tsx"));

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { formatCurrency } from "../../../lib/formatting/money";
+import { validateObligationPlan } from "../lib/obligation-editor-input";
 import {
   addMonthsIso,
   defaultFirstDueDate,
@@ -65,7 +66,13 @@ export function PaymentPlanEditor({
   const last = rows[rows.length - 1];
   const isBeforeStart = firstDueDate < startDate;
   const agreedBeforeFirst = mode === "custom" && agreed.some((item) => item.dueDate < firstDueDate);
-  const canSave = complete && !isBeforeStart && !agreedBeforeFirst;
+  const planError = useMemo(() => {
+    if (!draft) return null;
+    try { validateObligationPlan(draft, principal, startDate); return null; }
+    catch (error) { return error instanceof Error ? error.message : "Revisa el plan."; }
+  }, [draft, principal, startDate]);
+  const canSave = complete && !isBeforeStart && !agreedBeforeFirst && !planError;
+  const adjustedDates = draft?.mode === "custom" && draft.agreed.some((row, i) => row.dueDate && row.dueDate !== rows[i]?.dueDate);
 
   return (
     <div className="space-y-5">
@@ -111,9 +118,11 @@ export function PaymentPlanEditor({
       )}
 
       <div className="border-t border-white/[0.08] pt-4">
+        {adjustedDates ? <div className="mb-4 text-xs leading-5 text-storm"><p>Las fechas que se cruzan pasan al mes siguiente, como en la app. El calendario que se usará es:</p>{rows.slice(0, 6).map(row => <p className="mt-1 flex justify-between gap-3" key={row.seq}><span>{row.seq}. {row.dueDate}</span><span>{formatAmount(row.amount)}</span></p>)}{rows.length > 6 ? <p>Y {rows.length - 6} pagos más.</p> : null}</div> : null}
         <p className="text-sm text-ink">{rows.length ? `${rows.length} ${rows.length === 1 ? "pago" : "pagos"} · ${monthLabel(first!.dueDate)} a ${monthLabel(last!.dueDate)}` : "Sin pagos programados"}</p>
         <p className="mt-1 text-sm text-storm">{formatAmount(principal - difference)} de {formatAmount(principal)}</p>
         {principal <= 0 ? <p className="mt-2 text-xs text-storm">Primero indica el monto del crédito o deuda.</p> : isBeforeStart ? <p className="mt-2 text-xs text-rose-300">El primer pago no puede ser anterior al inicio.</p> : agreedBeforeFirst ? <p className="mt-2 text-xs text-rose-300">Un pago acordado no puede caer antes del primer pago.</p> : !complete ? <p className="mt-2 text-xs text-rose-300">{difference > 0 ? `Faltan ${formatAmount(difference)} por programar` : `Sobran ${formatAmount(Math.abs(difference))}`}</p> : null}
+        {complete && !isBeforeStart && !agreedBeforeFirst && planError ? <p className="mt-2 text-xs text-rose-300">{planError}</p> : null}
         <Button className="mt-4 w-full" disabled={!canSave} onClick={() => onSave(draft)} type="button">Guardar plan</Button>
         {plan ? <button className="mt-3 w-full text-sm text-storm hover:text-ink" onClick={() => onSave(null)} type="button">Quitar plan</button> : null}
       </div>

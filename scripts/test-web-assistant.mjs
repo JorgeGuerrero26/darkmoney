@@ -18,6 +18,7 @@ mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureA
 mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-budget-review.tsx","export const AssistantBudgetReview=()=>null;");
 mock("src/modules/assistant/components/assistant-recurring-review.tsx","export const AssistantRecurringReview=()=>null;");
+mock("src/modules/assistant/components/assistant-obligation-review.tsx","export const AssistantObligationReview=()=>null;");
 const contract=await import(load("src/modules/assistant/lib/assistant-contract.ts"));
 const service=await import(load("src/services/queries/assistant.ts"));
 const {AssistantPage}=await import(load("src/modules/assistant/pages/assistant-page.tsx"));
