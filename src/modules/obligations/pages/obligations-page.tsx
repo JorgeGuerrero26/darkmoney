@@ -5,7 +5,6 @@ import {
   Archive,
   ArrowDownCircle,
   ArrowUpCircle,
-  CircleDollarSign,
   Check,
   ChevronDown,
   Download,
@@ -35,7 +34,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { PageHeader } from "../../../components/ui/page-header";
 import { Pagination } from "../../../components/ui/pagination";
 import type { PickerOption } from "../../../components/ui/searchable-picker";
-import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
+import { ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
@@ -60,9 +59,6 @@ import type {
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { ObligationAnalyticsModal } from "../components/obligation-analytics-modal";
-import { AttachmentGallery } from "../../attachments/components/attachment-gallery";
-import { PendingReceiptField } from "../../attachments/components/pending-receipt-field";
-import { CompactAttachmentField, CompactPendingAttachmentField } from "../../attachments/components/compact-attachment-field";
 import {
   deleteStoredReceipt,
   prepareReceiptUpload,
@@ -114,7 +110,7 @@ import {
 } from "../../../services/queries/workspace-data";
 import { ObligationTable } from "../components/obligation-table";
 import { ObligationDetailDialog } from "../components/obligation-detail-dialog";
-import { coverPlan, expandPaymentPlan, normalizePaymentPlan, parsePaymentPlan, planDifference } from "../lib/payment-plan";
+import { expandPaymentPlan, normalizePaymentPlan, parsePaymentPlan, planDifference } from "../lib/payment-plan";
 import { PendingEventRequestsSection } from "../components/pending-event-requests-section";
 import { PendingPaymentRequestsSection } from "../components/pending-payment-requests-section";
 import {
@@ -127,15 +123,6 @@ import { useObligationsFilters } from "../hooks/use-obligations-filters";
 
 type EditorMode = "create" | "edit";
 
-type PaymentFormState = {
-  amount: string;
-  eventDate: string;
-  installmentNo: string;
-  description: string;
-  notes: string;
-  registerAccountMovement: boolean;
-  accountId: string;
-};
 
 type PrincipalAdjustmentMode = "increase" | "decrease";
 
@@ -601,357 +588,6 @@ function MultiSelectFilter({
   return <div className="relative" ref={containerRef}><button aria-expanded={open} className="flex h-full min-h-14 w-full items-center justify-between rounded-xl border border-white/[0.08] bg-[#1a1917] px-4 text-left text-sm font-medium text-ink transition-colors duration-150 hover:border-white/[0.14]" onClick={() => setOpen((value) => !value)} type="button"><span>{display}</span><ChevronDown className={`h-4 w-4 text-storm transition-transform duration-150 ${open ? "rotate-180" : ""}`} /></button>{open ? <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[9px] border border-white/[0.12] bg-[#1b1a18] py-1">{options.map((option) => { const checked = values.includes(option.value); return <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 text-sm text-ink transition-colors duration-150 hover:bg-white/[0.04]" key={option.value}><input checked={checked} className="accent-[#d8d2c7]" onChange={() => onChange(checked ? values.filter((value) => value !== option.value) : [...values, option.value])} type="checkbox" /><span>{option.label}</span></label>; })}</div> : null}</div>;
 }
 
-function LegacyPaymentDialog({
-  accessMessage,
-  accounts,
-  attachments,
-  canManageReceipts,
-  editEventAmount,
-  feedback,
-  formState,
-  isEditMode,
-  isSaving,
-  isUploadingReceipt,
-  obligation,
-  onCancel,
-  onDeleteReceipt,
-  onSubmit,
-  onUploadReceipt,
-  pendingReceiptFile,
-  updateFormState,
-  updatePendingReceiptFile,
-}: {
-  accessMessage: string;
-  accounts: AccountSummary[];
-  attachments: AttachmentSummary[];
-  canManageReceipts: boolean;
-  editEventAmount: number | null;
-  feedback: FeedbackState | null;
-  formState: PaymentFormState;
-  isEditMode: boolean;
-  isSaving: boolean;
-  isUploadingReceipt: boolean;
-  obligation: ObligationSummary;
-  onCancel: () => void;
-  onDeleteReceipt: (attachment: AttachmentSummary) => Promise<void>;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  onUploadReceipt: (file: File) => Promise<void>;
-  pendingReceiptFile: File | null;
-  updatePendingReceiptFile: (file: File | null) => void;
-  updateFormState: <Field extends keyof PaymentFormState>(
-    field: Field,
-    value: PaymentFormState[Field],
-  ) => void;
-}) {
-  const paymentAmount = parseOptionalNumber(formState.amount) ?? 0;
-  // Al editar, el pendiente actual ya tiene descontado el monto viejo del abono.
-  const pendingBeforePayment = obligation.pendingAmount + (editEventAmount ?? 0);
-  const projectedPending = Math.max(0, pendingBeforePayment - paymentAmount);
-  // receivable = te deben, el abono entra a la cuenta; payable = debes, el abono sale.
-  const isReceivable = obligation.direction === "receivable";
-  const accountOptions = accounts
-    .filter(
-      (account) =>
-        (!account.isArchived || String(account.id) === formState.accountId) &&
-        account.currencyCode === obligation.currencyCode,
-    )
-    .map<PickerOption>((account) => ({
-      value: String(account.id),
-      label: account.name,
-      description: `${account.type} - ${account.currencyCode}`,
-      leadingLabel: account.currencyCode,
-      leadingColor: account.color,
-      searchText: `${account.name} ${account.type} ${account.currencyCode}`,
-    }));
-  const selectedAccount =
-    accounts.find((account) => String(account.id) === formState.accountId) ?? null;
-  const accountDelta = isReceivable ? paymentAmount : paymentAmount * -1;
-  const projectedAccountBalance =
-    selectedAccount && formState.registerAccountMovement
-      ? selectedAccount.currentBalance + accountDelta
-      : null;
-
-  return (
-    <div className="fixed inset-0 z-[80] isolate overflow-y-auto bg-black/75 p-3 sm:p-6">
-      <div className="flex min-h-full items-center justify-center">
-        <div className="animate-rise-in relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-white/10 bg-shell [transform:translateZ(0)]">
-          <form
-            className="flex max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden"
-            noValidate
-            onSubmit={onSubmit}
-          >
-            <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
-              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-                <h2 className="font-display text-xl font-semibold text-ink">
-                  {isEditMode ? "Editar abono" : "Registrar abono"}
-                </h2>
-
-                <button
-                  className="grid h-9 w-9 place-items-center rounded-full text-storm transition hover:bg-white/[0.06] hover:text-ink"
-                  onClick={onCancel}
-                  type="button"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {feedback ? (
-                <FormFeedbackBanner
-                  className="mt-6"
-                  description={feedback.description}
-                  title={feedback.title}
-                  tone={feedback.tone}
-                />
-              ) : null}
-
-              <div className="mt-5 grid gap-4">
-                <div className="hidden">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-storm/80">
-                    Resumen
-                  </p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-ink">
-                    {obligation.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-7 text-storm">{obligation.counterparty}</p>
-
-                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-[24px] border border-white/10 bg-black/15 p-4">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                        {isEditMode ? "Pendiente sin este abono" : "Pendiente actual"}
-                      </p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(pendingBeforePayment, obligation.currencyCode)}
-                      </p>
-                    </div>
-                    <div className="rounded-[24px] border border-white/10 bg-black/15 p-4">
-                      <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                        Quedaria en
-                      </p>
-                      <p className="mt-3 font-display text-2xl font-semibold text-ink">
-                        {formatCurrency(projectedPending, obligation.currencyCode)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={`${panelClassName} z-30`}>
-                  <div className="grid gap-5">
-                    <Field
-                      hint="Puedes registrar un pago parcial o uno total."
-                      label="Monto abonado"
-                    >
-                      <Input
-                        inputMode="decimal"
-                        min="0"
-                        onChange={(event) => updateFormState("amount", event.target.value)}
-                        placeholder="0.00"
-                        step="0.01"
-                        type="number"
-                        value={formState.amount}
-                      />
-                    </Field>
-                    <Field
-                      hint="Fecha efectiva del abono."
-                      label="Fecha"
-                    >
-                      <DatePickerField
-                        onChange={(nextValue) => updateFormState("eventDate", nextValue)}
-                        value={formState.eventDate}
-                      />
-                    </Field>
-                    <Field
-                      hint="Opcional. Util si trabajas por cuotas."
-                      label="Cuota"
-                    >
-                      <Input
-                        inputMode="numeric"
-                        min="1"
-                        onChange={(event) => updateFormState("installmentNo", event.target.value)}
-                        placeholder="Ej. 3"
-                        step="1"
-                        type="number"
-                        value={formState.installmentNo}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <div className={`${panelClassName} z-30`}>
-                  <div className="flex items-start justify-between gap-4 rounded-[24px] border border-white/10 bg-black/15 p-4">
-                    <div className="min-w-0">
-                      <p className={labelClassName}>Movimiento en cuenta</p>
-                      <p className="mt-2 text-sm leading-7 text-storm">
-                        {isReceivable
-                          ? "Registra tambien el ingreso del cobro y suma el saldo a la cuenta."
-                          : "Registra tambien el egreso del pago y descuenta el saldo de la cuenta."}
-                      </p>
-                    </div>
-                    <button
-                      aria-pressed={formState.registerAccountMovement}
-                      className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border transition ${
-                        formState.registerAccountMovement
-                          ? "border-pine/35 bg-pine/18"
-                          : "border-white/12 bg-white/[0.05]"
-                      }`}
-                      onClick={() =>
-                        updateFormState("registerAccountMovement", !formState.registerAccountMovement)
-                      }
-                      type="button"
-                    >
-                      <span
-                        className={`absolute h-6 w-6 rounded-full bg-white shadow-[0_8px_20px_rgba(0,0,0,0.28)] transition ${
-                          formState.registerAccountMovement ? "left-7" : "left-1"
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {formState.registerAccountMovement ? (
-                    <div className="mt-5">
-                      <Field
-                        hint={`Solo veras cuentas en ${obligation.currencyCode}.`}
-                        label={isReceivable ? "Cuenta de abono" : "Cuenta de debito"}
-                      >
-                        <Picker
-                          disabled={accountOptions.length === 0}
-                          emptyMessage={`No hay cuentas en ${obligation.currencyCode} disponibles.`}
-                          onChange={(value) => updateFormState("accountId", value)}
-                          options={accountOptions}
-                          placeholderDescription="Selecciona la cuenta afectada por este abono."
-                          placeholderLabel="Selecciona una cuenta"
-                          queryPlaceholder="Buscar cuenta..."
-                          value={formState.accountId}
-                        />
-                      </Field>
-
-                      {selectedAccount && projectedAccountBalance !== null ? (
-                        <div className="mt-4 rounded-[24px] border border-white/10 bg-black/15 p-4">
-                          <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                            Asi quedara {selectedAccount.name}
-                          </p>
-                          <div className="mt-3 grid gap-2 text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-storm">Saldo actual</span>
-                              <span className="font-semibold text-ink">
-                                {formatCurrency(selectedAccount.currentBalance, selectedAccount.currencyCode)}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-storm">Movimiento</span>
-                              <span
-                                className={`font-semibold ${accountDelta >= 0 ? "text-pine" : "text-rose-300"}`}
-                              >
-                                {accountDelta >= 0 ? "+" : "-"}
-                                {formatCurrency(Math.abs(accountDelta), selectedAccount.currencyCode)}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-storm">Quedara en</span>
-                              <span className="font-display text-base font-semibold text-ink">
-                                {formatCurrency(projectedAccountBalance, selectedAccount.currencyCode)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-5 lg:grid-cols-2">
-                <div className={`${panelClassName} z-30`}>
-                  <Field
-                    hint="Se usa como referencia corta dentro del historial."
-                    label="Descripcion"
-                  >
-                    <Input
-                      maxLength={120}
-                      onChange={(event) => updateFormState("description", event.target.value)}
-                      placeholder="Ej. Pago de cuota marzo"
-                      type="text"
-                      value={formState.description}
-                    />
-                  </Field>
-                </div>
-
-                <div className={`${panelClassName} z-30`}>
-                  <Field
-                    hint="Opcional. Anota comprobantes, canal o acuerdo."
-                    label="Notas"
-                  >
-                    <Textarea
-                      className="min-h-[132px]"
-                      onChange={(event) => updateFormState("notes", event.target.value)}
-                      placeholder="Ej. Transferencia recibida desde la cuenta principal."
-                      value={formState.notes}
-                    />
-                  </Field>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <div className={`${panelClassName} z-30`}>
-                  {isEditMode ? (
-                    <AttachmentGallery
-                      accessMessage={accessMessage}
-                      attachments={attachments}
-                      canManage={canManageReceipts}
-                      entityLabel="abono"
-                      isUploading={isUploadingReceipt}
-                      onDelete={(attachment) => {
-                        void onDeleteReceipt(attachment);
-                      }}
-                      onUpload={(file) => {
-                        void onUploadReceipt(file);
-                      }}
-                    />
-                  ) : (
-                    <PendingReceiptField
-                      canUpload={canManageReceipts}
-                      description="Opcional. Adjunta la foto del voucher o la constancia de la transferencia."
-                      file={pendingReceiptFile}
-                      lockedMessage={accessMessage}
-                      onChange={updatePendingReceiptFile}
-                    />
-                  )}
-                  {formState.registerAccountMovement ? (
-                    <p className="mt-3 text-xs leading-5 text-storm">
-                      El comprobante se copiara tambien al movimiento que genere este abono.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 bg-shell px-4 py-4 sm:px-6">
-              <div className="flex justify-end">
-                  <Button
-                    disabled={isSaving}
-                    type="submit"
-                  >
-                    {isSaving ? (
-                      <>
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <CircleDollarSign className="mr-2 h-4 w-4" />
-                        {isEditMode ? "Guardar abono" : "Registrar abono"}
-                      </>
-                    )}
-                  </Button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function LegacyPrincipalAdjustmentDialog({
   accounts,
@@ -1244,50 +880,6 @@ function LegacyPrincipalAdjustmentDialog({
   );
 }
 
-function PaymentDialog(props: Parameters<typeof LegacyPaymentDialog>[0]) {
-  const { accessMessage, accounts, attachments, canManageReceipts, editEventAmount, feedback, formState, isEditMode, isSaving, isUploadingReceipt, obligation, onCancel, onDeleteReceipt, onSubmit, onUploadReceipt, pendingReceiptFile, updateFormState, updatePendingReceiptFile } = props;
-  const [panel, setPanel] = useState<"main" | "details">("main");
-  const amount = parseOptionalNumber(formState.amount) ?? 0;
-  const pendingBefore = obligation.pendingAmount + (editEventAmount ?? 0);
-  const pendingAfter = Math.max(0, pendingBefore - amount);
-  const isReceivable = obligation.direction === "receivable";
-  const paymentNoun = isReceivable ? "cobro" : "pago";
-  const accountOptions = accounts.filter((account) => (!account.isArchived || String(account.id) === formState.accountId) && account.currencyCode === obligation.currencyCode).map<PickerOption>((account) => ({ value: String(account.id), label: account.name, description: `${account.type} · ${account.currencyCode}`, leadingLabel: account.currencyCode, leadingColor: "#6b6459" }));
-  const selectedAccount = accounts.find((account) => String(account.id) === formState.accountId) ?? null;
-  const balanceAfter = selectedAccount ? selectedAccount.currentBalance + (isReceivable ? amount : -amount) : null;
-  const plan = parsePaymentPlan(obligation.paymentPlan)
-    ?? (obligation.installmentCount ? { mode: "equal" as const, count: obligation.installmentCount } : null);
-  const coverage = plan ? coverPlan(
-    plan,
-    obligation.principalAmount,
-    obligation.currentPrincipalAmount ?? obligation.principalAmount,
-    obligation.startDate,
-    obligation.events.filter((item) => item.eventType === "payment").map((item) => ({ amount: item.amount, date: item.eventDate })),
-  ) : [];
-  const nextInstallment = coverage.find((item) => item.status !== "covered");
-  const remainingInInstallment = nextInstallment?.remaining ?? 0;
-  const installmentEffect = nextInstallment && amount > 0
-    ? amount < remainingInInstallment
-      ? `Quedarán ${formatCurrency(remainingInInstallment - amount, obligation.currencyCode)} pendientes de esta cuota.`
-      : amount === remainingInInstallment
-        ? "Completa esta cuota exacta."
-        : `Completa esta cuota y adelanta ${formatCurrency(amount - remainingInInstallment, obligation.currencyCode)} de la siguiente.`
-    : null;
-
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-3"><form className="resource-editor flex max-h-[calc(100dvh-24px)] w-full max-w-[640px] flex-col overflow-hidden rounded-[14px] border border-white/10 bg-[#1a1917] shadow-none" noValidate onSubmit={onSubmit}>
-    <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={onCancel} title={panel === "main" ? (isEditMode ? `Editar ${paymentNoun}` : `Registrar ${paymentNoun}`) : `Detalles del ${paymentNoun}`} />
-    <div className="overflow-y-auto px-5 py-5 sm:px-7">{feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}{panel === "main" ? <div className="space-y-5">
-      <Field label={`Monto del ${paymentNoun} (${getCurrencyLabel(obligation.currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" id="payment-amount" inputMode="decimal" min="0" onChange={(event) => updateFormState("amount", event.target.value)} placeholder="0.00" step="0.01" type="number" value={formState.amount} /></Field>
-      {!isEditMode && nextInstallment ? <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311] px-4 py-3 text-sm"><div className="flex items-center justify-between gap-4"><span className="text-storm">Cuota {nextInstallment.seq} de {coverage.length} · {formatDate(nextInstallment.dueDate)}</span><strong className="tabular-nums text-ink">{formatCurrency(remainingInInstallment, obligation.currencyCode)}</strong></div>{installmentEffect ? <p className="mt-2 text-xs text-storm">{installmentEffect}</p> : null}</div> : null}
-      <div className="flex min-h-14 items-center justify-between border-y border-white/[0.09] text-sm"><span className="text-storm">Pendiente después</span><strong className="text-lg tabular-nums text-ink">{formatCurrency(pendingAfter, obligation.currencyCode)}</strong></div>
-      <Field label="Cuándo"><DatePickerField appearance="compact" onChange={(value) => updateFormState("eventDate", value)} value={formState.eventDate} /></Field>
-      <div className="flex min-h-14 items-center justify-between gap-4 border-y border-white/[0.09]"><div><p className="font-semibold text-ink">Movimiento en cuenta</p><p className="mt-1 text-xs text-storm">{isReceivable ? "Suma el cobro al saldo." : "Descuenta el pago del saldo."}</p></div><button aria-pressed={formState.registerAccountMovement} className={`relative h-7 w-12 rounded-full border transition ${formState.registerAccountMovement ? "border-[#d8d2c7]/60 bg-white/[0.12]" : "border-white/[0.12] bg-white/[0.03]"}`} onClick={() => updateFormState("registerAccountMovement", !formState.registerAccountMovement)} type="button"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#e8e3da] transition ${formState.registerAccountMovement ? "left-[25px]" : "left-1"}`} /></button></div>
-      {formState.registerAccountMovement ? <><Field label={isReceivable ? "Cuenta de abono" : "Cuenta de débito"}><Picker disabled={!accountOptions.length} emptyMessage={`No hay cuentas en ${obligation.currencyCode}.`} onChange={(value) => updateFormState("accountId", value)} options={accountOptions} placeholderDescription="Cuenta afectada." placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.accountId} /></Field>{selectedAccount && balanceAfter !== null ? <div className="flex min-h-12 items-center justify-between border-b border-white/[0.09] text-sm"><span className="text-storm">Saldo después</span><strong className="tabular-nums text-ink">{formatCurrency(balanceAfter, selectedAccount.currencyCode)}</strong></div> : null}</> : null}
-      <ResourceEditorDestination onClick={() => setPanel("details")} summary="Descripción, notas y comprobante" />
-    </div> : <div className="space-y-5"><Field label="Descripción"><Input maxLength={120} onChange={(event) => updateFormState("description", event.target.value)} placeholder="Cuota del mes o referencia" value={formState.description} /></Field><Field label="Notas"><Textarea className="min-h-24" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Número de operación u otra nota" value={formState.notes} /></Field>{isEditMode ? <CompactAttachmentField accessMessage={accessMessage} attachments={attachments} canManage={canManageReceipts} isUploading={isUploadingReceipt} onDelete={(attachment) => void onDeleteReceipt(attachment)} onUpload={(file) => void onUploadReceipt(file)} /> : <CompactPendingAttachmentField canUpload={canManageReceipts} file={pendingReceiptFile} lockedMessage={accessMessage} onChange={updatePendingReceiptFile} />}</div>}</div>
-    <footer className="border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isEditMode ? "Guardar cambios" : `Registrar ${paymentNoun}`}</Button></footer>
-  </form></div>;
-}
 
 function PrincipalAdjustmentDialog(props: Parameters<typeof LegacyPrincipalAdjustmentDialog>[0] & { editEventAmount?: number; isEditMode?: boolean }) {
   const { accounts, editEventAmount = 0, feedback, formState, isEditMode = false, isSaving, mode, obligation, onCancel, onSubmit, updateFormState } = props;
@@ -4290,3 +3882,4 @@ export function ObligationsPage() {
     </div>
   );
 }
+import { ObligationPaymentDialog as PaymentDialog, type PaymentFormState } from "../components/obligation-payment-dialog";

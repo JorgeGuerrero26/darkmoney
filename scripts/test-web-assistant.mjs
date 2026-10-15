@@ -15,6 +15,7 @@ mock("src/modules/auth/auth-context.tsx","export const useAuth=()=>({user:{id:gl
 mock("src/modules/workspaces/use-active-workspace.ts",`const workspaces=[{id:8,name:'Personal',isArchived:false},{id:9,name:'Compartido',isArchived:false}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:workspaces.find(row=>row.id===globalThis.assistantWorkspace),isFetching:false,isError:false,setActiveWorkspaceId:id=>{globalThis.assistantWorkspace=id}});`);
 mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureAccess=()=>({canAccessProFeatures:true,isLoadingEntitlement:false});");
 // Conversation I/O is covered here; financial review has its own suite.
+mock("src/modules/assistant/components/assistant-payment-review.tsx", "export const AssistantPaymentReview=()=>null;");
 mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-budget-review.tsx","export const AssistantBudgetReview=()=>null;");
 mock("src/modules/assistant/components/assistant-recurring-review.tsx","export const AssistantRecurringReview=()=>null;");

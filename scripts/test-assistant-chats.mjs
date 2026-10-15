@@ -53,6 +53,7 @@ await close();
 globalThis.chatUser="page-user";globalThis.chatWorkspace=8;globalThis.chatCalls=[];globalThis.chatGate=null;
 mock("src/modules/auth/auth-context.tsx","export const useAuth=()=>({user:{id:globalThis.chatUser}});");
 mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureAccess=()=>({canAccessProFeatures:true,isLoadingEntitlement:false});");
+mock("src/modules/assistant/components/assistant-payment-review.tsx", "export const AssistantPaymentReview=()=>null;");
 mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-budget-review.tsx","export const AssistantBudgetReview=()=>null;");
 mock("src/modules/assistant/components/assistant-recurring-review.tsx","export const AssistantRecurringReview=()=>null;");

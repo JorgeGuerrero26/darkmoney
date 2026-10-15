@@ -62,6 +62,7 @@ mock("src/modules/auth/auth-context.tsx", "export const useAuth=()=>({user:{id:g
 mock("src/modules/workspaces/use-active-workspace.ts", "const workspaces=[{id:8,name:'Personal'},{id:9,name:'Otro'}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:workspaces.find(w=>w.id===globalThis.budgetScope.workspaceId),setActiveWorkspaceId:id=>{globalThis.budgetScope.workspaceId=id},isFetching:false,isError:false});");
 mock("src/modules/shared/use-pro-feature-access.ts", "export const useProFeatureAccess=()=>({canAccessProFeatures:globalThis.budgetScope.pro});");
 mock("src/services/queries/assistant.ts", "export const useAssistantInsight=()=>({data:null});export const askAssistant=async(message,history)=>{globalThis.budgetCalls.push({message,history});return globalThis.budgetReply;};");
+mock("src/modules/assistant/components/assistant-payment-review.tsx", "export const AssistantPaymentReview=()=>null;");
 mock("src/modules/assistant/components/assistant-movement-review.tsx", "export const AssistantMovementReview=()=>null;");
 mock("src/modules/assistant/components/assistant-recurring-review.tsx", "export const AssistantRecurringReview=()=>null;");
 mock("src/modules/assistant/components/assistant-obligation-review.tsx", "export const AssistantObligationReview=()=>null;");
