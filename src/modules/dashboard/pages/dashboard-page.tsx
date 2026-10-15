@@ -57,6 +57,8 @@ import { buildDashboardAiSummaryPayload } from "../lib/build-ai-summary-payload"
 import { DashboardAiSummaryPanel } from "../components/dashboard-ai-summary-panel";
 import { CashflowMonthPanel } from "../components/cashflow-month-panel";
 import { DashboardHealthPanel } from "../components/dashboard-health-panel";
+import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
+import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1160,6 +1162,7 @@ export function DashboardPage() {
     now: parityNow,
   });
   const healthScore = dashboardHealth.health;
+  const advancedReadings = canUseAdvancedDashboard ? buildAdvancedReadings(snapshot, parityCtx, parityNow) : null;
   // Dinero libre real: liquidez menos salidas comprometidas a 30 días (dato
   // derivado, ya no parte del score de salud).
   const realFreeMoney = liquidMoneyTotal - upcomingOutflows;
@@ -1739,6 +1742,8 @@ export function DashboardPage() {
           <summary className="cursor-pointer text-sm font-medium text-ink">Explicar mi situación con IA</summary>
           <div className="mt-4">{dashboardAiPanel}</div>
         </details> : null}
+
+        {advancedReadings ? <AdvancedReadingsPanel model={advancedReadings} currency={displayCurrencyCode} /> : null}
 
         <section className="border-t border-white/[0.07] pt-7">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
