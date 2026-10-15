@@ -6,6 +6,7 @@ export function CashflowMonthPanel({ model, currency, ready, failed, onRetry }: 
   ready: boolean; failed: boolean; onRetry: () => void;
 }) {
   const month = model.projection.months[0];
+  const missing = model.liquid.unconvertedCount + month.unconvertedCount + (model.typicalSpend.unconvertedCount ?? 0);
   const rows = [
     ["Caja disponible hoy", model.liquid.total],
     ["Cobros previstos", model.monthEnd.committedInflow],
@@ -15,12 +16,12 @@ export function CashflowMonthPanel({ model, currency, ready, failed, onRetry }: 
   return <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5" aria-label="Cierre de mes estimado">
     <h2 className="text-[13px] font-medium text-storm">Cierre de mes estimado</h2>
     <p className="mt-3 font-display text-3xl font-semibold text-ink">
-      {ready ? formatCurrency(month.closingBalance, currency) : "Sin estimación"}
+      {ready && !missing ? formatCurrency(month.closingBalance, currency) : "Sin estimación"}
     </p>
     {!ready ? <div role="status" className="mt-3 text-sm text-storm">
       {failed ? "No pudimos comprobar los datos de proyección. No mostramos un cierre parcial." : "Comprobando cuotas, compras únicas y cambios de ingresos…"}
       {failed ? <button type="button" onClick={onRetry} className="ml-2 font-medium text-ink underline underline-offset-4">Reintentar</button> : null}
-    </div> : <>
+    </div> : missing ? <p role="status" className="mt-3 text-sm leading-6 text-storm">{missing} cuentas, compromisos o gastos históricos sin conversión. No mostramos un cierre parcial.</p> : <>
       <p className="mt-1 text-sm text-storm">Hasta el último día del mes. Inversiones no son caja; las tarjetas se pagan en su fecha.</p>
       <dl className="mt-5 divide-y divide-white/[0.07] border-t border-white/[0.07]">
         {rows.map(([label, value]) => <div key={label} className="flex items-center justify-between gap-4 py-3 text-sm">

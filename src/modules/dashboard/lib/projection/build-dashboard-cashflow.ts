@@ -1,6 +1,6 @@
 import { format, startOfMonth } from "date-fns";
 import { convertParityAmount } from "@darkmoney/shared/currency";
-import { expenseAmt, isExpense, selectPeriodTotals } from "@darkmoney/shared/aggregations";
+import { isExpense, selectPeriodTotals } from "@darkmoney/shared/aggregations";
 import { movementDisplayAccountId, movementDisplayAmount } from "@darkmoney/shared/movement-amounts";
 import type { ParityConversionCtx } from "@darkmoney/shared/types";
 import type { WorkspaceSnapshot } from "../../../../services/queries/workspace-data";
@@ -10,6 +10,8 @@ import { isOneOffSpend, monthlyDiscretionarySpend } from "./discretionary-histor
 import { liquidBalance } from "./liquid-balance";
 import { plannedCashEffect } from "./planned-cash-effect";
 import { projectionFlowItems, windowsFromFlowItems } from "./flow-windows";
+import { isHistoryBalanceCorrection } from "../dashboard-health";
+import { limaCalendarTimestamp, limaClock } from "./lima-calendar";
 
 export type ProjectionSupplement = {
   workspaceId: number;
@@ -27,6 +29,8 @@ export function buildDashboardCashflow(
   months = 2,
 ) {
   if (snapshot.workspace.id !== supplement.workspaceId) throw new Error("La proyección pertenece a otro espacio.");
+  const actualNow = now;
+  now = limaClock(now);
   const convert = (amount: number, currency: string) => convertParityAmount({
     amount, currencyCode: currency, baseCurrencyCode: ctx.baseCurrency,
     targetCurrencyCode: ctx.displayCurrency, exchangeRateMap: ctx.exchangeRateMap,
@@ -37,15 +41,24 @@ export function buildDashboardCashflow(
   const oneOffTypeIds = new Set(supplement.oneOffTypeIds);
   const categoryDefaults = new Map(snapshot.catalogs.categories.map(c => [c.id, c.defaultSpendTypeId ?? null]));
   const coveredFrom = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-  const movements = snapshot.movements.map(m => ({ ...m, categoryId: m.categoryId ?? null, counterpartyId: m.counterpartyId ?? null }));
+  const movements = snapshot.movements.map(m => ({ ...m, occurredAt: limaCalendarTimestamp(m.occurredAt), categoryId: m.categoryId ?? null, counterpartyId: m.counterpartyId ?? null }));
+  const unconvertedHistory = new Set<number>();
   const history = (cardId?: number) => monthlyDiscretionarySpend({
     movements, months: 6, earliestCoveredDate: coveredFrom, now,
     expenseAmountOf: movement => {
-      if (!isExpense(movement) || isOneOffSpend(movement, oneOffTypeIds, categoryDefaults)) return 0;
+      if (!isExpense(movement) || isHistoryBalanceCorrection(movement) || isOneOffSpend(movement, oneOffTypeIds, categoryDefaults)) return 0;
       const accountId = movementDisplayAccountId(movement);
       // Calendar converts the card line from its native currency. Do not convert twice.
-      if (cardId !== undefined) return accountId === cardId ? movementDisplayAmount(movement) : 0;
-      return accountId !== null && cardIds.has(accountId) ? 0 : expenseAmt(movement, ctx);
+      if (cardId !== undefined) {
+        if (accountId !== cardId) return 0;
+        const amount = movementDisplayAmount(movement);
+        if (!Number.isFinite(amount)) { unconvertedHistory.add(movement.id); return 0; }
+        return amount;
+      }
+      if (accountId !== null && cardIds.has(accountId)) return 0;
+      const converted = convert(movementDisplayAmount(movement), ctx.accountCurrencyMap.get(accountId ?? 0) ?? ctx.baseCurrency);
+      if (converted === null || !Number.isFinite(converted)) { unconvertedHistory.add(movement.id); return 0; }
+      return converted;
     },
   });
   const totals = history();
@@ -57,14 +70,14 @@ export function buildDashboardCashflow(
   };
   const accountTypes = new Map(snapshot.accounts.map(a => [a.id, a.type]));
   const plannedMovements = snapshot.movements.flatMap(movement => {
-    if (movement.status !== "planned" || new Date(movement.occurredAt) <= now) return [];
+    if (movement.status !== "planned" || new Date(movement.occurredAt) <= actualNow) return [];
     const effect = plannedCashEffect(movement, accountTypes);
     if (!effect) return [];
     return [{
       id: movement.id, description: movement.description || (effect.signedAmount > 0 ? "Ingreso planificado" : "Gasto planificado"),
       signedAmount: effect.signedAmount,
       currencyCode: (effect.accountId ? ctx.accountCurrencyMap.get(effect.accountId) : undefined) ?? ctx.baseCurrency,
-      occurredAt: movement.occurredAt,
+      occurredAt: limaCalendarTimestamp(movement.occurredAt),
     }];
   });
   // Same merge rule as mobile: an owned obligation wins over a duplicate shared entry.
@@ -90,9 +103,9 @@ export function buildDashboardCashflow(
   });
   const firstMonth = projection.months[0];
   const sum = (rows: typeof firstMonth.inflows) => rows.reduce((total, line) => total + line.amount, 0);
-  const monthToDate = selectPeriodTotals(movements, startOfMonth(now), now, ctx);
+  const monthToDate = selectPeriodTotals(movements.filter(movement => !isHistoryBalanceCorrection(movement)), startOfMonth(now), now, ctx);
   return {
-    projection, liquid, typicalSpend,
+    projection, liquid, typicalSpend: { ...typicalSpend, unconvertedCount: unconvertedHistory.size },
     windows: windowsFromFlowItems(projectionFlowItems(projection.months, now), liquid.total, now),
     monthEnd: {
       expectedBalance: firstMonth.closingBalance,

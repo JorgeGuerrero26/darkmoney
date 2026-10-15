@@ -165,10 +165,12 @@ const aborted = new AbortController(); aborted.abort(); await assert.rejects(rea
 
 const { CashflowMonthPanel } = await import(load("src/modules/dashboard/components/cashflow-month-panel.tsx"));
 const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container); let retries = 0;
-const render = async extra => act(async () => renderer.render(React.createElement(CashflowMonthPanel, { model, currency: "PEN", ready: true, failed: false, onRetry: () => retries++, ...extra })));
+const completeModel = buildDashboardCashflow({ ...snapshot, accounts: accounts.filter(account => account.currencyCode !== "EUR") }, [], supplement, ctx, today);
+const render = async extra => act(async () => renderer.render(React.createElement(CashflowMonthPanel, { model: completeModel, currency: "PEN", ready: true, failed: false, onRetry: () => retries++, ...extra })));
 await render({});
-assert.match(container.textContent, /Caja disponible hoy/); assert.match(container.textContent, /Cobros previstos/); assert.match(container.textContent, /mediana de 6 meses/); assert.match(container.textContent, /1 cuentas/);
+assert.match(container.textContent, /Caja disponible hoy/); assert.match(container.textContent, /Cobros previstos/); assert.match(container.textContent, /mediana de 6 meses/);
 assert.equal(container.querySelectorAll("dl > div").length, 4); assert.ok(container.querySelector("details"));
+await render({ model }); assert.match(container.textContent, /Sin estimación/); assert.match(container.textContent, /sin conversión/); assert.equal(container.querySelector("details"), null);
 await render({ ready: false, failed: true }); assert.match(container.textContent, /Sin estimación/); assert.doesNotMatch(container.textContent, /1,300|1.300/);
 await act(async () => container.querySelector("button").click()); assert.equal(retries, 1);
 await render({ ready: false }); assert.match(container.textContent, /Comprobando/); assert.equal(container.querySelector("button"), null);

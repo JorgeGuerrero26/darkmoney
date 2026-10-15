@@ -130,10 +130,10 @@ const { buildDashboardAiSummaryPayload } = await import(load("src/modules/dashbo
 const { formatCurrency } = await import(load("src/lib/formatting/money.ts"));
 const captured = [];
 const pageEnv = {
-  activeWorkspace: { id: 7 }, projectionReady: true, canUseAdvancedDashboard: true,
+  activeWorkspace: { id: 7 }, projectionReady: true, projectionAmountsComplete: true, canUseAdvancedDashboard: true,
   snapshot: { workspace: { name: "Personal" }, accounts: [] },
   convertDashboardAmount: () => { throw new Error("no accounts in fixture"); }, baseCurrencyCode: "PEN", displayCurrencyCode: "PEN", exchangeRateMap: new Map(),
-  cashflow: { liquid: { total: 2000, unconvertedCount: 0 }, projection: { unconvertedCount: 0 } },
+  cashflow: { liquid: { total: 2000, unconvertedCount: 0 }, projection: { unconvertedCount: 0 }, typicalSpend: { unconvertedCount: 0 } },
   parityNetWorth: { amount: 9000 }, parityReviewInbox: { subscriptionsAttentionCount: 0 },
   buildDashboardAiSummaryPayload, formatCurrency, monthEndEstimate: { estimatedLiquidAtMonthEnd: 2500 }, dashboardHealth: model,
   futureFlowWindows: [{ expectedInflow: 500, expectedOutflow: 300 }], reviewInboxTotalIssues: 0, parityReadiness: { readinessScore: 80 },
@@ -141,7 +141,7 @@ const pageEnv = {
   dashboardAi: { requestSummary: async (workspaceId, summary) => captured.push({ workspaceId, summary }) },
 };
 function generate(overrides = {}) { const scope = { ...pageEnv, ...overrides }; return new Function(...Object.keys(scope), `${generateJs};return generate;`)(...Object.values(scope))(); }
-generate({ canUseAdvancedDashboard: false }); generate({ projectionReady: false }); assert.equal(captured.length, 0);
+generate({ canUseAdvancedDashboard: false }); generate({ projectionReady: false }); generate({ projectionAmountsComplete: false }); assert.equal(captured.length, 0);
 generate(); assert.equal(captured.length, 1); assert.equal(captured[0].workspaceId, 7);
 assert.equal(captured[0].summary.savingsRatePct,62.5);assert.equal(captured[0].summary.savingsAveragePct,69);assert.equal(captured[0].summary.collectionEfficiencyPct,50);
 assert.equal(captured[0].summary.cashCushionDays, model.cashCushion.days);

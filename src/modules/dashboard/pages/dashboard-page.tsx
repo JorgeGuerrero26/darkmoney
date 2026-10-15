@@ -523,7 +523,8 @@ export function DashboardPage() {
     projectionQuery.data?.workspaceId === activeWorkspace.id;
   const cashflow = buildDashboardCashflow(snapshot, sharedObligations, projectionQuery.data?.workspaceId === snapshot.workspace.id
     ? projectionQuery.data : { workspaceId: snapshot.workspace.id, oneOffTypeIds: [], scheduledChanges: [] }, parityCtx, parityNow);
-  const projectionMoney = (value: number) => projectionReady ? formatCurrency(value, displayCurrencyCode) : "Sin estimación";
+  const projectionAmountsComplete = cashflow.liquid.unconvertedCount + cashflow.projection.unconvertedCount + cashflow.typicalSpend.unconvertedCount === 0;
+  const projectionMoney = (value: number) => projectionReady && projectionAmountsComplete ? formatCurrency(value, displayCurrencyCode) : "Sin estimación";
   const parityPeriod: ParityPeriod = comparisonPreset === "week" ? "week" : "month";
   const parityPeriodBounds = getParityPeriodBounds(parityPeriod, parityNow);
   const parityCurrentTotals = selectParityPeriodTotals(
@@ -1392,7 +1393,7 @@ export function DashboardPage() {
   // IA del dashboard: arma el payload con los datos ya calculados y dispara la
   // Edge Function. El panel maneja tono, caché y límite diario.
   const handleGenerateAiSummary = () => {
-    if (!activeWorkspace || !projectionReady || !canUseAdvancedDashboard) {
+    if (!activeWorkspace || !projectionReady || !projectionAmountsComplete || !canUseAdvancedDashboard) {
       return;
     }
     const liquidAccounts=snapshot.accounts.filter(account=>!account.isArchived&&["cash","bank","savings"].includes(account.type));
@@ -1406,7 +1407,7 @@ export function DashboardPage() {
       netWorth: parityNetWorth.amount,
       visibleBalance:cashflow.liquid.total,
       unconvertedAccounts:cashflow.liquid.unconvertedCount,
-      unconvertedProjection:cashflow.projection.unconvertedCount,
+      unconvertedProjection:cashflow.projection.unconvertedCount + cashflow.typicalSpend.unconvertedCount,
       activeAccountsCount:snapshot.accounts.filter(account=>!account.isArchived).length,
       upcomingSubscriptions:parityReviewInbox.subscriptionsAttentionCount,
       visibleAccounts:liquidBalances.filter(row=>row.amount!==null).map(row=>`${row.name}: ${formatCurrency(row.amount!,displayCurrencyCode)}`).join(" · "),
@@ -1649,8 +1650,8 @@ export function DashboardPage() {
     errorMessage={dashboardAi.error instanceof Error ? dashboardAi.error.message : null}
     isPending={dashboardAi.isPending} limitReached={dashboardAi.limitReached}
     onGenerate={handleGenerateAiSummary} onToneChange={dashboardAi.setTone}
-    response={projectionReady ? dashboardAi.currentResponse : null}
-    unavailableReason={projectionReady ? null : "Comprueba los datos de proyección antes de solicitar una explicación."}
+    response={projectionReady && projectionAmountsComplete ? dashboardAi.currentResponse : null}
+    unavailableReason={projectionReady && projectionAmountsComplete ? null : "Comprueba los datos y conversiones de proyección antes de solicitar una explicación."}
     tone={dashboardAi.tone}
   /> : null;
 
