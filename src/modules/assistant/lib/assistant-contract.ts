@@ -1,6 +1,9 @@
+import { parseMovementProposal, type AssistantMovementDraft } from "./movement-proposal";
+
 export type AssistantMessage = { role: "user" | "assistant"; content: string };
 export type AssistantEvidence = { label: string; movementIds: number[] };
-export type AssistantProposal = { label: string; amount: number; currency: string; href: string };
+export type ProposalStatus = "pending" | "saved" | "discarded";
+export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; status?: ProposalStatus; statusNote?: string };
 export type AssistantReply = { reply: string; evidence: AssistantEvidence[]; proposals: AssistantProposal[]; remainingToday: number | null };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const id = (value: unknown) => (typeof value==="number"||typeof value==="string")&&Number.isSafeInteger(Number(value))&&Number(value)>0;
@@ -23,12 +26,16 @@ export function parseAssistantReply(value: unknown): AssistantReply {
     pay_subscription:{label:"Pago de suscripción",href:"/app/subscriptions"},pay_debt:{label:"Pago de deuda",href:"/app/obligations"},
   };
   const add = (value: unknown, label: string, href: string, amountKey="amount") => {
-    const row=object(value),amount=Number(row[amountKey]);
+    const row=object(value),amount=typeof row[amountKey]==="number"||typeof row[amountKey]==="string"?Number(row[amountKey]):NaN;
     if (Number.isFinite(amount)&&amount>0&&typeof row.currency==="string"&&/^[A-Z]{3}$/.test(row.currency)) proposals.push({label,href,amount,currency:row.currency});
   };
   for(const value of drafts.slice(0,20)) {
     const row=object(value),operation=operations[String(row.operation)];
-    if(operation)add(row,operation.label,operation.href);
+    if(operation){
+      const before=proposals.length;add(row,operation.label,operation.href);
+      const draft=parseMovementProposal(row);
+      if(draft&&proposals.length>before)proposals[before].movementDraft=draft;
+    }
   }
   add(raw.budgetDraft,"Presupuesto","/app/budgets","limitAmount");
   add(raw.obligationDraft,"Crédito o deuda","/app/obligations","principalAmount");

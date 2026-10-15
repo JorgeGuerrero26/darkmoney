@@ -14,6 +14,8 @@ mock("src/services/queries/workspace-data.ts","export const invokeAuthenticatedF
 mock("src/modules/auth/auth-context.tsx","export const useAuth=()=>({user:{id:globalThis.assistantUser}});");
 mock("src/modules/workspaces/use-active-workspace.ts",`const workspaces=[{id:8,name:'Personal',isArchived:false},{id:9,name:'Compartido',isArchived:false}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:workspaces.find(row=>row.id===globalThis.assistantWorkspace),isFetching:false,isError:false,setActiveWorkspaceId:id=>{globalThis.assistantWorkspace=id}});`);
 mock("src/modules/shared/use-pro-feature-access.ts","export const useProFeatureAccess=()=>({canAccessProFeatures:true,isLoadingEntitlement:false});");
+// Conversation I/O is covered here; financial review has its own suite.
+mock("src/modules/assistant/components/assistant-movement-review.tsx","export const AssistantMovementReview=()=>null;");
 const contract=await import(load("src/modules/assistant/lib/assistant-contract.ts"));
 const service=await import(load("src/services/queries/assistant.ts"));
 const {AssistantPage}=await import(load("src/modules/assistant/pages/assistant-page.tsx"));

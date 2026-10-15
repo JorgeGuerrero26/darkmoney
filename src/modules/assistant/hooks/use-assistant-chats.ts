@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AssistantMessage, AssistantReply } from "../lib/assistant-contract";
+import type { AssistantMessage, AssistantReply, ProposalStatus } from "../lib/assistant-contract";
 import { newChatId, parseChatStore, removeChat, renameChat, upsertChat, type ChatStore, type StoredChat } from "../lib/chat-store";
 
 type Turn = AssistantMessage & { id: string; response?: AssistantReply };
@@ -63,6 +63,14 @@ export function useAssistantChats(userId?: string, workspaceId?: number, fresh =
     update(previous => ({ ...previous, chats: removeChat(previous.chats, id),
       ...(previous.activeId === id ? { activeId: newChatId(), turns: [] } : {}) }));
   }
+  function markProposal(turnId: string, index: number, status: ProposalStatus, note?: string) {
+    update(previous => {
+      if (previous.activeId !== current?.activeId) return previous;
+      return { ...previous, turns: previous.turns.map(turn => turn.id !== turnId || !turn.response ? turn : {
+        ...turn, response: { ...turn.response, proposals: turn.response.proposals.map((p, i) => i === index ? { ...p, status, statusNote: note?.slice(0, 500) } : p) },
+      }) };
+    });
+  }
   return { turns: current?.turns ?? [], chats: current?.chats ?? [], activeId: current?.activeId ?? "", ready: current !== null,
-    error: current?.readError || (writeError?.key === key ? writeError.message : ""), append, startNew, select, rename, remove };
+    error: current?.readError || (writeError?.key === key ? writeError.message : ""), append, startNew, select, rename, remove, markProposal };
 }
