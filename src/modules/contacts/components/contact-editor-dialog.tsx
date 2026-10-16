@@ -1,5 +1,5 @@
 import { Check, ChevronRight } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Modal, ModalFooter } from "../../../components/ui/modal";
@@ -20,25 +20,28 @@ export function initialContactValue(contact?: CounterpartyOverview): ContactEdit
 
 const field = "mt-2 h-12 w-full rounded-[10px] border border-white/10 bg-[#141311] px-4 text-sm text-ink outline-none placeholder:text-storm/60 focus:border-white/40";
 
-export function ContactEditorDialog({ contact, onClose, onSave }: {
+export function ContactEditorDialog({ contact, onClose, onSave, disabled = false }: {
   contact: CounterpartyOverview | null; onClose: () => void; onSave: (value: ContactEditorValue) => Promise<void>;
+  disabled?: boolean;
 }) {
   const [value, setValue] = useState(() => initialContactValue(contact ?? undefined));
   const [panel, setPanel] = useState<"main" | "type" | "details" | "roles">("main");
   const [dirty, setDirty] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const patch = (next: Partial<ContactEditorValue>) => { setValue((current) => ({ ...current, ...next })); setDirty(true); setError(null); };
   const requestClose = () => dirty ? setDiscardOpen(true) : onClose();
   const typeLabel = typeOptions.find((option) => option.value === value.type)?.label ?? "Otro";
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingRef.current || disabled) return;
     if (!value.name.trim()) { setError("Escribe el nombre del contacto."); return; }
-    setSaving(true);
+    savingRef.current = true; setSaving(true);
     try { await onSave({ ...value, name: value.name.trim() }); setDirty(false); onClose(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo guardar el contacto."); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   const optionRow = "flex min-h-[54px] w-full items-center justify-between gap-3 border-b border-white/10 px-4 text-left text-sm last:border-0 hover:bg-white/[0.03]";
   return <>
@@ -58,7 +61,7 @@ export function ContactEditorDialog({ contact, onClose, onSave }: {
             <label className="block text-xs uppercase tracking-[0.12em] text-storm">Notas<textarea className={`${field} min-h-24 resize-y py-3`} onChange={(event) => patch({ notes: event.target.value })} placeholder="Información adicional" value={value.notes} /></label>
           </div>}
         </ModalBody>
-        {(panel === "main" || panel === "details" || panel === "roles") ? <ModalFooter><Button className="w-full" disabled={saving} type="submit">{saving ? "Guardando…" : contact ? "Guardar cambios" : "Crear contacto"}</Button></ModalFooter> : null}
+        {(panel === "main" || panel === "details" || panel === "roles") ? <ModalFooter><Button className="w-full" disabled={saving || disabled} type="submit">{saving ? "Guardando…" : contact ? "Guardar cambios" : "Crear contacto"}</Button></ModalFooter> : null}
       </form>
     </Modal>
     {discardOpen ? <UnsavedChangesDialog onDiscard={() => { setDiscardOpen(false); onClose(); }} onKeepEditing={() => setDiscardOpen(false)} /> : null}

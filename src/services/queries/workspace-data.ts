@@ -1008,6 +1008,8 @@ export type WorkspaceSnapshot = {
   obligations: ObligationSummary[];
   subscriptions: SubscriptionSummary[];
   recurringIncome: RecurringIncomeSummary[];
+  /** False when the legacy missing-table fallback could not verify recurring-income references. */
+  recurringIncomeAvailable?: boolean;
   activity: ActivityItem[];
   cashflow: CashflowPoint[];
   metrics: {
@@ -2264,6 +2266,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     obligations,
     subscriptions,
     recurringIncome,
+    recurringIncomeAvailable: !recurringIncomeResult.error,
     activity,
     cashflow: buildCashflow(movementRows),
     metrics: {
@@ -3196,12 +3199,11 @@ export function useUpsertWorkspaceFinancialGoalMutation() {
   });
 }
 
-export function useCounterpartiesOverviewQuery(workspaceId?: number) {
+export function useCounterpartiesOverviewQuery(workspaceId?: number, userId?: string) {
   return useQuery({
-    queryKey: ["counterparties-overview", workspaceId ?? null],
+    queryKey: ["counterparties-overview", workspaceId ?? null, userId],
     queryFn: () => fetchCounterpartiesOverview(workspaceId as number),
-    enabled: Boolean(workspaceId),
-    placeholderData: (previousData) => previousData,
+    enabled: Boolean(workspaceId && userId),
   });
 }
 
@@ -4661,7 +4663,7 @@ export function useDeleteCounterpartyMutation(workspaceId?: number, userId?: str
   return useMutation({
     mutationFn: async (input: CounterpartyDeleteInput) => {
       const client = getClient();
-      const [movementResult, obligationResult, subscriptionResult] = await Promise.all([
+      const [movementResult, obligationResult, subscriptionResult, recurringIncomeResult] = await Promise.all([
         client
           .from("movements")
           .select("id", { count: "exact", head: true })
@@ -4677,6 +4679,11 @@ export function useDeleteCounterpartyMutation(workspaceId?: number, userId?: str
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", input.workspaceId)
           .eq("vendor_party_id", input.counterpartyId),
+        client
+          .from("recurring_income")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", input.workspaceId)
+          .eq("payer_party_id", input.counterpartyId),
       ]);
 
       if (movementResult.error) {
@@ -4690,14 +4697,19 @@ export function useDeleteCounterpartyMutation(workspaceId?: number, userId?: str
       if (subscriptionResult.error) {
         throw subscriptionResult.error;
       }
+      if (recurringIncomeResult.error) throw recurringIncomeResult.error;
+      if ([movementResult, obligationResult, subscriptionResult, recurringIncomeResult].some(result => !Number.isSafeInteger(result.count) || (result.count as number) < 0)) {
+        throw new Error("No pudimos comprobar todas las relaciones del contacto. No se eliminó.");
+      }
 
       if (
         (movementResult.count ?? 0) > 0 ||
         (obligationResult.count ?? 0) > 0 ||
-        (subscriptionResult.count ?? 0) > 0
+        (subscriptionResult.count ?? 0) > 0 ||
+        (recurringIncomeResult.count ?? 0) > 0
       ) {
         throw new Error(
-          "Este contacto ya tiene movimientos, creditos, deudas o suscripciones asociadas. Archivarlo suele ser la mejor opcion.",
+          "Este contacto ya tiene movimientos, créditos, deudas, suscripciones o ingresos fijos asociados. Archívalo en lugar de eliminarlo.",
         );
       }
 
