@@ -19,7 +19,7 @@ import { Pagination } from "../../../components/ui/pagination";
 import { UnsavedChangesDialog } from "../../../components/ui/unsaved-changes-dialog";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { useUndoQueue } from "../../../components/ui/undo-queue";
-import { formatCurrency, resolveAggregateBalanceDisplay } from "../../../lib/formatting/money";
+import { formatCurrency } from "../../../lib/formatting/money";
 import {
   getQueryErrorMessage,
   useArchiveAccountMutation,
@@ -51,6 +51,7 @@ import {
 } from "../lib/account-filters";
 import { downloadAccountsCSV } from "../lib/account-formatters";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
+import { computeAccountWorth } from "../lib/account-worth";
 import {
   getFirstAccountFormError,
   toAccountInput,
@@ -196,9 +197,11 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
     filters.q.trim() || filters.type || filters.currency || filters.status !== "active",
   );
   const filteredActiveAccounts = filteredAccounts.filter((account) => !account.isArchived);
-  const filteredPatrimony = resolveAggregateBalanceDisplay(
+  const filteredPatrimony = computeAccountWorth(
     filteredActiveAccounts.filter((account) => account.includeInNetWorth),
     baseCurrencyCode,
+    baseCurrencyCode,
+    snapshot?.exchangeRates ?? [],
   );
   const filteredExcludedCount = filteredActiveAccounts.filter((account) => !account.includeInNetWorth).length;
   const orderedFilteredAccounts = useMemo(
@@ -653,7 +656,8 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
 
         <section aria-label="Resumen de cuentas filtradas" className="module-summary">
           <p className="mr-auto text-storm">Las <span className="font-medium text-ink">{filteredAccounts.length}</span> del filtro</p>
-          <p className="text-storm">Patrimonio <span className="font-medium text-ink">{formatCurrency(filteredPatrimony.amount, filteredPatrimony.currencyCode)}</span></p>
+          <p className="text-storm">Patrimonio <span className="font-medium text-ink">{filteredPatrimony.signedNetWorth == null ? "Por comprobar" : formatCurrency(filteredPatrimony.signedNetWorth, baseCurrencyCode)}</span></p>
+          {!filteredPatrimony.available ? <p className="text-storm">{filteredPatrimony.missingAccountIds.length} sin saldo o conversión verificable</p> : null}
           {filteredActiveAccounts.length !== filteredAccounts.length ? <p className="text-storm">Activas <span className="font-medium text-ink">{filteredActiveAccounts.length}</span></p> : null}
           {filteredExcludedCount > 0 ? <p className="text-storm">Fuera de patrimonio <span className="font-medium text-ink">{filteredExcludedCount}</span></p> : null}
         </section>
