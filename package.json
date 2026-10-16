@@ -55,6 +55,7 @@
     "test:account-permissions": "node scripts/test-account-permissions.mjs",
     "test:account-worth": "node scripts/test-account-worth.mjs",
     "test:account-filters": "node scripts/test-account-filters.mjs",
+    "test:account-analytics": "node scripts/test-account-analytics.mjs",
     "test:workspace-sync": "node scripts/test-workspace-sync.mjs",
     "preview": "vite preview"
   },

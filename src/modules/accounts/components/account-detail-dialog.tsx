@@ -9,6 +9,7 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, MovementRecord } from "../../../types/domain";
 import { findAccountInstitution } from "../lib/account-institutions";
 import { buildAccountBalanceEvolution } from "../lib/account-balance-evolution";
+import { accountBalanceHistoryReady } from "../lib/account-analytics";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
 
 type Props = {
@@ -26,7 +27,7 @@ type Props = {
 function movementAmount(movement: MovementRecord, account: AccountSummary) {
   const incoming = movement.destinationAccountId === account.id;
   return {
-    amount: incoming ? movement.destinationAmount ?? 0 : movement.sourceAmount ?? 0,
+    amount: incoming ? movement.destinationAmount : movement.sourceAmount,
     currency: incoming ? movement.destinationCurrencyCode ?? account.currencyCode : movement.sourceCurrencyCode ?? account.currencyCode,
     incoming,
   };
@@ -36,6 +37,7 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
   const [menuOpen, setMenuOpen] = useState(false);
   const AccountIcon = getAccountIcon(account.icon, account.type);
   const institution = findAccountInstitution(account.institutionCode);
+  const balanceReady = accountBalanceHistoryReady(account, movements);
   const accountMovements = useMemo(
     () => movements
       .filter((movement) => movement.workspaceId === account.workspaceId && (movement.sourceAccountId === account.id || movement.destinationAccountId === account.id))
@@ -84,7 +86,7 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-storm">Saldo actual</p>
-              <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-ink">{formatCurrency(account.currentBalance, account.currencyCode)}</p>
+              <p className="mt-1 font-display text-3xl font-semibold tabular-nums tracking-[-0.03em] text-ink">{Number.isFinite(account.currentBalance) ? formatCurrency(account.currentBalance, account.currencyCode) : "Por comprobar"}</p>
               {!account.includeInNetWorth ? <p className="mt-1 text-xs text-storm">No incluida en el patrimonio neto</p> : null}
             </div>
           </div>
@@ -107,14 +109,14 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
             </div>
             <button className="text-sm font-medium text-ink hover:text-white" onClick={onAnalyze} type="button">Analizar</button>
           </div>
-          <svg aria-label="Evolución del saldo durante los últimos 90 días" className="mt-4 h-[110px] w-full" preserveAspectRatio="none" role="img" viewBox="0 0 620 110">
+          {balanceReady ? <><svg aria-label="Evolución del saldo durante los últimos 90 días" className="mt-4 h-[110px] w-full" preserveAspectRatio="none" role="img" viewBox="0 0 620 110">
             <line stroke="rgba(255,255,255,0.08)" x1="4" x2="616" y1="106" y2="106" />
             <polyline fill="none" points={balanceChart.map((point) => `${point.x},${point.y}`).join(" ")} stroke="#d6b69b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
           </svg>
           <div className="mt-2 flex justify-between text-xs text-storm">
             <span>{formatCurrency(balancePoints[0]?.value ?? account.currentBalance, account.currencyCode)}</span>
             <span>{formatCurrency(account.currentBalance, account.currencyCode)}</span>
-          </div>
+          </div></> : <p role="status" className="mt-4 text-sm text-storm">Saldo o movimientos por comprobar; no se dibuja una evolución parcial.</p>}
         </section>
 
         <section className="pt-5">
@@ -134,9 +136,9 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
                 <button className="grid min-h-[58px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.07] px-1 text-left transition hover:bg-white/[0.025]" key={movement.id} onClick={onViewMovements} type="button">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink">{movement.description}</span>
-                    <span className="mt-0.5 block truncate text-xs text-storm">{movement.category === "Sin categoria" ? "Sin categoría" : movement.category || "Sin categoría"} · {formatDate(movement.occurredAt)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-storm">{movement.category === "Sin categoria" ? "Sin categoría" : movement.category || "Sin categoría"} · {Number.isFinite(new Date(movement.occurredAt).getTime()) ? formatDate(movement.occurredAt) : "Fecha por comprobar"}</span>
                   </span>
-                  <span className="text-sm font-semibold text-ink">{display.incoming ? "+" : "−"}{formatCurrency(display.amount, display.currency)}</span>
+                  <span className="text-sm font-semibold text-ink">{display.amount == null || !Number.isFinite(display.amount) ? "Por comprobar" : `${display.incoming ? "+" : "−"}${formatCurrency(display.amount, display.currency)}`}</span>
                 </button>
               );
             })}

@@ -13,27 +13,13 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, MovementRecord } from "../../../types/domain";
 import { getTypePreset } from "../lib/account-options";
-
-function getMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
+import { ACCOUNT_ANALYTICS_LIMIT, accountBalanceHistoryReady, buildAccountAnalytics } from "../lib/account-analytics";
+import { buildAccountBalanceEvolution } from "../lib/account-balance-evolution";
 
 function getMonthLabel(key: string) {
   const [year, month] = key.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("es", { month: "short", year: "2-digit" });
-}
-
-function getLast6MonthKeys() {
-  const keys: string[] = [];
-  const now = new Date();
-
-  for (let index = 5; index >= 0; index -= 1) {
-    const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
-    keys.push(getMonthKey(date));
-  }
-
-  return keys;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -114,7 +100,7 @@ function BalanceLineChart({
           strokeLinejoin="round"
           strokeWidth="2.5"
         />
-        {coordinates.map((coord) => (
+        {coordinates.slice(-1).map((coord) => (
           <g key={`${coord.label}-${coord.x}`}>
             <title>{`${coord.label}: ${formatCurrency(coord.balance, currencyCode)}`}</title>
             <circle cx={coord.x} cy={coord.y} fill={chartColor} opacity="0.9" r="4" />
@@ -157,12 +143,12 @@ function MonthlyFlowChart({
             <div className="flex w-full items-end gap-0.5" style={{ height: 120 }}>
               <div
                 className="flex-1 rounded-t-[4px] bg-pine/70"
-                style={{ height: incomeHeight || 2, minHeight: 2 }}
+                style={{ height: incomeHeight }}
                 title={`Ingresos: ${formatCurrency(month.income, currencyCode)}`}
               />
               <div
                 className="flex-1 rounded-t-[4px] bg-ember/70"
-                style={{ height: expenseHeight || 2, minHeight: 2 }}
+                style={{ height: expenseHeight }}
                 title={`Gastos: ${formatCurrency(month.expense, currencyCode)}`}
               />
             </div>
@@ -196,7 +182,7 @@ function CategoryBars({
           <div className="h-1.5 rounded-full bg-white/[0.07]">
             <div
               className="h-full rounded-full bg-ember/70"
-              style={{ width: `${(item.amount / maxValue) * 100}%` }}
+              style={{ width: `${clamp(item.amount / maxValue * 100, 0, 100)}%` }}
             />
           </div>
         </div>
@@ -216,138 +202,39 @@ export function AccountAnalyticsModal({
   movements,
   onClose,
 }: AccountAnalyticsModalProps) {
-  const accountMovements = useMemo(
-    () =>
-      movements.filter(
-        (movement) =>
-          movement.status !== "voided" &&
-          (movement.sourceAccountId === account.id ||
-            movement.destinationAccountId === account.id),
-      ),
-    [account.id, movements],
-  );
-  const postedMovements = useMemo(
-    () => accountMovements.filter((movement) => movement.status === "posted"),
-    [accountMovements],
-  );
-  const { totalIn, totalOut } = useMemo(() => {
-    let incoming = 0;
-    let outgoing = 0;
-
-    for (const movement of postedMovements) {
-      if (movement.destinationAccountId === account.id && movement.destinationAmount !== null) {
-        incoming += movement.destinationAmount;
-      }
-      if (movement.sourceAccountId === account.id && movement.sourceAmount !== null) {
-        outgoing += movement.sourceAmount;
-      }
-    }
-
-    return { totalIn: incoming, totalOut: outgoing };
-  }, [account.id, postedMovements]);
-  const netFlow = totalIn - totalOut;
-  const balancePoints = useMemo(() => {
-    const monthDeltas = new Map<string, number>();
-    const sortedMovements = [...postedMovements].sort(
-      (left, right) =>
-        new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime(),
-    );
-
-    for (const movement of sortedMovements) {
-      const key = getMonthKey(new Date(movement.occurredAt));
-      const inflow =
-        movement.destinationAccountId === account.id ? movement.destinationAmount ?? 0 : 0;
-      const outflow = movement.sourceAccountId === account.id ? movement.sourceAmount ?? 0 : 0;
-      monthDeltas.set(key, (monthDeltas.get(key) ?? 0) + inflow - outflow);
-    }
-
-    if (monthDeltas.size === 0) {
-      return [];
-    }
-
-    let runningBalance = account.openingBalance;
-    return [...monthDeltas.keys()].sort().map((key) => {
-      runningBalance += monthDeltas.get(key) ?? 0;
-      return { label: getMonthLabel(key), balance: runningBalance };
-    });
-  }, [account.id, account.openingBalance, postedMovements]);
-  const monthlyFlow = useMemo(() => {
-    const result = getLast6MonthKeys().map((key) => ({ key, income: 0, expense: 0 }));
-
-    for (const movement of postedMovements) {
-      const slot = result.find((item) => item.key === getMonthKey(new Date(movement.occurredAt)));
-
-      if (!slot) {
-        continue;
-      }
-
-      const isExpense = ["expense", "subscription_payment"].includes(movement.movementType);
-      const isIncome = ["income", "refund"].includes(movement.movementType);
-
-      if (movement.destinationAccountId === account.id && isIncome) {
-        slot.income += movement.destinationAmount ?? 0;
-      }
-      if (movement.sourceAccountId === account.id && isExpense) {
-        slot.expense += movement.sourceAmount ?? 0;
-      }
-    }
-
-    return result;
-  }, [account.id, postedMovements]);
-  const topCategories = useMemo(() => {
-    const categoryMap = new Map<string, number>();
-
-    for (const movement of postedMovements) {
-      if (movement.sourceAccountId !== account.id) {
-        continue;
-      }
-      if (!["expense", "subscription_payment"].includes(movement.movementType)) {
-        continue;
-      }
-
-      const name = movement.category || "Sin categoria";
-      categoryMap.set(name, (categoryMap.get(name) ?? 0) + (movement.sourceAmount ?? 0));
-    }
-
-    return [...categoryMap.entries()]
-      .map(([name, amount]) => ({ name, amount }))
-      .sort((left, right) => right.amount - left.amount)
-      .slice(0, 5);
-  }, [account.id, postedMovements]);
-  const recentMovements = useMemo(
-    () =>
-      [...accountMovements]
-        .sort(
-          (left, right) =>
-            new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
-        )
-        .slice(0, 8),
-    [accountMovements],
-  );
+  const analysis = useMemo(() => buildAccountAnalytics(account, movements), [account, movements]);
+  const balanceReady = accountBalanceHistoryReady(account, movements);
+  const { totalIn, totalOut, netFlow } = analysis;
+  const balancePoints = useMemo(() => buildAccountBalanceEvolution({ accountId: account.id, currentBalance: account.currentBalance,
+    movements: movements.filter(item => item.workspaceId === account.workspaceId) }).map(point => ({ label: formatDate(new Date(point.timestamp).toISOString()), balance: point.value })), [account, movements]);
+  const monthlyFlow = analysis.months;
+  const topCategories = [...analysis.visibleCategories, ...(analysis.remainingCategoryCount && analysis.remainingCategoryTotal != null ? [{ name: `Otras ${analysis.remainingCategoryCount} categorías`, amount: analysis.remainingCategoryTotal }] : []), ...(analysis.uncategorizedCount && analysis.uncategorized != null ? [{ name: "Sin categoría", amount: analysis.uncategorized }] : [])];
+  const recentMovements = analysis.selected.slice(0, 8);
+  const money = (amount: number | null) => amount == null ? "Por comprobar" : formatCurrency(amount, account.currencyCode);
   const metricCards = [
     {
       icon: ArrowUpCircle,
       label: "Entradas",
       tone: "success" as const,
-      value: formatCurrency(totalIn, account.currencyCode),
+      value: money(totalIn),
     },
     {
       icon: ArrowDownCircle,
       label: "Salidas",
       tone: "danger" as const,
-      value: formatCurrency(totalOut, account.currencyCode),
+      value: money(totalOut),
     },
     {
       icon: TrendingUp,
       label: "Flujo neto",
-      tone: netFlow >= 0 ? ("success" as const) : ("danger" as const),
-      value: formatCurrency(netFlow, account.currencyCode),
+      tone: netFlow != null && netFlow >= 0 ? ("success" as const) : ("danger" as const),
+      value: money(netFlow),
     },
     {
       icon: BarChart3,
       label: "Movimientos",
       tone: "neutral" as const,
-      value: String(accountMovements.length),
+      value: String(analysis.count),
     },
   ];
 
@@ -356,7 +243,7 @@ export function AccountAnalyticsModal({
       <ModalHeader
         accessory={
           <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-ink">
-            {formatCurrency(account.currentBalance, account.currencyCode)}
+            {Number.isFinite(account.currentBalance) ? formatCurrency(account.currentBalance, account.currencyCode) : "Por comprobar"}
           </span>
         }
         description={`${getTypePreset(account.type).label} - ${account.currencyCode}`}
@@ -365,10 +252,12 @@ export function AccountAnalyticsModal({
         titleId="account-analytics-title"
       />
       <ModalBody className="space-y-5">
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))]">
+        <p className="text-sm leading-6 text-storm">{analysis.count} movimientos aplicados de esta cuenta{analysis.from && analysis.to ? ` · ${formatDate(analysis.from)} a ${formatDate(analysis.to)}` : ""}. Máximo {ACCOUNT_ANALYTICS_LIMIT}, igual que en móvil.{analysis.truncated ? ` Se muestran los ${ACCOUNT_ANALYTICS_LIMIT} más recientes de ${analysis.totalCount}; los totales no incluyen los anteriores.` : ""}</p>
+        {!analysis.complete ? <p role="status" className="text-sm text-storm">Hay fechas, importes o monedas por comprobar. No se presenta un cálculo parcial como total.</p> : null}
+        <div className="grid gap-4 border-y border-white/10 py-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))]">
           {metricCards.map(({ icon: Icon, label, tone, value }) => (
             <article
-              className="glass-panel-soft rounded-[20px] px-4 py-4"
+              className="min-w-0"
               key={label}
             >
               <div className="mb-3 flex items-center gap-2">
@@ -400,28 +289,30 @@ export function AccountAnalyticsModal({
           ))}
         </div>
 
-        <section className="rounded-[24px] border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+        <p className="text-sm text-storm">Salidas sin traspasos: <span className="font-semibold text-ink">{money(analysis.spent)}</span> · Traspasos salientes: {money(analysis.transferOut)}. Los abonos de créditos/deudas sí forman parte del flujo de esta cuenta.</p>
+
+        <section className="border-b border-white/10 pb-5">
           <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-storm">
             Saldo en el tiempo
           </h3>
           <p className="mt-1 text-xs leading-5 text-storm">
-            Evolucion mensual del saldo partiendo del saldo inicial.
+            Últimos 90 días, reconstruidos desde el saldo actual y el historial completo de esta cuenta; no desde las 300 filas del análisis.
           </p>
           <div className="mt-4">
-            <BalanceLineChart
+            {balanceReady ? <BalanceLineChart
               color={account.color}
               currencyCode={account.currencyCode}
               points={balancePoints}
-            />
+            /> : <p className="text-sm text-storm">Saldo por comprobar.</p>}
           </div>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-[24px] border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+          <section className="border-b border-white/10 pb-5">
             <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-storm">
               Flujo mensual
             </h3>
-            <p className="mt-1 text-xs leading-5 text-storm">Ultimos 6 meses, entradas vs salidas.</p>
+            <p className="mt-1 text-xs leading-5 text-storm">Los últimos 6 meses con actividad de la muestra. Entradas y salidas incluyen traspasos y abonos.</p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-[0.65rem] text-storm">
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-pine/70" />
@@ -433,16 +324,17 @@ export function AccountAnalyticsModal({
               </span>
             </div>
             <MonthlyFlowChart currencyCode={account.currencyCode} months={monthlyFlow} />
+            {!analysis.complete ? <p className="mt-3 text-sm text-storm">Flujo mensual por comprobar.</p> : monthlyFlow.length === 0 ? <p className="mt-3 text-sm text-storm">Sin movimientos aplicados.</p> : null}
           </section>
 
-          <section className="rounded-[24px] border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+          <section className="border-b border-white/10 pb-5">
             <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-storm">
-              Top categorias de gasto
+              Categorías de salidas sin traspasos
             </h3>
             <p className="mt-1 text-xs leading-5 text-storm">
               Categorias con mayor volumen de salidas.
             </p>
-            {topCategories.length > 0 ? (
+            {!analysis.complete ? <p className="mt-6 text-center text-sm text-storm">Categorías por comprobar.</p> : topCategories.length > 0 ? (
               <CategoryBars currencyCode={account.currencyCode} items={topCategories} />
             ) : (
               <p className="mt-6 text-center text-sm text-storm">Sin gastos categorizados aun.</p>
@@ -450,7 +342,7 @@ export function AccountAnalyticsModal({
           </section>
         </div>
 
-        <section className="rounded-[24px] border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+        <section>
           <h3 className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-storm">
             Movimientos recientes
           </h3>
@@ -459,19 +351,17 @@ export function AccountAnalyticsModal({
               No hay movimientos registrados para esta cuenta.
             </p>
           ) : (
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 divide-y divide-white/[0.07] border-t border-white/[0.07]">
               {recentMovements.map((movement) => {
                 const isIn = movement.destinationAccountId === account.id;
-                const amount = isIn
-                  ? movement.destinationAmount ?? 0
-                  : movement.sourceAmount ?? 0;
+                const amount = isIn ? movement.destinationAmount : movement.sourceAmount;
                 const currency = isIn
                   ? movement.destinationCurrencyCode ?? account.currencyCode
                   : movement.sourceCurrencyCode ?? account.currencyCode;
 
                 return (
                   <div
-                    className="grid gap-3 rounded-[16px] border border-white/[0.06] bg-black/10 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                    className="grid gap-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
                     key={movement.id}
                   >
                     <div
@@ -496,11 +386,7 @@ export function AccountAnalyticsModal({
                     </div>
                     <div className="text-left sm:text-right">
                       <p className={`text-sm font-semibold ${isIn ? "text-pine" : "text-ember"}`}>
-                        {isIn ? "+" : "-"}
-                        {formatCurrency(amount, currency)}
-                      </p>
-                      <p className="text-[0.6rem] uppercase tracking-[0.15em] text-storm">
-                        {movement.status}
+                        {amount == null || !Number.isFinite(amount) ? "Por comprobar" : `${isIn ? "+" : "−"}${formatCurrency(amount, currency)}`}
                       </p>
                     </div>
                   </div>
