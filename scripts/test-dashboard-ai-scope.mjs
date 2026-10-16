@@ -15,7 +15,7 @@ window.localStorage.setItem("darkmoney.dashboard.aiSummaryCache.u.8.PEN.liquid-h
 await render();assert.doesNotMatch(container.textContent,/UNSCOPED_LEGACY|OLD_NET_WORTH|OLD_PERIOD_HEALTH|OLD_PARTIAL_CALENDAR/);
 await render({...props,isAdmin:false});assert.equal(globalThis.summaryHook.limitReached,true);await render(props);
 window.localStorage.setItem("darkmoney.dashboard.aiSummaryCache.usage.v2-user",JSON.stringify(today));await render({...props,userId:"v2-user",isAdmin:false});assert.equal(globalThis.summaryHook.limitReached,true);assert.equal(globalThis.summaryHook.currentResponse,null);await render(props);
-await assert.rejects(globalThis.summaryHook.requestSummary(9,{currency:"PEN"}),/espacio/);assert.equal(globalThis.summaryCalls.length,0);
+await act(async()=>assert.rejects(globalThis.summaryHook.requestSummary(9,{currency:"PEN"}),/espacio/));assert.equal(globalThis.summaryCalls.length,0);
 await act(async()=>globalThis.summaryHook.requestSummary(8,{currency:"PEN"}));assert.match(container.textContent,/Scoped explanation/);
 await render({...props,workspaceId:9});assert.doesNotMatch(container.textContent,/Scoped explanation/);
 await render({...props,currencyCode:"USD"});assert.doesNotMatch(container.textContent,/Scoped explanation/);

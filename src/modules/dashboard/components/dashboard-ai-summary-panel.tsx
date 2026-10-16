@@ -18,6 +18,9 @@ type DashboardAiSummaryPanelProps = {
   errorMessage: string | null;
   onGenerate: () => void;
   unavailableReason?: string | null;
+  title?: string;
+  description?: string;
+  contextLabel?: string;
 };
 
 function TermPopover({ term }: { term: DashboardAiComplexTerm }) {
@@ -68,6 +71,9 @@ export function DashboardAiSummaryPanel({
   errorMessage,
   onGenerate,
   unavailableReason,
+  title = "Tu situación explicada",
+  description = "Revisa caja, cierre previsto, ahorro y pendientes del espacio actual. La consulta solo se envía al pulsar Generar.",
+  contextLabel,
 }: DashboardAiSummaryPanelProps) {
   const activeToneOption = DASHBOARD_AI_TONE_OPTIONS.find((option) => option.id === tone);
   const ctaLabel =
@@ -86,11 +92,12 @@ export function DashboardAiSummaryPanel({
 
         {/* Header */}
         <h3 className="mt-4 font-display text-xl font-semibold tracking-[-0.02em] text-ink sm:text-2xl">
-          Tu situación explicada
+          {title}
         </h3>
         <p className="mt-1.5 text-sm leading-6 text-storm">
-          Revisa caja, cierre previsto, ahorro y pendientes del espacio actual. La consulta solo se envía al pulsar Generar.
+          {description}
         </p>
+        {contextLabel ? <p className="mt-2 text-xs leading-5 text-storm">{contextLabel}</p> : null}
 
         {/* Selector de tono */}
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -173,6 +180,7 @@ export function DashboardAiSummaryPanel({
                 Toca las palabras resaltadas para ver su explicación simple.
               </span>
             </div>
+            <p className="mb-3 text-xs text-storm">Generada el {new Intl.DateTimeFormat("es-PE", { timeZone: "America/Lima", dateStyle: "short", timeStyle: "short" }).format(new Date(response.generatedAt))}. Es una lectura guardada, no una actualización en vivo.</p>
             <ReplyText complexTerms={response.complexTerms} reply={response.reply} />
           </div>
         ) : !isPending ? (

@@ -25,6 +25,7 @@
     "test:dashboard-readings": "node scripts/test-dashboard-readings.mjs",
     "test:dashboard-history": "node scripts/test-dashboard-history.mjs",
     "test:dashboard-patterns": "node scripts/test-dashboard-patterns.mjs",
+    "test:dashboard-ai-sections": "node scripts/test-dashboard-ai-sections.mjs",
     "test:dashboard-categories": "node scripts/test-dashboard-categories.mjs",
     "test:dashboard-horizon": "node scripts/test-dashboard-horizon.mjs",
     "test:dashboard-flow": "node scripts/test-dashboard-flow.mjs",

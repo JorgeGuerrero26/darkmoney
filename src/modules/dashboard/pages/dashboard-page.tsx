@@ -60,8 +60,7 @@ import { DashboardHealthPanel } from "../components/dashboard-health-panel";
 import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
 import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
 import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
-import { DashboardPatternsPanel } from "../components/dashboard-patterns-panel";
-import { buildDashboardPatterns } from "../lib/dashboard-patterns";
+import { DashboardPatternsSection } from "../components/dashboard-patterns-section";
 import { ProjectionHorizonPanel } from "../components/projection-horizon-panel";
 import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
 import { DashboardCategorySuggestionsPanel } from "../components/dashboard-category-suggestions-panel";
@@ -253,7 +252,8 @@ export function DashboardPage() {
     return storedCurrencyCode ? normalizeCurrencyCode(storedCurrencyCode) : "PEN";
   });
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "PEN";
-  const dashboardAi = useDashboardAiSummary({ userId:user?.id,workspaceId:activeWorkspace?.id,currencyCode:displayCurrencyCode,isAdmin:isAdminOverride });
+  const dashboardAi = useDashboardAiSummary({ userId:user?.id,workspaceId:activeWorkspace?.id,currencyCode:displayCurrencyCode,isAdmin:isAdminOverride,
+    enabled:canAccessProFeatures && (!isLoadingEntitlement || isAdminOverride) && snapshot?.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError });
   const exchangeRateMap = useMemo(
     () => buildDashboardExchangeRateMap(snapshot?.exchangeRates ?? []),
     [snapshot?.exchangeRates],
@@ -1680,8 +1680,9 @@ export function DashboardPage() {
         </section>
 
         <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard}
-          patterns={() => <DashboardPatternsPanel model={buildDashboardPatterns(snapshot, parityCtx, parityNow)} currency={displayCurrencyCode}
-            ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
+          patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
+            ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
           history={() => <DashboardHistoryPanel snapshot={snapshot} ctx={parityCtx} now={parityNow}
             ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
           flow={() => <ProjectionHorizonPanel snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}

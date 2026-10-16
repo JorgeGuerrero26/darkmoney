@@ -7926,7 +7926,7 @@ export function useArchiveNotificationsMutation(userId?: string) {
   });
 }
 
-// ── IA del dashboard (Edge Function dashboard-advanced-ai-summary, ya desplegada).
+// ── IA del dashboard. La disponibilidad desplegada se verifica fuera de las pruebas locales.
 // Mismo contrato que el móvil: payload preprocesado + tono → explicación generada.
 export type DashboardAiSummaryInput = {
   workspaceId: number;
@@ -7947,13 +7947,19 @@ export type DashboardAiSummaryResponse = {
   cached?: boolean;
 };
 
-export function useDashboardAiSummaryMutation() {
+export type DashboardAiSection = "summary" | "patterns" | "flow" | "history" | "health";
+
+export function useDashboardAiSummaryMutation(section: DashboardAiSection = "summary") {
   return useMutation({
+    mutationKey: ["dashboard-ai", section],
     mutationFn: async (input: DashboardAiSummaryInput): Promise<DashboardAiSummaryResponse> => {
-      if (!input.workspaceId) {
-        throw new Error("No se encontró el workspace activo.");
+      if (!["summary", "patterns", "flow", "history", "health"].includes(section)) {
+        throw new Error("La sección del dashboard no es válida.");
       }
-      if (!input.summary || typeof input.summary !== "object") {
+      if (!Number.isSafeInteger(input.workspaceId) || input.workspaceId <= 0) {
+        throw new Error("No se encontró el espacio activo.");
+      }
+      if (!input.summary || typeof input.summary !== "object" || Array.isArray(input.summary)) {
         throw new Error("No hay resumen suficiente para enviar a la IA.");
       }
       if (input.tone !== "managerial" && input.tone !== "personal") {
@@ -7961,7 +7967,7 @@ export function useDashboardAiSummaryMutation() {
       }
 
       return invokeAuthenticatedFunction<DashboardAiSummaryResponse>(
-        "dashboard-advanced-ai-summary",
+        `dashboard-advanced-ai-${section}`,
         { workspaceId:input.workspaceId,summary:input.summary,tone:input.tone },
         {signal:input.signal},
       );
