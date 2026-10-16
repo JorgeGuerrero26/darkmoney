@@ -9,6 +9,8 @@ import {
 } from "react";
 
 import { type UiPrefs, useSaveUiPrefsMutation } from "../../services/queries/workspace-data";
+import { normalizeUiPreferences, readUiPreferences, sameColumns, writeUiPreferences } from "./lib/personal-preferences";
+import { usePreferenceSave } from "./use-preference-save";
 
 interface UserPreferencesContextValue {
   viewModes: Record<string, string>;
@@ -19,136 +21,84 @@ interface UserPreferencesContextValue {
 
 const UserPreferencesContext = createContext<UserPreferencesContextValue | null>(null);
 
-function readFromLocalStorage(): { viewModes: Record<string, string>; columnVisibility: Record<string, Record<string, boolean>> } {
-  const viewModes: Record<string, string> = {};
-  const columnVisibility: Record<string, Record<string, boolean>> = {};
-
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      if (key.startsWith("dm_view_")) {
-        const val = localStorage.getItem(key);
-        if (val && ["grid", "list", "table"].includes(val)) {
-          viewModes[key.slice("dm_view_".length)] = val;
-        }
-      } else if (key.startsWith("dm_col_")) {
-        const val = localStorage.getItem(key);
-        if (val) {
-          try {
-            columnVisibility[key] = JSON.parse(val) as Record<string, boolean>;
-          } catch {
-            // ignore malformed
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return { viewModes, columnVisibility };
-}
-
-export function UserPreferencesProvider({
-  userId,
-  initialUiPrefs,
-  children,
-}: PropsWithChildren<{
+type Props = PropsWithChildren<{
   userId?: string;
   initialUiPrefs?: UiPrefs | null;
-}>) {
-  const initial = readFromLocalStorage();
+}>;
 
-  const [viewModes, setViewModes] = useState<Record<string, string>>(initial.viewModes);
-  const [columnVisibility, setColumnVisibilityState] = useState<Record<string, Record<string, boolean>>>(initial.columnVisibility);
+export function UserPreferencesProvider(props: Props) {
+  return <ScopedUserPreferencesProvider key={props.userId ?? "signed-out"} {...props} />;
+}
 
-  const vmRef = useRef(viewModes);
-  const cvRef = useRef(columnVisibility);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dbLoadedRef = useRef(false);
-
+function ScopedUserPreferencesProvider({ userId, initialUiPrefs, children }: Props) {
+  const [preferences, setPreferences] = useState(() => readUiPreferences(userId));
+  const latest = useRef(preferences);
+  const mounted = useRef(true);
+  const editedViews = useRef(new Set<string>());
+  const editedColumns = useRef(new Set<string>());
   const saveMutation = useSaveUiPrefsMutation(userId);
+  const scheduleSave = usePreferenceSave<UiPrefs>({ ready: Boolean(userId && initialUiPrefs !== undefined), delay: 2000, save: async value => {
+    await saveMutation.mutateAsync(value);
+    for (const key of editedViews.current) if (latest.current.view_modes[key] === value.view_modes[key]) editedViews.current.delete(key);
+    for (const key of editedColumns.current) if (sameColumns(latest.current.column_visibility[key], value.column_visibility[key])) editedColumns.current.delete(key);
+  } });
 
-  useEffect(() => { vmRef.current = viewModes; }, [viewModes]);
-  useEffect(() => { cvRef.current = columnVisibility; }, [columnVisibility]);
-
-  // When DB data arrives, merge it in (DB wins over localStorage)
   useEffect(() => {
-    if (!initialUiPrefs || dbLoadedRef.current) return;
-    dbLoadedRef.current = true;
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
-    if (initialUiPrefs.view_modes && Object.keys(initialUiPrefs.view_modes).length > 0) {
-      setViewModes((prev) => {
-        const next = { ...prev, ...initialUiPrefs.view_modes };
-        // Sync back to localStorage
-        try {
-          for (const [module, mode] of Object.entries(initialUiPrefs.view_modes)) {
-            localStorage.setItem(`dm_view_${module}`, mode);
-          }
-        } catch { /* ignore */ }
-        return next;
-      });
-    }
-
-    if (initialUiPrefs.column_visibility && Object.keys(initialUiPrefs.column_visibility).length > 0) {
-      setColumnVisibilityState((prev) => {
-        const next = { ...prev, ...initialUiPrefs.column_visibility };
-        // Sync back to localStorage
-        try {
-          for (const [key, vis] of Object.entries(initialUiPrefs.column_visibility)) {
-            localStorage.setItem(key, JSON.stringify(vis));
-          }
-        } catch { /* ignore */ }
-        return next;
-      });
-    }
-  }, [initialUiPrefs]);
-
-  function scheduleSave() {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      saveMutation.mutate({
-        view_modes: vmRef.current,
-        column_visibility: cvRef.current,
-      });
-    }, 2000);
-  }
+  // Server values win over this user's local cache, but not over explicit edits
+  // made while the first read was pending. Unowned legacy keys are never imported.
+  useEffect(() => {
+    if (!userId || initialUiPrefs === undefined) return;
+    const remote = normalizeUiPreferences(initialUiPrefs), local = latest.current;
+    const next: UiPrefs = {
+      view_modes: { ...local.view_modes, ...remote.view_modes, ...Object.fromEntries([...editedViews.current].map(key => [key, local.view_modes[key]])) },
+      column_visibility: { ...local.column_visibility, ...remote.column_visibility, ...Object.fromEntries([...editedColumns.current].map(key => [key, local.column_visibility[key]])) },
+    };
+    latest.current = next;
+    setPreferences(next);
+    writeUiPreferences(userId, next);
+    if ([...editedViews.current].some(key => next.view_modes[key] !== remote.view_modes[key]) || [...editedColumns.current].some(key => !sameColumns(next.column_visibility[key], remote.column_visibility[key]))) scheduleSave(next, true);
+  }, [userId, initialUiPrefs, scheduleSave]);
 
   const handleSetViewMode = useCallback(
     (module: string, mode: string) => {
-      setViewModes((prev) => {
-        const next = { ...prev, [module]: mode };
-        vmRef.current = next;
-        try { localStorage.setItem(`dm_view_${module}`, mode); } catch { /* ignore */ }
-        scheduleSave();
-        return next;
-      });
+      if (!mounted.current || !userId) return;
+      const valid = normalizeUiPreferences({ view_modes: { [module]: mode } }).view_modes;
+      if (!Object.prototype.hasOwnProperty.call(valid, module) || latest.current.view_modes[module] === mode) return;
+      editedViews.current.add(module);
+      const next = { ...latest.current, view_modes: { ...latest.current.view_modes, ...valid } };
+      latest.current = next;
+      setPreferences(next);
+      writeUiPreferences(userId, next);
+      scheduleSave(next);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userId],
+    [userId, scheduleSave],
   );
 
   const handleSetColumnVisibility = useCallback(
     (key: string, visibility: Record<string, boolean>) => {
-      setColumnVisibilityState((prev) => {
-        const next = { ...prev, [key]: visibility };
-        cvRef.current = next;
-        try { localStorage.setItem(key, JSON.stringify(visibility)); } catch { /* ignore */ }
-        scheduleSave();
-        return next;
-      });
+      if (!mounted.current || !userId) return;
+      const valid = normalizeUiPreferences({ column_visibility: { [key]: visibility } }).column_visibility;
+      if (!Object.prototype.hasOwnProperty.call(valid, key) || sameColumns(latest.current.column_visibility[key], valid[key])) return;
+      editedColumns.current.add(key);
+      const next = { ...latest.current, column_visibility: { ...latest.current.column_visibility, ...valid } };
+      latest.current = next;
+      setPreferences(next);
+      writeUiPreferences(userId, next);
+      scheduleSave(next);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userId],
+    [userId, scheduleSave],
   );
 
   return (
     <UserPreferencesContext.Provider
       value={{
-        viewModes,
+        viewModes: preferences.view_modes,
         setViewMode: handleSetViewMode,
-        columnVisibility,
+        columnVisibility: preferences.column_visibility,
         setColumnVisibility: handleSetColumnVisibility,
       }}
     >

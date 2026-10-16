@@ -3873,7 +3873,6 @@ export function useNotificationPreferencesQuery(userId?: string) {
     queryKey: ["notification-preferences", userId],
     queryFn: () => fetchNotificationPreferences(userId as string),
     enabled: Boolean(userId),
-    placeholderData: (previousData) => previousData,
   });
 }
 

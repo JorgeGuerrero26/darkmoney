@@ -394,11 +394,11 @@ export function AppShell() {
 
   return (
     <NotificationReadsProvider
-      initialSmartReads={notificationPreferencesQuery.data?.smartReads}
+      initialSmartReads={notificationPreferencesQuery.isSuccess ? notificationPreferencesQuery.data?.smartReads ?? {} : undefined}
       userId={user?.id}
     >
       <UserPreferencesProvider
-        initialUiPrefs={notificationPreferencesQuery.data?.uiPrefs}
+        initialUiPrefs={notificationPreferencesQuery.isSuccess ? notificationPreferencesQuery.data?.uiPrefs ?? null : undefined}
         userId={user?.id}
       >
         <AppShellContent />
