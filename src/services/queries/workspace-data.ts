@@ -47,6 +47,7 @@ import type {
 import { supabase } from "../supabase/client";
 import { runIdempotentInsert } from "../../lib/idempotent-write";
 import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout } from "../../modules/accounts/lib/account-write-result";
+import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptionWriteTimeout } from "../../modules/subscriptions/lib/subscription-write-result";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -890,6 +891,8 @@ type SubscriptionUpdateInput = SubscriptionFormInput & {
 type SubscriptionDeleteInput = {
   subscriptionId: number;
   workspaceId: number;
+  userId: string;
+  isCurrent: () => boolean;
 };
 
 type RecurringIncomeMutationInput = RecurringIncomeFormInput & {
@@ -7505,22 +7508,24 @@ export function useCreateSubscriptionMutation(workspaceId?: number, userId?: str
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: SubscriptionMutationInput) => {
+      assertSubscriptionWriteScope(input, workspaceId, userId);
       const client = getClient();
-      const { data, error } = await client
+      const { data, error } = await withSubscriptionWriteTimeout(signal => client
         .from("subscriptions")
         .insert({
           workspace_id: input.workspaceId,
           created_by_user_id: input.userId,
           ...buildSubscriptionMutationPayload(input, input.userId),
         })
-        .select("id")
-        .single();
+        .select("id, workspace_id, status, next_due_date")
+        .abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
-      return { id: data.id as number };
+      return confirmSubscriptionWrite(data, input, { status: input.status, next_due_date: input.nextDueDate });
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -7534,17 +7539,22 @@ export function useUpdateSubscriptionMutation(workspaceId?: number, userId?: str
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: SubscriptionUpdateInput) => {
+      assertSubscriptionWriteScope(input, workspaceId, userId, true);
       const client = getClient();
-      const { error } = await client
+      const { data, error } = await withSubscriptionWriteTimeout(signal => client
         .from("subscriptions")
         .update(buildSubscriptionMutationPayload(input, input.userId))
         .eq("id", input.subscriptionId)
-        .eq("workspace_id", input.workspaceId);
+        .eq("workspace_id", input.workspaceId)
+        .select("id, workspace_id, status, next_due_date")
+        .abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
+      return confirmSubscriptionWrite(data, input, { status: input.status, next_due_date: input.nextDueDate });
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -7558,51 +7568,67 @@ export function useDeleteSubscriptionMutation(workspaceId?: number, userId?: str
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: SubscriptionDeleteInput) => {
+      assertSubscriptionWriteScope(input, workspaceId, userId, true);
+      if (typeof input.isCurrent !== "function" || !input.isCurrent()) throw new Error("El acceso cambió antes de eliminar.");
       const client = getClient();
-      const relatedMovementsResult = await client
-        .from("movements")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", input.workspaceId)
-        .eq("subscription_id", input.subscriptionId);
+      return withSubscriptionWriteTimeout(async signal => {
+        const assertCurrent = () => {
+          signal.throwIfAborted();
+          if (!input.isCurrent()) throw new Error("El acceso cambió. Comprueba la suscripción y el calendario antes de repetir.");
+        };
+        assertCurrent();
+        const parent = await client.from("subscriptions").select("id, workspace_id")
+          .eq("workspace_id", input.workspaceId).eq("id", input.subscriptionId).abortSignal(signal).single();
+        if (parent.error) throw parent.error;
+        confirmSubscriptionWrite(parent.data, input);
+        assertCurrent();
+        const relatedMovementsResult = await client
+          .from("movements")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", input.workspaceId)
+          .eq("subscription_id", input.subscriptionId).abortSignal(signal);
 
-      if (relatedMovementsResult.error) {
-        throw relatedMovementsResult.error;
-      }
+        if (relatedMovementsResult.error) throw relatedMovementsResult.error;
 
-      if ((relatedMovementsResult.count ?? 0) > 0) {
-        throw new Error(
-          "Esta suscripcion tiene movimientos asociados. Desvinculalos o eliminalos antes de borrarla.",
-        );
-      }
-
-      const { error: occurrenceDeleteError } = await client
-        .from("subscription_occurrences")
-        .delete()
-        .eq("subscription_id", input.subscriptionId);
-
-      if (occurrenceDeleteError) {
-        const message = String(occurrenceDeleteError.message ?? "").toLowerCase();
-
-        if (!message.includes("subscription_occurrences")) {
-          throw occurrenceDeleteError;
+        if (!Number.isSafeInteger(relatedMovementsResult.count) || relatedMovementsResult.count! < 0) {
+          throw new Error("No se pudo comprobar si hay movimientos asociados. No se envió la eliminación.");
         }
-      }
+        if (relatedMovementsResult.count! > 0) {
+          throw new Error("Esta suscripción tiene movimientos asociados. Desvincúlalos o elimínalos antes de borrarla.");
+        }
 
-      const { error } = await client
-        .from("subscriptions")
-        .delete()
-        .eq("id", input.subscriptionId)
-        .eq("workspace_id", input.workspaceId);
+        assertCurrent();
+        const { error: occurrenceDeleteError, count: deletedOccurrences } = await client
+          .from("subscription_occurrences")
+          .delete({ count: "exact" })
+          .eq("subscription_id", input.subscriptionId).abortSignal(signal);
 
-      if (error) {
-        throw error;
-      }
+        if (occurrenceDeleteError) throw occurrenceDeleteError;
+        if (!Number.isSafeInteger(deletedOccurrences) || deletedOccurrences! < 0) {
+          throw new Error("La eliminación del calendario está por comprobar. No se envió la eliminación de la suscripción.");
+        }
+
+        assertCurrent();
+        const { data, error } = await client
+          .from("subscriptions")
+          .delete()
+          .eq("id", input.subscriptionId)
+          .eq("workspace_id", input.workspaceId)
+          .select("id, workspace_id").abortSignal(signal).single();
+
+        if (error) throw error;
+        return confirmSubscriptionWrite(data, input);
+      });
     },
-    ...optimisticDelete<SubscriptionDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
-      ...snap,
-      subscriptions: snap.subscriptions.filter((s) => s.id !== input.subscriptionId),
-    })),
+    // A local snapshot rollback cannot undo a possibly committed calendar deletion.
+    onSettled: async () => {
+      if (workspaceId) await Promise.all([
+        invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
+        queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", workspaceId, userId] }),
+      ]);
+    },
   });
 }
 

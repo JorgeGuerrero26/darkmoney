@@ -37,7 +37,7 @@ mock("src/modules/auth/auth-context.tsx", "export const useAuth=()=>({user:globa
 mock("src/modules/workspaces/use-active-workspace.ts", "export const useActiveWorkspace=()=>({activeWorkspace:{id:globalThis.subScope.workspaceId,baseCurrencyCode:'PEN',role:globalThis.subScope.role,isArchived:globalThis.subScope.archived},isFetching:globalThis.subScope.fetching,isLoading:false});");
 mock("src/services/queries/workspace-data.ts", `
   export const useWorkspaceSnapshotQuery=()=>globalThis.subSnapshot;
-  const mutation=kind=>({isPending:false,mutateAsync:async input=>{globalThis.subWrites.push({kind,input});if(globalThis.subGate)await globalThis.subGate;if(globalThis.subFailure)throw globalThis.subFailure;return globalThis.subOverride??{id:88};}});
+  const mutation=kind=>({isPending:false,mutateAsync:async input=>{globalThis.subWrites.push({kind,input});if(globalThis.subGate)await globalThis.subGate;if(globalThis.subFailure)throw globalThis.subFailure;return globalThis.subOverride??{id:input.subscriptionId??88,workspaceId:input.workspaceId};}});
   export const useCreateSubscriptionMutation=()=>mutation('create'),useUpdateSubscriptionMutation=()=>mutation('update'),useDeleteSubscriptionMutation=()=>mutation('delete');
   export const getQueryErrorMessage=(error,fallback)=>error?.message??fallback??'fixture error';
 `);
@@ -98,6 +98,17 @@ await render({}, { data: undefined, error: new Error("failed snapshot") }); asse
 await openNew(); const staleSave = globalThis.subEditor.onSubmit; await render({ role: "viewer" }); assert.equal(container.querySelector("form"), null); await render({ role: "owner" }); await act(async () => staleSave({ preventDefault() {} })); assert.equal(globalThis.subWrites.length, 0);
 await openNew(); await formValues(); let finish; globalThis.subGate = new Promise(resolve => { finish = resolve; }); const save = find("Crear suscripción"); await act(async () => { save.click(); save.click(); }); assert.equal(globalThis.subWrites.length, 1); globalThis.subGate = null; await act(async () => finish()); await settle(); assert.equal(container.querySelector("form"), null);
 await openNew(); await formValues(); globalThis.subFailure = new Error("Failed to fetch"); await click("Crear suscripción"); assert.match(container.textContent, /Resultado por comprobar/); const beforeReplay = globalThis.subWrites.length; await act(async () => globalThis.subEditor.onSubmit({ preventDefault() {} })); assert.equal(globalThis.subWrites.length, beforeReplay); assert.ok(find("Comprueba el resultado").disabled); globalThis.subFailure = null; await discard();
+
+// Both editors require the ID and space returned by the actual mutation contract.
+for (const mode of ["create", "edit"]) for (const result of [{}, { id: 1, workspaceId: 99 }, { id: "1", workspaceId: 8 }, ...(mode === "edit" ? [{ id: 88, workspaceId: 8 }] : [])]) {
+  if (mode === "create") { await openNew(); await formValues(); } else { await menu(); await click("Editar"); }
+  globalThis.subOverride = result; const beforeInvalidSave = globalThis.subWrites.length;
+  await click(mode === "create" ? "Crear suscripción" : "Guardar cambios"); assert.equal(globalThis.subWrites.length, beforeInvalidSave + 1); assert.match(container.textContent, /Resultado por comprobar/);
+  await render(); await act(async () => globalThis.subEditor.onSubmit({ preventDefault() {} })); assert.equal(globalThis.subWrites.length, beforeInvalidSave + 1); assert.ok(find("Comprueba el resultado").disabled);
+  globalThis.subOverride = undefined; await discard();
+}
+await menu(); await click("Editar"); globalThis.subFailure = { code: "23514", message: "SQL rejected" }; await click("Guardar cambios"); assert.match(container.textContent, /No pudimos guardar/); assert.equal(find("Comprueba el resultado"), undefined);
+globalThis.subFailure = null; await click("Guardar cambios"); assert.equal(container.querySelector("form"), null);
 
 // All action shortcuts revalidate the current same-space resource and eligible catalogs.
 await menu(); await click("Ver detalle"); const stalePin = globalThis.subDetail.onPin, invalidAccount = globalThis.subDetail.onAssignAccount, invalidCategory = globalThis.subDetail.onAssignCategory;

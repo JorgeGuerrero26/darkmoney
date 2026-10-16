@@ -41,6 +41,7 @@ import { validateSubscriptionPayment } from "../lib/subscription-payment-input";
 import { SubscriptionAnalyticsModal } from "../components/subscription-analytics-modal";
 import { SubscriptionDetailDialog } from "../components/subscription-detail-dialog";
 import { assignSubscriptionField, changeSubscriptionStatus, markSubscriptionPaid, setSubscriptionPinned, todayPeru } from "../lib/subscription-actions";
+import { confirmSubscriptionWrite, isSubscriptionWriteRejected } from "../lib/subscription-write-result";
 import {
   getQueryErrorMessage,
   useCreateSubscriptionMutation,
@@ -645,7 +646,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
           ...payload,
         }));
         if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
-        if (!Number.isSafeInteger(result?.id) || result.id <= 0) throw new Error("El servidor no confirmó el identificador de la suscripción.");
+        confirmSubscriptionWrite(result && { id: result.id, workspace_id: result.workspaceId }, { workspaceId: activeWorkspace.id });
         editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
@@ -653,13 +654,14 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
           description: "Ya aparece en tu radar de vencimientos y en la lista principal.",
         });
       } else if (selectedSubscription) {
-        await runWrite(() => updateMutation.mutateAsync({
+        const result = await runWrite(() => updateMutation.mutateAsync({
           subscriptionId: selectedSubscription.id,
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
         }));
         if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        confirmSubscriptionWrite(result && { id: result.id, workspace_id: result.workspaceId }, { workspaceId: activeWorkspace.id, subscriptionId: selectedSubscription.id });
         editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
@@ -672,8 +674,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
       setSelectedSubscriptionId(null);
     } catch (error) {
       if (!responseScope.isCurrent() || (attempt && !editorWrite.isCurrent(attempt))) return;
-      const code = error && typeof error === "object" && "code" in error ? error.code : null;
-      const rejected = typeof code === "string" && /^(22|23|42)[A-Z0-9]{3}$/.test(code);
+      const rejected = isSubscriptionWriteRejected(error);
       if (attempt) { if (rejected) editorWrite.reject(attempt); else editorWrite.fail(attempt); }
       setFeedback({
         tone: "error",
@@ -705,7 +706,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
         try {
           currentSubscription(targetId);
           if (currentMovements.current.some(item => item.subscriptionId === targetId)) throw new Error("La suscripción tiene pagos asociados. No se eliminó.");
-          await runWrite(() => deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id }));
+          await runWrite(() => deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id, userId: user!.id, isCurrent: responseScope.isCurrent }));
         }
         catch (error) { restore(); if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación por comprobar", description: `${getQueryErrorMessage(error)} Actualiza y comprueba la suscripción y su calendario antes de repetir.` }); }
       },
@@ -832,7 +833,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
         responseScope.assertCurrent(); latestAccess.current.assertCurrent();
         if (!rows.current.some(item => item.id === id)) throw new Error("Una suscripción seleccionada ya no está disponible.");
         if (currentMovements.current.some(item => item.subscriptionId === id)) throw new Error("Una suscripción tiene pagos asociados. No se elimina.");
-        await deleteMutation.mutateAsync({ subscriptionId: id, workspaceId: activeWorkspace.id });
+        await deleteMutation.mutateAsync({ subscriptionId: id, workspaceId: activeWorkspace.id, userId: user!.id, isCurrent: responseScope.isCurrent });
       } });
       if (!responseScope.isCurrent()) return;
       clearAll();
