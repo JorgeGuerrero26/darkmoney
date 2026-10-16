@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { React, act, createRoot, dom, load, mock, h, settle, change, MemoryRouter } from "./lib/web-ui-harness.mjs";
 
-const account = (id, extra = {}) => ({ id, workspaceId: 8, name: `Cuenta ${id}`, type: "cash", currencyCode: "PEN", openingBalance: 0, currentBalance: 100 * id, currentBalanceInBaseCurrency: 100 * id, includeInNetWorth: true, lastActivity: "2026-10-01T12:00:00Z", color: "#1e6b57", icon: "wallet", isArchived: false, ...extra });
+const account = (id, extra = {}) => ({ id, workspaceId: 8, name: `Cuenta ${id}`, type: "cash", currencyCode: "PEN", openingBalance: 0, currentBalance: 100 * id, currentBalanceInBaseCurrency: 100 * id, includeInNetWorth: true, lastActivity: "2026-10-01T12:00:00Z", color: "#1b6a58", icon: "wallet", isArchived: false, ...extra });
 const fixtures = [account(1), account(2, { isArchived: true }), account(3, { workspaceId: 99, name: "Cuenta ajena" })];
 globalThis.accountScope = { userId: "A", workspaceId: 8, role: "owner", archived: false, fetching: false };
 globalThis.accountSnapshot = { isSuccess: true, isFetching: false, isPlaceholderData: false, data: { workspace: { id: 8, baseCurrencyCode: "PEN" }, accounts: fixtures, movements: [], exchangeRates: [{ fromCurrencyCode: "PEN", toCurrencyCode: "USD", rate: 0.25 }] } };
@@ -10,7 +10,7 @@ mock("src/modules/auth/auth-context.tsx", "export const useAuth=()=>({user:globa
 mock("src/modules/workspaces/use-active-workspace.ts", "export const useActiveWorkspace=()=>({activeWorkspace:{id:globalThis.accountScope.workspaceId,baseCurrencyCode:'PEN',role:globalThis.accountScope.role,isArchived:globalThis.accountScope.archived},isFetching:globalThis.accountScope.fetching,isLoading:false});");
 mock("src/services/queries/workspace-data.ts", `
   export const useWorkspaceSnapshotQuery=()=>globalThis.accountSnapshot;
-  const mutation=kind=>({isPending:false,mutateAsync:async input=>{globalThis.accountWrites.push({kind,input});if(globalThis.accountGate)await globalThis.accountGate;if(globalThis.accountFailure)throw globalThis.accountFailure;}});
+  const mutation=kind=>({isPending:false,mutateAsync:async input=>{globalThis.accountWrites.push({kind,input});if(globalThis.accountGate)await globalThis.accountGate;if(globalThis.accountFailure)throw globalThis.accountFailure;return globalThis.accountResultOverride??{id:input.accountId??77,workspaceId:input.workspaceId,isArchived:input.isArchived??false};}});
   export const useCreateAccountMutation=()=>mutation('create'),useUpdateAccountMutation=()=>mutation('update'),useArchiveAccountMutation=()=>mutation('archive'),useDeleteAccountMutation=()=>mutation('delete');
   export const getQueryErrorMessage=(e,f)=>e?.message??f;
 `);
@@ -76,6 +76,23 @@ const beforeRemoved = globalThis.accountWrites.length; await act(async () => rem
 await render({ workspaceId: 9 }, { data: { ...snapshotData(), workspace: { id: 9 }, accounts: [account(9, { workspaceId: 9 })] } }); assert.equal(container.querySelector("form"), null);
 await act(async () => removedSubmit({ preventDefault() {} })); assert.equal(globalThis.accountWrites.length, beforeRemoved);
 await render({ workspaceId: 8 }, { data: { ...snapshotData(), workspace: { id: 8 } } });
+
+// Single-write result evidence: lost/invalid response blocks this intent, explicit SQL rejection permits correction.
+for (const failure of [new Error("Failed to fetch"), { code: "20", message: "aborted response" }, null]) {
+  await click("Nueva cuenta"); await change(container.querySelector('input[placeholder="Ej. Cuenta Principal"]'), "Cuenta por comprobar");
+  globalThis.accountFailure = failure; globalThis.accountResultOverride = failure ? undefined : {};
+  const originalSave = globalThis.accountEditor.onSubmit, beforeUncertain = globalThis.accountWrites.length;
+  await click("Crear cuenta"); assert.match(container.textContent, /Resultado por comprobar/); assert.ok(find("Comprueba el resultado").disabled);
+  assert.ok(container.querySelector('form fieldset').disabled); assert.equal(aria("Cerrar formulario").disabled, false);
+  await act(async () => originalSave({ preventDefault() {} })); assert.equal(globalThis.accountWrites.length, beforeUncertain + 1);
+  await render({}, { isFetching: true }); await render({}, { isFetching: false }); assert.ok(find("Comprueba el resultado").disabled);
+  globalThis.accountFailure = null; globalThis.accountResultOverride = undefined;
+  await act(async () => globalThis.accountEditor.onClose()); await click("Sí, descartar");
+}
+await click("Nueva cuenta"); await change(container.querySelector('input[placeholder="Ej. Cuenta Principal"]'), "Corregible"); globalThis.accountFailure = { code: "23514", message: "SQL validation rejection" };
+await click("Crear cuenta"); assert.match(container.textContent, /SQL validation rejection/); assert.equal(find("Crear cuenta").disabled, false); assert.equal(container.querySelector('form fieldset').disabled, false);
+globalThis.accountFailure = null; await change(container.querySelector('input[placeholder="Ej. Cuenta Principal"]'), "Corregida"); await click("Crear cuenta"); assert.equal(container.querySelector("form"), null);
+await menu(); await click("Editar"); globalThis.accountResultOverride = { id: 999, workspaceId: 8, isArchived: false }; await click("Guardar cambios"); assert.ok(find("Comprueba el resultado").disabled); globalThis.accountResultOverride = undefined; await act(async () => globalThis.accountEditor.onClose()); if (find("Sí, descartar")) await click("Sí, descartar");
 
 // Cancel old delete intents on context/read/access loss; revalidate current archived status.
 async function scheduleDelete() {

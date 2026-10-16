@@ -99,11 +99,13 @@ assert.match(overviewQuery, /\.select\("id, workspace_id, name, type, phone, ema
 const selectedHooks = serviceAst.statements.filter((node) => ts.isFunctionDeclaration(node) && ["useCreateAccountMutation", "useUpdateAccountMutation"].includes(node.name?.text));
 const hookJs = ts.transpileModule(selectedHooks.map((node) => node.getText(serviceAst).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
 const payloads = [];
+const accountWrite = await import(compile(resolve(root, "src/modules/accounts/lib/account-write-result.ts")));
 const client = { from(table) {
   assert.equal(table, "accounts");
-  return { insert(payload) { payloads.push(payload); return Promise.resolve({ error: null }); }, update(payload) { payloads.push(payload); return { eq() { return this; }, then(resolve) { resolve({ error: null }); } }; } };
+  const chain = { eq() { return this; }, select() { return this; }, abortSignal() { return this; }, single() { return Promise.resolve({ data: { id: 1, workspace_id: 1, is_archived: false }, error: null }); } };
+  return { insert(payload) { payloads.push(payload); return chain; }, update(payload) { payloads.push(payload); return chain; } };
 } };
-const hooks = new Function("useQueryClient", "useMutation", "getClient", "invalidateWorkspaceSnapshot", `${hookJs}; return {useCreateAccountMutation,useUpdateAccountMutation};`)(() => ({}), (options) => options, () => client, async () => {});
+const hooks = new Function("useQueryClient", "useMutation", "getClient", "invalidateWorkspaceSnapshot", "assertAccountWriteScope", "confirmAccountWrite", "withAccountWriteTimeout", `${hookJs}; return {useCreateAccountMutation,useUpdateAccountMutation};`)(() => ({}), (options) => options, () => client, async () => {}, accountWrite.assertAccountWriteScope, accountWrite.confirmAccountWrite, accountWrite.withAccountWriteTimeout);
 await hooks.useCreateAccountMutation(1, "test").mutationFn({ ...input, workspaceId: 1, userId: "test", sortOrder: 1 });
 await hooks.useUpdateAccountMutation(1, "test").mutationFn({ ...input, workspaceId: 1, userId: "test", accountId: 1 });
 for (const payload of payloads) { assert.equal(payload.statement_day, 25); assert.equal(payload.payment_day, 15); assert.equal(payload.credit_limit, 2000.5); }

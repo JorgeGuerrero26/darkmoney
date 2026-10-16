@@ -32,6 +32,7 @@ type AccountEditorDialogProps = {
   formState: AccountFormState;
   isCreateMode: boolean;
   isSaving: boolean;
+  saveBlocked?: boolean;
   onArchiveToggle: (account: AccountSummary) => void;
   onClose: () => void;
   onDelete: () => void;
@@ -64,6 +65,7 @@ export function AccountEditorDialog({
   formState,
   isCreateMode,
   isSaving,
+  saveBlocked = false,
   onArchiveToggle,
   onClose,
   onDelete,
@@ -105,6 +107,8 @@ export function AccountEditorDialog({
           {errorMessage ? (
             <FormFeedbackBanner className="mb-5" description={errorMessage} title="Revisa la cuenta antes de guardarla" tone="error" />
           ) : null}
+
+          <fieldset className="min-w-0 border-0 p-0" disabled={isSaving || saveBlocked}>
 
           {activePanel === "main" ? (
             <div className="space-y-5">
@@ -213,12 +217,13 @@ export function AccountEditorDialog({
               ) : null}
             </div>
           )}
+          </fieldset>
         </ModalBody>
 
         <ModalFooter>
-          <Button className="w-full" disabled={isSaving} type="submit">
+          <Button className="w-full" disabled={isSaving || saveBlocked} type="submit">
             <Save className="h-4 w-4" />
-            {isSaving ? "Guardando..." : isCreateMode ? "Crear cuenta" : "Guardar cambios"}
+            {isSaving ? "Guardando..." : saveBlocked ? "Comprueba el resultado" : isCreateMode ? "Crear cuenta" : "Guardar cambios"}
           </Button>
         </ModalFooter>
       </form>

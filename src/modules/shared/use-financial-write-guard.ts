@@ -20,6 +20,6 @@ export function useFinancialWriteGuard(scopeKey: string) {
     const attempt = { scope: scopeKey }; state.current = { scope: scopeKey, status: "pending", attempt }; render(value => value + 1); return attempt;
   }
   const status = state.current.scope === scopeKey ? state.current.status : "idle";
-  return { begin, isCurrent, confirm: (attempt: Attempt) => mark(attempt, "confirmed"), fail: (attempt: Attempt) => mark(attempt, "uncertain"),
+  return { begin, isCurrent, confirm: (attempt: Attempt) => mark(attempt, "confirmed"), fail: (attempt: Attempt) => mark(attempt, "uncertain"), reject: (attempt: Attempt) => mark(attempt, "idle"),
     status, blocked: status !== "idle", pending: status === "pending" };
 }

@@ -32,6 +32,7 @@ import type { AccountSummary } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
 import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
+import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { requestQuickMovement } from "../../movements/lib/quick-movement-event";
 import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import { AccountArchiveDialog } from "../components/account-archive-dialog";
@@ -53,6 +54,7 @@ import {
 import { downloadAccountsCSV } from "../lib/account-formatters";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
 import { computeAccountWorth } from "../lib/account-worth";
+import { isAccountWriteRejected } from "../lib/account-write-result";
 import {
   getFirstAccountFormError,
   toAccountInput,
@@ -234,6 +236,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
     userId: user?.id,
     workspaceId: activeWorkspace?.id,
   });
+  const editorWrite = useFinancialWriteGuard(`${user?.id}:${activeWorkspace?.id}:account-editor:${editor.isEditorOpen}:${editor.editorMode}:${editor.selectedAccountId}`);
 
   const createAccountMutation = useCreateAccountMutation(activeWorkspace?.id, user?.id);
   const updateAccountMutation = useUpdateAccountMutation(activeWorkspace?.id, user?.id);
@@ -329,11 +332,13 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
     field: Field,
     value: AccountFormState[Field],
   ) {
+    if (locks.current.size || editorWrite.blocked) return;
     clearFormFieldError(field);
     editor.updateFormState(field, value);
   }
 
   function handleTypeChange(type: string) {
+    if (locks.current.size || editorWrite.blocked) return;
     clearFormFieldError("type");
     clearFormFieldError("color");
     clearFormFieldError("icon");
@@ -367,7 +372,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!activeWorkspace || !user || !access.isCurrent() || locks.current.size) {
+    if (!activeWorkspace || !user || !access.isCurrent() || locks.current.size || editorWrite.blocked) {
       return;
     }
 
@@ -382,16 +387,20 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
       return;
     }
 
+    let attempt: ReturnType<typeof editorWrite.begin> = null;
     try {
       if (editor.editorMode === "create") {
-        await runWrite("new", () => createAccountMutation.mutateAsync({
+        attempt = editorWrite.begin(); if (!attempt) return;
+        const result = await runWrite("new", () => createAccountMutation.mutateAsync({
           ...toAccountInput(editor.formState),
           sortOrder: accounts.length + 1,
           userId: user.id,
           workspaceId: activeWorkspace.id,
         }));
 
-        if (!responseScope.isCurrent()) return;
+        if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        if (!Number.isSafeInteger(result?.id) || result.id <= 0 || result.workspaceId !== activeWorkspace.id || result.isArchived !== false) throw new Error("El servidor no confirmó la cuenta creada.");
+        editorWrite.confirm(attempt);
         editor.closeEditor();
         setFeedbackMessage("Cuenta creada correctamente.");
         return;
@@ -403,23 +412,31 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
       }
 
       const target = currentAccount(editor.selectedAccount.id);
-      await runWrite(target.id, () => updateAccountMutation.mutateAsync({
+      attempt = editorWrite.begin(); if (!attempt) return;
+      const result = await runWrite(target.id, () => updateAccountMutation.mutateAsync({
         ...toAccountInput(editor.formState),
         accountId: target.id,
         userId: user.id,
         workspaceId: activeWorkspace.id,
       }));
 
-      if (!responseScope.isCurrent()) return;
+      if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+      if (result?.id !== target.id || result.workspaceId !== activeWorkspace.id) throw new Error("El servidor no confirmó la cuenta actualizada.");
+      editorWrite.confirm(attempt);
       editor.closeEditor();
       setFeedbackMessage("Cuenta actualizada correctamente.");
     } catch (error) {
-      if (responseScope.isCurrent()) setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar la cuenta."));
+      if (!responseScope.isCurrent() || (attempt && !editorWrite.isCurrent(attempt))) return;
+      const uncertain = Boolean(attempt && !isAccountWriteRejected(error));
+      if (attempt) { if (uncertain) editorWrite.fail(attempt); else editorWrite.reject(attempt); }
+      setErrorMessage(uncertain
+        ? `${getQueryErrorMessage(error, "No recibimos confirmación.")} Resultado por comprobar: la cuenta podría haberse guardado. Cierra y actualiza Cuentas antes de registrarla otra vez; no se repetirá este envío.`
+        : getQueryErrorMessage(error, "No pudimos guardar la cuenta."));
     }
   }
 
   function handleArchiveToggle(account: AccountSummary) {
-    if (!activeWorkspace || !user || !canAct || !access.isCurrent() || !currentRows.current.some(item => item.id === account.id)) {
+    if (!activeWorkspace || !user || !canAct || !access.isCurrent() || (editor.isEditorOpen && editorWrite.blocked) || !currentRows.current.some(item => item.id === account.id)) {
       return;
     }
 
@@ -455,7 +472,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
   }
 
   function handleDeleteAccount() {
-    if (!activeWorkspace || !editor.selectedAccount?.isArchived || !canAct || !access.isCurrent()) {
+    if (!activeWorkspace || !editor.selectedAccount?.isArchived || !canAct || !access.isCurrent() || editorWrite.blocked) {
       return;
     }
 
@@ -722,6 +739,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
           formState={editor.formState}
           isCreateMode={editor.editorMode === "create"}
           isSaving={formDisabled}
+          saveBlocked={editorWrite.status === "uncertain"}
           onArchiveToggle={handleArchiveToggle}
           onClose={requestCloseEditor}
           onDelete={handleDeleteAccount}

@@ -46,6 +46,7 @@ import type {
 } from "../../types/domain";
 import { supabase } from "../supabase/client";
 import { runIdempotentInsert } from "../../lib/idempotent-write";
+import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout } from "../../modules/accounts/lib/account-write-result";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -3975,9 +3976,11 @@ export function useCreateAccountMutation(workspaceId?: number, userId?: string) 
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: AccountMutationInput) => {
+      assertAccountWriteScope(input, workspaceId, userId);
       const client = getClient();
-      const { error } = await client.from("accounts").insert({
+      const { data, error } = await withAccountWriteTimeout(signal => client.from("accounts").insert({
         workspace_id: input.workspaceId,
         created_by_user_id: input.userId,
         updated_by_user_id: input.userId,
@@ -3995,11 +3998,12 @@ export function useCreateAccountMutation(workspaceId?: number, userId?: string) 
         notes: input.notes?.trim() || null,
         sort_order: input.sortOrder,
         is_archived: false,
-      });
+      }).select("id, workspace_id, is_archived").abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
+      return confirmAccountWrite(data, input, false);
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -4013,9 +4017,11 @@ export function useUpdateAccountMutation(workspaceId?: number, userId?: string) 
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: AccountUpdateInput) => {
+      assertAccountWriteScope(input, workspaceId, userId, true);
       const client = getClient();
-      const { error } = await client
+      const { data, error } = await withAccountWriteTimeout(signal => client
         .from("accounts")
         .update({
           updated_by_user_id: input.userId,
@@ -4033,11 +4039,13 @@ export function useUpdateAccountMutation(workspaceId?: number, userId?: string) 
           notes: input.notes?.trim() || null,
         })
         .eq("id", input.accountId)
-        .eq("workspace_id", input.workspaceId);
+        .eq("workspace_id", input.workspaceId)
+        .select("id, workspace_id, is_archived").abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
+      return confirmAccountWrite(data, input);
     },
     onSuccess: async () => {
       if (workspaceId) {
@@ -4051,27 +4059,26 @@ export function useArchiveAccountMutation(workspaceId?: number, userId?: string)
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: AccountArchiveInput) => {
+      assertAccountWriteScope(input, workspaceId, userId, true);
       const client = getClient();
-      const { error } = await client
+      const { data, error } = await withAccountWriteTimeout(signal => client
         .from("accounts")
         .update({
           updated_by_user_id: input.userId,
           is_archived: input.isArchived,
         })
         .eq("id", input.accountId)
-        .eq("workspace_id", input.workspaceId);
+        .eq("workspace_id", input.workspaceId)
+        .select("id, workspace_id, is_archived").abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
+      return confirmAccountWrite(data, input, input.isArchived);
     },
-    ...optimisticDelete<AccountArchiveInput>(queryClient, workspaceId, userId, (snap, input) => ({
-      ...snap,
-      accounts: snap.accounts.map((a) =>
-        a.id === input.accountId ? { ...a, isArchived: input.isArchived } : a,
-      ),
-    })),
+    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 
@@ -4079,22 +4086,24 @@ export function useDeleteAccountMutation(workspaceId?: number, userId?: string) 
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: AccountDeleteInput) => {
+      assertAccountWriteScope({ ...input, userId }, workspaceId, userId, true);
       const client = getClient();
-      const { error } = await client
+      const { data, error } = await withAccountWriteTimeout(signal => client
         .from("accounts")
         .delete()
         .eq("id", input.accountId)
-        .eq("workspace_id", input.workspaceId);
+        .eq("workspace_id", input.workspaceId)
+        .eq("is_archived", true)
+        .select("id, workspace_id, is_archived").abortSignal(signal).single());
 
       if (error) {
         throw error;
       }
+      return confirmAccountWrite(data, input, true);
     },
-    ...optimisticDelete<AccountDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
-      ...snap,
-      accounts: snap.accounts.filter((a) => a.id !== input.accountId),
-    })),
+    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 
