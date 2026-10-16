@@ -13,7 +13,7 @@ globalThis.subUndo = new Map(); globalThis.subCancelled = []; let sequence = 0;
 globalThis.subClient = { from(table) {
   return { table, kind: "read", payload: null, filters: [], signal: null,
     select() { return this; }, range(from, to) { this.start = from; this.end = to; return this; }, update(payload) { this.kind = "update"; this.payload = payload; return this; }, insert(payload) { this.kind = "insert"; this.payload = payload; return this; },
-    eq(key, value) { this.filters.push([key, value]); return this; }, abortSignal(signal) { this.signal = signal; return this; }, order() { return this; },
+    eq(key, value) { this.filters.push([key, value]); return this; }, is(key, value) { this.filters.push([key, value]); return this; }, abortSignal(signal) { this.signal = signal; return this; }, order() { return this; },
     single() { return this.execute(); }, maybeSingle() { return this.execute(); }, then(resolve, reject) { return this.execute().then(resolve, reject); },
     async execute() {
       const id = this.filters.find(([key]) => key === "id")?.[1], ws = this.filters.find(([key]) => key === "workspace_id")?.[1];
@@ -28,7 +28,7 @@ globalThis.subClient = { from(table) {
       if (globalThis.subGate) await globalThis.subGate;
       if (globalThis.subFailure) return { data: null, error: globalThis.subFailure };
       if (globalThis.subNoAdvance) return { data: null, error: null };
-      return { data: table === "subscriptions" && row ? { id: row.id, workspace_id: row.workspaceId, next_due_date: this.payload.next_due_date } : globalThis.subBadInsert ? {} : { id: 400, workspace_id: this.payload.workspace_id, subscription_id: this.payload.subscription_id, source_account_id: this.payload.source_account_id, source_amount: this.payload.source_amount, status: this.payload.status }, error: null };
+      return { data: table === "subscriptions" && row ? { id: row.id, workspace_id: row.workspaceId, ...this.payload } : globalThis.subBadInsert ? {} : { id: 400, workspace_id: this.payload.workspace_id, subscription_id: this.payload.subscription_id, source_account_id: this.payload.source_account_id, source_amount: this.payload.source_amount, status: this.payload.status }, error: null };
     },
   };
 } };

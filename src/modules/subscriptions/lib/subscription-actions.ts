@@ -2,6 +2,7 @@ import { supabase } from "../../../services/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import type { SubscriptionStatus, SubscriptionSummary } from "../../../types/domain";
 import { computeNextRecurringDate, rollDueDateForward } from "./subscriptions-presenters";
+import { confirmSubscriptionWrite, SubscriptionWritePreflightError, withSubscriptionWriteTimeout } from "./subscription-write-result";
 
 export type SubscriptionOccurrence = {
   id: number;
@@ -55,32 +56,57 @@ export function todayPeru() {
   return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+function assertActionTarget(subscription: SubscriptionSummary) {
+  if (!Number.isSafeInteger(subscription.id) || subscription.id <= 0 || !Number.isSafeInteger(subscription.workspaceId) || subscription.workspaceId <= 0) {
+    throw new SubscriptionWritePreflightError("La suscripción o el espacio ya no están disponibles.");
+  }
+}
+
 export async function changeSubscriptionStatus(subscription: SubscriptionSummary, status: SubscriptionStatus) {
+  assertActionTarget(subscription);
+  if (!["active", "paused", "cancelled"].includes(status)) throw new SubscriptionWritePreflightError("Selecciona un estado válido.");
   const nextDueDate = status === "active"
     ? rollDueDateForward(subscription.nextDueDate, subscription.frequency, subscription.intervalCount, todayPeru(), subscription.dayOfMonth)
     : subscription.nextDueDate;
-  const { error } = await client().from("subscriptions")
+  const { data, error } = await withSubscriptionWriteTimeout(signal => client().from("subscriptions")
     .update({ status, next_due_date: nextDueDate })
     .eq("workspace_id", subscription.workspaceId)
-    .eq("id", subscription.id);
+    .eq("id", subscription.id)
+    .eq("status", subscription.status).eq("next_due_date", subscription.nextDueDate)
+    .select("id, workspace_id, status, next_due_date").abortSignal(signal).single());
   if (error) throw error;
+  confirmSubscriptionWrite(data, { workspaceId: subscription.workspaceId, subscriptionId: subscription.id }, { status, next_due_date: nextDueDate });
   return nextDueDate;
 }
 
 export async function setSubscriptionPinned(subscription: SubscriptionSummary, isPinned: boolean) {
-  const { error } = await client().from("subscriptions")
+  assertActionTarget(subscription);
+  if (typeof isPinned !== "boolean" || typeof subscription.isPinned !== "boolean") throw new SubscriptionWritePreflightError("Revisa la posición de la suscripción.");
+  const { data, error } = await withSubscriptionWriteTimeout(signal => client().from("subscriptions")
     .update({ is_pinned: isPinned })
     .eq("workspace_id", subscription.workspaceId)
-    .eq("id", subscription.id);
+    .eq("id", subscription.id).eq("is_pinned", subscription.isPinned)
+    .select("id, workspace_id, is_pinned").abortSignal(signal).single());
   if (error) throw error;
+  return confirmSubscriptionWrite(data, { workspaceId: subscription.workspaceId, subscriptionId: subscription.id }, { is_pinned: isPinned });
 }
 
 export async function assignSubscriptionField(subscription: SubscriptionSummary, field: "account_id" | "category_id", value: number | null) {
-  const { error } = await client().from("subscriptions")
+  assertActionTarget(subscription);
+  if (!["account_id", "category_id"].includes(field) || (value !== null && (!Number.isSafeInteger(value) || value <= 0)) ||
+    (field === "account_id" && value === null && subscription.autoCreateMovement)) throw new SubscriptionWritePreflightError("Revisa la cuenta o categoría; el registro automático necesita una cuenta.");
+  const previous = (field === "account_id" ? subscription.accountId : subscription.categoryId) ?? null;
+  const { data, error } = await withSubscriptionWriteTimeout(signal => {
+    let query = client().from("subscriptions")
     .update({ [field]: value })
     .eq("workspace_id", subscription.workspaceId)
-    .eq("id", subscription.id);
+    .eq("id", subscription.id).eq("currency_code", subscription.currencyCode);
+    query = previous === null ? query.is(field, null) : query.eq(field, previous);
+    if (field === "account_id" && value === null) query = query.eq("auto_create_movement", false);
+    return query.select(`id, workspace_id, ${field}`).abortSignal(signal).single();
+  });
   if (error) throw error;
+  return confirmSubscriptionWrite(data, { workspaceId: subscription.workspaceId, subscriptionId: subscription.id }, { [field]: value });
 }
 
 export async function markSubscriptionPaid(

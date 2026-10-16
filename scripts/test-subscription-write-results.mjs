@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
-import { dom, load } from "./lib/web-ui-harness.mjs";
+import { dom, load, mock } from "./lib/web-ui-harness.mjs";
 
 const rules = await import(load("src/modules/subscriptions/lib/subscription-write-result.ts"));
 const source = readFileSync(new URL("../src/services/queries/workspace-data.ts", import.meta.url), "utf8"), ast = ts.createSourceFile("workspace-data.ts", source, ts.ScriptTarget.Latest, true);
@@ -14,7 +14,7 @@ const invalidations = [], queryClient = { invalidateQueries: async value => inva
 const client = { from(table) {
   return { table, kind: "read", filters: [],
     insert(payload) { this.kind = "insert"; this.payload = payload; return this; }, update(payload) { this.kind = "update"; this.payload = payload; return this; },
-    delete(options) { this.kind = "delete"; this.options = options; return this; }, eq(key, value) { this.filters.push([key, value]); return this; },
+    delete(options) { this.kind = "delete"; this.options = options; return this; }, eq(key, value) { this.filters.push([key, value]); return this; }, is(key, value) { this.filters.push([key, value, "is"]); return this; },
     select(columns, options) { this.columns = columns; this.selectOptions = options; return this; }, abortSignal(signal) { this.signal = signal; return this; },
     single() { this.isSingle = true; return this.execute(); }, then(resolve, reject) { return this.execute().then(resolve, reject); },
     async execute() { const index = operations.length; operations.push(this); if (index === gateAt) await new Promise(resolve => { release = resolve; }); afterReply?.(index); return replies[index]; },
@@ -80,6 +80,31 @@ reset(); await assert.rejects(remove.mutationFn({ ...input, isCurrent: undefined
 assert.equal(rules.isSubscriptionWriteRejected({ code: "23514" }), true); assert.equal(rules.isSubscriptionWriteRejected(new rules.SubscriptionWritePreflightError()), true);
 for (const error of [new Error("network"), { code: "PGRST116" }, { code: 20 }, null]) assert.equal(rules.isSubscriptionWriteRejected(error), false);
 
+// Execute the real status/pin/assignment helpers, not their page mocks.
+globalThis.subscriptionWriteClient = client; mock("src/services/supabase/client.ts", "export const supabase=globalThis.subscriptionWriteClient;");
+const actions = await import(load("src/modules/subscriptions/lib/subscription-actions.ts"));
+const subscription = { id: 9, workspaceId: 8, status: "active", isPinned: false, nextDueDate: "2026-11-01", frequency: "monthly", intervalCount: 1, accountId: 1, categoryId: null, currencyCode: "PEN", autoCreateMovement: false };
+const actionCases = [
+  { run: sub => actions.changeSubscriptionStatus(sub, "paused"), expected: { status: "paused", next_due_date: subscription.nextDueDate }, filters: [["status", "active"], ["next_due_date", subscription.nextDueDate]] },
+  { run: sub => actions.setSubscriptionPinned(sub, true), expected: { is_pinned: true }, filters: [["is_pinned", false]] },
+  { run: sub => actions.assignSubscriptionField(sub, "account_id", 2), expected: { account_id: 2 }, filters: [["account_id", 1], ["currency_code", "PEN"]] },
+  { run: sub => actions.assignSubscriptionField(sub, "category_id", 11), expected: { category_id: 11 }, filters: [["category_id", null, "is"]] },
+  { run: sub => actions.assignSubscriptionField(sub, "account_id", null), expected: { account_id: null }, filters: [["auto_create_movement", false]] },
+];
+for (const action of actionCases) {
+  reset([ok({ ...row, ...action.expected })]); await action.run(subscription); assert.equal(operations.length, 1); const query = operations[0];
+  assert.equal(query.isSingle, true); assert.ok(query.signal instanceof AbortSignal); assert.deepEqual(query.payload, action.expected);
+  for (const filter of [["id", 9], ["workspace_id", 8], ...action.filters]) assert.ok(query.filters.some(actual => JSON.stringify(actual) === JSON.stringify(filter)), JSON.stringify(filter));
+  for (const data of [null, {}, { ...row, ...action.expected, id: 10 }, { ...row, ...action.expected, workspace_id: 99 }, ...Object.keys(action.expected).map(key => ({ ...row, ...action.expected, [key]: "unexpected" }))]) {
+    reset([ok(data)]); await assert.rejects(action.run(subscription), /No se confirmó/); assert.equal(operations.length, 1);
+  }
+  for (const patch of [{ id: 0 }, { id: NaN }, { workspaceId: -1 }]) { reset(); await assert.rejects(action.run({ ...subscription, ...patch }), rules.SubscriptionWritePreflightError); assert.equal(operations.length, 0); }
+  const error = { code: "PGRST116", message: "stale row/CAS" }; reset([{ data: null, error }]); await assert.rejects(action.run(subscription), found => found === error); assert.equal(operations.length, 1);
+}
+for (const action of [() => actions.changeSubscriptionStatus(subscription, "unknown"), () => actions.setSubscriptionPinned(subscription, "true"), () => actions.assignSubscriptionField(subscription, "name", 2), () => actions.assignSubscriptionField(subscription, "account_id", 0), () => actions.assignSubscriptionField({ ...subscription, autoCreateMovement: true }, "account_id", null)]) {
+  reset(); await assert.rejects(action(), rules.SubscriptionWritePreflightError); assert.equal(operations.length, 0);
+}
+
 // Deterministic timeout: even a transport that ignores abort cannot continue a compound delete.
 const originalTimeout = globalThis.setTimeout, originalClear = globalThis.clearTimeout, timers = new Map();
 globalThis.setTimeout = (callback, delay, ...args) => { if (delay !== rules.SUBSCRIPTION_WRITE_TIMEOUT_MS) return originalTimeout(callback, delay, ...args); const id = {}; timers.set(id, callback); return id; };
@@ -91,6 +116,11 @@ for (const [name, phase] of [[names[0], 0], [names[1], 0], [names[2], 0], [names
   [...timers.values()][0](); await rejected; assert.equal(operations.at(-1).signal.aborted, true); assert.equal(timers.size, 0);
   const beforeLate = operations.length; release(); for (let i = 0; i < 20; i++) await Promise.resolve(); assert.equal(operations.length, beforeLate);
 }
+for (const action of actionCases) {
+  reset([ok({ ...row, ...action.expected })]); gateAt = 0;
+  const pending = action.run(subscription), rejected = assert.rejects(pending, /tardó demasiado/); for (let i = 0; i < 10; i++) await Promise.resolve(); assert.ok(release);
+  [...timers.values()][0](); await rejected; assert.equal(operations[0].signal.aborted, true); release(); for (let i = 0; i < 10; i++) await Promise.resolve(); assert.equal(operations.length, 1);
+}
 globalThis.setTimeout = originalTimeout; globalThis.clearTimeout = originalClear;
 dom.window.close();
-console.log("subscription-write-results: OK (three actual hooks/payload; scoped confirmed rows/status/date, unknown reference counts, parent-before-child, strict child errors/counts, context checks between phases, no snapshot rollback/retry, timeout and abort-ignoring late replies; fake transport, not server atomicity/RLS)");
+console.log("subscription-write-results: OK (three actual hooks/payload and status/pin/assignment helpers; scoped confirmed rows/status/date/fields, CAS filters, unknown reference counts, parent-before-child, strict child errors/counts, context checks between phases, no snapshot rollback/retry, timeouts and abort-ignoring late replies; fake transport, not server atomicity/RLS)");
