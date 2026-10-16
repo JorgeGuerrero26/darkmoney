@@ -7504,6 +7504,13 @@ export function useAdjustObligationPrincipalMutation(workspaceId?: number, userI
   });
 }
 
+async function invalidateSubscriptionData(queryClient: ReturnType<typeof useQueryClient>, workspaceId: number, userId?: string) {
+  await Promise.all([
+    invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
+    queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", workspaceId, userId] }),
+  ]);
+}
+
 export function useCreateSubscriptionMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
@@ -7527,9 +7534,9 @@ export function useCreateSubscriptionMutation(workspaceId?: number, userId?: str
       }
       return confirmSubscriptionWrite(data, input, { status: input.status, next_due_date: input.nextDueDate });
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+        await invalidateSubscriptionData(queryClient, workspaceId, userId);
       }
     },
   });
@@ -7556,9 +7563,9 @@ export function useUpdateSubscriptionMutation(workspaceId?: number, userId?: str
       }
       return confirmSubscriptionWrite(data, input, { status: input.status, next_due_date: input.nextDueDate });
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
+        await invalidateSubscriptionData(queryClient, workspaceId, userId);
       }
     },
   });
@@ -7624,10 +7631,7 @@ export function useDeleteSubscriptionMutation(workspaceId?: number, userId?: str
     },
     // A local snapshot rollback cannot undo a possibly committed calendar deletion.
     onSettled: async () => {
-      if (workspaceId) await Promise.all([
-        invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
-        queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", workspaceId, userId] }),
-      ]);
+      if (workspaceId) await invalidateSubscriptionData(queryClient, workspaceId, userId);
     },
   });
 }

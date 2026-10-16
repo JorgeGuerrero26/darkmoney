@@ -6,7 +6,7 @@ import { dom, load, mock } from "./lib/web-ui-harness.mjs";
 const rules = await import(load("src/modules/subscriptions/lib/subscription-write-result.ts"));
 const source = readFileSync(new URL("../src/services/queries/workspace-data.ts", import.meta.url), "utf8"), ast = ts.createSourceFile("workspace-data.ts", source, ts.ScriptTarget.Latest, true);
 const names = ["useCreateSubscriptionMutation", "useUpdateSubscriptionMutation", "useDeleteSubscriptionMutation"];
-const declarations = [...names, "buildSubscriptionMutationPayload", "normalizeOptionalText"];
+const declarations = [...names, "invalidateSubscriptionData", "buildSubscriptionMutationPayload", "normalizeOptionalText"];
 const nodes = ast.statements.filter(node => ts.isFunctionDeclaration(node) && declarations.includes(node.name?.text)); assert.equal(nodes.length, declarations.length);
 const code = ts.transpileModule(nodes.map(node => node.getText(ast).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 let operations, replies, current, afterReply, gateAt, release;
@@ -36,9 +36,10 @@ for (const name of names) {
   assert.ok(operations.every(op => op.signal instanceof AbortSignal));
   const target = operations.at(-1); assert.equal(target.isSingle, true); assert.match(target.columns, /workspace_id/);
   if (!name.includes("Create")) { assert.ok(target.filters.some(([key, value]) => key === "id" && value === 9)); assert.ok(target.filters.some(([key, value]) => key === "workspace_id" && value === 8)); }
-  if (isDelete) { assert.deepEqual(operations.map(op => `${op.table}:${op.kind}`), ["subscriptions:read", "movements:read", "subscription_occurrences:delete", "subscriptions:delete"]); assert.deepEqual(operations[2].options, { count: "exact" }); await hook.onSettled(); }
-  else await hook.onSuccess();
+  if (isDelete) { assert.deepEqual(operations.map(op => `${op.table}:${op.kind}`), ["subscriptions:read", "movements:read", "subscription_occurrences:delete", "subscriptions:delete"]); assert.deepEqual(operations[2].options, { count: "exact" }); }
+  invalidations.length = 0; await hook.onSettled();
   assert.ok(invalidations.some(value => value.ws === 8 && value.user === "A"));
+  assert.ok(invalidations.some(value => JSON.stringify(value.queryKey) === '["subscription-occurrences",8,"A"]'));
   for (const data of [null, {}, [], { ...row, id: "9" }, { ...row, id: 0 }, { ...row, workspace_id: 99 }, ...(!name.includes("Create") ? [{ ...row, id: 10 }] : [])]) {
     const responses = isDelete ? deletion() : [ok(row)]; responses[isDelete ? 3 : 0] = ok(data); reset(responses);
     await assert.rejects(hook.mutationFn(input), /No se confirmó/); assert.equal(writes().length, isDelete ? 2 : 1);

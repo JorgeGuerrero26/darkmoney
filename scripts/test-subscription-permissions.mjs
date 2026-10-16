@@ -54,6 +54,9 @@ const { SubscriptionsPage } = await import(load("src/modules/subscriptions/pages
 const { markSubscriptionPaid } = await import(load("src/modules/subscriptions/lib/subscription-actions.ts"));
 const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+const invalidations = [], invalidate = queryClient.invalidateQueries.bind(queryClient);
+queryClient.invalidateQueries = (options, ...rest) => { invalidations.push(options.queryKey); return invalidate(options, ...rest); };
+const calendarInvalidated = user => invalidations.some(key => JSON.stringify(key) === JSON.stringify(["subscription-occurrences", 8, user]));
 const find = label => [...container.querySelectorAll("button")].find(node => node.textContent.trim() === label);
 const aria = label => { const node = container.querySelector(`button[aria-label="${label}"]`); assert.ok(node, label); return node; };
 const newButton = () => container.querySelector('[data-tour="create-subscription"]');
@@ -89,6 +92,7 @@ globalThis.subOccurrences = []; await render({}, { data: data() }); await act(as
 await act(async () => aria("Más acciones de suscripción").click()); assert.equal(find("Fijar en la lista"), undefined); await click("Ver analítica"); assert.deepEqual(globalThis.subAnalysis.movements, []); await click("Cerrar análisis"); await click("Cerrar");
 assert.ok(globalThis.subReads.some(read => read.table === "subscriptions" && read.filters.some(([key, value]) => key === "workspace_id" && value === 8) && read.signal));
 await act(async () => aria("Más acciones").click()); await click("Exportar las 2"); assert.equal(exported, 1); assert.doesNotMatch(csv, /Servicio ajeno/);
+invalidations.length = 0; await act(async () => aria("Más acciones").click()); await click("Actualizar"); assert.equal(calendarInvalidated("A"), true); // Read-only users can refresh history too.
 await act(async () => container.querySelector('input[aria-label="Seleccionar todas"]').click()); assert.equal(find("Pausar"), undefined); assert.equal(find("Eliminar"), undefined); await click("Exportar CSV"); assert.equal(exported, 2); assert.equal(globalThis.subWrites.length, 0);
 await render({ role: "owner", archived: true }); assert.equal(newButton().disabled, true);
 await render({ archived: false, fetching: true }); assert.equal(newButton().disabled, true); await render({ fetching: false }, { isFetching: true }); assert.equal(newButton().disabled, true);
@@ -115,6 +119,13 @@ await menu(); await click("Ver detalle"); const stalePin = globalThis.subDetail.
 const beforeInvalid = globalThis.subWrites.length; await act(async () => { invalidAccount(2); invalidAccount(9); invalidCategory(12); }); await settle(); assert.equal(globalThis.subWrites.length, beforeInvalid); assert.match(container.textContent, /activa|activo/);
 await render({ role: "viewer" }); await render({ role: "owner" }); await act(async () => stalePin()); assert.equal(globalThis.subWrites.length, beforeInvalid); await act(async () => globalThis.subDetail.onClose());
 await menu(); await click("Editar"); const removedSave = globalThis.subEditor.onSubmit; await render({}, { data: { ...data(), subscriptions: fixtures.filter(item => item.id !== 1) } }); await act(async () => removedSave({ preventDefault() {} })); assert.equal(globalThis.subWrites.length, beforeInvalid); await render({ userId: "B" }, { data: data() });
+
+await menu(); await click("Ver detalle");
+for (const action of [() => globalThis.subDetail.onStatus("paused"), () => globalThis.subDetail.onPin(), () => globalThis.subDetail.onAssignAccount(1), () => globalThis.subDetail.onAssignCategory(11)]) {
+  invalidations.length = 0; await act(async () => action()); await settle(); assert.equal(calendarInvalidated("B"), true);
+}
+globalThis.subNoAdvance = true; invalidations.length = 0; await act(async () => globalThis.subDetail.onStatus("paused")); await settle(); assert.equal(calendarInvalidated("B"), true); assert.match(container.textContent, /No se confirmó/); globalThis.subNoAdvance = false;
+await act(async () => globalThis.subDetail.onClose());
 
 // Native payment sequence: one advance + one movement, guarded between phases and by returned evidence.
 await menu(); await click("Registrar pago"); const pay = find("Confirmar pago"); assert.ok(pay); let finishPay; globalThis.subGate = new Promise(resolve => { finishPay = resolve; }); const beforePay = globalThis.subWrites.length;

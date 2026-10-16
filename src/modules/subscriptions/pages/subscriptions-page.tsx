@@ -316,6 +316,9 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
     flight.current = true; setIsActionPending(true);
     try { return await action(); } finally { flight.current = false; setIsActionPending(false); }
   }
+  async function refreshCalendar() {
+    await queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", activeWorkspace?.id, user?.id] });
+  }
   function exportRows(items: SubscriptionSummary[], filename: string) {
     if (!ready) return;
     const ids = new Set(items.map(item => item.id));
@@ -731,6 +734,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
       if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo cambiar el estado", description: getQueryErrorMessage(error) });
     } finally {
       if (responseScope.isCurrent()) setCancelSubscriptionId(null);
+      if (responseScope.isCurrent()) await refreshCalendar();
     }
   }
 
@@ -744,6 +748,8 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
       await snapshotQuery.refetch();
     } catch (error) {
       if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo cambiar la posición", description: getQueryErrorMessage(error) });
+    } finally {
+      if (responseScope.isCurrent()) await refreshCalendar();
     }
   }
 
@@ -760,6 +766,8 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
       await snapshotQuery.refetch();
     } catch (error) {
       if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo actualizar la suscripción", description: getQueryErrorMessage(error) });
+    } finally {
+      if (responseScope.isCurrent()) await refreshCalendar();
     }
   }
 
@@ -774,7 +782,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
       if (!responseScope.isCurrent()) return;
       setFeedback({ tone: "success", title: "Pago registrado", description: `Próximo cobro: ${formatDate(nextDueDate)}.` });
     } catch (error) {
-      if (responseScope.isCurrent()) await snapshotQuery.refetch();
+      if (responseScope.isCurrent()) await Promise.all([snapshotQuery.refetch(), refreshCalendar()]);
       throw error;
     }
   }
@@ -821,7 +829,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
     } catch (error) {
       if (responseScope.isCurrent()) setFeedback({ tone: "error", title: `${completed} de ${active.length} confirmadas como pausadas`, description: `${getQueryErrorMessage(error)} Comprueba el estado de la última antes de repetir.` });
     } finally {
-      if (responseScope.isCurrent()) await snapshotQuery.refetch();
+      if (responseScope.isCurrent()) await Promise.all([snapshotQuery.refetch(), refreshCalendar()]);
     }
   }
 
@@ -907,7 +915,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
             <>
               <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
               <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
-                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
+                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); void Promise.all([snapshotQuery.refetch(), refreshCalendar()]); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
                 <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!ready || !filteredSubscriptions.length} onClick={() => { setIsActionsMenuOpen(false); exportRows(filteredSubscriptions, "suscripciones-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar las {filteredSubscriptions.length}</button>
               </div>
             </>

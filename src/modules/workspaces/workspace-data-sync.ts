@@ -1,5 +1,5 @@
 export const workspaceSyncTables = ["accounts", "movements", "categories", "counterparties", "obligations", "subscriptions", "recurring_income", "budgets", "spend_types"] as const;
-export const workspaceSyncQueryNames = ["workspace-snapshot", "dashboard-projection-inputs", "categories-overview", "counterparties-overview", "budget-spend-types", "recurring_income_occurrences", "obligation-shares", "obligation-payment-request-counts", "obligation-payment-requests-pending"] as const;
+export const workspaceSyncQueryNames = ["workspace-snapshot", "dashboard-projection-inputs", "categories-overview", "counterparties-overview", "budget-spend-types", "recurring_income_occurrences", "subscription-occurrences", "obligation-shares", "obligation-payment-request-counts", "obligation-payment-requests-pending"] as const;
 
 export function isWorkspaceDataQuery(key: readonly unknown[], workspaceId: number) {
   return key[1] === workspaceId && workspaceSyncQueryNames.some((name) => name === key[0]);
