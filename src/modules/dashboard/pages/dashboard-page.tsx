@@ -61,7 +61,7 @@ import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
 import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
 import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
 import { DashboardPatternsSection } from "../components/dashboard-patterns-section";
-import { ProjectionHorizonPanel } from "../components/projection-horizon-panel";
+import { DashboardFlowSection } from "../components/dashboard-flow-section";
 import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
 import { DashboardCategorySuggestionsPanel } from "../components/dashboard-category-suggestions-panel";
 import {
@@ -1685,8 +1685,9 @@ export function DashboardPage() {
             ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
           history={() => <DashboardHistoryPanel snapshot={snapshot} ctx={parityCtx} now={parityNow}
             ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
-          flow={() => <ProjectionHorizonPanel snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
-            ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
+          flow={() => <DashboardFlowSection key={`flow-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard} health={dashboardHealth}
+            ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isError && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
             onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
           health={() => <><DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />
             <DashboardCategorySuggestionsPanel key={`categories:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}

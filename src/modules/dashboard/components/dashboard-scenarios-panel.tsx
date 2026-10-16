@@ -7,11 +7,12 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import type { buildDashboardCashflow } from "../lib/projection/build-dashboard-cashflow";
 import { buildDashboardScenarios } from "../lib/projection/dashboard-scenarios";
 
-export function DashboardScenariosPanel({ snapshot, shared, cashflow, ctx, now }: {
+export function DashboardScenariosPanel({ snapshot, shared, cashflow, ctx, now, scenarios }: {
   snapshot: WorkspaceSnapshot; shared: SharedObligationSummary[]; cashflow: ReturnType<typeof buildDashboardCashflow>;
   ctx: ParityConversionCtx; now: Date;
+  scenarios?: ReturnType<typeof buildDashboardScenarios>;
 }) {
-  const result = useMemo(() => buildDashboardScenarios(snapshot, shared, cashflow, ctx, now), [snapshot, shared, cashflow, ctx, now]);
+  const result = useMemo(() => scenarios ?? buildDashboardScenarios(snapshot, shared, cashflow, ctx, now), [scenarios, snapshot, shared, cashflow, ctx, now]);
   const money = (value: number) => formatCurrency(value, ctx.displayCurrency);
   const model = result.model;
   const due = (days: number | null) => days === null ? "Sin fecha" : days < 0 ? `${-days} días vencido` : days === 0 ? "Vence hoy" : `En ${days} días`;

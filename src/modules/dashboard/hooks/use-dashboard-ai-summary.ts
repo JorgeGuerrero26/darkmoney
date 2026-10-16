@@ -148,6 +148,7 @@ export function useDashboardAiSummary({
       const generatedAt = new Date().toISOString();
       writeStored(usageKey,requestedDate);confirmedUsage.set(usageKey,requestedDate);
       if(controller.signal.aborted||currentScope.current!==original)return response;
+      setLocalError(null);
       setUsage({key:usageKey,date:requestedDate});
       setCache((current) => ({
         usageDate:requestedDate,
