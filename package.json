@@ -57,6 +57,7 @@
     "test:account-filters": "node scripts/test-account-filters.mjs",
     "test:account-analytics": "node scripts/test-account-analytics.mjs",
     "test:account-write-results": "node scripts/test-account-write-results.mjs",
+    "test:subscription-permissions": "node scripts/test-subscription-permissions.mjs",
     "test:workspace-sync": "node scripts/test-workspace-sync.mjs",
     "preview": "vite preview"
   },

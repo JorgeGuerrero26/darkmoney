@@ -21,6 +21,8 @@ type SubscriptionTableProps = {
   onReactivate: (subscription: SubscriptionSummary) => void;
   onAnalytics: (id: number) => void;
   onDelete: (id: number) => void;
+  canWrite?: boolean;
+  canAnalyze?: boolean;
 };
 
 function sectionLabel(subscription: SubscriptionSummary, today: string) {
@@ -43,6 +45,8 @@ export function SubscriptionTable({
   onReactivate,
   onAnalytics,
   onDelete,
+  canWrite = false,
+  canAnalyze = true,
 }: SubscriptionTableProps) {
   const [openActionsId, setOpenActionsId] = useState<number | null>(null);
   return (
@@ -84,11 +88,13 @@ export function SubscriptionTable({
                 <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenActionsId(null)} type="button" />
                 <div className="absolute right-0 top-10 z-50 w-44 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onOpen(subscription); }} type="button"><ChevronRight className="h-4 w-4" />Ver detalle</button>
-                  {subscription.status === "active" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onPay(subscription); }} type="button"><CircleCheck className="h-4 w-4" />Registrar pago</button> : null}
-                  {subscription.status === "paused" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onReactivate(subscription); }} type="button"><Play className="h-4 w-4" />Reactivar</button> : null}
-                  <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onAnalytics(subscription.id); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
+                  {canWrite && subscription.status === "active" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onPay(subscription); }} type="button"><CircleCheck className="h-4 w-4" />Registrar pago</button> : null}
+                  {canWrite && subscription.status === "paused" ? <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onReactivate(subscription); }} type="button"><Play className="h-4 w-4" />Reactivar</button> : null}
+                  <button disabled={!canAnalyze} className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onAnalytics(subscription.id); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
+                  {canWrite ? <>
                   <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onEdit(subscription); }} type="button"><PencilLine className="h-4 w-4" />Editar</button>
                   <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setOpenActionsId(null); onDelete(subscription.id); }} type="button"><Trash2 className="h-4 w-4" />Eliminar</button>
+                  </> : null}
                 </div>
               </> : null}
             </div>

@@ -23,11 +23,16 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
   const [saving, setSaving] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const lock = useRef(false);
+  const initialSubscription = useRef(subscription);
+  const staleLatch = useRef(false);
+  if (["id", "workspaceId", "nextDueDate", "currencyCode", "amount", "frequency", "intervalCount", "dayOfMonth", "status"].some(key => initialSubscription.current[key as keyof SubscriptionSummary] !== subscription[key as keyof SubscriptionSummary])) staleLatch.current = true;
+  const stale = staleLatch.current;
   const eligibleAccounts = accounts.filter(account => account.workspaceId === subscription.workspaceId && !account.isArchived && account.currencyCode === subscription.currencyCode);
   const selectedAccount = eligibleAccounts.find(account => String(account.id) === accountId);
   const nextDueDate = computeNextRecurringDate(subscription.nextDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth);
   const busy = isPending || saving;
   function update(field: "amount" | "paidDate" | "accountId", value: string) {
+    if (lock.current || busy || unconfirmed || stale) return;
     if (field === "amount") setAmount(value);
     if (field === "paidDate") setPaidDate(value);
     if (field === "accountId") setAccountId(value);
@@ -35,7 +40,7 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
     onInputChange?.({ amount: Number((field === "amount" ? value : amount).replace(",", ".")), paidDate: field === "paidDate" ? value : paidDate, accountId: Number(field === "accountId" ? value : accountId) });
   }
   async function confirmPayment() {
-    if (lock.current || busy || unconfirmed) return;
+    if (lock.current || busy || unconfirmed || stale) return;
     setError("");
     let sent = false;
     try {
@@ -54,6 +59,7 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
     <ResourceEditorHeader disabled={busy} onBack={onBack} onClose={onClose} title={`${subscription.name} · pago`} titleId="subscription-payment-title" />
     <ModalBody className="space-y-5">
       {context ? <div className="text-sm text-storm">{context}</div> : null}
+      {stale ? <p className="text-sm text-storm" role="alert">La suscripción o el próximo cobro cambiaron mientras revisabas el pago. Cierra y vuelve a comprobarlo; no se enviará otro vencimiento.</p> : null}
       <label className="block text-[13px] font-medium text-storm" htmlFor="subscription-paid-amount">Cuánto pagaste ({subscription.currencyCode})</label>
       <input className="field-dark !h-16 w-full text-2xl font-semibold" disabled={busy} id="subscription-paid-amount" min="0.01" onChange={event => update("amount", event.target.value)} step="0.01" type="number" value={amount} />
       <div className="divide-y divide-white/[0.08] rounded-xl border border-white/[0.08] px-4">
@@ -64,6 +70,6 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
       {!eligibleAccounts.length ? <p className="text-sm text-storm">Necesitas una cuenta activa en {subscription.currencyCode} para registrar el pago sin conversión.</p> : null}
       {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
     </ModalBody>
-    <footer className="border-t border-white/[0.08] px-6 py-4"><p className="mb-3 text-xs text-storm">{selectedAccount ? `Se anotará un gasto en ${selectedAccount.name} y avanzará el próximo cobro.` : "Elige la cuenta para registrar el gasto."}</p><Button className="w-full" disabled={busy || unconfirmed || !eligibleAccounts.length} onClick={() => void confirmPayment()}>{unconfirmed ? "Comprueba el pago en el historial" : busy ? "Registrando..." : selectedAccount ? "Confirmar pago" : "Elige la cuenta"}</Button></footer>
+    <footer className="border-t border-white/[0.08] px-6 py-4"><p className="mb-3 text-xs text-storm">{selectedAccount ? `Se anotará un gasto en ${selectedAccount.name} y avanzará el próximo cobro.` : "Elige la cuenta para registrar el gasto."}</p><Button className="w-full" disabled={busy || unconfirmed || stale || !eligibleAccounts.length} onClick={() => void confirmPayment()}>{unconfirmed ? "Comprueba el pago en el historial" : stale ? "Revisa el próximo cobro" : busy ? "Registrando..." : selectedAccount ? "Confirmar pago" : "Elige la cuenta"}</Button></footer>
   </Modal>;
 }

@@ -63,11 +63,11 @@ export function AssistantPaymentReview({ draft, userId, workspaceId, session, on
     if (input.kind === "subscription") {
       const target = query.data.subscriptions.find(row => row.id === input.id && row.workspaceId === workspaceId);
       if (!target) throw new Error("La suscripción ya no está disponible.");
-      session.nextDueDate = await markSubscriptionPaid(target, input.value);
+      session.nextDueDate = await markSubscriptionPaid(target, input.value, { isCurrent: () => alive.current && scope.current });
       if (!validAssistantDay(session.nextDueDate)) throw new Error("El servidor no confirmó la próxima fecha del cobro.");
       // Invalidation is read-only housekeeping, not evidence of a failed financial write.
       void client.invalidateQueries({ queryKey: ["workspace-snapshot"] }).catch(() => undefined);
-      void client.invalidateQueries({ queryKey: ["subscription-occurrences", input.id] }).catch(() => undefined);
+      void client.invalidateQueries({ queryKey: ["subscription-occurrences", workspaceId, userId, input.id] }).catch(() => undefined);
     } else {
       const result = await payment.mutateAsync({ ...input.value, userId, workspaceId });
       if (!Number.isSafeInteger(result.eventId) || !result.eventId || result.eventId <= 0 || input.value.registerAccountMovement && (!Number.isSafeInteger(result.movementId) || !result.movementId || result.movementId <= 0)) throw new Error("El servidor no confirmó el abono completo.");

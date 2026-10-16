@@ -11,8 +11,9 @@ import {
 import type {
   FormEvent,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useResourceLink } from "../../../hooks/use-resource-link";
 
 import { Button } from "../../../components/ui/button";
@@ -34,6 +35,9 @@ import type {
 } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
+import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
+import { validateSubscriptionPayment } from "../lib/subscription-payment-input";
 import { SubscriptionAnalyticsModal } from "../components/subscription-analytics-modal";
 import { SubscriptionDetailDialog } from "../components/subscription-detail-dialog";
 import { assignSubscriptionField, changeSubscriptionStatus, markSubscriptionPaid, setSubscriptionPinned, todayPeru } from "../lib/subscription-actions";
@@ -86,10 +90,6 @@ function toDateInputValue(value: string) {
   return value ? value.slice(0, 10) : "";
 }
 
-function localDateKey(date: Date) {
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-}
-
 function parseOptionalInteger(value: string) {
   const normalizedValue = value.trim();
   if (!normalizedValue) {
@@ -109,6 +109,7 @@ function parseOptionalNumber(value: string) {
 }
 
 function createDefaultFormState(baseCurrencyCode: string): SubscriptionFormState {
+  const today = todayPeru();
   return {
     name: "",
     vendorPartyId: "",
@@ -120,8 +121,8 @@ function createDefaultFormState(baseCurrencyCode: string): SubscriptionFormState
     intervalCount: "1",
     dayOfMonth: "",
     dayOfWeek: "",
-    startDate: localDateKey(new Date()),
-    nextDueDate: localDateKey(new Date()),
+    startDate: today,
+    nextDueDate: today,
     endDate: "",
     status: "active",
     autoCreateMovement: false,
@@ -211,11 +212,23 @@ function downloadSubscriptionsCSV(subscriptions: SubscriptionSummary[], filename
 }
 
 export function SubscriptionsPage() {
+  const auth = useAuth(), workspace = useActiveWorkspace();
+  return <ScopedSubscriptionsPage key={`${auth.user?.id}:${workspace.activeWorkspace?.id}`} auth={auth} workspace={workspace} />;
+}
+
+function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof useAuth>; workspace: ReturnType<typeof useActiveWorkspace> }) {
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
-  const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
+  const queryClient = useQueryClient();
+  const { profile, user } = auth;
+  const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = workspace;
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  const snapshot = snapshotQuery.data;
+  const snapshot = user && !snapshotQuery.isPlaceholderData && snapshotQuery.data?.workspace.id === activeWorkspace?.id ? snapshotQuery.data : undefined;
+  const ready = Boolean(snapshot && snapshotQuery.isSuccess && !snapshotQuery.error && !snapshotQuery.isFetching && !isWorkspacesLoading && !workspaceError && !workspace.isFetching && !workspace.isPlaceholderData);
+  const access = useCatalogWriteScope(activeWorkspace, user?.id, ready);
+  const responseScope = useCatalogWriteScope(activeWorkspace, user?.id, true);
+  const permitted = canWriteWorkspaceCatalog(activeWorkspace, user?.id, true);
+  const latestAccess = useRef(access); latestAccess.current = access;
+  const flight = useRef(false), queued = useRef(new Set<string>()), pendingDeletes = useRef(new Set<number>());
   const createMutation = useCreateSubscriptionMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateSubscriptionMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteSubscriptionMutation(activeWorkspace?.id, user?.id);
@@ -247,7 +260,7 @@ export function SubscriptionsPage() {
   const [cancelSubscriptionId, setCancelSubscriptionId] = useState<number | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
-  const { schedule } = useUndoQueue();
+  const { schedule, cancel } = useUndoQueue();
   const {
     filters: subscriptionFilters,
     setFilters: setSubscriptionFilters,
@@ -261,15 +274,18 @@ export function SubscriptionsPage() {
   );
 
   const subscriptions = useMemo(
-    () => [...(snapshot?.subscriptions ?? [])].sort((left, right) => {
+    () => (snapshot?.subscriptions ?? []).filter(item => item.workspaceId === activeWorkspace?.id).sort((left, right) => {
       const rank = (item: SubscriptionSummary) => item.status === "active" ? (item.nextDueDate < todayPeru() ? 0 : 1) : item.status === "paused" ? 2 : 3;
       return rank(left) - rank(right) || Number(right.isPinned) - Number(left.isPinned) || left.nextDueDate.localeCompare(right.nextDueDate);
     }),
-    [snapshot?.subscriptions],
+    [snapshot?.subscriptions, activeWorkspace?.id],
   );
+  const rows = useRef(subscriptions); rows.current = subscriptions;
   const categories = snapshot?.catalogs.categories ?? [];
   const counterparties = snapshot?.catalogs.counterparties ?? [];
-  const accounts = snapshot?.accounts ?? [];
+  const accounts = (snapshot?.accounts ?? []).filter(item => item.workspaceId === activeWorkspace?.id);
+  const movements = (snapshot?.movements ?? []).filter(item => item.workspaceId === activeWorkspace?.id);
+  const currentMovements = useRef(movements); currentMovements.current = movements;
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedSubscription =
     selectedSubscriptionId === null
@@ -282,6 +298,35 @@ export function SubscriptionsPage() {
   const detailSubscription = detailSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === detailSubscriptionId) ?? null;
   useResourceLink(subscriptions, setDetailSubscriptionId);
   const cancelSubscription = cancelSubscriptionId === null ? null : subscriptions.find((subscription) => subscription.id === cancelSubscriptionId) ?? null;
+  const editorWrite = useFinancialWriteGuard(`${user?.id}:${activeWorkspace?.id}:subscription-editor:${isEditorOpen}:${editorMode}:${selectedSubscriptionId}`);
+  const canAct = access.writable && !isActionPending && !createMutation.isPending && !updateMutation.isPending && !deleteMutation.isPending;
+  useEffect(() => () => { queued.current.forEach(id => cancel(id)); queued.current.clear(); }, [cancel]);
+  useEffect(() => { if (!access.writable) { queued.current.forEach(id => cancel(id)); queued.current.clear(); } }, [access.writable, cancel]);
+  useEffect(() => { if (!permitted) { setIsEditorOpen(false); setShowUnsavedDialog(false); setDeleteTargetId(null); setCancelSubscriptionId(null); setShowBulkDeleteConfirm(false); } }, [permitted]);
+  function currentSubscription(id: number) {
+    access.assertCurrent();
+    const item = rows.current.find(item => item.id === id && item.workspaceId === activeWorkspace?.id);
+    if (!item || pendingDeletes.current.has(id)) throw new Error("La suscripción ya no está disponible en este espacio.");
+    return item;
+  }
+  async function runWrite<T>(action: () => Promise<T>) {
+    access.assertCurrent();
+    if (flight.current) throw new Error("Ya hay una operación de suscripciones pendiente.");
+    flight.current = true; setIsActionPending(true);
+    try { return await action(); } finally { flight.current = false; setIsActionPending(false); }
+  }
+  function exportRows(items: SubscriptionSummary[], filename: string) {
+    if (!ready) return;
+    const ids = new Set(items.map(item => item.id));
+    downloadSubscriptionsCSV(rows.current.filter(item => ids.has(item.id)), filename);
+  }
+  function openDelete(id: number) { if (canAct && access.isCurrent() && rows.current.some(item => item.id === id)) setDeleteTargetId(id); }
+  function openPay(item: SubscriptionSummary) {
+    if (!canAct || !access.isCurrent()) return;
+    const current = rows.current.find(row => row.id === item.id);
+    if (!current || current.status !== "active") return;
+    setDetailInitialPanel("pay"); setDetailSubscriptionId(current.id);
+  }
 
   const hasActiveFilters =
     subscriptionFilters.name.trim() !== "" ||
@@ -355,19 +400,20 @@ export function SubscriptionsPage() {
     field: Field,
     value: SubscriptionFormState[Field],
   ) {
+    if (flight.current || editorWrite.blocked) return;
     setIsDirty(true);
     setFormState((currentValue) => ({ ...currentValue, [field]: value }));
   }
 
   function closeEditor() {
-    if (isSavingEditor) return;
+    if (isSavingEditor || flight.current) return;
     setIsEditorOpen(false);
     setSelectedSubscriptionId(null);
     setIsDirty(false);
   }
 
   function requestCloseEditor() {
-    if (isSavingEditor) return;
+    if (isSavingEditor || flight.current) return;
     if (isDirty) {
       setShowUnsavedDialog(true);
     } else {
@@ -376,6 +422,7 @@ export function SubscriptionsPage() {
   }
 
   function openCreateEditor() {
+    if (!canAct || !access.isCurrent()) return;
     setFeedback(null);
     setInvalidFields(new Set());
     setEditorMode("create");
@@ -386,11 +433,14 @@ export function SubscriptionsPage() {
   }
 
   function openEditEditor(subscription: SubscriptionSummary) {
+    if (!canAct || !access.isCurrent()) return;
+    const current = rows.current.find(item => item.id === subscription.id);
+    if (!current) return;
     setFeedback(null);
     setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedSubscriptionId(subscription.id);
-    setFormState(buildFormStateFromSubscription(subscription));
+    setFormState(buildFormStateFromSubscription(current));
     setIsDirty(false);
     setIsEditorOpen(true);
   }
@@ -399,11 +449,11 @@ export function SubscriptionsPage() {
   const isDeleting = deleteMutation.isPending;
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const today = new Date();
-  const todayKey = localDateKey(today);
+  const todayKey = todayPeru();
+  const today = new Date(`${todayKey}T12:00:00Z`);
   const inSevenDays = new Date(today);
-  inSevenDays.setDate(today.getDate() + 7);
-  const inSevenDaysKey = localDateKey(inSevenDays);
+  inSevenDays.setUTCDate(today.getUTCDate() + 7);
+  const inSevenDaysKey = inSevenDays.toISOString().slice(0, 10);
   const dueSoonCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey && subscription.nextDueDate <= inSevenDaysKey).length;
   const overdueCount = subscriptions.filter((subscription) => subscription.status === "active" && subscription.nextDueDate < todayKey).length;
   const nextUpcoming = subscriptions.find((subscription) => subscription.status === "active" && subscription.nextDueDate >= todayKey);
@@ -447,6 +497,7 @@ export function SubscriptionsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!access.isCurrent() || flight.current || editorWrite.blocked) return;
 
     if (!activeWorkspace || !user?.id) {
       setFeedback({
@@ -581,27 +632,35 @@ export function SubscriptionsPage() {
       return;
     }
 
+    let attempt: ReturnType<typeof editorWrite.begin> = null;
     try {
       if (!snapshot) throw new Error("Espera la lectura del espacio actual.");
       const payload = buildSubscriptionEditorInput(formState, snapshot, editorMode === "create");
+      if (editorMode === "edit") currentSubscription(selectedSubscriptionId ?? 0);
+      attempt = editorWrite.begin(); if (!attempt) return;
       if (editorMode === "create") {
-        await createMutation.mutateAsync({
+        const result = await runWrite(() => createMutation.mutateAsync({
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
-        });
+        }));
+        if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        if (!Number.isSafeInteger(result?.id) || result.id <= 0) throw new Error("El servidor no confirmó el identificador de la suscripción.");
+        editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
           title: "Suscripcion creada",
           description: "Ya aparece en tu radar de vencimientos y en la lista principal.",
         });
       } else if (selectedSubscription) {
-        await updateMutation.mutateAsync({
+        await runWrite(() => updateMutation.mutateAsync({
           subscriptionId: selectedSubscription.id,
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
-        });
+        }));
+        if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
           title: "Cambios guardados",
@@ -612,82 +671,110 @@ export function SubscriptionsPage() {
       setIsEditorOpen(false);
       setSelectedSubscriptionId(null);
     } catch (error) {
+      if (!responseScope.isCurrent() || (attempt && !editorWrite.isCurrent(attempt))) return;
+      const code = error && typeof error === "object" && "code" in error ? error.code : null;
+      const rejected = typeof code === "string" && /^(22|23|42)[A-Z0-9]{3}$/.test(code);
+      if (attempt) { if (rejected) editorWrite.reject(attempt); else editorWrite.fail(attempt); }
       setFeedback({
         tone: "error",
-        title: "No pudimos guardar la suscripción",
-        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        title: attempt && !rejected ? "Resultado por comprobar" : "No pudimos guardar la suscripción",
+        description: `${getQueryErrorMessage(error, "Revisa los datos.")}${attempt && !rejected ? " No repitas este envío: cierra y comprueba Suscripciones antes de registrar otra vez; el cambio podría haberse guardado." : ""}`,
       });
     }
   }
 
   function handleDelete() {
-    if (!activeWorkspace || !deleteTarget) return;
+    if (!activeWorkspace || !deleteTarget || !canAct || !access.isCurrent() || pendingDeletes.current.has(deleteTarget.id)) return;
     const targetId = deleteTarget.id;
+    currentSubscription(targetId);
+    pendingDeletes.current.add(targetId);
     setDeleteTargetId(null);
     setHiddenIds((prev) => new Set([...prev, targetId]));
-    schedule({
-      label: "SuscripciÃ³n eliminada",
-      onCommit: () =>
-        deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id }),
-      onUndo: () => {
-        setHiddenIds((prev) => {
+    let resolved = false;
+    const restore = () => setHiddenIds((prev) => {
           const next = new Set(prev);
           next.delete(targetId);
           return next;
-        });
+    });
+    const queueId = schedule({
+      label: "Suscripción pendiente de eliminar",
+      onCommit: async () => {
+        if (resolved) return;
+        resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId);
+        if (!access.isCurrent()) { restore(); return; }
+        try {
+          currentSubscription(targetId);
+          if (currentMovements.current.some(item => item.subscriptionId === targetId)) throw new Error("La suscripción tiene pagos asociados. No se eliminó.");
+          await runWrite(() => deleteMutation.mutateAsync({ subscriptionId: targetId, workspaceId: activeWorkspace.id }));
+        }
+        catch (error) { restore(); if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación por comprobar", description: `${getQueryErrorMessage(error)} Actualiza y comprueba la suscripción y su calendario antes de repetir.` }); }
+      },
+      onUndo: () => {
+        if (resolved) return;
+        resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId); restore();
       },
     });
+    queued.current.add(queueId);
   }
 
   async function runStatusChange(subscription: SubscriptionSummary, status: SubscriptionStatus) {
-    setIsActionPending(true);
+    if (!canAct || !access.isCurrent() || flight.current) return;
     try {
-      const nextDueDate = await changeSubscriptionStatus(subscription, status);
+      const current = currentSubscription(subscription.id); if (current.status === status) return;
+      const nextDueDate = await runWrite(() => changeSubscriptionStatus(current, status));
+      if (!responseScope.isCurrent()) return;
       await snapshotQuery.refetch();
+      if (!responseScope.isCurrent()) return;
       setFeedback({ tone: "success", title: status === "active" ? "Suscripción reactivada" : status === "paused" ? "Suscripción pausada" : "Suscripción cancelada", description: status === "active" ? `Próximo pago: ${formatDate(nextDueDate)}.` : "El historial de pagos se conserva." });
     } catch (error) {
-      setFeedback({ tone: "error", title: "No se pudo cambiar el estado", description: getQueryErrorMessage(error) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo cambiar el estado", description: getQueryErrorMessage(error) });
     } finally {
-      setIsActionPending(false);
-      setCancelSubscriptionId(null);
+      if (responseScope.isCurrent()) setCancelSubscriptionId(null);
     }
   }
 
   async function handleTogglePin(subscription: SubscriptionSummary) {
-    setIsActionPending(true);
+    if (!canAct || !access.isCurrent() || flight.current) return;
     try {
-      await setSubscriptionPinned(subscription, !subscription.isPinned);
+      const current = currentSubscription(subscription.id), pinned = !subscription.isPinned;
+      if (current.isPinned === pinned) return;
+      await runWrite(() => setSubscriptionPinned(current, pinned));
+      if (!responseScope.isCurrent()) return;
       await snapshotQuery.refetch();
     } catch (error) {
-      setFeedback({ tone: "error", title: "No se pudo cambiar la posición", description: getQueryErrorMessage(error) });
-    } finally {
-      setIsActionPending(false);
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo cambiar la posición", description: getQueryErrorMessage(error) });
     }
   }
 
   async function handleAssignField(subscription: SubscriptionSummary, field: "account_id" | "category_id", value: number | null) {
-    setIsActionPending(true);
+    if (!canAct || !access.isCurrent() || flight.current) return;
     try {
-      await assignSubscriptionField(subscription, field, value);
+      const current = currentSubscription(subscription.id);
+      if (value != null && !Number.isSafeInteger(value)) throw new Error("Selecciona una opción válida.");
+      if (field === "account_id" && value != null && !accounts.some(account => account.id === value && !account.isArchived && account.currencyCode === current.currencyCode)) throw new Error(`Elige una cuenta activa en ${current.currencyCode}.`);
+      if (field === "account_id" && value == null && current.autoCreateMovement) throw new Error("Desactiva el registro automático antes de quitar la cuenta.");
+      if (field === "category_id" && value != null && !categories.some(category => category.id === value && category.isActive && ["expense", "both"].includes(category.kind))) throw new Error("Elige una categoría de gasto activa.");
+      await runWrite(() => assignSubscriptionField(current, field, value));
+      if (!responseScope.isCurrent()) return;
       await snapshotQuery.refetch();
     } catch (error) {
-      setFeedback({ tone: "error", title: "No se pudo actualizar la suscripción", description: getQueryErrorMessage(error) });
-    } finally {
-      setIsActionPending(false);
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo actualizar la suscripción", description: getQueryErrorMessage(error) });
     }
   }
 
   async function handleMarkPaid(subscription: SubscriptionSummary, input: { paidDate: string; amount: number; accountId: number }) {
-    setIsActionPending(true);
+    const current = currentSubscription(subscription.id);
+    if (current.nextDueDate !== subscription.nextDueDate || current.currencyCode !== subscription.currencyCode || current.amount !== subscription.amount || current.frequency !== subscription.frequency || current.intervalCount !== subscription.intervalCount || current.dayOfMonth !== subscription.dayOfMonth) throw new Error("El calendario de la suscripción cambió. Cierra y revisa el próximo cobro antes de confirmar.");
+    validateSubscriptionPayment(current, accounts, input);
     try {
-      const nextDueDate = await markSubscriptionPaid(subscription, input);
-      await snapshotQuery.refetch();
+      const nextDueDate = await runWrite(() => markSubscriptionPaid(current, input, { isCurrent: responseScope.isCurrent }));
+      if (!responseScope.isCurrent()) return;
+      await Promise.all([snapshotQuery.refetch(), queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", current.workspaceId, user?.id, current.id] })]);
+      if (!responseScope.isCurrent()) return;
       setFeedback({ tone: "success", title: "Pago registrado", description: `Próximo cobro: ${formatDate(nextDueDate)}.` });
     } catch (error) {
-      await snapshotQuery.refetch();
+      if (responseScope.isCurrent()) await snapshotQuery.refetch();
       throw error;
-    } finally {
-      setIsActionPending(false);
     }
   }
 
@@ -710,39 +797,47 @@ export function SubscriptionsPage() {
   }
 
   async function handleBulkDelete() {
-    if (selectedCount === 0) return;
+    if (selectedCount === 0 || !canAct || !access.isCurrent()) return;
     setShowBulkDeleteConfirm(true);
   }
 
   async function handleBulkPause() {
+    if (!canAct || !access.isCurrent() || flight.current) return;
     const active = selectedItems.filter((subscription) => subscription.status === "active");
     if (!active.length) return;
-    setIsActionPending(true);
     let completed = 0;
     try {
-      for (const subscription of active) {
-        await changeSubscriptionStatus(subscription, "paused");
+      await runWrite(async () => { for (const subscription of active) {
+        responseScope.assertCurrent(); latestAccess.current.assertCurrent();
+        const current = rows.current.find(item => item.id === subscription.id);
+        if (!current || current.status !== "active") continue;
+        await changeSubscriptionStatus(current, "paused");
         completed += 1;
-      }
+      } });
+      if (!responseScope.isCurrent()) return;
       clearAll();
       setFeedback({ tone: "success", title: `${completed} suscripción${completed === 1 ? "" : "es"} pausada${completed === 1 ? "" : "s"}`, description: "Puedes reactivarlas desde su detalle." });
     } catch (error) {
-      setFeedback({ tone: "error", title: `${completed} de ${active.length} pausadas`, description: getQueryErrorMessage(error) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: `${completed} de ${active.length} confirmadas como pausadas`, description: `${getQueryErrorMessage(error)} Comprueba el estado de la última antes de repetir.` });
     } finally {
-      await snapshotQuery.refetch();
-      setIsActionPending(false);
+      if (responseScope.isCurrent()) await snapshotQuery.refetch();
     }
   }
 
   async function confirmBulkDelete() {
+    if (!canAct || !access.isCurrent() || flight.current || !activeWorkspace) return;
     setIsBulkDeleting(true);
     try {
-      for (const id of Array.from(selectedIds)) {
-        await deleteMutation.mutateAsync({ subscriptionId: id, workspaceId: activeWorkspace!.id });
-      }
+      await runWrite(async () => { for (const id of Array.from(selectedIds)) {
+        responseScope.assertCurrent(); latestAccess.current.assertCurrent();
+        if (!rows.current.some(item => item.id === id)) throw new Error("Una suscripción seleccionada ya no está disponible.");
+        if (currentMovements.current.some(item => item.subscriptionId === id)) throw new Error("Una suscripción tiene pagos asociados. No se elimina.");
+        await deleteMutation.mutateAsync({ subscriptionId: id, workspaceId: activeWorkspace.id });
+      } });
+      if (!responseScope.isCurrent()) return;
       clearAll();
     } catch (err) {
-      setFeedback({ tone: "error", title: "Error", description: getQueryErrorMessage(err) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación parcial o por comprobar", description: `${getQueryErrorMessage(err)} Las anteriores pueden haberse eliminado; actualiza antes de repetir.` });
     } finally {
       setIsBulkDeleting(false);
       setShowBulkDeleteConfirm(false);
@@ -776,7 +871,7 @@ export function SubscriptionsPage() {
     );
   }
 
-  if (snapshotQuery.isLoading || !snapshot) {
+  if (!snapshotQuery.error && (snapshotQuery.isLoading || !snapshot)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos cargando tus pagos recurrentes y sus próximos vencimientos." eyebrow="suscripciones" title="Cargando suscripciones" />
@@ -804,7 +899,7 @@ export function SubscriptionsPage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        <Button data-tour="create-subscription" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nueva</span><span className="hidden sm:inline">Nueva suscripción</span></Button>
+        <Button data-tour="create-subscription" disabled={!canAct} onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nueva</span><span className="hidden sm:inline">Nueva suscripción</span></Button>
         <div className="relative">
           <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
           {isActionsMenuOpen ? (
@@ -812,7 +907,7 @@ export function SubscriptionsPage() {
               <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
               <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
                 <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
-                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredSubscriptions.length} onClick={() => { setIsActionsMenuOpen(false); downloadSubscriptionsCSV(filteredSubscriptions, "suscripciones-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar las {filteredSubscriptions.length}</button>
+                <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!ready || !filteredSubscriptions.length} onClick={() => { setIsActionsMenuOpen(false); exportRows(filteredSubscriptions, "suscripciones-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar las {filteredSubscriptions.length}</button>
               </div>
             </>
           ) : null}
@@ -849,23 +944,27 @@ export function SubscriptionsPage() {
         <span>Al mes <strong className="font-semibold text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong>{monthlySummary.unconvertedCount ? <span className="ml-2 text-storm">· {monthlySummary.unconvertedCount} sin conversión no {monthlySummary.unconvertedCount === 1 ? "suma" : "suman"}</span> : null}</span>
       </section>
 
-      {feedback && feedback.tone !== "error" && !isEditorOpen ? (
+      {!permitted ? <p className="text-sm text-storm">{activeWorkspace?.isArchived ? "Este espacio está archivado. Puedes consultar y exportar, pero no modificar suscripciones." : "Tienes acceso de solo lectura. Puedes consultar y exportar las suscripciones."}</p> : !ready ? <p className="text-sm text-storm">Comprobando datos y permisos; espera antes de modificar o exportar.</p> : null}
+
+      {feedback && !isEditorOpen ? (
         <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} />
       ) : null}
 
       {subscriptions.length === 0 ? (
-        <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripción</Button>} description="Todavía no hay pagos recurrentes registrados en este espacio." title="Sin suscripciones" />
+        <DataState action={<Button disabled={!canAct} onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primera suscripción</Button>} description="Todavía no hay pagos recurrentes registrados en este espacio." title="Sin suscripciones" />
       ) : filteredSubscriptions.length === 0 ? (
         <DataState action={hasActiveFilters ? <Button onClick={clearSubscriptionFilters} variant="secondary">Quitar filtros</Button> : undefined} description="No hay suscripciones que coincidan con los filtros." title="Sin resultados" />
       ) : (
         <SubscriptionTable
           allSelected={allSelected}
-          onAnalytics={setAnalyticsSubscriptionId}
+          canWrite={canAct}
+          canAnalyze={ready}
+          onAnalytics={(id) => { if (ready) setAnalyticsSubscriptionId(id); }}
           onClearAll={clearAll}
-          onDelete={setDeleteTargetId}
+          onDelete={openDelete}
           onEdit={openEditEditor}
           onOpen={(subscription) => { setDetailInitialPanel("detail"); setDetailSubscriptionId(subscription.id); }}
-          onPay={(subscription) => { setDetailInitialPanel("pay"); setDetailSubscriptionId(subscription.id); }}
+          onPay={openPay}
           onReactivate={(subscription) => void runStatusChange(subscription, "active")}
           onSelectAll={selectAll}
           onToggleSelect={toggleSelect}
@@ -884,7 +983,7 @@ export function SubscriptionsPage() {
         />
       ) : null}
 
-      {isEditorOpen ? (
+      {isEditorOpen && permitted ? (
         <EditorDialog
           accounts={accounts}
           baseCurrencyCode={baseCurrencyCode}
@@ -896,8 +995,9 @@ export function SubscriptionsPage() {
           formState={formState}
           invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
-          isSaving={isSavingEditor}
-          movements={snapshot?.movements ?? []}
+          isSaving={isSavingEditor || isActionPending || !access.writable}
+          saveBlocked={editorWrite.status === "uncertain"}
+          movements={movements}
           onSubmit={handleSubmit}
           updateFormState={updateFormState}
         />
@@ -907,22 +1007,25 @@ export function SubscriptionsPage() {
         accounts={accounts}
         initialPanel={detailInitialPanel}
         categories={categories}
-        isPending={isActionPending}
-        movements={snapshot?.movements ?? []}
-        onAnalytics={() => setAnalyticsSubscriptionId(detailSubscription.id)}
+        isPending={isActionPending || !ready}
+        canWrite={permitted}
+        userId={user?.id}
+        errorMessage={feedback?.tone === "error" ? feedback.description : undefined}
+        movements={movements}
+        onAnalytics={() => { if (ready) setAnalyticsSubscriptionId(detailSubscription.id); }}
         onClose={() => setDetailSubscriptionId(null)}
-        onDelete={() => { setDetailSubscriptionId(null); setDeleteTargetId(detailSubscription.id); }}
+        onDelete={() => { if (canAct && access.isCurrent()) { setDetailSubscriptionId(null); openDelete(detailSubscription.id); } }}
         onEdit={() => openEditEditor(detailSubscription)}
         onPay={(input) => handleMarkPaid(detailSubscription, input)}
         onOpenMovement={(movementId) => navigate(`/app/movements?period=all&movement=${movementId}`)}
         onAssignAccount={(value) => void handleAssignField(detailSubscription, "account_id", value)}
         onAssignCategory={(value) => void handleAssignField(detailSubscription, "category_id", value)}
         onPin={() => void handleTogglePin(detailSubscription)}
-        onStatus={(status) => status === "cancelled" ? setCancelSubscriptionId(detailSubscription.id) : void runStatusChange(detailSubscription, status)}
+        onStatus={(status) => { if (!canAct || !access.isCurrent()) return; if (status === "cancelled") setCancelSubscriptionId(detailSubscription.id); else void runStatusChange(detailSubscription, status); }}
         subscription={detailSubscription}
       /> : null}
 
-      {cancelSubscription ? <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/75 p-3" role="presentation">
+      {cancelSubscription && permitted ? <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/75 p-3" role="presentation">
         <div aria-labelledby="cancel-subscription-title" aria-modal="true" className="w-full max-w-md rounded-[14px] border border-white/10 bg-[#1a1917] p-6" role="dialog">
           <h2 className="font-display text-xl font-semibold text-ink" id="cancel-subscription-title">¿Cancelar suscripción?</h2>
           <p className="mt-3 text-sm leading-6 text-storm">«{cancelSubscription.name}» dejará de generar cobros. Su historial de pagos se conserva y podrás reactivarla cuando quieras.</p>
@@ -937,11 +1040,11 @@ export function SubscriptionsPage() {
         />
       ) : null}
 
-      {deleteTarget ? (
+      {deleteTarget && permitted ? (
         <DeleteConfirmDialog
-          badge="Eliminar suscripciÃ³n"
+          badge="Eliminar suscripción"
           description="Esto elimina la suscripción y su calendario asociado. Si ya tiene movimientos vinculados, primero tendrás que resolverlos."
-          isDeleting={isDeleting}
+          isDeleting={isDeleting || !canAct}
           onCancel={() => {
             if (!isDeleting) {
               setDeleteTargetId(null);
@@ -969,13 +1072,13 @@ export function SubscriptionsPage() {
         </DeleteConfirmDialog>
       ) : null}
 
-      {analyticsSubscriptionId !== null ? (() => {
+      {analyticsSubscriptionId !== null && ready ? (() => {
         const analyticsSub = subscriptions.find((s) => s.id === analyticsSubscriptionId);
         return analyticsSub ? (
           <SubscriptionAnalyticsModal
             exchangeRates={snapshot?.exchangeRates ?? []}
             baseCurrencyCode={baseCurrencyCode}
-            movements={snapshot?.movements ?? []}
+            movements={movements}
             subscription={analyticsSub}
             onClose={() => setAnalyticsSubscriptionId(null)}
           />
@@ -984,17 +1087,17 @@ export function SubscriptionsPage() {
 
       <BulkActionBar
         archiveLabel="Pausar"
-        isArchiving={isActionPending}
-        isDeleting={isBulkDeleting}
+        isArchiving={!canAct}
+        isDeleting={!canAct || isBulkDeleting}
         onClearAll={clearAll}
-        onDelete={handleBulkDelete}
-        onExport={() => downloadSubscriptionsCSV(selectedItems, `suscripciones-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`)}
-        onArchive={selectedItems.some((subscription) => subscription.status === "active") ? () => void handleBulkPause() : undefined}
+        onDelete={permitted ? handleBulkDelete : undefined}
+        onExport={ready ? () => exportRows(selectedItems, `suscripciones-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`) : undefined}
+        onArchive={permitted && selectedItems.some((subscription) => subscription.status === "active") ? () => void handleBulkPause() : undefined}
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredSubscriptions.length}
       />
-      {showBulkDeleteConfirm ? (
+      {showBulkDeleteConfirm && permitted ? (
         <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/75 p-3" role="dialog" aria-modal="true" aria-labelledby="sub-bulk-title">
           <div className="w-full max-w-md rounded-[14px] border border-white/10 bg-[#1a1917] p-6 shadow-none">
             <h2 id="sub-bulk-title" className="font-display text-xl font-semibold text-ink">
@@ -1004,7 +1107,7 @@ export function SubscriptionsPage() {
               Esta acción eliminará permanentemente las suscripciones seleccionadas. No se puede deshacer.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>
+              <Button disabled={isBulkDeleting || !canAct} onClick={() => void confirmBulkDelete()}>
                 {isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}
               </Button>
               <Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">

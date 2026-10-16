@@ -153,6 +153,7 @@ export function SubscriptionEditorDialog({
   invalidFields,
   isCreateMode,
   isSaving,
+  saveBlocked = false,
   movements,
   onSubmit,
   updateFormState,
@@ -169,6 +170,7 @@ export function SubscriptionEditorDialog({
   invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
+  saveBlocked?: boolean;
   movements: MovementRecord[];
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   updateFormState: <Field extends keyof SubscriptionFormState>(
@@ -229,6 +231,7 @@ export function SubscriptionEditorDialog({
         <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
           {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
+          <fieldset className="min-w-0 border-0 p-0" disabled={isSaving || saveBlocked}>
           {panel === "main" ? (
             <div className="space-y-5">
               <div data-field="amount">
@@ -279,10 +282,11 @@ export function SubscriptionEditorDialog({
               <Field label="Notas"><Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Solo para este espacio" value={formState.notes} /></Field>
             </div>
           )}
+          </fieldset>
         </div>
         <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7">
-          <Button className="w-full" disabled={isSaving} type="submit">
-            {isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear suscripción" : "Guardar cambios"}
+          <Button className="w-full" disabled={isSaving || saveBlocked} type="submit">
+            {isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : saveBlocked ? "Comprueba el resultado" : isCreateMode ? "Crear suscripción" : "Guardar cambios"}
           </Button>
         </footer>
       </form>
