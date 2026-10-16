@@ -43,6 +43,26 @@ assert.equal(late.label, "Atrasada");
 assert.equal(late.missedCharges, 3);
 assert.match(late.detail, /hace 90 días/);
 
+// Do not copy the native selector's verified-history omission: overdue rows are unpaid,
+// and advancing the pointer does not settle earlier scheduled rows.
+const standingSource = ts.createSourceFile("standing.ts", readFileSync(new URL("../../DarkMoneyApp/features/subscriptions/lib/subscriptionStanding.ts", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true);
+const standingDeclarations = standingSource.statements.filter(node => ts.isFunctionDeclaration(node));
+const standingJs = ts.transpileModule(standingDeclarations.map(node => node.getText(standingSource).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+const nativeStanding = new Function("DUE_SOON_DAYS", "computeNextRecurringDate", "rollDueDateForward", `${standingJs};return subscriptionStanding;`)(7, computeNextRecurringDate, rollDueDateForward);
+for (const pointer of ["2026-06-04", "2026-09-20"]) for (const status of ["scheduled", "overdue"]) {
+  const args = { subscription: { ...base, nextDueDate: pointer }, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate, occurrences: [
+    { dueDate: "2026-08-04", status, expectedAmount: 40 },
+    { dueDate: "2026-07-04", status: "paid", expectedAmount: 100 },
+    { dueDate: "2026-09-04", status: "scheduled", expectedAmount: 60 },
+  ] };
+  const actual = subscriptionStandingCopy(args); assert.equal(actual.label, "Atrasada"); assert.equal(actual.missedCharges, 1); assert.equal(actual.daysUntilDue, -29); assert.match(actual.detail, /04 08/); assert.match(actual.detail, /S\/ 40\.00/);
+  if (pointer === "2026-09-20" || status === "overdue") assert.equal(nativeStanding(args).missedCharges, 0);
+}
+const severalPending = subscriptionStandingCopy({ subscription: { ...base, nextDueDate: "2026-10-04" }, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate,
+  occurrences: [{ dueDate: "2026-08-04", status: "scheduled", expectedAmount: 40 }, { dueDate: "2026-06-04", status: "overdue", expectedAmount: 60 }] });
+assert.equal(severalPending.missedCharges, 2); assert.equal(severalPending.daysUntilDue, -90); assert.match(severalPending.detail, /04 06/); assert.match(severalPending.detail, /S\/ 100\.00/);
+for (const status of ["paused", "cancelled"]) assert.equal(subscriptionStandingCopy({ subscription: { ...base, status }, today: "2026-09-02", formatAmount: fmtMoney, formatDate: fmtDate, occurrences: [{ dueDate: "2026-06-04", status: "overdue", expectedAmount: 40 }] }).missedCharges, 0);
+
 assert.ok(Math.abs(subscriptionMonthlyFactor("monthly", 2) - 0.5) < 1e-9);
 assert.ok(Math.abs(subscriptionMonthlyFactor("quarterly", 2) - 1 / 6) < 1e-9);
 assert.ok(Math.abs(subscriptionMonthlyFactor("custom", 30) - 365 / 12 / 30) < 1e-9);

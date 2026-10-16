@@ -22,17 +22,17 @@ function daysBetween(from: string, to: string) {
 
 const plural = (count: number) => `${count} ${count === 1 ? "día" : "días"}`;
 
-/** Misma regla que `subscriptionStanding` móvil: estado, fecha y días no se contradicen. */
+/** Native standing rules, except that verified overdue history cannot be hidden by a future pointer. */
 export function subscriptionStandingCopy({ subscription, today, formatAmount, formatDate, occurrences }: Args): SubscriptionStanding {
   const daysUntilDue = daysBetween(subscription.nextDueDate, today);
   if (subscription.status === "cancelled") return { label: "Cancelada", detail: "Ya no genera cobros. Su historial se conserva.", missedCharges: 0, daysUntilDue };
   if (subscription.status === "paused") return { label: "Pausada", detail: "No se cobrará hasta que la reactives.", missedCharges: 0, daysUntilDue };
 
-  if (daysUntilDue < 0) {
+  const pending = occurrences?.filter((occurrence) => ["scheduled", "overdue"].includes(occurrence.status) && daysBetween(occurrence.dueDate, today) < 0);
+  if (daysUntilDue < 0 || pending?.length) {
     let missedCharges: number;
     let missedAmount: number;
-    if (occurrences) {
-      const pending = occurrences.filter((occurrence) => occurrence.status === "scheduled" && daysBetween(occurrence.dueDate, today) < 0);
+    if (pending) {
       missedCharges = pending.length;
       missedAmount = pending.reduce((total, occurrence) => total + occurrence.expectedAmount, 0);
     } else {
@@ -57,13 +57,15 @@ export function subscriptionStandingCopy({ subscription, today, formatAmount, fo
         daysUntilDue: days,
       };
     }
-    const late = Math.abs(daysUntilDue);
+    const oldestDueDate = pending?.length ? pending.reduce((oldest, occurrence) => occurrence.dueDate < oldest ? occurrence.dueDate : oldest, pending[0].dueDate) : subscription.nextDueDate;
+    const actualDaysUntilDue = daysBetween(oldestDueDate, today);
+    const late = Math.abs(actualDaysUntilDue);
     const charges = missedCharges === 1 ? "Va 1 cobro sin anotar" : `Van ${missedCharges} cobros sin anotar`;
     return {
       label: "Atrasada",
-      detail: `Debía cobrarse el ${formatDate(subscription.nextDueDate)}, hace ${plural(late)}. ${charges}, ${formatAmount(missedAmount)}.`,
+      detail: `Debía cobrarse el ${formatDate(oldestDueDate)}, hace ${plural(late)}. ${charges}, ${formatAmount(missedAmount)}.`,
       missedCharges,
-      daysUntilDue,
+      daysUntilDue: actualDaysUntilDue,
     };
   }
   if (daysUntilDue === 0) return { label: "Se cobra hoy", detail: `Toca hoy, ${formatAmount(subscription.amount)}.`, missedCharges: 0, daysUntilDue };

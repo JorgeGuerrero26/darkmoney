@@ -83,6 +83,9 @@ for (const invalid of [[{ id: 1, subscription_id: 1, due_date: today, expected_a
   globalThis.subOccurrences = invalid; await act(async () => queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", 8, "A", 1] })); await settle(); assert.match(container.textContent, /Por comprobar/);
 }
 globalThis.subOccurrences = []; await act(async () => queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", 8, "A", 1] })); await settle();
+globalThis.subOccurrences = [{ id: 1, subscription_id: 1, due_date: "2026-01-01", expected_amount: 40, status: "overdue" }];
+await render({}, { data: { ...data(), subscriptions: fixtures.map(item => item.id === 1 ? { ...item, nextDueDate: "2027-02-16" } : item) } }); await act(async () => queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", 8, "A", 1] })); await settle(); assert.match(container.textContent, /Suscripción · Atrasada/); assert.match(container.textContent, /1 cobro sin anotar/);
+globalThis.subOccurrences = []; await render({}, { data: data() }); await act(async () => queryClient.invalidateQueries({ queryKey: ["subscription-occurrences", 8, "A", 1] })); await settle();
 await act(async () => aria("Más acciones de suscripción").click()); assert.equal(find("Fijar en la lista"), undefined); await click("Ver analítica"); assert.deepEqual(globalThis.subAnalysis.movements, []); await click("Cerrar análisis"); await click("Cerrar");
 assert.ok(globalThis.subReads.some(read => read.table === "subscriptions" && read.filters.some(([key, value]) => key === "workspace_id" && value === 8) && read.signal));
 await act(async () => aria("Más acciones").click()); await click("Exportar las 2"); assert.equal(exported, 1); assert.doesNotMatch(csv, /Servicio ajeno/);
