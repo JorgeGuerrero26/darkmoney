@@ -1,6 +1,6 @@
 import { Archive, Check, Download, MoreVertical, Plus, RefreshCw } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useResourceLink } from "../../../hooks/use-resource-link";
 
@@ -31,6 +31,8 @@ import {
 import type { AccountSummary } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
+import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
+import { requestQuickMovement } from "../../movements/lib/quick-movement-event";
 import { AccountAnalyticsModal } from "../components/account-analytics-modal";
 import { AccountArchiveDialog } from "../components/account-archive-dialog";
 import { AccountEditorDialog } from "../components/account-editor-dialog";
@@ -91,10 +93,10 @@ function AccountsModuleHeader({ actions, totalCount, visibleCount }: { actions?:
   );
 }
 
-function EmptyAccountsState({ onCreate }: { onCreate: () => void }) {
+function EmptyAccountsState({ onCreate, disabled }: { onCreate: () => void; disabled: boolean }) {
   return (
     <DataState
-      action={<Button onClick={onCreate}>Crear primera cuenta</Button>}
+      action={<Button disabled={disabled} onClick={onCreate}>Crear primera cuenta</Button>}
       description="Registra una cuenta real para activar saldos, filtros, vistas y analitica por cuenta."
       title="Aun no hay cuentas"
     />
@@ -124,15 +126,32 @@ function NoFilteredAccountsState({
 }
 
 export function AccountsPage() {
+  const auth = useAuth(), workspace = useActiveWorkspace();
+  return <ScopedAccountsPage key={`${auth.user?.id}:${workspace.activeWorkspace?.id}`} auth={auth} workspace={workspace} />;
+}
+
+function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAuth>; workspace: ReturnType<typeof useActiveWorkspace> }) {
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
+  const { profile, user } = auth;
   const {
     activeWorkspace,
     error: workspaceError,
     isLoading: isWorkspacesLoading,
-  } = useActiveWorkspace();
+  } = workspace;
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  const snapshot = snapshotQuery.data;
+  const snapshot = user && !snapshotQuery.isPlaceholderData && snapshotQuery.data?.workspace.id === activeWorkspace?.id ? snapshotQuery.data : undefined;
+  const ready = Boolean(snapshot && snapshotQuery.isSuccess && !snapshotQuery.error && !snapshotQuery.isFetching && !isWorkspacesLoading && !workspaceError && !workspace.isFetching && !workspace.isPlaceholderData);
+  const access = useCatalogWriteScope(activeWorkspace, user?.id, ready);
+  const responseScope = useCatalogWriteScope(activeWorkspace, user?.id, true);
+  const latestAccess = useRef(access); latestAccess.current = access;
+  const permitted = canWriteWorkspaceCatalog(activeWorkspace, user?.id, true);
+  const locks = useRef(new Set<number | "new" | "bulk">());
+  const [busy, setBusy] = useState(false);
+  const canAct = access.writable && !busy;
+  const queued = useRef(new Set<string>());
+  const pendingDeletes = useRef(new Set<number>());
+  const currentRows = useRef<AccountSummary[]>([]);
+  currentRows.current = (snapshot?.accounts ?? []).filter(account => account.workspaceId === activeWorkspace?.id);
   const baseCurrencyCode =
     snapshot?.workspace.baseCurrencyCode ??
     activeWorkspace?.baseCurrencyCode ??
@@ -152,15 +171,16 @@ export function AccountsPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [analyticsAccountId, setAnalyticsAccountId] = useState<number | null>(null);
   const [detailAccountId, setDetailAccountId] = useState<number | null>(null);
-  const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"archive" | "restore" | null>(null);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-  const [groupByType, setGroupByType] = useState(() => window.localStorage.getItem("darkmoney-accounts-group-by-type") === "true");
-  const { schedule } = useUndoQueue();
+  const groupingKey = `darkmoney.accounts-group.v1.${encodeURIComponent(user?.id ?? "signed-out")}.${activeWorkspace?.id}`;
+  const [groupByType, setGroupByType] = useState(() => { try { return Boolean(user && window.localStorage.getItem(groupingKey) === "true"); } catch { return false; } });
+  const { schedule, cancel } = useUndoQueue();
 
   const accounts = useMemo(
-    () => (snapshot?.accounts ?? []).filter((account) => !hiddenIds.has(account.id)),
-    [hiddenIds, snapshot?.accounts],
+    () => (snapshot?.accounts ?? []).filter((account) => account.workspaceId === activeWorkspace?.id && !hiddenIds.has(account.id)),
+    [hiddenIds, snapshot?.accounts, activeWorkspace?.id],
   );
   const availableTypes = useMemo(() => getAvailableAccountTypes(accounts), [accounts]);
   useResourceLink(accounts, setDetailAccountId);
@@ -206,7 +226,7 @@ export function AccountsPage() {
   const editor = useAccountEditor({
     accounts,
     baseCurrencyCode,
-    isLoadingWorkspace: isWorkspacesLoading,
+    isLoadingWorkspace: !ready,
     userId: user?.id,
     workspaceId: activeWorkspace?.id,
   });
@@ -221,6 +241,34 @@ export function AccountsPage() {
     archiveAccountMutation.isPending ||
     deleteAccountMutation.isPending ||
     isBulkArchiving;
+  const formDisabled = isSaving || busy || !access.writable;
+  const movements = (snapshot?.movements ?? []).filter(item => item.workspaceId === activeWorkspace?.id);
+
+  useEffect(() => () => { queued.current.forEach(id => cancel(id)); queued.current.clear(); }, [cancel]);
+  useEffect(() => {
+    if (!access.writable) { queued.current.forEach(id => cancel(id)); queued.current.clear(); }
+  }, [access.writable, cancel]);
+  useEffect(() => {
+    if (!permitted) { editor.closeEditor(); editor.setShowUnsavedDialog(false); setArchiveTargetId(null); setShowDeleteDialog(false); setBulkMode(null); }
+  }, [permitted]);
+
+  function currentAccount(id: number) {
+    access.assertCurrent();
+    const account = currentRows.current.find(item => item.id === id);
+    if (!account) throw new Error("La cuenta ya no está disponible en este espacio.");
+    return account;
+  }
+  async function runWrite<T>(id: number | "new" | "bulk", action: () => Promise<T>) {
+    access.assertCurrent();
+    if (locks.current.size) throw new Error("Ya hay una operación de cuentas pendiente.");
+    locks.current.add(id); setBusy(true);
+    try { return await action(); } finally { locks.current.delete(id); setBusy(false); }
+  }
+  function exportAccounts(items: AccountSummary[], filename: string) {
+    if (!ready) return;
+    const ids = new Set(items.map(item => item.id));
+    downloadAccountsCSV(currentRows.current.filter(item => ids.has(item.id)), filename);
+  }
 
   const {
     allSelected,
@@ -289,19 +337,23 @@ export function AccountsPage() {
   }
 
   function openCreateEditor() {
+    if (!canAct || !access.isCurrent()) return;
     setErrorMessage("");
     setFormErrors({});
     editor.openCreateEditor();
   }
 
   function openEditEditor(account: AccountSummary) {
+    if (!canAct || !access.isCurrent()) return;
+    const current = currentRows.current.find(item => item.id === account.id);
+    if (!current) return;
     setErrorMessage("");
     setFormErrors({});
-    editor.openEditEditor(account);
+    editor.openEditEditor(current);
   }
 
   function requestCloseEditor() {
-    if (isSaving) {
+    if (isSaving || busy) {
       return;
     }
 
@@ -311,7 +363,7 @@ export function AccountsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!activeWorkspace || !user) {
+    if (!activeWorkspace || !user || !access.isCurrent() || locks.current.size) {
       return;
     }
 
@@ -328,13 +380,14 @@ export function AccountsPage() {
 
     try {
       if (editor.editorMode === "create") {
-        await createAccountMutation.mutateAsync({
+        await runWrite("new", () => createAccountMutation.mutateAsync({
           ...toAccountInput(editor.formState),
-          sortOrder: (snapshot?.accounts.length ?? 0) + 1,
+          sortOrder: accounts.length + 1,
           userId: user.id,
           workspaceId: activeWorkspace.id,
-        });
+        }));
 
+        if (!responseScope.isCurrent()) return;
         editor.closeEditor();
         setFeedbackMessage("Cuenta creada correctamente.");
         return;
@@ -345,22 +398,24 @@ export function AccountsPage() {
         return;
       }
 
-      await updateAccountMutation.mutateAsync({
+      const target = currentAccount(editor.selectedAccount.id);
+      await runWrite(target.id, () => updateAccountMutation.mutateAsync({
         ...toAccountInput(editor.formState),
-        accountId: editor.selectedAccount.id,
+        accountId: target.id,
         userId: user.id,
         workspaceId: activeWorkspace.id,
-      });
+      }));
 
+      if (!responseScope.isCurrent()) return;
       editor.closeEditor();
       setFeedbackMessage("Cuenta actualizada correctamente.");
     } catch (error) {
-      setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar la cuenta."));
+      if (responseScope.isCurrent()) setErrorMessage(getQueryErrorMessage(error, "No pudimos guardar la cuenta."));
     }
   }
 
   function handleArchiveToggle(account: AccountSummary) {
-    if (!activeWorkspace || !user) {
+    if (!activeWorkspace || !user || !canAct || !access.isCurrent() || !currentRows.current.some(item => item.id === account.id)) {
       return;
     }
 
@@ -370,31 +425,33 @@ export function AccountsPage() {
   }
 
   async function handleConfirmArchiveToggle() {
-    if (!activeWorkspace || !user || !archiveTarget) {
+    if (!activeWorkspace || !user || !archiveTarget || !access.isCurrent() || locks.current.size) {
       return;
     }
 
     const nextArchivedValue = !archiveTarget.isArchived;
 
     try {
-      await archiveAccountMutation.mutateAsync({
-        accountId: archiveTarget.id,
+      const target = currentAccount(archiveTarget.id);
+      await runWrite(target.id, () => archiveAccountMutation.mutateAsync({
+        accountId: target.id,
         isArchived: nextArchivedValue,
         userId: user.id,
         workspaceId: activeWorkspace.id,
-      });
+      }));
 
+      if (!responseScope.isCurrent()) return;
       setArchiveTargetId(null);
       setFeedbackMessage(
         nextArchivedValue ? "Cuenta archivada correctamente." : "Cuenta reactivada correctamente.",
       );
     } catch (error) {
-      setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar la cuenta."));
+      if (responseScope.isCurrent()) setErrorMessage(getQueryErrorMessage(error, "No pudimos actualizar la cuenta."));
     }
   }
 
   function handleDeleteAccount() {
-    if (!activeWorkspace || !editor.selectedAccount) {
+    if (!activeWorkspace || !editor.selectedAccount?.isArchived || !canAct || !access.isCurrent()) {
       return;
     }
 
@@ -402,51 +459,77 @@ export function AccountsPage() {
   }
 
   function handleConfirmDeleteAccount() {
-    if (!activeWorkspace || !editor.selectedAccount) {
+    if (!activeWorkspace || !editor.selectedAccount || !canAct || !access.isCurrent()) {
       return;
     }
 
     const targetId = editor.selectedAccount.id;
     const workspaceId = activeWorkspace.id;
+    const target = currentRows.current.find(item => item.id === targetId);
+    if (!target?.isArchived || pendingDeletes.current.has(targetId)) return;
+    pendingDeletes.current.add(targetId);
 
     setShowDeleteDialog(false);
     editor.closeEditor();
     setHiddenIds((currentIds) => new Set([...currentIds, targetId]));
-    schedule({
-      label: "Cuenta eliminada permanentemente",
-      onCommit: () => deleteAccountMutation.mutateAsync({ accountId: targetId, workspaceId }),
-      onUndo: () => {
-        setHiddenIds((currentIds) => {
+    let resolved = false;
+    const restore = () => setHiddenIds((currentIds) => {
           const nextIds = new Set(currentIds);
           nextIds.delete(targetId);
           return nextIds;
-        });
+    });
+    const queueId = schedule({
+      label: "Cuenta pendiente de eliminar",
+      onCommit: async () => {
+        if (resolved) return;
+        resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId);
+        if (!access.isCurrent()) { restore(); return; }
+        try {
+          if (!currentAccount(targetId).isArchived) throw new Error("La cuenta fue reactivada. No se eliminó.");
+          await runWrite(targetId, () => deleteAccountMutation.mutateAsync({ accountId: targetId, workspaceId }));
+          if (responseScope.isCurrent()) setFeedbackMessage("Cuenta eliminada.");
+        } catch (error) {
+          restore();
+          if (responseScope.isCurrent()) setErrorMessage(getQueryErrorMessage(error, "No pudimos confirmar la eliminación. Actualiza y comprueba la cuenta."));
+        }
+      },
+      onUndo: () => {
+        if (resolved) return;
+        resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId); restore();
       },
     });
+    queued.current.add(queueId);
   }
 
   async function confirmBulkArchive() {
-    if (!activeWorkspace || !user || selectedCount === 0) {
+    if (!activeWorkspace || !user || selectedCount === 0 || !bulkMode || !access.isCurrent() || locks.current.size) {
       return;
     }
 
+    const archived = bulkMode === "archive";
+    const targets = selectedItems.filter(item => item.isArchived !== archived).map(item => item.id);
     setIsBulkArchiving(true);
     setErrorMessage("");
 
     try {
-      for (const accountId of selectedIds) {
+      await runWrite("bulk", async () => { for (const accountId of targets) {
+        responseScope.assertCurrent(); latestAccess.current.assertCurrent();
+        const current = currentRows.current.find(item => item.id === accountId);
+        if (!current) throw new Error("Una cuenta seleccionada ya no está disponible. Comprueba las anteriores.");
+        if (current.isArchived === archived) continue;
         await archiveAccountMutation.mutateAsync({
           accountId,
-          isArchived: true,
+          isArchived: archived,
           userId: user.id,
           workspaceId: activeWorkspace.id,
         });
-      }
+      } });
+      if (!responseScope.isCurrent()) return;
       clearAll();
-      setShowBulkArchiveConfirm(false);
-      setFeedbackMessage("Cuentas archivadas correctamente.");
+      setBulkMode(null);
+      setFeedbackMessage(archived ? "Archivado de la selección completado." : "Restauración de la selección completada.");
     } catch (error) {
-      setErrorMessage(getQueryErrorMessage(error, "No pudimos archivar las cuentas."));
+      if (responseScope.isCurrent()) { setBulkMode(null); setErrorMessage(`${getQueryErrorMessage(error, "No pudimos completar la selección.")} Puede haberse aplicado una parte; actualiza y comprueba antes de repetir.`); }
     } finally {
       setIsBulkArchiving(false);
     }
@@ -505,7 +588,7 @@ export function AccountsPage() {
         <AccountsModuleHeader
           actions={
             <div className="flex shrink-0 items-center gap-2">
-              <Button onClick={openCreateEditor}>
+              <Button disabled={!canAct} onClick={openCreateEditor}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nueva cuenta
               </Button>
@@ -540,13 +623,13 @@ export function AccountsPage() {
                       <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { void snapshotQuery.refetch(); setIsActionsMenuOpen(false); }} type="button">
                         <RefreshCw className={`h-4 w-4 ${snapshotQuery.isFetching ? "animate-spin" : ""}`} />Actualizar
                       </button>
-                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setGroupByType((current) => { const next = !current; window.localStorage.setItem("darkmoney-accounts-group-by-type", String(next)); return next; }); setIsActionsMenuOpen(false); }} type="button">
+                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { const next = !groupByType; setGroupByType(next); try { if (user) window.localStorage.setItem(groupingKey, String(next)); } catch { /* Keep the preference in memory if storage is blocked. */ } setIsActionsMenuOpen(false); }} type="button">
                         <Check className={`h-3.5 w-3.5 ${groupByType ? "opacity-100" : "opacity-0"}`} />Agrupar por tipo
                       </button>
                       {hasActiveFilters ? (
                         <button className="flex h-11 w-full items-center border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { resetFilters(); setIsActionsMenuOpen(false); }} type="button">Limpiar filtros</button>
                       ) : null}
-                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm font-medium text-ink hover:bg-white/[0.04] disabled:text-storm/45" disabled={!filteredAccounts.length} onClick={() => { downloadAccountsCSV(filteredAccounts, `cuentas-${new Date().toISOString().slice(0, 10)}.csv`); setIsActionsMenuOpen(false); }} type="button">
+                      <button className="flex h-11 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm font-medium text-ink hover:bg-white/[0.04] disabled:text-storm/45" disabled={!ready || !filteredAccounts.length} onClick={() => { exportAccounts(filteredAccounts, `cuentas-${new Date().toISOString().slice(0, 10)}.csv`); setIsActionsMenuOpen(false); }} type="button">
                         <Download className="h-4 w-4" />Exportar las {filteredAccounts.length}
                       </button>
                     </div>
@@ -558,6 +641,8 @@ export function AccountsPage() {
           totalCount={accounts.length}
           visibleCount={filteredAccounts.length}
         />
+
+        {!permitted ? <p className="text-sm text-storm">{activeWorkspace?.isArchived ? "Este espacio está archivado. Puedes consultar y exportar, pero no modificar cuentas." : "Tienes acceso de solo lectura. Puedes consultar y exportar las cuentas."}</p> : !ready ? <p className="text-sm text-storm">Comprobando datos y permisos; espera antes de modificar o exportar.</p> : null}
 
         <AccountsToolbar
           availableCurrencyCodes={availableCurrencyCodes}
@@ -577,6 +662,7 @@ export function AccountsPage() {
           accounts={accounts}
           baseCurrencyCode={baseCurrencyCode}
           exchangeRates={snapshot.exchangeRates}
+          preferenceKey={`${groupingKey}.currency`}
         />
 
         {errorMessage && !editor.isEditorOpen ? (
@@ -589,7 +675,7 @@ export function AccountsPage() {
         ) : null}
 
         {accounts.length === 0 ? (
-          <EmptyAccountsState onCreate={openCreateEditor} />
+          <EmptyAccountsState disabled={!canAct} onCreate={openCreateEditor} />
         ) : filteredAccounts.length === 0 ? (
           <NoFilteredAccountsState onReset={resetFilters} status={filters.status} />
         ) : (
@@ -598,9 +684,11 @@ export function AccountsPage() {
                 accounts={paginatedAccounts.items}
                 allSelected={allSelected}
                 groupByType={groupByType}
+                canWrite={canAct}
+                canAnalyze={ready}
                 onArchive={handleArchiveToggle}
                 onEdit={openEditEditor}
-                onOpenAnalytics={(account) => setAnalyticsAccountId(account.id)}
+                onOpenAnalytics={(account) => { if (ready) setAnalyticsAccountId(account.id); }}
                 onOpen={(account) => setDetailAccountId(account.id)}
                 onSelectAll={() => (allSelected ? clearAll() : selectAll())}
                 onToggleSelect={toggleSelect}
@@ -620,14 +708,14 @@ export function AccountsPage() {
         )}
       </div>
 
-      {editor.isEditorOpen ? (
+      {editor.isEditorOpen && permitted ? (
         <AccountEditorDialog
           baseCurrencyCode={baseCurrencyCode}
           errorMessage={errorMessage}
           formErrors={formErrors}
           formState={editor.formState}
           isCreateMode={editor.editorMode === "create"}
-          isSaving={isSaving}
+          isSaving={formDisabled}
           onArchiveToggle={handleArchiveToggle}
           onClose={requestCloseEditor}
           onDelete={handleDeleteAccount}
@@ -638,10 +726,18 @@ export function AccountsPage() {
         />
       ) : null}
 
-      {detailAccount ? (
+      {detailAccount && ready ? (
         <AccountDetailDialog
           account={detailAccount}
-          movements={snapshot.movements}
+          movements={movements}
+          canWrite={canAct}
+          onCreateMovement={(kind) => {
+            if (!canAct || !access.isCurrent()) return;
+            const current = currentRows.current.find(item => item.id === detailAccount.id);
+            if (!current || current.isArchived) return;
+            setDetailAccountId(null);
+            requestQuickMovement({ kind, accountId: current.id });
+          }}
           onAnalyze={() => {
             setDetailAccountId(null);
             setAnalyticsAccountId(detailAccount.id);
@@ -669,10 +765,10 @@ export function AccountsPage() {
         />
       ) : null}
 
-      {archiveTarget ? (
+      {archiveTarget && permitted ? (
         <AccountArchiveDialog
           account={archiveTarget}
-          isSaving={archiveAccountMutation.isPending}
+          isSaving={formDisabled}
           onCancel={() => {
             if (!archiveAccountMutation.isPending) {
               setArchiveTargetId(null);
@@ -682,11 +778,11 @@ export function AccountsPage() {
         />
       ) : null}
 
-      {showDeleteDialog && editor.selectedAccount ? (
+      {showDeleteDialog && editor.selectedAccount && permitted ? (
         <DeleteConfirmDialog
           badge="Eliminar cuenta"
           description="Esto elimina la cuenta permanentemente. Si tiene movimientos vinculados, primero tendras que resolverlos."
-          isDeleting={deleteAccountMutation.isPending}
+          isDeleting={formDisabled}
           onCancel={() => {
             if (!deleteAccountMutation.isPending) {
               setShowDeleteDialog(false);
@@ -723,46 +819,48 @@ export function AccountsPage() {
         </DeleteConfirmDialog>
       ) : null}
 
-      {analyticsAccount ? (
+      {analyticsAccount && ready ? (
         <AccountAnalyticsModal
           account={analyticsAccount}
-          movements={snapshot.movements}
+          movements={movements}
           onClose={() => setAnalyticsAccountId(null)}
         />
       ) : null}
 
       <BulkActionBar
-        deleteLabel="Archivar"
-        deletingLabel="Archivando..."
-        isDeleting={isBulkArchiving}
+        archiveLabel="Archivar activas"
+        deleteLabel="Restaurar archivadas"
+        deletingLabel="Procesando..."
+        isArchiving={formDisabled}
+        isDeleting={formDisabled}
         onClearAll={clearAll}
-        onDelete={() => setShowBulkArchiveConfirm(true)}
-        onExport={() =>
-          downloadAccountsCSV(
+        onArchive={permitted && selectedItems.some(item => !item.isArchived) ? () => { if (canAct && access.isCurrent()) setBulkMode("archive"); } : undefined}
+        onDelete={permitted && selectedItems.some(item => item.isArchived) ? () => { if (canAct && access.isCurrent()) setBulkMode("restore"); } : undefined}
+        onExport={ready ? () =>
+          exportAccounts(
             selectedItems,
             `cuentas-seleccionadas-${new Date().toISOString().slice(0, 10)}.csv`,
-          )
-        }
+          ) : undefined}
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredAccounts.length}
       />
 
-      {showBulkArchiveConfirm ? (
+      {bulkMode && permitted ? (
         <Modal
           disableOutsideClose={isBulkArchiving}
           labelledBy="accounts-bulk-archive-title"
           onClose={() => {
             if (!isBulkArchiving) {
-              setShowBulkArchiveConfirm(false);
+              setBulkMode(null);
             }
           }}
           size="sm"
         >
           <ModalHeader
-            description="Las cuentas seleccionadas dejaran de aparecer en el flujo principal. Podras reactivarlas despues."
-            onClose={isBulkArchiving ? undefined : () => setShowBulkArchiveConfirm(false)}
-            title={`Archivar ${selectedCount} cuenta${selectedCount !== 1 ? "s" : ""}`}
+            description="Se intentará cambiar solo las cuentas que correspondan. Si una falla, las anteriores pueden haberse guardado."
+            onClose={isBulkArchiving ? undefined : () => setBulkMode(null)}
+            title={bulkMode === "archive" ? "Archivar cuentas activas" : "Restaurar cuentas archivadas"}
             titleId="accounts-bulk-archive-title"
           />
           <ModalBody>
@@ -774,7 +872,7 @@ export function AccountsPage() {
                 <div>
                   <p className="font-semibold text-ink">Accion reversible</p>
                   <p className="mt-1 text-sm leading-6 text-storm">
-                    Se archivaran solo las cuentas filtradas que seleccionaste.
+                    {bulkMode === "archive" ? "Se archivarán las cuentas activas de la selección." : "Se restaurarán las cuentas archivadas de la selección."}
                   </p>
                 </div>
               </div>
@@ -783,14 +881,14 @@ export function AccountsPage() {
           <ModalFooter>
             <Button
               disabled={isBulkArchiving}
-              onClick={() => setShowBulkArchiveConfirm(false)}
+              onClick={() => setBulkMode(null)}
               variant="ghost"
             >
               Cancelar
             </Button>
-            <Button disabled={isBulkArchiving} onClick={() => void confirmBulkArchive()}>
+            <Button disabled={formDisabled} onClick={() => void confirmBulkArchive()}>
               <Archive className="h-4 w-4" />
-              {isBulkArchiving ? "Archivando..." : "Archivar"}
+              {isBulkArchiving ? "Procesando..." : bulkMode === "archive" ? "Archivar" : "Restaurar"}
             </Button>
           </ModalFooter>
         </Modal>

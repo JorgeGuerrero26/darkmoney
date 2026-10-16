@@ -12,6 +12,8 @@ type AccountsTableProps = {
   accounts: AccountSummary[];
   allSelected: boolean;
   groupByType: boolean;
+  canWrite?: boolean;
+  canAnalyze?: boolean;
   onArchive: (account: AccountSummary) => void;
   onEdit: (account: AccountSummary) => void;
   onOpen: (account: AccountSummary) => void;
@@ -27,6 +29,8 @@ export function AccountsTable({
   accounts,
   allSelected,
   groupByType,
+  canWrite = false,
+  canAnalyze = true,
   onArchive,
   onEdit,
   onOpen,
@@ -102,9 +106,11 @@ export function AccountsTable({
                 <>
                   <button aria-label="Cerrar opciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpenActionsId(null)} type="button" />
                   <div className="absolute right-0 top-9 z-50 w-48 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
-                    <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onOpenAnalytics(account); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
+                    <button disabled={!canAnalyze} className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onOpenAnalytics(account); }} type="button"><BarChart3 className="h-4 w-4" />Analizar</button>
+                    {canWrite ? <>
                     <button className="flex h-10 w-full items-center gap-3 px-4 text-left text-sm text-ink hover:bg-white/[0.04]" onClick={() => { setOpenActionsId(null); onEdit(account); }} type="button"><PencilLine className="h-4 w-4" />Editar</button>
                     <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-left text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={() => { setOpenActionsId(null); onArchive(account); }} type="button"><Archive className="h-4 w-4" />{account.isArchived ? "Reactivar" : "Archivar"}</button>
+                    </> : null}
                   </div>
                 </>
               ) : null}

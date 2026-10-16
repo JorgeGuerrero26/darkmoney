@@ -7,7 +7,6 @@ import { ModalBody } from "../../../components/ui/modal-body";
 import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, MovementRecord } from "../../../types/domain";
-import { requestQuickMovement } from "../../movements/lib/quick-movement-event";
 import { findAccountInstitution } from "../lib/account-institutions";
 import { buildAccountBalanceEvolution } from "../lib/account-balance-evolution";
 import { getAccountIcon, getTypePreset } from "../lib/account-options";
@@ -20,6 +19,8 @@ type Props = {
   onClose: () => void;
   onEdit: () => void;
   onViewMovements: () => void;
+  canWrite?: boolean;
+  onCreateMovement: (kind: "expense" | "transfer") => void;
 };
 
 function movementAmount(movement: MovementRecord, account: AccountSummary) {
@@ -31,15 +32,15 @@ function movementAmount(movement: MovementRecord, account: AccountSummary) {
   };
 }
 
-export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, onClose, onEdit, onViewMovements }: Props) {
+export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, onClose, onEdit, onViewMovements, canWrite = false, onCreateMovement }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const AccountIcon = getAccountIcon(account.icon, account.type);
   const institution = findAccountInstitution(account.institutionCode);
   const accountMovements = useMemo(
     () => movements
-      .filter((movement) => movement.sourceAccountId === account.id || movement.destinationAccountId === account.id)
+      .filter((movement) => movement.workspaceId === account.workspaceId && (movement.sourceAccountId === account.id || movement.destinationAccountId === account.id))
       .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime()),
-    [account.id, movements],
+    [account.id, account.workspaceId, movements],
   );
   const balancePoints = useMemo(
     () => buildAccountBalanceEvolution({ accountId: account.id, currentBalance: account.currentBalance, movements: accountMovements }),
@@ -63,8 +64,7 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
   const subtitle = [institution?.label, getTypePreset(account.type).label, account.currencyCode].filter(Boolean).join(" · ");
 
   function openMovement(kind: "expense" | "transfer") {
-    onClose();
-    window.setTimeout(() => requestQuickMovement({ kind, accountId: account.id }), 0);
+    if (canWrite && !account.isArchived) onCreateMovement(kind);
   }
 
   return (
@@ -91,7 +91,7 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
           {account.type === "credit_card" ? <div className="mt-4 divide-y divide-white/10 border-y border-white/10 text-sm">
             {[["Día de corte", account.statementDay ?? "Sin definir"], ["Día de pago", account.paymentDay ?? "Sin definir"], ["Límite de crédito", account.creditLimit == null ? "Sin definir" : formatCurrency(account.creditLimit, account.currencyCode)]].map(([label, value]) => <div className="flex min-h-[48px] items-center justify-between gap-4" key={label}><span className="text-storm">{label}</span><span className="text-ink">{value}</span></div>)}
           </div> : null}
-          {!account.isArchived ? (
+          {canWrite && !account.isArchived ? (
             <div className="mt-5 flex flex-wrap gap-2">
               <Button onClick={() => openMovement("expense")}><ArrowDown className="h-4 w-4" />Nuevo gasto</Button>
               <Button onClick={() => openMovement("transfer")} variant="secondary"><ArrowLeftRight className="h-4 w-4" />Transferir</Button>
@@ -149,11 +149,11 @@ export function AccountDetailDialog({ account, movements, onAnalyze, onArchive, 
           {menuOpen ? (
             <div className="absolute bottom-11 left-0 z-20 w-48 overflow-hidden rounded-[9px] border border-white/[0.1] bg-[#1a1917]">
               <button className="flex h-10 w-full items-center gap-3 px-4 text-sm text-ink hover:bg-white/[0.04]" onClick={onAnalyze} type="button"><BarChart3 className="h-4 w-4" />Analítica</button>
-              <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={onArchive} type="button">{account.isArchived ? "Reactivar" : "Archivar"}</button>
+              {canWrite ? <button className="flex h-10 w-full items-center gap-3 border-t border-white/[0.08] px-4 text-sm text-storm hover:bg-white/[0.04] hover:text-ink" onClick={onArchive} type="button">{account.isArchived ? "Reactivar" : "Archivar"}</button> : null}
             </div>
           ) : null}
         </div>
-        <Button onClick={onEdit} variant="secondary"><PencilLine className="h-4 w-4" />Editar cuenta</Button>
+        {canWrite ? <Button onClick={onEdit} variant="secondary"><PencilLine className="h-4 w-4" />Editar cuenta</Button> : <Button onClick={onClose} variant="secondary">Cerrar</Button>}
       </ModalFooter>
     </Modal>
   );

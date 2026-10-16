@@ -10,7 +10,7 @@ import { getTypePreset } from "../lib/account-options";
 
 export type AccountEditorMode = "create" | "edit";
 
-const ACCOUNT_EDITOR_DRAFT_STORAGE_KEY = "darkmoney-account-editor-draft";
+export const accountEditorDraftKey = (userId: string, workspaceId: number) => `darkmoney.account-editor.v1.${encodeURIComponent(userId)}.${workspaceId}`;
 const ACCOUNT_EDITOR_DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
 
 type PersistedAccountEditorState = {
@@ -23,39 +23,39 @@ type PersistedAccountEditorState = {
   workspaceId: number;
 };
 
-function readPersistedAccountEditorState() {
+function readPersistedAccountEditorState(key: string) {
   if (typeof window === "undefined") {
-    return null;
-  }
-
-  const rawValue = window.sessionStorage.getItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
-
-  if (!rawValue) {
     return null;
   }
 
   try {
-    return JSON.parse(rawValue) as PersistedAccountEditorState;
+    const rawValue = window.sessionStorage.getItem(key);
+    if (!rawValue) return null;
+    const value = JSON.parse(rawValue) as PersistedAccountEditorState;
+    if (!value || !["create", "edit"].includes(value.editorMode) || typeof value.isEditorOpen !== "boolean" ||
+      !Number.isFinite(value.savedAt) || value.savedAt > Date.now() || value.savedAt < 0 ||
+      (value.selectedAccountId !== null && (!Number.isSafeInteger(value.selectedAccountId) || value.selectedAccountId <= 0)) ||
+      !value.formState || Object.entries(createDefaultFormState("PEN")).some(([field, fallback]) => typeof value.formState[field as keyof AccountFormState] !== typeof fallback)) return null;
+    return value;
   } catch {
-    window.sessionStorage.removeItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
     return null;
   }
 }
 
-export function clearPersistedAccountEditorState() {
+export function clearPersistedAccountEditorState(key: string) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.sessionStorage.removeItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY);
+  try { window.sessionStorage.removeItem(key); } catch { /* Editing remains available without storage. */ }
 }
 
-function persistAccountEditorState(value: PersistedAccountEditorState) {
+function persistAccountEditorState(key: string, value: PersistedAccountEditorState) {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.sessionStorage.setItem(ACCOUNT_EDITOR_DRAFT_STORAGE_KEY, JSON.stringify(value));
+  try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch { /* Keep the draft in memory. */ }
 }
 
 export function useAccountEditor({
@@ -81,6 +81,7 @@ export function useAccountEditor({
   );
   const hasHydratedEditorDraft = useRef(false);
   const isEditorDraftReady = useRef(false);
+  const storageKey = userId && workspaceId ? accountEditorDraftKey(userId, workspaceId) : null;
 
   const selectedAccount =
     selectedAccountId !== null
@@ -107,12 +108,12 @@ export function useAccountEditor({
   }, [baseCurrencyCode, editorMode, isEditorOpen, isLoadingWorkspace, workspaceId]);
 
   useEffect(() => {
-    if (hasHydratedEditorDraft.current || !workspaceId || !userId) {
+    if (hasHydratedEditorDraft.current || !workspaceId || !userId || !storageKey || isLoadingWorkspace) {
       return;
     }
 
     hasHydratedEditorDraft.current = true;
-    const persistedState = readPersistedAccountEditorState();
+    const persistedState = readPersistedAccountEditorState(storageKey);
 
     if (!persistedState) {
       isEditorDraftReady.current = true;
@@ -124,7 +125,7 @@ export function useAccountEditor({
       persistedState.userId !== userId || persistedState.workspaceId !== workspaceId;
 
     if (isExpired || isWrongScope) {
-      clearPersistedAccountEditorState();
+      clearPersistedAccountEditorState(storageKey);
       isEditorDraftReady.current = true;
       return;
     }
@@ -133,20 +134,21 @@ export function useAccountEditor({
     setSelectedAccountId(persistedState.selectedAccountId);
     setFormState({ ...createDefaultFormState(baseCurrencyCode), ...persistedState.formState });
     setIsEditorOpen(persistedState.isEditorOpen);
+    setIsDirty(persistedState.isEditorOpen);
     isEditorDraftReady.current = true;
-  }, [userId, workspaceId]);
+  }, [userId, workspaceId, storageKey, isLoadingWorkspace]);
 
   useEffect(() => {
-    if (!isEditorDraftReady.current || !workspaceId || !userId) {
+    if (!isEditorDraftReady.current || !workspaceId || !userId || !storageKey) {
       return;
     }
 
     if (!isEditorOpen) {
-      clearPersistedAccountEditorState();
+      clearPersistedAccountEditorState(storageKey);
       return;
     }
 
-    persistAccountEditorState({
+    persistAccountEditorState(storageKey, {
       editorMode,
       formState,
       isEditorOpen,
@@ -155,7 +157,7 @@ export function useAccountEditor({
       userId,
       workspaceId,
     });
-  }, [editorMode, formState, isEditorOpen, selectedAccountId, userId, workspaceId]);
+  }, [editorMode, formState, isEditorOpen, selectedAccountId, userId, workspaceId, storageKey]);
 
   useEffect(() => {
     if (!isEditorOpen || editorMode !== "edit" || !selectedAccount || isDirty) {
@@ -220,7 +222,7 @@ export function useAccountEditor({
   }
 
   function closeEditor() {
-    clearPersistedAccountEditorState();
+    if (storageKey) clearPersistedAccountEditorState(storageKey);
     setIsEditorOpen(false);
     setSelectedAccountId(null);
     setIsDirty(false);

@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, ExchangeRateSummary } from "../../../types/domain";
@@ -9,6 +9,7 @@ type Props = {
   accounts: AccountSummary[];
   baseCurrencyCode: string;
   exchangeRates: ExchangeRateSummary[];
+  preferenceKey?: string;
 };
 
 function conversionRate(rates: ExchangeRateSummary[], from: string, to: string) {
@@ -19,7 +20,7 @@ function conversionRate(rates: ExchangeRateSummary[], from: string, to: string) 
   return inverse?.rate ? 1 / inverse.rate : null;
 }
 
-export function AccountComposition({ accounts, baseCurrencyCode, exchangeRates }: Props) {
+export function AccountComposition({ accounts, baseCurrencyCode, exchangeRates, preferenceKey }: Props) {
   const [expanded, setExpanded] = useState(false);
   const availableCurrencies = useMemo(() => {
     const currencies = new Set([baseCurrencyCode]);
@@ -29,12 +30,9 @@ export function AccountComposition({ accounts, baseCurrencyCode, exchangeRates }
     }
     return [...currencies].slice(0, 4);
   }, [baseCurrencyCode, exchangeRates]);
-  const [displayCurrency, setDisplayCurrency] = useState(() => window.localStorage.getItem("darkmoney-accounts-display-currency") || baseCurrencyCode);
+  const [displayCurrency, setDisplayCurrency] = useState(() => { try { return preferenceKey ? window.localStorage.getItem(preferenceKey) || baseCurrencyCode : baseCurrencyCode; } catch { return baseCurrencyCode; } });
   const effectiveCurrency = availableCurrencies.includes(displayCurrency) ? displayCurrency : baseCurrencyCode;
   const factor = conversionRate(exchangeRates, baseCurrencyCode, effectiveCurrency) ?? 1;
-  useEffect(() => {
-    window.localStorage.setItem("darkmoney-accounts-display-currency", effectiveCurrency);
-  }, [effectiveCurrency]);
   const composition = useMemo(() => {
     const groups = new Map<string, number>();
     let debts = 0;
@@ -69,7 +67,7 @@ export function AccountComposition({ accounts, baseCurrencyCode, exchangeRates }
           {availableCurrencies.length > 1 ? (
             <div className="mb-4 flex flex-wrap gap-2" aria-label="Moneda de visualización">
               {availableCurrencies.map((currency) => (
-                <button aria-pressed={effectiveCurrency === currency} className={`rounded-[7px] border px-3 py-1.5 text-xs font-semibold ${effectiveCurrency === currency ? "border-ink/40 bg-ink text-void" : "border-white/10 text-storm hover:text-ink"}`} key={currency} onClick={() => setDisplayCurrency(currency)} type="button">{currency}</button>
+                <button aria-pressed={effectiveCurrency === currency} className={`rounded-[7px] border px-3 py-1.5 text-xs font-semibold ${effectiveCurrency === currency ? "border-ink/40 bg-ink text-void" : "border-white/10 text-storm hover:text-ink"}`} key={currency} onClick={() => { setDisplayCurrency(currency); try { if (preferenceKey) window.localStorage.setItem(preferenceKey, currency); } catch { /* Keep the selection in memory. */ } }} type="button">{currency}</button>
               ))}
             </div>
           ) : null}
