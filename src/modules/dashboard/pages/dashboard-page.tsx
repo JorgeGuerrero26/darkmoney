@@ -59,7 +59,7 @@ import { CashflowMonthPanel } from "../components/cashflow-month-panel";
 import { DashboardHealthPanel } from "../components/dashboard-health-panel";
 import { buildAdvancedReadings } from "../lib/dashboard-advanced-readings";
 import { AdvancedReadingsPanel } from "../components/advanced-readings-panel";
-import { DashboardHistoryPanel } from "../components/dashboard-history-panel";
+import { DashboardHistorySection } from "../components/dashboard-history-section";
 import { DashboardPatternsSection } from "../components/dashboard-patterns-section";
 import { DashboardFlowSection } from "../components/dashboard-flow-section";
 import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
@@ -1683,8 +1683,9 @@ export function DashboardPage() {
           patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
             userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
             ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
-          history={() => <DashboardHistoryPanel snapshot={snapshot} ctx={parityCtx} now={parityNow}
-            ready={!snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
+          history={() => <DashboardHistorySection key={`history-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
+            ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
           flow={() => <DashboardFlowSection key={`flow-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
             userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard} health={dashboardHealth}
             ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isError && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}

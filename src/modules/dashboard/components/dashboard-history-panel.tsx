@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ParityConversionCtx } from "@darkmoney/shared/types";
 import type { WorkspaceSnapshot } from "../../../services/queries/workspace-data";
@@ -10,8 +10,9 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import { buildDashboardHistory, dashboardHistoryYears } from "../lib/dashboard-history";
 import { monthReading } from "../lib/history-view";
 
-export function DashboardHistoryPanel({ snapshot, ctx, now, ready, onRetry }: {
+export function DashboardHistoryPanel({ snapshot, ctx, now, ready, onRetry, renderExplanation }: {
   snapshot: WorkspaceSnapshot; ctx: ParityConversionCtx; now: Date; ready: boolean; onRetry: () => void;
+  renderExplanation?: (model: ReturnType<typeof buildDashboardHistory>) => ReactNode;
 }) {
   const years = dashboardHistoryYears(snapshot, now);
   const [selectedYear, setSelectedYear] = useState(Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "America/Lima" }).format(now)));
@@ -39,6 +40,16 @@ export function DashboardHistoryPanel({ snapshot, ctx, now, ready, onRetry }: {
         <div className="mt-5"><h3 className="text-sm font-semibold text-ink">Lo que hace variar tus meses</h3>{model.factors ? <><p className="mt-2 text-xs leading-5 text-storm">{model.factors.body} Es una asociación estadística, no una causa demostrada; los importes son gasto acumulado del año.</p><div className="mt-3 divide-y divide-white/[0.07]">{model.factors.topCategories.map(category => <Link className="flex min-h-14 items-center justify-between gap-4 text-sm" key={category.categoryId ?? "none"} to={monthHref(`${year}-01-01`, year === Number(model.today.slice(0, 4)) ? model.today : `${year}-12-31`, category.categoryId)}><span className="text-ink">{category.name}<span className="ml-2 text-xs text-storm">{category.direction === "sube_con_el_cambio" ? "Sube con el cambio" : "Se mueve en sentido contrario"}</span></span><span className="tabular-nums text-ink">{formatCurrency(category.amount, ctx.displayCurrency)} ›</span></Link>)}</div></> : <p className="mt-2 text-xs leading-5 text-storm">Se necesitan tres meses con gasto, dos categorías y variación observable, con conversiones completas.</p>}</div>
       </>}
     </>}
+    {ready && model.complete && (model.changePoint || model.clusters.length > 0) ? <details className="mt-5 border-t border-white/[0.07] pt-4">
+      <summary className="cursor-pointer py-2 text-sm font-medium text-ink">Cambios y tipos de meses de {year}</summary>
+      <p className="mt-2 text-xs leading-5 text-storm">Señales descriptivas sobre meses con actividad del año seleccionado, no causas demostradas. El mes actual está incompleto; una ausencia de registros no demuestra ausencia de gasto. Hasta cuatro tipos de meses; los importes son promedios de neto.</p>
+      {model.changePoint ? <div className="mt-3 border-b border-white/[0.07] pb-4"><p className="text-sm font-medium text-ink">{model.changePoint.title}</p><p className="mt-2 text-xs leading-5 text-storm">{model.changePoint.body} Se comparan tres meses con actividad con los tres anteriores con actividad.</p></div> : <p className="mt-3 text-xs text-storm">Sin cambio dominante; hacen falta al menos seis meses con actividad y una variación suficiente.</p>}
+      <div className="mt-3 divide-y divide-white/[0.07]">{model.clusters.slice(0, 4).map(cluster => <div className="py-3" key={cluster.kind}>
+        <div className="flex items-baseline justify-between gap-4"><p className="text-sm font-medium text-ink">{cluster.title} · {cluster.count} {cluster.count === 1 ? "mes" : "meses"}</p><p className="shrink-0 text-sm tabular-nums text-ink">{formatCurrency(cluster.averageNet, ctx.displayCurrency)}/mes</p></div>
+        <p className="mt-1 text-xs leading-5 text-storm">{cluster.monthLabels.join(" · ")} · {cluster.description}</p>
+      </div>)}</div>
+    </details> : null}
+    {renderExplanation?.(model)}
     {ready && month ? <Modal onClose={() => setSelectedMonth(null)} labelledBy="history-month-title"><ResourceEditorHeader onClose={() => setSelectedMonth(null)} title={`${monthName(month.dateFrom)} de ${year}`} titleId="history-month-title" /><ModalBody><p className="text-xs text-storm">{month.dateFrom} a {month.dateTo} · {month.totalCount} registros aplicados</p><p className="mt-3 text-2xl font-semibold tabular-nums text-ink">{month.unconvertedCount ? "Sin total: faltan conversiones" : formatCurrency(month.net, ctx.displayCurrency)}</p><p className="mt-2 text-sm text-storm">{month.correctionIds.length} correcciones excluidas del neto.</p><div className="mt-5 divide-y divide-white/10">{month.movements.slice(0, 4).map(row => <Link className="flex min-h-14 items-center justify-between gap-4 text-sm" key={row.id} to={`/app/movements?period=all&movement=${row.id}`}><span className="text-ink">{row.title}{row.correction ? " · corrección, no suma al neto" : ""}</span><span className="tabular-nums text-storm">{row.amount === null ? "Sin conversión" : `${row.income ? "+" : "−"}${formatCurrency(row.amount, ctx.displayCurrency)}`}</span></Link>)}</div><Link className="mt-5 inline-block text-sm text-ink underline underline-offset-4" to={monthHref(month.dateFrom, month.dateTo)}>Ver movimientos del mes</Link></ModalBody></Modal> : null}
   </section>;
 }

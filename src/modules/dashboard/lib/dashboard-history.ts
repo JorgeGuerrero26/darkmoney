@@ -7,6 +7,8 @@ import type { WorkspaceSnapshot } from "../../../services/queries/workspace-data
 import { isHistoryBalanceCorrection } from "./dashboard-health";
 import { buildHistoryFactorAnalysis } from "./history-factor-analysis";
 import { historyYearTotals, recentNetComparison } from "./history-view";
+import { detectHistoryChangePoint } from "./history-change-points";
+import { clusterHistoryMonths } from "./month-clustering";
 
 export function buildDashboardHistory(snapshot: WorkspaceSnapshot, ctx: ParityConversionCtx, year: number, now = new Date()) {
   if (!Number.isSafeInteger(year) || year < 1 || year > 9998) throw new Error("Elige un año válido.");
@@ -19,10 +21,10 @@ export function buildDashboardHistory(snapshot: WorkspaceSnapshot, ctx: ParityCo
     const dateTo = dateFrom.slice(0, 7) === today.slice(0, 7) ? today : monthEnd.toISOString().slice(0, 10);
     return { label: new Intl.DateTimeFormat("es-PE", { month: "short", timeZone: "UTC" }).format(new Date(`${dateFrom}T12:00:00Z`)), dateFrom, dateTo, isFuture,
       income: 0, expense: 0, net: 0, cumulativeNet: 0, unconvertedCount: 0, totalCount: 0, correctionIds: [] as number[], categories: [] as Array<{ categoryId: number | null; name: string; amount: number }>,
-      movements: [] as Array<{ id: number; title: string; amount: number | null; income: boolean; correction: boolean; accountId: number | null }> };
+      movements: [] as Array<{ id: number; title: string; amount: number | null; income: boolean; correction: boolean; accountId: number | null; categoryId: number | null }> };
   });
   for (const raw of snapshot.movements) {
-    if (raw.status !== "posted" || new Date(raw.occurredAt) > now || !Number.isFinite(new Date(raw.occurredAt).getTime())) continue;
+    if (raw.workspaceId !== snapshot.workspace.id || raw.status !== "posted" || new Date(raw.occurredAt) > now || !Number.isFinite(new Date(raw.occurredAt).getTime())) continue;
     const movement = { ...raw, categoryId: raw.categoryId ?? null, counterpartyId: raw.counterpartyId ?? null };
     const day = isoToDateStr(movement.occurredAt), month = months.find(row => day >= row.dateFrom && day <= row.dateTo && !row.isFuture);
     if (!month) continue;
@@ -30,8 +32,9 @@ export function buildDashboardHistory(snapshot: WorkspaceSnapshot, ctx: ParityCo
     if (isHistoryBalanceCorrection(movement)) month.correctionIds.push(movement.id);
     if (!isIncome(movement) && !isExpense(movement)) continue;
     const accountId = movementDisplayAccountId(movement), income = isIncome(movement), correction = isHistoryBalanceCorrection(movement);
-    const amount = convertParityAmount({ amount: movementDisplayAmount(movement), currencyCode: ctx.accountCurrencyMap.get(accountId ?? 0), baseCurrencyCode: ctx.baseCurrency, targetCurrencyCode: ctx.displayCurrency, exchangeRateMap: ctx.exchangeRateMap });
-    month.movements.push({ id: movement.id, title: movement.description.trim() || (income ? "Ingreso" : "Gasto"), amount, income, correction, accountId });
+    const converted = convertParityAmount({ amount: movementDisplayAmount(movement), currencyCode: ctx.accountCurrencyMap.get(accountId ?? 0), baseCurrencyCode: ctx.baseCurrency, targetCurrencyCode: ctx.displayCurrency, exchangeRateMap: ctx.exchangeRateMap });
+    const amount = converted !== null && Number.isFinite(converted) && converted >= 0 ? converted : null;
+    month.movements.push({ id: movement.id, title: movement.description.trim() || (income ? "Ingreso" : "Gasto"), amount, income, correction, accountId, categoryId: movement.categoryId });
     if (correction) continue;
     if (amount === null) { month.unconvertedCount++; continue; }
     if (income) month.income += amount;
@@ -45,15 +48,17 @@ export function buildDashboardHistory(snapshot: WorkspaceSnapshot, ctx: ParityCo
   let cumulative = 0;
   for (const month of months) { month.net = month.income - month.expense; if (!month.isFuture) cumulative += month.net; month.cumulativeNet = cumulative; month.movements.sort((a, b) => Math.abs(b.amount ?? 0) - Math.abs(a.amount ?? 0)); }
   const unconvertedCount = months.reduce((sum, month) => sum + month.unconvertedCount, 0);
-  return { year, today, months, unconvertedCount, complete: unconvertedCount === 0,
+  return { workspaceId: snapshot.workspace.id, currency: ctx.displayCurrency, year, today, months, unconvertedCount, complete: unconvertedCount === 0,
     totals: unconvertedCount === 0 ? historyYearTotals(months) : null,
     comparison: unconvertedCount === 0 ? recentNetComparison(months) : null,
-    factors: unconvertedCount === 0 ? buildHistoryFactorAnalysis({ months }) : null };
+    factors: unconvertedCount === 0 ? buildHistoryFactorAnalysis({ months }) : null,
+    changePoint: unconvertedCount === 0 ? detectHistoryChangePoint(months) : null,
+    clusters: unconvertedCount === 0 ? clusterHistoryMonths(months) : [] };
 }
 
 export function dashboardHistoryYears(snapshot: WorkspaceSnapshot, now = new Date()) {
   const year = Number(isoToDateStr(now.toISOString()).slice(0, 4));
   const years = new Set([year, year - 1]);
-  for (const movement of snapshot.movements) { if (!Number.isFinite(new Date(movement.occurredAt).getTime())) continue; years.add(Number(isoToDateStr(movement.occurredAt).slice(0, 4))); }
+  for (const movement of snapshot.movements) { if (movement.workspaceId !== snapshot.workspace.id || !Number.isFinite(new Date(movement.occurredAt).getTime())) continue; years.add(Number(isoToDateStr(movement.occurredAt).slice(0, 4))); }
   return [...years].sort((a, b) => b - a);
 }
