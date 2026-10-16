@@ -24,6 +24,8 @@ export function useAccountFilters() {
     () => ({
       q: searchParams.get("q") ?? "",
       type: searchParams.get("type") ?? "",
+      types: [...new Set(searchParams.getAll("type").filter(Boolean))],
+      institutions: [...new Set(searchParams.getAll("institution").map(value => value || null))],
       status: parseStatus(searchParams.get("status")),
       currency: searchParams.get("currency") ?? "",
       view: parseView(searchParams.get("view")),
@@ -43,9 +45,9 @@ export function useAccountFilters() {
     if (merged.q.trim()) {
       nextParams.set("q", merged.q.trim());
     }
-    if (merged.type) {
-      nextParams.set("type", merged.type);
-    }
+    const types = nextFilters.type !== undefined && nextFilters.types === undefined ? (nextFilters.type ? [nextFilters.type] : []) : merged.types ?? (merged.type ? [merged.type] : []);
+    for (const type of [...new Set(types.filter(Boolean))]) nextParams.append("type", type);
+    for (const institution of [...new Set(merged.institutions ?? [])]) nextParams.append("institution", institution ?? "");
     if (merged.status !== "active") {
       nextParams.set("status", merged.status);
     }

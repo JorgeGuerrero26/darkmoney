@@ -1,5 +1,6 @@
 import type { AccountSummary } from "../../../types/domain";
 import { getTypePreset } from "./account-options";
+import { findAccountInstitution } from "./account-institutions";
 
 export type AccountStatusFilter = "active" | "all" | "included" | "excluded" | "archived";
 export type AccountViewMode = "table" | "list" | "grid";
@@ -7,6 +8,8 @@ export type AccountViewMode = "table" | "list" | "grid";
 export type AccountFilters = {
   q: string;
   type: string;
+  types?: string[];
+  institutions?: (string | null)[];
   status: AccountStatusFilter;
   currency: string;
   view: AccountViewMode;
@@ -74,9 +77,11 @@ export function filterAccounts(accounts: AccountSummary[], filters: AccountFilte
       return false;
     }
 
-    if (filters.type && filters.type !== account.type) {
+    const types = filters.types ?? (filters.type ? [filters.type] : []);
+    if (types.length && !types.includes(account.type)) {
       return false;
     }
+    if (filters.institutions?.length && !filters.institutions.includes(account.institutionCode || null)) return false;
 
     if (currency && account.currencyCode.toUpperCase() !== currency) {
       return false;
@@ -88,8 +93,7 @@ export function filterAccounts(accounts: AccountSummary[], filters: AccountFilte
 
     return (
       account.name.toLowerCase().includes(query) ||
-      account.currencyCode.toLowerCase().includes(query) ||
-      getTypePreset(account.type).label.toLowerCase().includes(query)
+      account.currencyCode.toLowerCase().includes(query)
     );
   });
 }
@@ -116,4 +120,10 @@ export function getAvailableCurrencyCodes(accounts: AccountSummary[]) {
   return Array.from(
     new Set(accounts.map((account) => account.currencyCode.trim().toUpperCase()).filter(Boolean)),
   ).sort((left, right) => left.localeCompare(right));
+}
+
+export function getAvailableAccountInstitutions(accounts: AccountSummary[]) {
+  return [...new Set(accounts.map(account => account.institutionCode || null))]
+    .map(value => ({ value, label: value ? findAccountInstitution(value)?.label ?? value : "Sin institución" }))
+    .sort((left, right) => left.label.localeCompare(right.label, "es"));
 }

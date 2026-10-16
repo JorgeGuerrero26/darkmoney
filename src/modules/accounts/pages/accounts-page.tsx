@@ -47,6 +47,7 @@ import {
   filterAccounts,
   getAvailableAccountTypes,
   getAvailableCurrencyCodes,
+  getAvailableAccountInstitutions,
   paginateAccounts,
 } from "../lib/account-filters";
 import { downloadAccountsCSV } from "../lib/account-formatters";
@@ -194,7 +195,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
     [accounts, filters],
   );
   const hasActiveFilters = Boolean(
-    filters.q.trim() || filters.type || filters.currency || filters.status !== "active",
+    filters.q.trim() || filters.type || filters.types?.length || filters.institutions?.length || filters.currency || filters.status !== "active",
   );
   const filteredActiveAccounts = filteredAccounts.filter((account) => !account.isArchived);
   const filteredPatrimony = computeAccountWorth(
@@ -650,6 +651,7 @@ function ScopedAccountsPage({ auth, workspace }: { auth: ReturnType<typeof useAu
         <AccountsToolbar
           availableCurrencyCodes={availableCurrencyCodes}
           availableTypes={availableTypes}
+          institutions={getAvailableAccountInstitutions(accounts)}
           filters={filters}
           onUpdateFilters={writeFilters}
         />
