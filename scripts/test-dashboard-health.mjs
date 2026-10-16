@@ -105,6 +105,17 @@ assert.equal(unknownLiquid.health.score, null); assert.equal(unknownLiquid.cashC
 const unread = web.buildDashboardHealth({ ...input, shared, obligationsReady: false });
 assert.equal(unread.health.score, null); assert.equal(unread.collection.rate, null); assert.equal(unread.collection.label, "Sin comprobar");
 assert.equal(web.buildDashboardHealth({ ...input, historyAvailable: false }).health.score, null);
+const dueToday = web.buildDashboardHealth({ ...input, snapshot: { ...snapshot, obligations: [obligation(90, "payable", "active", "2026-10-15")] } });
+assert.equal(dueToday.health.overdueCount, 0, "A payment due today is not overdue before the day ends in Lima");
+const collectionWindow = web.buildDashboardHealth({ ...input, snapshot: { ...snapshot, obligations: [obligation(90, "receivable", "paid", "2026-09-16", 0), obligation(91, "receivable", "active", "2026-10-15"), obligation(92, "receivable", "active", "2026-09-15"), obligation(93, "receivable", "cancelled", "2026-10-15")] } });
+assert.equal(collectionWindow.collection.total, 2); assert.equal(collectionWindow.collection.rate, 50);
+const invalidAmount = web.buildDashboardHealth({ ...input, snapshot: { ...snapshot, movements: [...movements, movement(99, "09", "expense", NaN)] } });
+assert.equal(invalidAmount.unconvertedHistory, 1); assert.equal(invalidAmount.health.score, null);
+for (const stamp of ["2026-10-01T04:30:00Z", "2027-01-01T04:30:00Z", "2024-03-01T04:30:00Z", "2026-03-29T07:30:00Z"]) {
+  const time = new Date(stamp), expected = web.buildDashboardHealth({ ...input, now: time });
+  for (const zone of ["UTC", "Europe/Madrid", "America/Los_Angeles"]) { process.env.TZ = zone; assert.deepEqual(web.buildDashboardHealth({ ...input, now: time }), expected); }
+  process.env.TZ = "America/Lima";
+}
 const inverse = web.buildDashboardHealth({ ...input, ctx: { ...ctx, displayCurrency: "USD" }, liquid: { total: 2000 / 3.7, unconvertedCount: 0 }, commitmentsOutflow: 300 / 3.7 });
 assert.equal(inverse.cashCushion.days, model.cashCushion.days); assert.ok(Math.abs(inverse.savings.averagePct - 69) < 1e-8);
 assert.equal(inverse.health.score, model.health.score);

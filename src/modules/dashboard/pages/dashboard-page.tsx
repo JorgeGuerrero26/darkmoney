@@ -63,7 +63,7 @@ import { DashboardHistorySection } from "../components/dashboard-history-section
 import { DashboardPatternsSection } from "../components/dashboard-patterns-section";
 import { DashboardFlowSection } from "../components/dashboard-flow-section";
 import { DashboardAnalysisSections } from "../components/dashboard-analysis-sections";
-import { DashboardCategorySuggestionsPanel } from "../components/dashboard-category-suggestions-panel";
+import { DashboardHealthSection } from "../components/dashboard-health-section";
 import {
   buildPrimaryRecommendation,
   buildSuggestedProActions,
@@ -1690,10 +1690,12 @@ export function DashboardPage() {
             userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard} health={dashboardHealth}
             ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isError && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
             onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
-          health={() => <><DashboardHealthPanel model={dashboardHealth} currency={displayCurrencyCode} />
-            <DashboardCategorySuggestionsPanel key={`categories:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}
+          health={() => <DashboardHealthSection key={`health-ai:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}
+              shared={sharedObligations} health={dashboardHealth} enabled={canUseAdvancedDashboard} isAdmin={isAdminOverride}
+              healthReady={!sharedObligationsQuery.isPending && !sharedObligationsQuery.isError && !sharedObligationsQuery.isFetching}
+              cashflow={projectionReady && !projectionQuery.isFetching ? cashflow : null}
               ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
-              canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} /></>}
+              canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} />}
           summary={<>
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import type { ParityConversionCtx } from "@darkmoney/shared/types";
@@ -11,14 +11,15 @@ import { supabase } from "../../../services/supabase/client";
 import { applyDashboardCategory, CategoryApplyError, readDashboardCategoryEvidence } from "../../../services/queries/dashboard-categories";
 import type { WorkspaceSnapshot } from "../../../services/queries/workspace-data";
 import type { CategorySuggestionCandidate } from "../../movements/lib/category-suggestion-candidates";
-import { buildDashboardCategorySuggestions } from "../lib/dashboard-category-suggestions";
+import { buildDashboardCategorySuggestions, type DashboardCategoryEvidence } from "../lib/dashboard-category-suggestions";
 
 type Result = { movementId: number; message: string };
 type ReviewItem = { suggestion: CategorySuggestionCandidate; movement: WorkspaceSnapshot["movements"][number]; category: WorkspaceSnapshot["catalogs"]["categories"][number] };
-type Props = { snapshot: WorkspaceSnapshot; ctx: ParityConversionCtx; userId?: string; ready: boolean; canEdit: boolean; now: Date };
+export type DashboardCategoryReading = { suggestions: CategorySuggestionCandidate[]; evidence: DashboardCategoryEvidence | null; ready: boolean; failed: boolean; unconvertedCount: number; applying: boolean };
+type Props = { snapshot: WorkspaceSnapshot; ctx: ParityConversionCtx; userId?: string; ready: boolean; canEdit: boolean; now: Date; renderExplanation?: (reading: DashboardCategoryReading) => ReactNode };
 const emptyEvidence = { feedback: [], signals: [], unavailable: [] };
 
-export function DashboardCategorySuggestionsPanel({ snapshot, ctx, userId, ready, canEdit, now }: Props) {
+export function DashboardCategorySuggestionsPanel({ snapshot, ctx, userId, ready, canEdit, now, renderExplanation }: Props) {
   const queryClient = useQueryClient();
   const scopeKey = `${userId}:${snapshot.workspace.id}:${ctx.displayCurrency}`;
   const scope = useRef({ key: scopeKey });
@@ -106,6 +107,7 @@ export function DashboardCategorySuggestionsPanel({ snapshot, ctx, userId, ready
         {suggestions.length > 1 ? <Button className="mt-3" disabled={!writable || pending} onClick={() => openReview(suggestions)} variant="secondary">Revisar las {suggestions.length} sugerencias</Button> : null}
         {!canEdit || snapshot.workspace.role === "viewer" ? <p className="mt-3 text-xs text-storm">Tu acceso permite consultar, pero no aplicar categorías.</p> : null}
       </>}
+    {renderExplanation?.({ suggestions, evidence: evidence.isError ? null : evidence.data ?? null, ready: !reading, failed: evidence.isError, unconvertedCount: model.unconvertedCount, applying: pending })}
     {review ? <Modal className={resourceEditorSurfaceClassName} labelledBy="category-review-title" onClose={closeReview} disableOutsideClose={pending}>
       <ResourceEditorHeader disabled={pending} onClose={closeReview} title="Revisar categorías" titleId="category-review-title" />
       <ModalBody><p className="mb-3 text-sm leading-6 text-storm">Solo se guardará la categoría de cada movimiento. La coincidencia orienta; no garantiza que la categoría sea correcta.</p>

@@ -1,4 +1,4 @@
-import { endOfMonth, format, startOfMonth, subDays, subMonths } from "date-fns";
+import { isoToDateStr } from "@darkmoney/shared/dates";
 import { buildHealthScore } from "@darkmoney/shared/health";
 import { convertParityAmount } from "@darkmoney/shared/currency";
 import { isExpense, isIncome } from "@darkmoney/shared/aggregations";
@@ -7,6 +7,7 @@ import type { ParityConversionCtx } from "@darkmoney/shared/types";
 import type { WorkspaceSnapshot } from "../../../services/queries/workspace-data";
 import type { SharedObligationSummary } from "../../../types/domain";
 import { obligationViewerDirection } from "./projection/projection-perspective";
+import { limaCalendarDay } from "./projection/lima-calendar";
 
 /** Same history contract as mobile health-view/history-view; not the selected chart period. */
 export function healthBaselineFromMonths(months: readonly { income: number; expense: number }[]) {
@@ -39,21 +40,25 @@ export function buildDashboardHealth(input: {
   obligationsReady: boolean; historyAvailable?: boolean; now?: Date;
 }) {
   const { snapshot, ctx, liquid, commitmentsOutflow, obligationsReady, historyAvailable = true, now = new Date() } = input;
-  const convert = (amount: number, currencyCode?: string | null) => convertParityAmount({
-    amount, currencyCode, baseCurrencyCode: ctx.baseCurrency, targetCurrencyCode: ctx.displayCurrency,
-    exchangeRateMap: ctx.exchangeRateMap,
-  });
-  const movements = snapshot.movements.map(m => ({ ...m, categoryId: m.categoryId ?? null, counterpartyId: m.counterpartyId ?? null }));
+  const today = isoToDateStr(now.toISOString()), anchor = new Date(`${today.slice(0, 7)}-01T12:00:00Z`);
+  const convert = (amount: number, currencyCode?: string | null) => {
+    const converted = convertParityAmount({ amount, currencyCode, baseCurrencyCode: ctx.baseCurrency, targetCurrencyCode: ctx.displayCurrency, exchangeRateMap: ctx.exchangeRateMap });
+    return converted !== null && Number.isFinite(converted) && converted >= 0 ? converted : null;
+  };
+  const movements = snapshot.movements.filter(m => m.workspaceId === snapshot.workspace.id && Number.isFinite(new Date(m.occurredAt).getTime()) && new Date(m.occurredAt) <= now)
+    .map(m => ({ ...m, categoryId: m.categoryId ?? null, counterpartyId: m.counterpartyId ?? null }));
   const historical = movements.filter(m => !isHistoryBalanceCorrection(m) && (isIncome(m) || isExpense(m))).map(m => ({
     movement: m, date: new Date(m.occurredAt),
     amount: convert(movementDisplayAmount(m), ctx.accountCurrencyMap.get(movementDisplayAccountId(m) ?? 0)),
   }));
   const months = Array.from({ length: 7 }, (_, i) => {
-    const date = subMonths(now, 6 - i), start = startOfMonth(date), end = i === 6 ? now : endOfMonth(date);
+    const date = new Date(anchor); date.setUTCMonth(anchor.getUTCMonth() - 6 + i);
+    const monthKey = date.toISOString().slice(0, 7), next = new Date(date); next.setUTCMonth(date.getUTCMonth() + 1);
+    const start = new Date(`${monthKey}-01T05:00:00Z`), end = i === 6 ? now : new Date(new Date(`${next.toISOString().slice(0, 7)}-01T05:00:00Z`).getTime() - 1);
     const rows = historical.filter(row => row.date >= start && row.date <= end);
     const income = rows.filter(row => isIncome(row.movement)).reduce((sum, row) => sum + (row.amount ?? 0), 0);
     const expense = rows.filter(row => isExpense(row.movement)).reduce((sum, row) => sum + (row.amount ?? 0), 0);
-    return { monthKey: format(date, "yyyy-MM"), income, expense, rate: income > 0 ? (income - expense) / income * 100 : null,
+    return { monthKey, income, expense, rate: income > 0 ? (income - expense) / income * 100 : null,
       unconvertedCount: rows.filter(row => row.amount === null).length };
   });
   const complete = months.slice(0, -1), current = months[6];
@@ -68,19 +73,19 @@ export function buildDashboardHealth(input: {
     trend: !historyReady || validRates.length < 3 ? "insuficiente" : difference > 3 ? "mejorando" : difference < -3 ? "empeorando" : "estable",
   };
   const incomes = complete.map(month => month.income);
-  const enoughIncome = historyReady && incomes.filter(amount => amount > 0).length >= 3;
   const mean = incomes.reduce((sum, value) => sum + value, 0) / incomes.length;
   const variance = incomes.reduce((sum, value) => sum + (value - mean) ** 2, 0) / incomes.length;
   const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
+  const enoughIncome = historyReady && incomes.filter(amount => amount > 0).length >= 3 && Number.isFinite(cv);
   const stabilityScore = enoughIncome ? Math.round(Math.max(0, Math.min(100, (1 - cv) * 100))) : null;
   const incomeStability = {
     score: stabilityScore, cvPct: enoughIncome ? Math.round(cv * 100) : null,
     label: !historyReady ? "Sin historial completo" : stabilityScore === null ? "Historial insuficiente" : stabilityScore >= 75 ? "Muy estable" : stabilityScore >= 50 ? "Moderado" : "Variable",
   };
-  const recent = historical.filter(row => row.date >= subDays(now, 29) && row.date <= now && isExpense(row.movement));
+  const recent = historical.filter(row => row.date.getTime() >= now.getTime() - 29 * 86400000 && isExpense(row.movement));
   const last30Expense = recent.reduce((sum, row) => sum + (row.amount ?? 0), 0);
   const monthlyExpense = baseline.averageExpense > 0 ? baseline.averageExpense : last30Expense;
-  const reserveReady = historyReady && liquid.unconvertedCount === 0 && monthlyExpense > 0 &&
+  const reserveReady = historyReady && liquid.unconvertedCount === 0 && Number.isFinite(liquid.total) && monthlyExpense > 0 && Number.isFinite(monthlyExpense) &&
     (baseline.averageExpense > 0 || recent.every(row => row.amount !== null));
   const days = reserveReady ? reserveDays(liquid.total, monthlyExpense) : null;
   const cashCushion = {
@@ -89,7 +94,7 @@ export function buildDashboardHealth(input: {
     coverageMonths: reserveReady ? liquid.total / monthlyExpense : null,
   };
 
-  const byId = new Map(snapshot.obligations.map(o => [o.id, o]));
+  const byId = new Map(snapshot.obligations.filter(o => o.workspaceId === snapshot.workspace.id).map(o => [o.id, o]));
   for (const o of input.shared) if (!byId.has(o.id)) byId.set(o.id, o);
   const obligations = [...byId.values()];
   let totalPayable = 0, overdueCount = 0, unconvertedPayables = 0;
@@ -99,10 +104,13 @@ export function buildDashboardHealth(input: {
     const amount = convert(o.pendingAmount, o.currencyCode);
     if (amount === null) unconvertedPayables++;
     else totalPayable += amount;
-    if (o.dueDate && new Date(o.dueDate) < now) overdueCount++;
+    const due = limaCalendarDay(o.dueDate);
+    if (due && due < today) overdueCount++;
   }
-  const receivable = obligations.filter(o => obligationViewerDirection(o) === "receivable");
-  const due = receivable.filter(o => o.dueDate && new Date(o.dueDate) >= subDays(now, 30) && new Date(o.dueDate) <= now);
+  const receivable = obligations.filter(o => obligationViewerDirection(o) === "receivable" && ["active", "defaulted", "paid"].includes(o.status));
+  const collectionFrom = new Date(`${today}T12:00:00Z`); collectionFrom.setUTCDate(collectionFrom.getUTCDate() - 29);
+  const collectionFromDay = collectionFrom.toISOString().slice(0, 10);
+  const due = receivable.filter(o => { const day = limaCalendarDay(o.dueDate); return day && day >= collectionFromDay && day <= today; });
   const resolved = due.filter(o => o.status === "paid").length;
   const collectionRate = obligationsReady && due.length > 0 ? Math.round(resolved / due.length * 100) : null;
   const collection = {
@@ -113,7 +121,7 @@ export function buildDashboardHealth(input: {
     liquidMoney: liquid.total, averageMonthlyExpense: monthlyExpense,
     periodIncome: baseline.averageIncome, periodNet: baseline.averageNet, totalPayable, overdueCount,
   };
-  const scoreReady = historyReady && baseline.monthsUsed > 0 && baseline.averageIncome > 0 && monthlyExpense > 0 &&
+  const scoreReady = historyReady && baseline.monthsUsed > 0 && baseline.averageIncome > 0 && monthlyExpense > 0 && Object.values(healthInputs).every(Number.isFinite) &&
     liquid.unconvertedCount === 0 && unconvertedPayables === 0 && obligationsReady;
   const result = buildHealthScore(healthInputs);
   const indicators = result.indicators.map(indicator => {
@@ -131,6 +139,6 @@ export function buildDashboardHealth(input: {
     headline: scoreReady ? result.headline : "Faltan datos completos para valorar tu salud financiera.",
     indicators: scoreReady ? indicators : [],
   };
-  return { health, healthInputs, scoreReady, baseline, savings, incomeStability, cashCushion, collection,
+  return { workspaceId: snapshot.workspace.id, currency: ctx.displayCurrency, today, collectionFrom: collectionFromDay, health, healthInputs, scoreReady, baseline, savings, incomeStability, cashCushion, collection,
     obligationsReady, unconvertedHistory, unconvertedCurrent: current.unconvertedCount, unconvertedPayables, unconvertedLiquid: liquid.unconvertedCount };
 }
