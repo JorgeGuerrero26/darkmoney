@@ -27,8 +27,9 @@ export function initialCategoryValue(categories: CategoryOverview[], category?: 
 const field = "h-12 w-full rounded-[10px] border border-white/10 bg-[#141311] px-4 text-sm text-ink outline-none placeholder:text-storm/60 focus:border-white/40";
 const row = "flex min-h-[54px] w-full items-center justify-between gap-4 border-b border-white/10 px-4 text-left text-sm last:border-0 hover:bg-white/[0.03]";
 
-export function CategoryEditorDialog({ category, categories, spendTypes, onClose, onSave }: {
+export function CategoryEditorDialog({ category, categories, spendTypes, onClose, onSave, disabled = false }: {
   category: CategoryOverview | null; categories: CategoryOverview[]; spendTypes: { id: number; name: string }[];
+  disabled?: boolean;
   onClose: () => void; onSave: (value: CategoryEditorValue) => Promise<void>;
 }) {
   const [value, setValue] = useState(() => initialCategoryValue(categories, category ?? undefined));
@@ -46,7 +47,7 @@ export function CategoryEditorDialog({ category, categories, spendTypes, onClose
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (savingRef.current) return;
+    if (savingRef.current || disabled) return;
     if (!value.name.trim()) { setError("Escribe el nombre de la categoría."); return; }
     if (value.parentId != null && !parentCandidates.some((item) => item.id === value.parentId)) { setError("Selecciona una categoría padre compatible o Ninguna."); setPanel("parent"); return; }
     savingRef.current = true;
@@ -80,7 +81,7 @@ export function CategoryEditorDialog({ category, categories, spendTypes, onClose
             <div><p className="mb-3 text-xs uppercase tracking-[0.12em] text-storm">Color</p><div className="flex flex-wrap gap-3">{colorOptions.map((color) => <button aria-label={`Color ${color}`} aria-pressed={value.color === color} className={`h-8 w-8 rounded-full border-2 ${value.color === color ? "border-white" : "border-transparent"}`} key={color} onClick={() => patch({ color })} style={{ backgroundColor: color }} type="button" />)}</div></div>
           </div>}
         </ModalBody>
-        {(panel === "main" || panel === "details") ? <ModalFooter><Button className="w-full" disabled={saving} type="submit">{saving ? "Guardando…" : category ? "Guardar cambios" : "Crear categoría"}</Button></ModalFooter> : null}
+        {(panel === "main" || panel === "details") ? <ModalFooter><Button className="w-full" disabled={saving || disabled} type="submit">{saving ? "Guardando…" : category ? "Guardar cambios" : "Crear categoría"}</Button></ModalFooter> : null}
       </form>
     </Modal>
     {discardOpen ? <UnsavedChangesDialog onDiscard={() => { setDiscardOpen(false); onClose(); }} onKeepEditing={() => setDiscardOpen(false)} /> : null}

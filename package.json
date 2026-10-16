@@ -50,6 +50,7 @@
     "test:recurring-income-parity": "node --experimental-strip-types scripts/test-recurring-income-parity.mjs",
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",
     "test:catalog-parity": "node scripts/test-catalog-parity.mjs",
+    "test:category-permissions": "node scripts/test-category-permissions.mjs",
     "test:workspace-sync": "node scripts/test-workspace-sync.mjs",
     "preview": "vite preview"
   },

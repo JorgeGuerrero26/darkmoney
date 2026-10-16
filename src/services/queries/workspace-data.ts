@@ -3205,12 +3205,11 @@ export function useCounterpartiesOverviewQuery(workspaceId?: number) {
   });
 }
 
-export function useCategoriesOverviewQuery(workspaceId?: number) {
+export function useCategoriesOverviewQuery(workspaceId?: number, userId?: string) {
   return useQuery({
-    queryKey: ["categories-overview", workspaceId ?? null],
+    queryKey: ["categories-overview", workspaceId ?? null, userId],
     queryFn: () => fetchCategoriesOverview(workspaceId as number),
-    enabled: Boolean(workspaceId),
-    placeholderData: (previousData) => previousData,
+    enabled: Boolean(workspaceId && userId),
   });
 }
 
