@@ -497,7 +497,6 @@ type UiPrefsRow = {
 
 type NotificationPreferencesRow = {
   in_app_enabled: boolean;
-  push_enabled: boolean;
   email_enabled: boolean;
   smart_reads: Record<string, string> | null;
   ui_prefs: UiPrefsRow | null;
@@ -527,7 +526,6 @@ export type UiPrefs = {
 
 export type NotificationPreferences = {
   inAppEnabled: boolean;
-  pushEnabled: boolean;
   emailEnabled: boolean;
   smartReads: Record<string, string>;
   uiPrefs: UiPrefs | null;
@@ -2727,11 +2725,11 @@ async function fetchNotificationPreferences(userId: string) {
   }
 
   let { data, error } = await querySelect(
-    "in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs, muted_kinds",
+    "in_app_enabled, email_enabled, smart_reads, ui_prefs, muted_kinds",
   );
 
   if (error && isMissingRelationError(error, "muted_kinds")) {
-    ({ data, error } = await querySelect("in_app_enabled, push_enabled, email_enabled, smart_reads, ui_prefs"));
+    ({ data, error } = await querySelect("in_app_enabled, email_enabled, smart_reads, ui_prefs"));
   }
 
   if (error) {
@@ -2746,7 +2744,6 @@ async function fetchNotificationPreferences(userId: string) {
 
   return {
     inAppEnabled: row.in_app_enabled,
-    pushEnabled: row.push_enabled,
     emailEnabled: row.email_enabled,
     smartReads: (row.smart_reads as Record<string, string>) ?? {},
     uiPrefs: row.ui_prefs
@@ -3880,22 +3877,30 @@ export function useSaveNotificationPreferencesMutation(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: Pick<NotificationPreferences, "inAppEnabled" | "emailEnabled" | "pushEnabled">) => {
+    mutationFn: async (input: Pick<NotificationPreferences, "inAppEnabled" | "emailEnabled">) => {
       if (!userId) {
         throw new Error("No hay sesion activa.");
       }
 
       const client = getClient();
-      const { error } = await client.from("notification_preferences").upsert({
-        user_id: userId,
+      const { data: existing, error: readError } = await client.from("notification_preferences").select("user_id").eq("user_id", userId).maybeSingle();
+      if (readError) throw readError;
+      if (existing && existing.user_id !== userId) throw new Error("Las preferencias no pertenecen a esta sesión.");
+      const patch = {
         in_app_enabled: input.inAppEnabled,
-        push_enabled: input.pushEnabled,
         email_enabled: input.emailEnabled,
-      });
+      };
+      // Explicit partial UPDATE preserves the device channel and its topic flags.
+      // An INSERT race fails rather than replacing a newly registered mobile row.
+      const request = existing
+        ? client.from("notification_preferences").update(patch).eq("user_id", userId)
+        : client.from("notification_preferences").insert({ user_id: userId, ...patch });
+      const { data: saved, error } = await request.select("user_id").maybeSingle();
 
       if (error) {
         throw error;
       }
+      if (!saved) throw new Error("Las preferencias cambiaron durante el guardado. Actualiza antes de intentarlo otra vez.");
 
       return input;
     },

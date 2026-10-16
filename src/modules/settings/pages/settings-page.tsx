@@ -33,6 +33,7 @@ import {
   useWorkspaceSnapshotQuery,
 } from "../../../services/queries/workspace-data";
 import type { WorkspaceRole } from "../../../types/domain";
+import { NotificationDeliveryPreferences } from "../components/notification-delivery-preferences";
 
 const profileCurrencyOptions = [
   { value: "PEN", label: "PEN", description: "Sol peruano" },
@@ -226,6 +227,7 @@ function getFriendlyBillingStatus(status?: string | null) {
 
 function NotificationPreferenceCard({
   checked,
+  disabled = false,
   description,
   detail,
   isLive,
@@ -233,6 +235,7 @@ function NotificationPreferenceCard({
   title,
 }: {
   checked: boolean;
+  disabled?: boolean;
   description: string;
   detail: string;
   isLive: boolean;
@@ -251,16 +254,16 @@ function NotificationPreferenceCard({
         <p className="mt-2 text-sm leading-7 text-storm">{description}</p>
         <p className="mt-2 text-xs uppercase tracking-[0.18em] text-storm/75">{detail}</p>
       </div>
-      <input checked={checked} className="sr-only" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
+      <input checked={checked} disabled={disabled} className="peer sr-only" onChange={(event) => onChange(event.target.checked)} type="checkbox" />
       <span
         aria-hidden="true"
-        className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 rounded-full border transition duration-200 ${
-          checked ? "border-pine/40 bg-pine/25" : "border-white/12 bg-white/[0.05]"
+        className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors duration-150 motion-reduce:transition-none peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink peer-disabled:opacity-50 ${
+          checked ? "border-ink bg-ink" : "border-white/20 bg-white/[0.05]"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-all duration-200 ${
-            checked ? "left-[1.375rem]" : "left-0.5"
+          className={`absolute top-0.5 h-6 w-6 rounded-full transition-transform duration-150 motion-reduce:transition-none ${
+            checked ? "translate-x-[1.375rem] bg-void" : "translate-x-0.5 bg-ink"
           }`}
         />
       </span>
@@ -553,7 +556,6 @@ export function SettingsPage() {
   const [timezone, setTimezone] = useState(profile?.timezone ?? "America/Lima");
   const [inAppEnabled, setInAppEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [billingFeedbackMessage, setBillingFeedbackMessage] = useState("");
@@ -670,14 +672,13 @@ export function SettingsPage() {
   }, [profile]);
 
   useEffect(() => {
-    if (!preferencesQuery.data) {
+    if (!preferencesQuery.isSuccess) {
       return;
     }
 
-    setInAppEnabled(preferencesQuery.data.inAppEnabled);
-    setEmailEnabled(preferencesQuery.data.emailEnabled);
-    setPushEnabled(preferencesQuery.data.pushEnabled);
-  }, [preferencesQuery.data]);
+    setInAppEnabled(preferencesQuery.data?.inAppEnabled ?? true);
+    setEmailEnabled(preferencesQuery.data?.emailEnabled ?? false);
+  }, [preferencesQuery.data, preferencesQuery.isSuccess]);
 
   useEffect(() => {
     const query = new URLSearchParams(location.search);
@@ -767,21 +768,21 @@ export function SettingsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting || savePreferencesMutation.isPending || !user?.id || !hasSettingsChanges || hasNotificationChanges && (!preferencesQuery.isSuccess || preferencesQuery.isFetching)) return;
     setFeedbackMessage("");
     setErrorMessage("");
     setIsSubmitting(true);
 
     try {
-      await saveProfile({
+      if (hasProfileChanges) await saveProfile({
         fullName,
         baseCurrencyCode,
         timezone,
       });
 
-      await savePreferencesMutation.mutateAsync({
+      if (hasNotificationChanges) await savePreferencesMutation.mutateAsync({
         inAppEnabled,
         emailEnabled,
-        pushEnabled,
       });
 
       await refetchWorkspaces();
@@ -792,7 +793,7 @@ export function SettingsPage() {
       setFeedbackMessage("Configuración actualizada correctamente.");
     } catch (error) {
       setErrorMessage(
-        getQueryErrorMessage(error, "No pudimos guardar tu configuración. Intentá de nuevo."),
+        getQueryErrorMessage(error, "No pudimos guardar tu configuración. Intenta de nuevo."),
       );
     } finally {
       setIsSubmitting(false);
@@ -1061,10 +1062,9 @@ export function SettingsPage() {
         timezone !== profile.timezone),
   );
   const hasNotificationChanges = Boolean(
-    preferencesQuery.data &&
-      (inAppEnabled !== preferencesQuery.data.inAppEnabled ||
-        emailEnabled !== preferencesQuery.data.emailEnabled ||
-        pushEnabled !== preferencesQuery.data.pushEnabled),
+    preferencesQuery.isSuccess &&
+      (inAppEnabled !== (preferencesQuery.data?.inAppEnabled ?? true) ||
+        emailEnabled !== (preferencesQuery.data?.emailEnabled ?? false)),
   );
   const hasSettingsChanges = hasProfileChanges || hasNotificationChanges;
   const isCreatingSharedWorkspace = createSharedWorkspaceMutation.isPending;
@@ -1391,6 +1391,7 @@ export function SettingsPage() {
               <div className="grid">
                 <NotificationPreferenceCard
                   checked={inAppEnabled}
+                  disabled={isSaving || preferencesQuery.isFetching}
                   description="Muestra la bandeja y un contador neutro con las acciones que requieren tu atención."
                   detail="Este canal ya funciona hoy dentro de la web."
                   isLive
@@ -1399,25 +1400,19 @@ export function SettingsPage() {
                 />
                 <NotificationPreferenceCard
                   checked={emailEnabled}
+                  disabled={isSaving || preferencesQuery.isFetching}
                   description="Guarda si quieres recibir correos cuando venzan suscripciones, cobros esperados, pagos pendientes u otras alertas importantes."
                   detail="Por ahora guardamos tu preferencia. Los correos automáticos se están preparando."
                   isLive={false}
                   onChange={setEmailEnabled}
                   title="Recordatorios por correo"
                 />
-                <NotificationPreferenceCard
-                  checked={pushEnabled}
-                  description="Reserva tu preferencia para futuras notificaciones push en navegador o app móvil, sin depender de que tengas abierta la bandeja."
-                  detail="Todavía no enviamos push reales. Esta opción queda guardada para activarla después."
-                  isLive={false}
-                  onChange={setPushEnabled}
-                  title="Notificaciones push"
-                />
                 <p className="border-t border-white/[0.09] py-5 text-sm leading-7 text-storm">
-                  Hoy la funcionalidad activa es la bandeja dentro de la app. Correo y push ya se guardan en tu perfil para usarlos cuando se habiliten esos canales.
+                  La bandeja web y los recordatorios por correo se configuran por separado de los avisos del teléfono.
                 </p>
               </div>
             )}
+            <NotificationDeliveryPreferences userId={user?.id} />
           </div>
         </section>
         </section>
@@ -1436,7 +1431,7 @@ export function SettingsPage() {
             </span>
             <Button
               className="min-w-40 [&:disabled]:bg-[#252320] [&:disabled]:text-[#6b6459] [&:disabled]:opacity-100"
-              disabled={isSaving || !hasSettingsChanges}
+              disabled={isSaving || !hasSettingsChanges || hasNotificationChanges && (!preferencesQuery.isSuccess || preferencesQuery.isFetching)}
               type="submit"
             >
               {isSaving ? "Guardando..." : "Guardar cambios"}
