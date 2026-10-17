@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   defaultRecurringIncomeTableFilters,
+  incomeFrequencyValues,
+  incomeStatusValues,
   type RecurringIncomeTableFilters,
 } from "../lib/recurring-income-filters";
 
@@ -15,19 +17,24 @@ export function useRecurringIncomeFilters() {
 
   const filters = useMemo<RecurringIncomeTableFilters>(() => {
     const defaults = defaultRecurringIncomeTableFilters();
-    const freqParam = searchParams.get("freq");
-    const statusParam = searchParams.get("status");
+    const frequencies = [...new Set(searchParams.getAll("freq").flatMap(value => value.split(",")))].filter((value): value is RecurringIncomeTableFilters["selectedFrequencies"][number] => incomeFrequencyValues.some(valid => valid === value));
+    const statuses = [...new Set(searchParams.getAll("status").flatMap(value => value.split(",")))].filter((value): value is RecurringIncomeTableFilters["selectedStatuses"][number] => incomeStatusValues.some(valid => valid === value));
+    const readId = (key: string) => { const raw = searchParams.get(key); const value = raw && /^\d+$/.test(raw) ? Number(raw) : null; return Number.isSafeInteger(value) && value! > 0 ? value : null; };
 
     return {
       name: searchParams.get("q") ?? defaults.name,
       payer: searchParams.get("payer") ?? defaults.payer,
-      frequency: (freqParam as RecurringIncomeTableFilters["frequency"]) || "all",
-      status: statusParam === "active" || statusParam === "paused" || statusParam === "cancelled" ? statusParam : "all",
-      selectedStatuses: statusParam?.includes(",") ? statusParam.split(",").filter((value): value is "active" | "paused" | "cancelled" => ["active", "paused", "cancelled"].includes(value)) : [],
+      frequency: frequencies.length === 1 ? frequencies[0] : "all",
+      selectedFrequencies: frequencies.length > 1 ? frequencies : [],
+      status: statuses.length === 1 ? statuses[0] : "all",
+      selectedStatuses: statuses.length > 1 ? statuses : [],
       pinnedOnly: searchParams.get("pinned") === "1",
       upcomingOnly: searchParams.get("upcoming") === "1",
       category: searchParams.get("cat") ?? defaults.category,
       account: searchParams.get("account") ?? defaults.account,
+      payerId: readId("payer_id"),
+      categoryId: readId("category_id"),
+      accountId: readId("account_id"),
       amount: searchParams.get("amount") ?? defaults.amount,
       nextExpectedDateFrom: searchParams.get("from") ?? defaults.nextExpectedDateFrom,
       nextExpectedDateTo: searchParams.get("to") ?? defaults.nextExpectedDateTo,
@@ -38,23 +45,29 @@ export function useRecurringIncomeFilters() {
 
   const writeFiltersToParams = useCallback(
     (next: RecurringIncomeTableFilters, page: number) => {
-      const params = new URLSearchParams();
+      // Preserve resource/notification destinations and other non-filter parameters.
+      const params = new URLSearchParams(searchParams);
+      for (const key of ["q", "payer", "freq", "status", "pinned", "upcoming", "cat", "account", "payer_id", "category_id", "account_id", "amount", "from", "to", "page"]) params.delete(key);
       if (next.name.trim()) params.set("q", next.name);
       if (next.payer.trim()) params.set("payer", next.payer);
-      if (next.frequency !== "all") params.set("freq", next.frequency);
+      if (next.selectedFrequencies.length) params.set("freq", next.selectedFrequencies.join(","));
+      else if (next.frequency !== "all") params.set("freq", next.frequency);
       if (next.selectedStatuses.length) params.set("status", next.selectedStatuses.join(","));
       else if (next.status !== "all") params.set("status", next.status);
       if (next.pinnedOnly) params.set("pinned", "1");
       if (next.upcomingOnly) params.set("upcoming", "1");
       if (next.category.trim()) params.set("cat", next.category);
       if (next.account.trim()) params.set("account", next.account);
+      if (next.payerId !== null) params.set("payer_id", String(next.payerId));
+      if (next.categoryId !== null) params.set("category_id", String(next.categoryId));
+      if (next.accountId !== null) params.set("account_id", String(next.accountId));
       if (next.amount.trim()) params.set("amount", next.amount);
       if (next.nextExpectedDateFrom) params.set("from", next.nextExpectedDateFrom);
       if (next.nextExpectedDateTo) params.set("to", next.nextExpectedDateTo);
       if (page > 1) params.set("page", String(page));
       setSearchParams(params, { replace: true });
     },
-    [setSearchParams],
+    [searchParams, setSearchParams],
   );
 
   const setFilters = useCallback(

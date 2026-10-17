@@ -6,7 +6,6 @@ import {
   MoreVertical,
   Plus,
   RefreshCw,
-  SlidersHorizontal,
 } from "lucide-react";
 import type {
   FormEvent,
@@ -30,7 +29,6 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type {
   AccountSummary,
-  RecurringIncomeFrequency,
   RecurringIncomeStatus,
   RecurringIncomeSummary,
 } from "../../../types/domain";
@@ -49,10 +47,8 @@ import {
 import { RecurringIncomeList } from "../components/recurring-income-list";
 import { useRecurringIncomeFilters } from "../hooks/use-recurring-income-filters";
 import {
-  frequencyOptions,
   getFrequencyOption,
   getStatusOption,
-  statusOptions,
 } from "../lib/recurring-income-presenters";
 import { advanceNextExpectedDate, summarizeRecurringIncomeMonthly, pendingArrivalDates } from "../lib/recurring-income-parity";
 import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
@@ -60,30 +56,10 @@ import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
 import { confirmIncomeWrite, isIncomeWriteRejected } from "../lib/income-write-result";
 import { IncomeHistoryDialog } from "../components/income-history-dialog";
+import { IncomeFiltersToolbar } from "../components/income-filters-toolbar";
+import { defaultRecurringIncomeTableFilters, filterRecurringIncome, isRecurringIncomeTableFilterActive, type RecurringIncomeTableFilterField } from "../lib/recurring-income-filters";
 
 const RECURRING_INCOME_PAGE_SIZE = 50;
-
-const statusFilterPickerOptions: PickerOption[] = [
-  { value: "all", label: "Todos los estados", description: "No filtra por estado.", leadingLabel: "TO", searchText: "todos estados" },
-  ...statusOptions.map((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    searchText: `${option.value} ${option.label}`,
-  })),
-];
-
-const frequencyFilterPickerOptions: PickerOption[] = [
-  { value: "all", label: "Todas las frecuencias", description: "No filtra por frecuencia.", leadingLabel: "TO", searchText: "todas frecuencias" },
-  ...frequencyOptions.map((option) => ({
-    value: option.value,
-    label: option.label,
-    description: option.description,
-    leadingLabel: option.leadingLabel,
-    searchText: `${option.value} ${option.label}`,
-  })),
-];
 
 type EditorMode = "create" | "edit";
 
@@ -349,7 +325,6 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
   useSuccessToast(feedback, {
     clear: () => setFeedback(null),
   });
-  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -376,7 +351,6 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     filters: incomeFilters,
     currentPage,
     setCurrentPage,
-    updateFilter: updateIncomeFilter,
     updateFilters: updateIncomeFilters,
     clearFilters: clearIncomeFilters,
   } = useRecurringIncomeFilters();
@@ -438,72 +412,10 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     downloadRecurringIncomeCSV(rows.current.filter(item => ids.has(item.id)), filename);
   }
 
-  const hasActiveFilters =
-    incomeFilters.name.trim() !== "" ||
-    incomeFilters.payer.trim() !== "" ||
-    incomeFilters.category.trim() !== "" ||
-    incomeFilters.account.trim() !== "" ||
-    incomeFilters.amount.trim() !== "" ||
-    incomeFilters.nextExpectedDateFrom !== "" ||
-    incomeFilters.nextExpectedDateTo !== "" ||
-    incomeFilters.frequency !== "all" ||
-    incomeFilters.status !== "all" ||
-    incomeFilters.selectedStatuses.length > 0 ||
-    incomeFilters.pinnedOnly ||
-    incomeFilters.upcomingOnly;
+  const hasActiveFilters = Object.keys(defaultRecurringIncomeTableFilters()).some(field => isRecurringIncomeTableFilterActive(incomeFilters, field as RecurringIncomeTableFilterField));
   const filteredIncome = useMemo(() => {
-    let result = recurringIncome.filter((r) => !hiddenIds.has(r.id));
-    const normalizedName = incomeFilters.name.trim().toLowerCase();
-    const normalizedPayer = incomeFilters.payer.trim().toLowerCase();
-    const normalizedCategory = incomeFilters.category.trim().toLowerCase();
-    const normalizedAccount = incomeFilters.account.trim().toLowerCase();
-    const normalizedAmount = incomeFilters.amount.trim();
-    if (normalizedName) {
-      result = result.filter(
-        (r) =>
-          r.name.toLowerCase().includes(normalizedName) ||
-          (r.payer ?? "").toLowerCase().includes(normalizedName) ||
-          (r.categoryName ?? "").toLowerCase().includes(normalizedName) ||
-          (r.accountName ?? "").toLowerCase().includes(normalizedName) ||
-          (r.description ?? "").toLowerCase().includes(normalizedName) ||
-          (r.notes ?? "").toLowerCase().includes(normalizedName),
-      );
-    }
-    if (normalizedPayer) {
-      result = result.filter((r) => (r.payer ?? "").toLowerCase().includes(normalizedPayer));
-    }
-    if (normalizedCategory) {
-      result = result.filter((r) => (r.categoryName ?? "").toLowerCase().includes(normalizedCategory));
-    }
-    if (normalizedAccount) {
-      result = result.filter((r) => (r.accountName ?? "").toLowerCase().includes(normalizedAccount));
-    }
-    if (incomeFilters.frequency !== "all") {
-      result = result.filter((r) => r.frequency === incomeFilters.frequency);
-    }
-    if (incomeFilters.selectedStatuses.length > 0) {
-      result = result.filter((r) => incomeFilters.selectedStatuses.includes(r.status));
-    } else if (incomeFilters.status !== "all") {
-      result = result.filter((r) => r.status === incomeFilters.status);
-    }
-    if (incomeFilters.pinnedOnly) result = result.filter((r) => r.isPinned);
-    if (incomeFilters.upcomingOnly) {
-      const today = todayDateInputValue();
-      const limit = new Date(`${today}T12:00:00Z`);
-      limit.setUTCDate(limit.getUTCDate() + 30);
-      const through = limit.toISOString().slice(0, 10);
-      result = result.filter((r) => r.nextExpectedDate >= today && r.nextExpectedDate <= through);
-    }
-    if (normalizedAmount) {
-      result = result.filter((r) => String(r.amount).includes(normalizedAmount));
-    }
-    if (incomeFilters.nextExpectedDateFrom) {
-      result = result.filter((r) => r.nextExpectedDate >= incomeFilters.nextExpectedDateFrom);
-    }
-    if (incomeFilters.nextExpectedDateTo) {
-      result = result.filter((r) => r.nextExpectedDate <= incomeFilters.nextExpectedDateTo);
-    }
     const today = todayDateInputValue();
+    const result = filterRecurringIncome(recurringIncome.filter(r => !hiddenIds.has(r.id)), incomeFilters, today);
     const rank = (item: RecurringIncomeSummary) => item.status === "active" ? (item.nextExpectedDate < today ? 0 : 1) : item.status === "paused" ? 2 : 3;
     return [...result].sort((a, b) => rank(a) - rank(b) || Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned)) || a.nextExpectedDate.localeCompare(b.nextExpectedDate));
   }, [hiddenIds, incomeFilters, recurringIncome]);
@@ -596,39 +508,6 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
   const activeInFilter = filteredIncome.filter((item) => item.status === "active").length;
   const monthlySummary = summarizeRecurringIncomeMonthly(filteredIncome, baseCurrencyCode);
   const missedArrivals = recurringIncome.reduce((sum, item) => sum + pendingArrivalDates(item, todayDate).length, 0);
-  const recurringIncomePayers = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          recurringIncome
-            .map((income) => income.payer?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [recurringIncome],
-  );
-  const recurringIncomeCategories = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          recurringIncome
-            .map((income) => income.categoryName?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [recurringIncome],
-  );
-  const recurringIncomeAccounts = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          recurringIncome
-            .map((income) => income.accountName?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [recurringIncome],
-  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -991,30 +870,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
         </div>
       </section>
 
-      <section aria-label="Filtros de ingresos fijos">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,0.75fr)_auto]">
-          <input aria-label="Buscar ingresos fijos" className="field-dark !h-14" onChange={(event) => updateIncomeFilter("name", event.target.value)} placeholder="Buscar por nombre, pagador o categoría..." type="search" value={incomeFilters.name} />
-          <SearchablePicker appearance="toolbar" emptyMessage="No hay estados." onChange={(value) => { if (value !== "multiple") updateIncomeFilters({ status: value as "all" | RecurringIncomeStatus, selectedStatuses: [] }); }} options={incomeFilters.selectedStatuses.length > 1 ? [{ value: "multiple", label: "Varios estados", description: "Filtra por los estados marcados abajo.", leadingLabel: "VA" }, ...statusFilterPickerOptions] : statusFilterPickerOptions} placeholderDescription="Estado" placeholderLabel="Todos los estados" queryPlaceholder="Buscar estado..." showSearch={false} value={incomeFilters.selectedStatuses.length > 1 ? "multiple" : incomeFilters.selectedStatuses[0] ?? incomeFilters.status} />
-          <SearchablePicker appearance="toolbar" emptyMessage="No hay frecuencias." onChange={(value) => updateIncomeFilter("frequency", value as "all" | RecurringIncomeFrequency)} options={frequencyFilterPickerOptions} placeholderDescription="Frecuencia" placeholderLabel="Todas las frecuencias" queryPlaceholder="Buscar frecuencia..." showSearch={false} value={incomeFilters.frequency} />
-          <button aria-expanded={showMoreFilters} className="flex h-14 items-center justify-center gap-2 rounded-xl border border-white/[0.1] px-4 text-sm text-storm transition hover:text-ink" onClick={() => setShowMoreFilters((value) => !value)} type="button"><SlidersHorizontal className="h-4 w-4" />Más filtros</button>
-        </div>
-        {showMoreFilters ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            <fieldset className="flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.1] px-4 py-3 sm:col-span-2 xl:col-span-3"><legend className="px-1 text-xs text-storm">Estados combinados</legend>{statusOptions.map((option) => { const checked = incomeFilters.selectedStatuses.length ? incomeFilters.selectedStatuses.includes(option.value) : incomeFilters.status === option.value; return <label className="flex items-center gap-2 text-sm text-ink" key={option.value}><input checked={checked} className="accent-[#e5e0d6]" onChange={() => { const current = incomeFilters.selectedStatuses.length ? incomeFilters.selectedStatuses : incomeFilters.status === "all" ? [] : [incomeFilters.status]; const next = checked ? current.filter((value) => value !== option.value) : [...current, option.value]; updateIncomeFilters({ status: "all", selectedStatuses: next }); }} type="checkbox" />{option.label}</label>; })}</fieldset>
-            <label className="flex h-14 items-center gap-3 rounded-xl border border-white/[0.1] px-4 text-sm text-ink"><input checked={incomeFilters.pinnedOnly} className="accent-[#e5e0d6]" onChange={(event) => updateIncomeFilter("pinnedOnly", event.target.checked)} type="checkbox" />Solo fijados</label>
-            <label className="flex h-14 items-center gap-3 rounded-xl border border-white/[0.1] px-4 text-sm text-ink"><input checked={incomeFilters.upcomingOnly} className="accent-[#e5e0d6]" onChange={(event) => updateIncomeFilter("upcomingOnly", event.target.checked)} type="checkbox" />Próximos 30 días</label>
-            <SearchablePicker appearance="toolbar" emptyMessage="No hay pagadores." onChange={(value) => updateIncomeFilter("payer", value)} options={[{ value: "", label: "Todos los pagadores", description: "", leadingLabel: "—" }, ...recurringIncomePayers.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Pagador" placeholderLabel="Todos los pagadores" queryPlaceholder="Buscar pagador..." value={incomeFilters.payer} />
-            <SearchablePicker appearance="toolbar" emptyMessage="No hay categorías." onChange={(value) => updateIncomeFilter("category", value)} options={[{ value: "", label: "Todas las categorías", description: "", leadingLabel: "—" }, ...recurringIncomeCategories.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Categoría" placeholderLabel="Todas las categorías" queryPlaceholder="Buscar categoría..." value={incomeFilters.category} />
-            <SearchablePicker appearance="toolbar" emptyMessage="No hay cuentas." onChange={(value) => updateIncomeFilter("account", value)} options={[{ value: "", label: "Todas las cuentas", description: "", leadingLabel: "—" }, ...recurringIncomeAccounts.map((value) => ({ value, label: value, description: "", leadingLabel: value.slice(0, 2).toUpperCase() }))]} placeholderDescription="Cuenta" placeholderLabel="Todas las cuentas" queryPlaceholder="Buscar cuenta..." value={incomeFilters.account} />
-            <input aria-label="Filtrar por monto" className="field-dark !h-14" onChange={(event) => updateIncomeFilter("amount", event.target.value)} placeholder="Monto" type="search" value={incomeFilters.amount} />
-            <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
-              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Llegada desde</p><DatePickerField appearance="compact" onChange={(value) => updateIncomeFilter("nextExpectedDateFrom", value)} value={incomeFilters.nextExpectedDateFrom} /></div>
-              <div><p className="mb-1.5 text-[13px] font-medium text-storm">Llegada hasta</p><DatePickerField appearance="compact" onChange={(value) => updateIncomeFilter("nextExpectedDateTo", value)} value={incomeFilters.nextExpectedDateTo} /></div>
-            </div>
-          </div>
-        ) : null}
-        {hasActiveFilters ? <button className="mt-2 text-xs text-storm underline-offset-4 hover:text-ink hover:underline" onClick={clearIncomeFilters} type="button">Limpiar filtros</button> : null}
-      </section>
+      <IncomeFiltersToolbar filters={incomeFilters} items={recurringIncome} onChange={updateIncomeFilters} onClear={clearIncomeFilters} />
 
       <section aria-label="Resumen de ingresos filtrados" className="module-summary">
         <span><span className="font-semibold text-ink">{filteredIncome.length}</span> {filteredIncome.length === 1 ? "ingreso" : "ingresos"} en esta vista{activeInFilter !== filteredIncome.length ? ` · ${activeInFilter} activos` : ""}</span>

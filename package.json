@@ -64,6 +64,7 @@
     "test:recurring-income-monthly": "node --experimental-strip-types scripts/test-recurring-income-monthly.mjs",
     "test:recurring-income-write-results": "node scripts/test-recurring-income-write-results.mjs",
     "test:recurring-income-history": "node scripts/test-recurring-income-history.mjs",
+    "test:recurring-income-filters": "node scripts/test-recurring-income-filters.mjs",
     "test:workspace-sync": "node scripts/test-workspace-sync.mjs",
     "preview": "vite preview"
   },
