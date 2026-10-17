@@ -11,7 +11,7 @@ import {
 import type {
   FormEvent,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
@@ -57,6 +57,9 @@ import {
   statusOptions,
 } from "../lib/recurring-income-presenters";
 import { advanceNextExpectedDate, monthlyEquivalent, pendingArrivalDates } from "../lib/recurring-income-parity";
+import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
+import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
+import { validateArrivalInput } from "../lib/arrival-input";
 
 const RECURRING_INCOME_PAGE_SIZE = 50;
 
@@ -89,8 +92,7 @@ function toDateInputValue(value: string) {
 }
 
 function todayDateInputValue() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
 }
 
 function parseOptionalInteger(value: string) {
@@ -183,13 +185,18 @@ function ConfirmArrivalDialog({
   const [accountId, setAccountId] = useState(income.accountId ? String(income.accountId) : "");
   const [baseChangeMode, setBaseChangeMode] = useState<"once" | "forever">("once");
   const [error, setError] = useState<string | null>(null);
-  const accountOptions = accounts.filter((item) => !item.isArchived || String(item.id) === accountId).map<PickerOption>((item) => ({
+  const write = useFinancialWriteGuard(`${income.workspaceId}:${income.id}:arrival`);
+  const initialIncome = useRef(income), staleLatch = useRef(false);
+  if (["id", "workspaceId", "nextExpectedDate", "currencyCode", "amount", "frequency", "intervalCount", "dayOfMonth", "dayOfWeek", "status", "accountId", "categoryId", "payerPartyId", "name", "description"].some(key => initialIncome.current[key as keyof RecurringIncomeSummary] !== income[key as keyof RecurringIncomeSummary])) staleLatch.current = true;
+  const stale = staleLatch.current, busy = isSaving || write.pending;
+  const accountOptions = accounts.filter(item => item.workspaceId === income.workspaceId && !item.isArchived && item.currencyCode === income.currencyCode).map<PickerOption>((item) => ({
     value: String(item.id), label: item.name, description: item.currencyCode, leadingLabel: item.currencyCode,
   }));
   const nextExpectedDate = advanceNextExpectedDate(income);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || write.blocked || stale) return;
     if (!actualDate) {
       setPanel("main");
       setError("Indica la fecha real de llegada.");
@@ -207,8 +214,9 @@ function ConfirmArrivalDialog({
       return;
     }
     setError(null);
+    let attempt: ReturnType<typeof write.begin> = null;
     try {
-      await onConfirm({
+      const input = validateArrivalInput(income, accounts, {
       recurringIncomeId: income.id,
       expectedDate: income.nextExpectedDate,
       actualDate,
@@ -225,17 +233,23 @@ function ConfirmArrivalDialog({
       notes,
       nextExpectedDate,
       });
+      attempt = write.begin(); if (!attempt) return;
+      await onConfirm(input);
+      write.confirm(attempt);
     } catch (failure) {
-      setError(getQueryErrorMessage(failure, "Intenta nuevamente."));
+      if (attempt && !write.isCurrent(attempt)) return;
+      if (attempt) write.fail(attempt);
+      setError(`${getQueryErrorMessage(failure)}${attempt ? " No repitas la llegada: cierra y comprueba el historial, Movimientos y la próxima fecha; alguna fase podría haberse guardado." : ""}`);
     }
   }
 
   return (
-    <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-arrival-title" onClose={onClose}>
+    <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={busy} labelledBy="income-arrival-title" onClose={() => { if (!busy) onClose(); }}>
       <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={handleSubmit}>
-        <ResourceEditorHeader disabled={isSaving} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={onClose} title={panel === "main" ? "Confirmar llegada" : "Llegó distinto"} titleId="income-arrival-title" />
-        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
+        <ResourceEditorHeader disabled={busy} onBack={panel === "details" ? () => setPanel("main") : undefined} onClose={onClose} title={panel === "main" ? "Confirmar llegada" : "Llegó distinto"} titleId="income-arrival-title" />
+        <fieldset className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7" disabled={busy || write.blocked || stale}>
           {error ? <FormFeedbackBanner className="mb-5" description={error} title="Revisa la fecha" tone="error" /> : null}
+          {stale ? <p className="mb-4 text-sm text-storm" role="alert">El ingreso o la próxima llegada cambiaron. Cierra y revisa antes de confirmar.</p> : null}
           {panel === "main" ? (
             <div className="space-y-5">
               <div>
@@ -254,8 +268,8 @@ function ConfirmArrivalDialog({
               <Field label="Notas"><Textarea onChange={(event) => setNotes(event.target.value)} placeholder="Contexto de esta llegada" value={notes} /></Field>
             </div>
           )}
-        </div>
-        <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? "Confirmando..." : "Confirmar llegada"}</Button></footer>
+        </fieldset>
+        <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={busy || write.blocked || stale} type="submit">{write.status === "uncertain" ? "Comprueba la llegada en el historial" : stale ? "Revisa la próxima llegada" : busy ? "Confirmando..." : "Confirmar llegada"}</Button></footer>
       </form>
     </Modal>
   );
@@ -274,17 +288,23 @@ function HistoryDialog({
   onClose,
   onConfirm,
   onOpenMovement,
+  canWrite,
+  isPending,
+  userId,
 }: {
   income: RecurringIncomeSummary;
   workspaceId: number;
   onClose: () => void;
   onConfirm: (date: string) => void;
   onOpenMovement: (movementId: number) => void;
+  canWrite: boolean;
+  isPending: boolean;
+  userId?: string;
 }) {
   const [view, setView] = useState<"history" | "analytics">("history");
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<"all" | "on_time" | "late">("all");
-  const occurrencesQuery = useRecurringIncomeOccurrencesQuery(workspaceId, income.id);
+  const occurrencesQuery = useRecurringIncomeOccurrencesQuery(workspaceId, income.id, userId);
   const occurrences = occurrencesQuery.data ?? [];
   const pending = pendingArrivalDates(income, todayDateInputValue());
   const received = occurrences.reduce((sum, row) => sum + row.amount, 0);
@@ -321,7 +341,7 @@ function HistoryDialog({
           <div className="flex gap-2 text-xs">{(["all", "on_time", "late"] as const).map((filter) => <button aria-pressed={timelineFilter === filter} className={`rounded-lg border px-3 py-1.5 ${timelineFilter === filter ? "border-white/50 text-ink" : "border-white/[0.08] text-storm"}`} key={filter} onClick={() => setTimelineFilter(filter)} type="button">{filter === "all" ? "Todas" : filter === "on_time" ? "A tiempo" : "Con demora"}</button>)}</div>
           <div className="divide-y divide-white/[0.08]">{filteredTimeline.slice(0, 20).map((row) => <div className="flex justify-between gap-4 py-3 text-sm" key={row.id}><span className="text-storm">{formatDate(row.actualDate ?? row.expectedDate)} · {getOccurrenceStatusLabel(row.status)}</span><span className="tabular-nums text-ink">{formatCurrency(row.amount, row.currencyCode)}</span></div>)}{filteredTimeline.length === 0 ? <p className="py-3 text-sm text-storm">No hay llegadas en este grupo.</p> : null}</div>
         </div> : occurrencesQuery.isLoading ? <div className="space-y-2 py-4">{Array.from({ length: 3 }).map((_, index) => <div className="h-16 animate-pulse rounded-lg bg-white/[0.04]" key={index} />)}</div>
-        : <>{pending.map((date, index) => <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-3" key={date}><div><p className="text-sm font-medium text-ink">{formatDate(date)}</p><p className="text-xs text-storm">{index === 0 ? "Sin confirmar · la más antigua" : `Sin confirmar · después del ${formatDate(pending[index - 1])}`}</p></div>{index === 0 ? <Button onClick={() => onConfirm(date)} variant="secondary">Anotar llegada</Button> : null}</div>)}{occurrences.length === 0 && pending.length === 0 ? <p className="py-6 text-sm text-storm">Aún no hay llegadas para mostrar.</p> : null}{occurrences.map((occurrence) => (
+        : <>{pending.map((date, index) => <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-3" key={date}><div><p className="text-sm font-medium text-ink">{formatDate(date)}</p><p className="text-xs text-storm">{index === 0 ? "Sin confirmar · la más antigua" : `Sin confirmar · después del ${formatDate(pending[index - 1])}`}</p></div>{canWrite && index === 0 ? <Button disabled={isPending} onClick={() => onConfirm(date)} variant="secondary">Anotar llegada</Button> : null}</div>)}{occurrences.length === 0 && pending.length === 0 ? <p className="py-6 text-sm text-storm">Aún no hay llegadas para mostrar.</p> : null}{occurrences.map((occurrence) => (
           <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-4 last:border-0" key={occurrence.id}>
             <div className="min-w-0">
               <p className="text-sm font-medium text-ink">{formatDate(occurrence.expectedDate)}</p>
@@ -385,11 +405,23 @@ function downloadRecurringIncomeCSV(items: RecurringIncomeSummary[], filename: s
 }
 
 export function RecurringIncomePage() {
+  const auth = useAuth(), workspace = useActiveWorkspace();
+  return <ScopedRecurringIncomePage key={`${auth.user?.id}:${workspace.activeWorkspace?.id}`} auth={auth} workspace={workspace} />;
+}
+
+function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeof useAuth>; workspace: ReturnType<typeof useActiveWorkspace> }) {
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
-  const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = useActiveWorkspace();
+  const { profile, user } = auth;
+  const { activeWorkspace, error: workspaceError, isLoading: isWorkspacesLoading } = workspace;
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  const snapshot = snapshotQuery.data;
+  const snapshot = user && !snapshotQuery.isPlaceholderData && snapshotQuery.data?.workspace.id === activeWorkspace?.id ? snapshotQuery.data : undefined;
+  const ready = Boolean(snapshot && snapshotQuery.isSuccess && !snapshotQuery.error && !snapshotQuery.isFetching && !workspaceError && !isWorkspacesLoading && !workspace.isFetching && !workspace.isPlaceholderData);
+  const access = useCatalogWriteScope(activeWorkspace, user?.id, ready);
+  const responseScope = useCatalogWriteScope(activeWorkspace, user?.id, true);
+  const permitted = canWriteWorkspaceCatalog(activeWorkspace, user?.id, true);
+  const latestAccess = useRef(access); latestAccess.current = access;
+  const flight = useRef(false), queued = useRef(new Set<string>()), pendingDeletes = useRef(new Set<number>());
+  const [isActionPending, setIsActionPending] = useState(false);
   const createMutation = useCreateRecurringIncomeMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateRecurringIncomeMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteRecurringIncomeMutation(activeWorkspace?.id, user?.id);
@@ -421,7 +453,7 @@ export function RecurringIncomePage() {
   const [confirmDate, setConfirmDate] = useState<string | undefined>(undefined);
   const [historyIncomeId, setHistoryIncomeId] = useState<number | null>(null);
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
-  const { schedule } = useUndoQueue();
+  const { schedule, cancel } = useUndoQueue();
   const {
     filters: incomeFilters,
     currentPage,
@@ -434,10 +466,12 @@ export function RecurringIncomePage() {
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
 
-  const recurringIncome = snapshot?.recurringIncome ?? [];
+  const recurringIncome = useMemo(() => (snapshot?.recurringIncome ?? []).filter(item => item.workspaceId === activeWorkspace?.id), [snapshot?.recurringIncome, activeWorkspace?.id]);
+  const rows = useRef(recurringIncome); rows.current = recurringIncome;
   const categories = snapshot?.catalogs.categories ?? [];
   const counterparties = snapshot?.catalogs.counterparties ?? [];
-  const accounts = snapshot?.accounts ?? [];
+  const accounts = (snapshot?.accounts ?? []).filter(item => item.workspaceId === activeWorkspace?.id);
+  const movements = (snapshot?.movements ?? []).filter(item => item.workspaceId === activeWorkspace?.id);
   const baseCurrencyCode = snapshot?.workspace.baseCurrencyCode ?? activeWorkspace?.baseCurrencyCode ?? "USD";
   const selectedIncome =
     selectedIncomeId === null
@@ -455,6 +489,36 @@ export function RecurringIncomePage() {
     historyIncomeId === null
       ? null
       : recurringIncome.find((r) => r.id === historyIncomeId) ?? null;
+  const editorWrite = useFinancialWriteGuard(`${user?.id}:${activeWorkspace?.id}:income-editor:${isEditorOpen}:${editorMode}:${selectedIncomeId}`);
+  const canAct = access.writable && !isActionPending && !createMutation.isPending && !updateMutation.isPending && !deleteMutation.isPending && !flagsMutation.isPending && !confirmMutation.isPending;
+  useEffect(() => () => { queued.current.forEach(id => cancel(id)); queued.current.clear(); }, [cancel]);
+  useEffect(() => { if (!access.writable) { queued.current.forEach(id => cancel(id)); queued.current.clear(); } }, [access.writable, cancel]);
+  useEffect(() => { if (!permitted) { setIsEditorOpen(false); setShowUnsavedDialog(false); setDeleteTargetId(null); setConfirmIncomeId(null); setShowBulkDeleteConfirm(false); } }, [permitted]);
+  function currentIncome(id: number) {
+    access.assertCurrent();
+    const item = rows.current.find(item => item.id === id);
+    if (!item || pendingDeletes.current.has(id)) throw new Error("El ingreso ya no está disponible en este espacio.");
+    return item;
+  }
+  async function runWrite<T>(action: () => Promise<T>) {
+    access.assertCurrent();
+    if (flight.current) throw new Error("Ya hay una operación de ingresos fijos pendiente.");
+    flight.current = true; setIsActionPending(true);
+    try { return await action(); } finally { flight.current = false; setIsActionPending(false); }
+  }
+  function openHistory(id: number) { if (ready && rows.current.some(item => item.id === id)) setHistoryIncomeId(id); }
+  function openConfirm(id: number, date?: string) {
+    if (!canAct || !access.isCurrent()) return;
+    const item = rows.current.find(item => item.id === id);
+    if (!item || item.status !== "active" || (date && date !== item.nextExpectedDate)) return;
+    setHistoryIncomeId(null); setConfirmDate(date); setConfirmIncomeId(id);
+  }
+  function openDelete(id: number) { if (canAct && access.isCurrent() && rows.current.some(item => item.id === id)) setDeleteTargetId(id); }
+  function exportRows(items: RecurringIncomeSummary[], filename: string) {
+    if (!ready) return;
+    const ids = new Set(items.map(item => item.id));
+    downloadRecurringIncomeCSV(rows.current.filter(item => ids.has(item.id)), filename);
+  }
 
   const hasActiveFilters =
     incomeFilters.name.trim() !== "" ||
@@ -543,6 +607,7 @@ export function RecurringIncomePage() {
     field: Field,
     value: RecurringIncomeFormState[Field],
   ) {
+    if (!canAct || editorWrite.blocked) return;
     setIsDirty(true);
     setFormState((currentValue) => ({ ...currentValue, [field]: value }));
   }
@@ -564,13 +629,14 @@ export function RecurringIncomePage() {
   }
 
   function openCreateEditor() {
+    if (!canAct || !access.isCurrent()) return;
     setFeedback(null);
     setInvalidFields(new Set());
     setEditorMode("create");
     setSelectedIncomeId(null);
     const activeAccountIds = new Set(accounts.filter((item) => !item.isArchived).map((item) => item.id));
     const counts = new Map<number, number>();
-    for (const movement of snapshot?.movements ?? []) {
+    for (const movement of movements) {
       if (movement.movementType !== "income" || !movement.destinationAccountId || !activeAccountIds.has(movement.destinationAccountId)) continue;
       counts.set(movement.destinationAccountId, (counts.get(movement.destinationAccountId) ?? 0) + 1);
     }
@@ -581,6 +647,8 @@ export function RecurringIncomePage() {
   }
 
   function openEditEditor(income: RecurringIncomeSummary) {
+    if (!canAct || !access.isCurrent()) return;
+    income = currentIncome(income.id);
     setFeedback(null);
     setInvalidFields(new Set());
     setEditorMode("edit");
@@ -590,12 +658,9 @@ export function RecurringIncomePage() {
     setIsEditorOpen(true);
   }
 
-  useResourceLink(snapshot?.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError ? recurringIncome : [], id => {
-    const income = recurringIncome.find(row => row.id === id);
-    if (income) openEditEditor(income);
-  });
+  useResourceLink(ready ? recurringIncome : [], openHistory);
 
-  const isSavingEditor = createMutation.isPending || updateMutation.isPending;
+  const isSavingEditor = createMutation.isPending || updateMutation.isPending || editorWrite.pending;
   const isDeleting = deleteMutation.isPending;
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkPausing, setIsBulkPausing] = useState(false);
@@ -650,6 +715,7 @@ export function RecurringIncomePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canAct || !access.isCurrent() || editorWrite.blocked || flight.current) return;
 
     if (!activeWorkspace || !user?.id) {
       setFeedback({
@@ -773,27 +839,35 @@ export function RecurringIncomePage() {
       return;
     }
 
+    let attempt: ReturnType<typeof editorWrite.begin> = null;
     try {
       if (!snapshot) throw new Error("Espera la lectura del espacio actual.");
       const payload = buildRecurringIncomeEditorInput(formState, snapshot, editorMode === "create");
+      if (editorMode === "edit") currentIncome(selectedIncomeId ?? 0);
+      attempt = editorWrite.begin(); if (!attempt) return;
       if (editorMode === "create") {
-        await createMutation.mutateAsync({
+        const result = await runWrite(() => createMutation.mutateAsync({
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
-        });
+        }));
+        if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        if (!Number.isSafeInteger(result?.id) || result.id <= 0) throw new Error("No se confirmó el identificador del ingreso fijo.");
+        editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
           title: "Ingreso fijo registrado",
           description: "Ya aparece en la lista de ingresos fijos.",
         });
       } else if (selectedIncome) {
-        await updateMutation.mutateAsync({
+        await runWrite(() => updateMutation.mutateAsync({
           recurringIncomeId: selectedIncome.id,
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
-        });
+        }));
+        if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
           title: "Cambios guardados",
@@ -804,47 +878,63 @@ export function RecurringIncomePage() {
       setIsEditorOpen(false);
       setSelectedIncomeId(null);
     } catch (error) {
+      if (!responseScope.isCurrent() || (attempt && !editorWrite.isCurrent(attempt))) return;
+      const code = error && typeof error === "object" && "code" in error ? error.code : null;
+      const rejected = typeof code === "string" && /^(22|23|42)[A-Z0-9]{3}$/.test(code);
+      if (attempt) { if (rejected) editorWrite.reject(attempt); else editorWrite.fail(attempt); }
       setFeedback({
         tone: "error",
-        title: "No pudimos guardar el ingreso fijo",
-        description: getQueryErrorMessage(error, "Intenta nuevamente en unos segundos."),
+        title: attempt && !rejected ? "Resultado por comprobar" : "No pudimos guardar el ingreso fijo",
+        description: `${getQueryErrorMessage(error)}${attempt && !rejected ? " No repitas el envío: cierra y comprueba Ingresos fijos; podría haberse guardado." : ""}`,
       });
     }
   }
 
   function handleDelete() {
-    if (!activeWorkspace || !deleteTarget) return;
+    if (!activeWorkspace || !deleteTarget || !canAct || !access.isCurrent() || pendingDeletes.current.has(deleteTarget.id)) return;
     const targetId = deleteTarget.id;
+    currentIncome(targetId);
+    pendingDeletes.current.add(targetId);
     setDeleteTargetId(null);
     setHiddenIds((prev) => new Set([...prev, targetId]));
-    schedule({
-      label: "Ingreso fijo eliminado",
-      onCommit: () =>
-        deleteMutation.mutateAsync({ recurringIncomeId: targetId, workspaceId: activeWorkspace.id }),
-      onUndo: () => {
-        setHiddenIds((prev) => {
-          const next = new Set(prev);
-          next.delete(targetId);
-          return next;
-        });
+    let resolved = false;
+    const restore = () => setHiddenIds(prev => { const next = new Set(prev); next.delete(targetId); return next; });
+    const queueId = schedule({
+      label: "Ingreso fijo pendiente de eliminar",
+      onCommit: async () => {
+        if (resolved) return;
+        resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId);
+        if (!access.isCurrent()) { restore(); return; }
+        try {
+          currentIncome(targetId);
+          await runWrite(() => deleteMutation.mutateAsync({ recurringIncomeId: targetId, workspaceId: activeWorkspace.id }));
+        } catch (error) {
+          restore();
+          if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación por comprobar", description: `${getQueryErrorMessage(error)} Actualiza antes de repetir.` });
+        }
       },
+      onUndo: () => { if (resolved) return; resolved = true; queued.current.delete(queueId); pendingDeletes.current.delete(targetId); restore(); },
     });
+    queued.current.add(queueId);
   }
 
   async function handleBulkDelete() {
-    if (selectedCount === 0) return;
+    if (selectedCount === 0 || !canAct || !access.isCurrent()) return;
     setShowBulkDeleteConfirm(true);
   }
 
   async function confirmBulkDelete() {
+    if (!activeWorkspace || !canAct || !access.isCurrent() || flight.current) return;
     setIsBulkDeleting(true);
     try {
-      for (const id of Array.from(selectedIds)) {
-        await deleteMutation.mutateAsync({ recurringIncomeId: id, workspaceId: activeWorkspace!.id });
-      }
+      await runWrite(async () => { for (const id of Array.from(selectedIds)) {
+        responseScope.assertCurrent(); latestAccess.current.assertCurrent(); currentIncome(id);
+        await deleteMutation.mutateAsync({ recurringIncomeId: id, workspaceId: activeWorkspace.id });
+      } });
+      if (!responseScope.isCurrent()) return;
       clearAll();
     } catch (err) {
-      setFeedback({ tone: "error", title: "Error", description: getQueryErrorMessage(err) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación parcial o por comprobar", description: `${getQueryErrorMessage(err)} Las anteriores pueden haberse eliminado; actualiza antes de repetir.` });
     } finally {
       setIsBulkDeleting(false);
       setShowBulkDeleteConfirm(false);
@@ -852,13 +942,16 @@ export function RecurringIncomePage() {
   }
 
   async function handleConfirmArrival(input: Omit<ConfirmArrivalInput, "workspaceId" | "userId">) {
-    if (!activeWorkspace || !user?.id) return;
+    if (!activeWorkspace || !user?.id || !canAct || !access.isCurrent()) throw new Error("Los datos o permisos cambiaron antes de confirmar.");
+    const current = currentIncome(input.recurringIncomeId);
+    validateArrivalInput(current, accounts, input);
     try {
-      await confirmMutation.mutateAsync({
+      await runWrite(() => confirmMutation.mutateAsync({
         ...input,
         workspaceId: activeWorkspace.id,
         userId: user.id,
-      });
+      }));
+      if (!responseScope.isCurrent()) return;
       setConfirmIncomeId(null);
       setFeedback({
         tone: "success",
@@ -866,35 +959,45 @@ export function RecurringIncomePage() {
         description: `La próxima llegada se actualizó automáticamente a ${formatDate(input.nextExpectedDate)}.`,
       });
     } catch (err) {
-      setFeedback({
+      if (responseScope.isCurrent()) setFeedback({
         tone: "error",
-        title: "No se pudo confirmar la llegada",
-        description: getQueryErrorMessage(err, "Intenta nuevamente."),
+        title: "Llegada por comprobar",
+        description: `${getQueryErrorMessage(err)} No repitas la llegada sin comprobar el historial y Movimientos.`,
       });
       throw err;
     }
   }
 
   async function handleBulkPause() {
+    if (!canAct || !access.isCurrent() || flight.current) return;
     const active = selectedItems.filter((item) => item.status === "active");
     if (!active.length) return;
     setIsBulkPausing(true);
     try {
-      for (const item of active) await flagsMutation.mutateAsync({ recurringIncomeId: item.id, patch: { status: "paused" } });
+      await runWrite(async () => { for (const item of active) {
+        responseScope.assertCurrent(); latestAccess.current.assertCurrent();
+        const current = currentIncome(item.id); if (current.status !== "active") continue;
+        await flagsMutation.mutateAsync({ recurringIncomeId: item.id, patch: { status: "paused" } });
+      } });
+      if (!responseScope.isCurrent()) return;
       clearAll();
       setFeedback({ tone: "success", title: "Ingresos pausados", description: `${active.length} ${active.length === 1 ? "ingreso quedó" : "ingresos quedaron"} en pausa.` });
     } catch (error) {
-      setFeedback({ tone: "error", title: "No se pudieron pausar todos", description: getQueryErrorMessage(error) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Lote parcial o por comprobar", description: `${getQueryErrorMessage(error)} Comprueba el último estado antes de repetir.` });
     } finally {
       setIsBulkPausing(false);
     }
   }
 
   async function setIncomeFlag(income: RecurringIncomeSummary, patch: { is_pinned?: boolean; status?: RecurringIncomeStatus }) {
+    if (!canAct || !access.isCurrent() || flight.current) return;
     try {
-      await flagsMutation.mutateAsync({ recurringIncomeId: income.id, patch });
+      const current = currentIncome(income.id);
+      if (patch.status && (!["active", "paused"].includes(patch.status) || current.status === "cancelled")) throw new Error("Revisa el estado actual antes de cambiarlo.");
+      if (patch.status === current.status || (patch.is_pinned !== undefined && patch.is_pinned === current.isPinned)) return;
+      await runWrite(() => flagsMutation.mutateAsync({ recurringIncomeId: current.id, patch }));
     } catch (error) {
-      setFeedback({ tone: "error", title: "No se pudo actualizar el ingreso", description: getQueryErrorMessage(error) });
+      if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo actualizar el ingreso", description: getQueryErrorMessage(error) });
     }
   }
 
@@ -925,7 +1028,7 @@ export function RecurringIncomePage() {
     );
   }
 
-  if (snapshotQuery.isLoading || !snapshot) {
+  if (snapshotQuery.isLoading || (!snapshot && !snapshotQuery.error)) {
     return (
       <div className="flex flex-col gap-6 pb-8">
         <PageHeader description="Estamos cargando tus ingresos fijos y sus próximas llegadas." eyebrow="ingresos fijos" title="Cargando ingresos fijos" />
@@ -953,7 +1056,7 @@ export function RecurringIncomePage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button data-tour="create-recurring-income" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo ingreso</span></Button>
+          <Button disabled={!canAct} data-tour="create-recurring-income" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo ingreso</span></Button>
           <div className="relative">
             <button aria-expanded={isActionsMenuOpen} aria-label="Más acciones" className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/[0.08] text-storm transition hover:bg-white/[0.04] hover:text-ink" onClick={() => setIsActionsMenuOpen((value) => !value)} type="button"><MoreVertical className="h-4 w-4" /></button>
             {isActionsMenuOpen ? (
@@ -961,7 +1064,7 @@ export function RecurringIncomePage() {
                 <button aria-label="Cerrar acciones" className="fixed inset-0 z-30 cursor-default" onClick={() => setIsActionsMenuOpen(false)} type="button" />
                 <div className="absolute right-0 top-12 z-40 min-w-52 overflow-hidden rounded-xl border border-white/[0.1] bg-[#1b1a18] py-1">
                   <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={snapshotQuery.isFetching} onClick={() => { setIsActionsMenuOpen(false); snapshotQuery.refetch(); }} type="button"><RefreshCw className={snapshotQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Actualizar</button>
-                  <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!filteredIncome.length} onClick={() => { setIsActionsMenuOpen(false); downloadRecurringIncomeCSV(filteredIncome, "ingresos-fijos-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar los {filteredIncome.length}</button>
+                  <button className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-ink hover:bg-white/[0.04] disabled:opacity-40" disabled={!ready || !filteredIncome.length} onClick={() => { setIsActionsMenuOpen(false); exportRows(filteredIncome, "ingresos-fijos-" + new Date().toISOString().slice(0, 10) + ".csv"); }} type="button"><Download className="h-4 w-4" />Exportar los {filteredIncome.length}</button>
                 </div>
               </>
             ) : null}
@@ -999,14 +1102,15 @@ export function RecurringIncomePage() {
         <span>{unconvertedCount ? "Esperado al mes: conversión pendiente" : <>Esperado al mes <strong className="text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong></>}</span>
       </section>
 
-      {feedback && feedback.tone !== "error" && !isEditorOpen ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
+      {!permitted ? <p className="text-sm text-storm" role="status">{activeWorkspace.isArchived ? "Este espacio está archivado." : "Tu acceso es de solo lectura."} Puedes consultar y exportar, pero no modificar ingresos fijos.</p> : null}
+      {feedback && !isEditorOpen && !confirmIncome ? <DataState description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
       {recurringIncome.length === 0 ? (
-        <DataState action={<Button onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer ingreso</Button>} description="Aún no hay ingresos fijos registrados en este espacio." title="Sin ingresos fijos" />
+        <DataState action={<Button disabled={!canAct} onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" />Crear primer ingreso</Button>} description="Aún no hay ingresos fijos registrados en este espacio." title="Sin ingresos fijos" />
       ) : filteredIncome.length === 0 ? (
         <DataState action={hasActiveFilters ? <Button onClick={clearIncomeFilters} variant="secondary">Quitar filtros</Button> : undefined} description="No hay ingresos que coincidan con los filtros." title="Sin resultados" />
       ) : (
-        <RecurringIncomeList allSelected={allSelected} income={paginatedIncome} onClearAll={clearAll} onConfirm={(id) => { setConfirmDate(undefined); setConfirmIncomeId(id); }} onDelete={setDeleteTargetId} onEdit={openEditEditor} onHistory={setHistoryIncomeId} onPause={(income) => void setIncomeFlag(income, { status: income.status === "active" ? "paused" : "active" })} onPin={(income) => void setIncomeFlag(income, { is_pinned: !income.isPinned })} onSelectAll={selectAll} onToggleSelect={toggleSelect} selectedIds={selectedIds} someSelected={someSelected} />
+        <RecurringIncomeList canWrite={canAct} isPending={isActionPending || !ready} allSelected={allSelected} income={paginatedIncome} onClearAll={clearAll} onConfirm={openConfirm} onDelete={openDelete} onEdit={openEditEditor} onHistory={openHistory} onPause={(income) => void setIncomeFlag(income, { status: income.status === "active" ? "paused" : "active" })} onPin={(income) => void setIncomeFlag(income, { is_pinned: !income.isPinned })} onSelectAll={selectAll} onToggleSelect={toggleSelect} selectedIds={selectedIds} someSelected={someSelected} />
       )}
       {filteredIncome.length > 0 ? (
         <Pagination
@@ -1025,12 +1129,13 @@ export function RecurringIncomePage() {
           clearFieldError={clearFieldError}
           closeEditor={requestCloseEditor}
           counterparties={counterparties}
-          movements={snapshot.movements}
+          movements={movements}
           feedback={feedback}
           formState={formState}
           invalidFields={invalidFields}
           isCreateMode={editorMode === "create"}
           isSaving={isSavingEditor}
+          saveBlocked={editorWrite.blocked && !editorWrite.pending}
           onSubmit={handleSubmit}
           updateFormState={updateFormState}
         />
@@ -1055,29 +1160,32 @@ export function RecurringIncomePage() {
         archiveLabel="Pausar activos"
         isArchiving={isBulkPausing}
         isDeleting={isBulkDeleting}
-        onArchive={selectedItems.some((item) => item.status === "active") ? () => void handleBulkPause() : undefined}
+        onArchive={canAct && selectedItems.some((item) => item.status === "active") ? () => void handleBulkPause() : undefined}
         onClearAll={clearAll}
-        onDelete={handleBulkDelete}
-        onExport={() => downloadRecurringIncomeCSV(selectedItems, `ingresos-fijos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
+        onDelete={canAct ? handleBulkDelete : undefined}
+        onExport={() => exportRows(selectedItems, `ingresos-fijos-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`)}
         onSelectAll={selectAll}
         selectedCount={selectedCount}
         totalCount={filteredIncome.length}
       /> : null}
-      {confirmIncome && activeWorkspace ? (
+      {confirmIncome && activeWorkspace && permitted ? (
         <ConfirmArrivalDialog
           accounts={accounts}
           income={confirmIncome}
           initialDate={confirmDate}
-          isSaving={confirmMutation.isPending}
-          onClose={() => setConfirmIncomeId(null)}
+          isSaving={isActionPending || !ready}
+          onClose={() => { if (!flight.current) setConfirmIncomeId(null); }}
           onConfirm={handleConfirmArrival}
         />
       ) : null}
 
       {historyIncome && activeWorkspace ? (
         <HistoryDialog
+          canWrite={canAct}
+          isPending={isActionPending || !ready}
+          userId={user?.id}
           income={historyIncome}
-          onConfirm={(date) => { setHistoryIncomeId(null); setConfirmDate(date); setConfirmIncomeId(historyIncome.id); }}
+          onConfirm={(date) => openConfirm(historyIncome.id, date)}
           onOpenMovement={(movementId) => navigate(`/app/movements?period=all&movement=${movementId}`)}
           onClose={() => setHistoryIncomeId(null)}
           workspaceId={activeWorkspace.id}

@@ -7732,12 +7732,13 @@ export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: 
 export function useRecurringIncomeOccurrencesQuery(
   workspaceId?: number,
   recurringIncomeId?: number,
+  userId?: string,
 ) {
   return useQuery({
-    queryKey: ["recurring_income_occurrences", workspaceId, recurringIncomeId],
-    enabled: !!workspaceId && !!recurringIncomeId,
-    queryFn: async () => {
-      if (!workspaceId || !recurringIncomeId) return [];
+    queryKey: ["recurring_income_occurrences", workspaceId, userId, recurringIncomeId],
+    enabled: !!workspaceId && !!recurringIncomeId && !!userId,
+    queryFn: async ({ signal }) => {
+      if (!workspaceId || !recurringIncomeId || !userId) throw new Error("No hay un espacio o una sesión activos.");
       const client = getClient();
       const { data, error } = await client
         .from("recurring_income_occurrences")
@@ -7745,7 +7746,7 @@ export function useRecurringIncomeOccurrencesQuery(
         .eq("workspace_id", workspaceId)
         .eq("recurring_income_id", recurringIncomeId)
         .order("expected_date", { ascending: false })
-        .limit(200);
+        .limit(200).abortSignal(signal);
       if (error) {
         if (isMissingRelationError(error, "recurring_income_occurrences")) return [];
         throw error;
@@ -7857,7 +7858,7 @@ export function useConfirmRecurringIncomeArrivalMutation(workspaceId?: number, u
       if (workspaceId) {
         await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
         await queryClient.invalidateQueries({
-          queryKey: ["recurring_income_occurrences", workspaceId, input.recurringIncomeId],
+          queryKey: ["recurring_income_occurrences", workspaceId, userId, input.recurringIncomeId],
         });
       }
     },

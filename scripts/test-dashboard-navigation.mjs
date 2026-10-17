@@ -16,8 +16,8 @@ await act(async()=>renderer.unmount());container.textContent='';
 const path=resolve(root,'src/modules/recurring-income/pages/recurring-income-page.tsx');const source=ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let resourceCall;
 function visit(node){if(ts.isCallExpression(node)&&node.expression.getText(source)==='useResourceLink')resourceCall=node.getText(source);ts.forEachChild(node,visit);}visit(source);assert.ok(resourceCall);
 const code=ts.transpileModule(resourceCall,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
-const invoke=new Function('useResourceLink','snapshot','activeWorkspace','snapshotQuery','recurringIncome','openEditEditor',code),opened=[];
-function ResourceHost({ready,foreign=false}){invoke(useResourceLink,{workspace:{id:foreign?9:8}},{id:8},{isFetching:!ready,isPlaceholderData:false,isError:false},[{id:20,name:'Sueldo'}],row=>opened.push(row.id));return React.createElement('p',null,'Ingresos fijos');}
+const invoke=new Function('useResourceLink','ready','recurringIncome','openHistory',code),opened=[];
+function ResourceHost({ready,foreign=false}){invoke(useResourceLink,ready&&!foreign,[{id:20,name:'Sueldo'}],id=>opened.push(id));return React.createElement('p',null,'Ingresos fijos');}
 const next=createRoot(container);async function resource(ready,foreign=false){await act(async()=>next.render(React.createElement(MemoryRouter,{initialEntries:['/app/recurring-income?resource=20']},React.createElement(ResourceHost,{ready,foreign}))));}
 await resource(false);assert.equal(opened.length,0);await resource(true,true);assert.equal(opened.length,0);await resource(true);assert.deepEqual(opened,[20]);await resource(true);assert.deepEqual(opened,[20]);await act(async()=>next.unmount());container.remove();dom.window.close();
 console.log('Dashboard navigation: five native sections, lazy advanced calculations, workspace reset/Pro gating, actual recurring-income resource hook with fresh scoped read and one-time opening passed locally.');

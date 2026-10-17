@@ -130,6 +130,7 @@ export function RecurringIncomeEditorDialog({
   invalidFields,
   isCreateMode,
   isSaving,
+  saveBlocked = false,
   onSubmit,
   updateFormState,
 }: {
@@ -146,6 +147,7 @@ export function RecurringIncomeEditorDialog({
   invalidFields: Set<string>;
   isCreateMode: boolean;
   isSaving: boolean;
+  saveBlocked?: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   updateFormState: <Field extends keyof RecurringIncomeFormState>(
     field: Field,
@@ -195,7 +197,7 @@ export function RecurringIncomeEditorDialog({
     <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-editor-title" onClose={closeEditor}>
       <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
         <ResourceEditorHeader disabled={isSaving} onBack={panel === "breakdown" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo ingreso fijo" : "Editar ingreso fijo") : panel === "breakdown" ? "Desglose" : "Detalles"} titleId="income-editor-title" />
-        <div className="min-h-0 overflow-y-auto px-5 py-3 sm:px-7">
+        <fieldset className="min-h-0 overflow-y-auto px-5 py-3 sm:px-7" disabled={isSaving || saveBlocked}>
           {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
           {panel === "main" ? (
@@ -249,9 +251,9 @@ export function RecurringIncomeEditorDialog({
               {formState.grossAmount ? <p className="border-t border-white/[0.08] pt-4 text-sm text-storm">Bruto menos descuentos: {formatCurrency((Number(formState.grossAmount) || 0) - formState.deductions.reduce((sum, row) => sum + (Number(row.amount) || 0), 0), formState.currencyCode)} · Neto declarado: {formatCurrency(Number(formState.amount) || 0, formState.currencyCode)}</p> : null}
             </div>
           )}
-        </div>
+        </fieldset>
         <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7">
-          <Button className="w-full" disabled={isSaving} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : isCreateMode ? "Crear ingreso fijo" : "Guardar cambios"}</Button>
+          <Button className="w-full" disabled={isSaving || saveBlocked} type="submit">{isSaving ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : saveBlocked ? "Comprueba el resultado" : isCreateMode ? "Crear ingreso fijo" : "Guardar cambios"}</Button>
         </footer>
       </form>
     </Modal>
