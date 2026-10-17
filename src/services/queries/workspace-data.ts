@@ -48,6 +48,7 @@ import { supabase } from "../supabase/client";
 import { runIdempotentInsert } from "../../lib/idempotent-write";
 import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout } from "../../modules/accounts/lib/account-write-result";
 import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptionWriteTimeout } from "../../modules/subscriptions/lib/subscription-write-result";
+import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recurring-income/lib/arrival-write";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -7771,96 +7772,13 @@ export function useRecurringIncomeOccurrencesQuery(
 export function useConfirmRecurringIncomeArrivalMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: ConfirmArrivalInput) => {
-      const client = getClient();
-      if (!input.accountId || input.amount <= 0 || !input.actualDate) {
-        throw new Error("Indica la fecha, el monto recibido y la cuenta de destino.");
-      }
-      const { data: previous, error: previousError } = await client
-        .from("recurring_income_occurrences")
-        .select("id")
-        .eq("workspace_id", input.workspaceId)
-        .eq("recurring_income_id", input.recurringIncomeId)
-        .eq("expected_date", input.expectedDate)
-        .maybeSingle();
-      if (previousError) throw previousError;
-      if (previous) throw new Error("Esta llegada ya fue confirmada. Actualiza la página antes de continuar.");
-
-      const updateBase = input.newBaseAmount != null && Number.isFinite(input.newBaseAmount) && input.newBaseAmount > 0 && Math.abs(input.newBaseAmount - input.currentBaseAmount) > 0.000001;
-      const baseNote = updateBase
-        ? `El monto esperado de las próximas llegadas pasa de ${input.currentBaseAmount.toFixed(2)} a ${input.newBaseAmount!.toFixed(2)} ${input.currencyCode}.`
-        : "";
-      const movementNotes = [input.notes.trim(), baseNote].filter(Boolean).join("\n") || null;
-      const peruTime = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(11, 23);
-      const occurredAt = new Date(`${input.actualDate}T${peruTime}-05:00`).toISOString();
-      const { data: movement, error: movementError } = await client.from("movements").insert({
-        workspace_id: input.workspaceId,
-        created_by_user_id: input.userId,
-        updated_by_user_id: input.userId,
-        movement_type: "income",
-        status: "posted",
-        occurred_at: occurredAt,
-        description: input.description?.trim() || input.recurringIncomeName.trim(),
-        notes: movementNotes,
-        source_account_id: null,
-        source_amount: null,
-        destination_account_id: input.accountId,
-        destination_amount: input.amount,
-        category_id: input.categoryId,
-        counterparty_id: input.payerPartyId,
-        metadata: {
-          recurring_income_id: input.recurringIncomeId,
-          recurring_income_expected_date: input.expectedDate,
-          recurring_income_actual_date: input.actualDate,
-          recurring_income_confirmed_arrival: true,
-          recurring_income_base_change_kind: updateBase ? (input.newBaseAmount! > input.currentBaseAmount ? "bonus" : "discount") : null,
-          recurring_income_base_amount_before: input.currentBaseAmount,
-          recurring_income_base_amount_after: updateBase ? input.newBaseAmount : null,
-        },
-      }).select("id").single();
-      if (movementError) throw movementError;
-      const movementId = movement.id as number;
-      const occurrenceStatus = input.actualDate <= input.expectedDate ? "on_time" : "late";
-      const { data: occurrence, error: occErr } = await client.from("recurring_income_occurrences").insert({
-        workspace_id: input.workspaceId,
-        recurring_income_id: input.recurringIncomeId,
-        expected_date: input.expectedDate,
-        actual_date: input.actualDate,
-        amount: input.amount,
-        currency_code: input.currencyCode.toUpperCase(),
-        movement_id: movementId,
-        status: occurrenceStatus,
-        notes: movementNotes,
-      }).select("id").single();
-      if (occErr) {
-        await client.from("movements").delete().eq("id", movementId).eq("workspace_id", input.workspaceId);
-        throw occErr;
-      }
-      const { data: updated, error: updateErr } = await client
-        .from("recurring_income")
-        .update({
-          next_expected_date: input.nextExpectedDate,
-          ...(updateBase ? { amount: input.newBaseAmount } : {}),
-          ...(!input.currentAccountId ? { account_id: input.accountId } : {}),
-        })
-        .eq("id", input.recurringIncomeId)
-        .eq("workspace_id", input.workspaceId)
-        .eq("next_expected_date", input.expectedDate)
-        .select("id")
-        .maybeSingle();
-      if (updateErr || !updated) {
-        await client.from("recurring_income_occurrences").delete().eq("id", occurrence.id).eq("workspace_id", input.workspaceId);
-        await client.from("movements").delete().eq("id", movementId).eq("workspace_id", input.workspaceId);
-        throw updateErr ?? new Error("La próxima llegada cambió mientras confirmabas. Actualiza la página y vuelve a intentarlo.");
-      }
-    },
-    onSuccess: async (_, input) => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-        await queryClient.invalidateQueries({
-          queryKey: ["recurring_income_occurrences", workspaceId, userId, input.recurringIncomeId],
-        });
-      }
+    retry: false,
+    mutationFn: (input: ArrivalWriteInput) => confirmArrivalWrite(getClient(), input, workspaceId, userId),
+    onSettled: async (_data, _error, input) => {
+      if (workspaceId) await Promise.all([
+        invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
+        queryClient.invalidateQueries({ queryKey: ["recurring_income_occurrences", workspaceId, userId, input.recurringIncomeId] }),
+      ]);
     },
   });
 }

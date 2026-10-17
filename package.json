@@ -60,6 +60,7 @@
     "test:subscription-permissions": "node scripts/test-subscription-permissions.mjs",
     "test:subscription-write-results": "node scripts/test-subscription-write-results.mjs",
     "test:recurring-income-permissions": "node scripts/test-recurring-income-permissions.mjs",
+    "test:recurring-income-arrival": "node scripts/test-recurring-income-arrival.mjs",
     "test:workspace-sync": "node scripts/test-workspace-sync.mjs",
     "preview": "vite preview"
   },

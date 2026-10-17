@@ -946,12 +946,14 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     const current = currentIncome(input.recurringIncomeId);
     validateArrivalInput(current, accounts, input);
     try {
-      await runWrite(() => confirmMutation.mutateAsync({
+      const result = await runWrite(() => confirmMutation.mutateAsync({
         ...input,
         workspaceId: activeWorkspace.id,
         userId: user.id,
+        isCurrent: responseScope.isCurrent,
       }));
       if (!responseScope.isCurrent()) return;
+      if (!result || !Number.isSafeInteger(result.movementId) || result.movementId <= 0 || !Number.isSafeInteger(result.occurrenceId) || result.occurrenceId <= 0 || result.nextExpectedDate !== input.nextExpectedDate || result.updatedBaseAmount !== (input.newBaseAmount !== input.currentBaseAmount ? input.newBaseAmount : null)) throw new Error("El servidor no confirmó la llegada y su calendario. Comprueba el resultado antes de repetir.");
       setConfirmIncomeId(null);
       setFeedback({
         tone: "success",
