@@ -30,7 +30,6 @@ import type {
   ObligationStatus,
   ObligationSummary,
   RecurringIncomeFrequency,
-  RecurringIncomeOccurrence,
   RecurringIncomeSummary,
   SubscriptionFrequency,
   SubscriptionSummary,
@@ -50,6 +49,7 @@ import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout }
 import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptionWriteTimeout } from "../../modules/subscriptions/lib/subscription-write-result";
 import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recurring-income/lib/arrival-write";
 import { assertIncomeWriteScope, confirmIncomeWrite, IncomeWritePreflightError, withIncomeWriteTimeout } from "../../modules/recurring-income/lib/income-write-result";
+import { readIncomeHistory } from "../../modules/recurring-income/lib/income-history";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -350,20 +350,6 @@ type RecurringIncomeRow = {
   remind_days_before: number;
   description: string | null;
   notes: string | null;
-};
-
-type RecurringIncomeOccurrenceRow = {
-  id: number;
-  workspace_id: number;
-  recurring_income_id: number;
-  expected_date: string;
-  actual_date: string | null;
-  amount: NumericLike;
-  currency_code: string;
-  movement_id: number | null;
-  status: "on_time" | "late" | "missed";
-  notes: string | null;
-  created_at: string;
 };
 
 type ActivityRow = {
@@ -7748,42 +7734,12 @@ export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: 
   });
 }
 
-export function useRecurringIncomeOccurrencesQuery(
-  workspaceId?: number,
-  recurringIncomeId?: number,
-  userId?: string,
-) {
+export function useRecurringIncomeOccurrencesQuery(workspaceId?: number, recurringIncomeId?: number, userId?: string) {
   return useQuery({
     queryKey: ["recurring_income_occurrences", workspaceId, userId, recurringIncomeId],
-    enabled: !!workspaceId && !!recurringIncomeId && !!userId,
-    queryFn: async ({ signal }) => {
-      if (!workspaceId || !recurringIncomeId || !userId) throw new Error("No hay un espacio o una sesión activos.");
-      const client = getClient();
-      const { data, error } = await client
-        .from("recurring_income_occurrences")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("recurring_income_id", recurringIncomeId)
-        .order("expected_date", { ascending: false })
-        .limit(200).abortSignal(signal);
-      if (error) {
-        if (isMissingRelationError(error, "recurring_income_occurrences")) return [];
-        throw error;
-      }
-      return (data ?? []).map<RecurringIncomeOccurrence>((row: RecurringIncomeOccurrenceRow) => ({
-        id: row.id,
-        workspaceId: row.workspace_id,
-        recurringIncomeId: row.recurring_income_id,
-        expectedDate: row.expected_date,
-        actualDate: row.actual_date,
-        amount: toNumber(row.amount),
-        currencyCode: row.currency_code,
-        movementId: row.movement_id,
-        status: row.status,
-        notes: row.notes,
-        createdAt: row.created_at,
-      }));
-    },
+    enabled: Boolean(Number.isSafeInteger(workspaceId) && workspaceId! > 0 && Number.isSafeInteger(recurringIncomeId) && recurringIncomeId! > 0 && userId),
+    staleTime: 0,
+    queryFn: ({ signal }) => readIncomeHistory(getClient(), workspaceId!, recurringIncomeId!, userId!, signal),
   });
 }
 

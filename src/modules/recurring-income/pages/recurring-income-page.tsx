@@ -31,7 +31,6 @@ import { formatCurrency } from "../../../lib/formatting/money";
 import type {
   AccountSummary,
   RecurringIncomeFrequency,
-  RecurringIncomeOccurrence,
   RecurringIncomeStatus,
   RecurringIncomeSummary,
 } from "../../../types/domain";
@@ -43,7 +42,6 @@ import {
   useConfirmRecurringIncomeArrivalMutation,
   useCreateRecurringIncomeMutation,
   useDeleteRecurringIncomeMutation,
-  useRecurringIncomeOccurrencesQuery,
   useSetRecurringIncomeFlagsMutation,
   useUpdateRecurringIncomeMutation,
   useWorkspaceSnapshotQuery,
@@ -61,6 +59,7 @@ import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use
 import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
 import { confirmIncomeWrite, isIncomeWriteRejected } from "../lib/income-write-result";
+import { IncomeHistoryDialog } from "../components/income-history-dialog";
 
 const RECURRING_INCOME_PAGE_SIZE = 50;
 
@@ -272,88 +271,6 @@ function ConfirmArrivalDialog({
         </fieldset>
         <footer className="shrink-0 border-t border-white/[0.08] px-5 py-4 sm:px-7"><Button className="w-full" disabled={busy || write.blocked || stale} type="submit">{write.status === "uncertain" ? "Comprueba la llegada en el historial" : stale ? "Revisa la próxima llegada" : busy ? "Confirmando..." : "Confirmar llegada"}</Button></footer>
       </form>
-    </Modal>
-  );
-}
-function getOccurrenceStatusLabel(status: RecurringIncomeOccurrence["status"]) {
-  switch (status) {
-    case "on_time": return "A tiempo";
-    case "late": return "Con demora";
-    case "missed": return "No llegó";
-  }
-}
-
-function HistoryDialog({
-  income,
-  workspaceId,
-  onClose,
-  onConfirm,
-  onOpenMovement,
-  canWrite,
-  isPending,
-  userId,
-}: {
-  income: RecurringIncomeSummary;
-  workspaceId: number;
-  onClose: () => void;
-  onConfirm: (date: string) => void;
-  onOpenMovement: (movementId: number) => void;
-  canWrite: boolean;
-  isPending: boolean;
-  userId?: string;
-}) {
-  const [view, setView] = useState<"history" | "analytics">("history");
-  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
-  const [timelineFilter, setTimelineFilter] = useState<"all" | "on_time" | "late">("all");
-  const occurrencesQuery = useRecurringIncomeOccurrencesQuery(workspaceId, income.id, userId);
-  const occurrences = occurrencesQuery.data ?? [];
-  const pending = pendingArrivalDates(income, todayDateInputValue());
-  const received = occurrences.reduce((sum, row) => sum + row.amount, 0);
-  const onTimeCount = occurrences.filter((row) => row.status === "on_time").length;
-  const months = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date();
-    date.setUTCDate(1);
-    date.setUTCMonth(date.getUTCMonth() - 11 + index);
-    const key = date.toISOString().slice(0, 7);
-    return { key, label: new Intl.DateTimeFormat("es-PE", { month: "short" }).format(date), amount: occurrences.filter((row) => row.actualDate?.startsWith(key)).reduce((sum, row) => sum + row.amount, 0) };
-  });
-  const maxMonth = Math.max(1, ...months.map((month) => month.amount));
-  const monthKey = selectedMonthKey ?? [...months].reverse().find((month) => month.amount > 0)?.key ?? months[11].key;
-  const selectedMonth = months.find((month) => month.key === monthKey)!;
-  const monthOccurrences = occurrences.filter((row) => row.actualDate?.startsWith(monthKey));
-  const filteredTimeline = occurrences.filter((row) => timelineFilter === "all" || row.status === timelineFilter);
-  const lateDays = occurrences.filter((row) => row.status === "late" && row.actualDate).map((row) => Math.max(0, Math.round((Date.parse(row.actualDate!) - Date.parse(row.expectedDate)) / 86_400_000)));
-  const averageLateDays = lateDays.length ? lateDays.reduce((sum, days) => sum + days, 0) / lateDays.length : 0;
-
-  return (
-    <Modal className="!max-w-2xl !bg-[#1a1917]" labelledBy="income-history-title" onClose={onClose}>
-      <ModalHeader description={getFrequencyOption(income.frequency).label} onClose={onClose} title={income.name} titleId="income-history-title" />
-      <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-5">
-        <div><p className="text-2xl font-semibold tabular-nums text-ink">{formatCurrency(income.amount, income.currencyCode)}</p><p className="mt-1 text-sm text-storm">Próxima llegada: {formatDate(income.nextExpectedDate)}{income.accountName ? ` · ${income.accountName}` : ""}</p></div>
-        {income.grossAmount != null ? <p className="border-t border-white/[0.08] pt-4 text-sm text-storm">Bruto {formatCurrency(income.grossAmount, income.currencyCode)}{income.deductions?.length ? ` · ${income.deductions.map((row) => `${row.name} ${formatCurrency(row.amount, income.currencyCode)}`).join(" · ")}` : ""}</p> : null}
-        {income.description || income.notes ? <p className="text-sm leading-6 text-storm">{[income.description, income.notes].filter(Boolean).join(" · ")}</p> : null}
-        <div className="flex flex-wrap gap-x-6 gap-y-1 border-y border-white/[0.08] py-4 text-sm text-storm"><span>{occurrences.length} llegadas visibles</span><span>Recibido en este historial: <strong className="text-ink">{formatCurrency(received, income.currencyCode)}</strong></span>{occurrences.length ? <span>{onTimeCount} a tiempo</span> : null}</div>
-        <div className="flex gap-5 border-b border-white/[0.08] text-sm"><button aria-current={view === "history" ? "page" : undefined} className={`pb-3 ${view === "history" ? "border-b border-ink text-ink" : "text-storm"}`} onClick={() => setView("history")} type="button">Llegadas</button><button aria-current={view === "analytics" ? "page" : undefined} className={`pb-3 ${view === "analytics" ? "border-b border-ink text-ink" : "text-storm"}`} onClick={() => setView("analytics")} type="button">Análisis</button></div>
-        {view === "analytics" ? <div className="space-y-5">
-          <p className="text-sm text-storm">Importes recibidos en los últimos 12 meses. Solo incluye llegadas confirmadas.</p>
-          <div className="flex h-40 items-end gap-2 border-b border-white/[0.08] pb-2">{months.map((month) => <button aria-label={`${month.label}: ${formatCurrency(month.amount, income.currencyCode)}`} aria-pressed={monthKey === month.key} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2 focus-visible:outline focus-visible:outline-1 focus-visible:outline-white" key={month.key} onClick={() => setSelectedMonthKey(month.key)} type="button"><span className={`w-full max-w-8 rounded-t ${monthKey === month.key ? "bg-[#f9f7f3]" : "bg-[#b2aca1]"}`} style={{ height: `${month.amount ? Math.max(4, month.amount / maxMonth * 110) : 1}px`, opacity: month.amount ? 1 : 0.15 }} /><span className="truncate text-[10px] text-storm">{month.label}</span></button>)}</div>
-          <p className="text-sm text-storm">{selectedMonth.label} · <strong className="text-ink">{formatCurrency(selectedMonth.amount, income.currencyCode)}</strong> en {monthOccurrences.length} {monthOccurrences.length === 1 ? "llegada" : "llegadas"}.</p>
-          <div className="grid gap-3 border-y border-white/[0.08] py-4 text-sm text-storm sm:grid-cols-2"><p>Promedio recibido: <strong className="text-ink">{formatCurrency(occurrences.length ? received / occurrences.length : 0, income.currencyCode)}</strong></p><p>Llegada mayor: <strong className="text-ink">{formatCurrency(Math.max(0, ...occurrences.map((row) => row.amount)), income.currencyCode)}</strong></p><p>A tiempo: <strong className="text-ink">{occurrences.length ? Math.round(onTimeCount / occurrences.length * 100) : 0} %</strong></p><p>Demora media: <strong className="text-ink">{averageLateDays.toFixed(1)} días</strong></p></div>
-          <div className="flex gap-2 text-xs">{(["all", "on_time", "late"] as const).map((filter) => <button aria-pressed={timelineFilter === filter} className={`rounded-lg border px-3 py-1.5 ${timelineFilter === filter ? "border-white/50 text-ink" : "border-white/[0.08] text-storm"}`} key={filter} onClick={() => setTimelineFilter(filter)} type="button">{filter === "all" ? "Todas" : filter === "on_time" ? "A tiempo" : "Con demora"}</button>)}</div>
-          <div className="divide-y divide-white/[0.08]">{filteredTimeline.slice(0, 20).map((row) => <div className="flex justify-between gap-4 py-3 text-sm" key={row.id}><span className="text-storm">{formatDate(row.actualDate ?? row.expectedDate)} · {getOccurrenceStatusLabel(row.status)}</span><span className="tabular-nums text-ink">{formatCurrency(row.amount, row.currencyCode)}</span></div>)}{filteredTimeline.length === 0 ? <p className="py-3 text-sm text-storm">No hay llegadas en este grupo.</p> : null}</div>
-        </div> : occurrencesQuery.isLoading ? <div className="space-y-2 py-4">{Array.from({ length: 3 }).map((_, index) => <div className="h-16 animate-pulse rounded-lg bg-white/[0.04]" key={index} />)}</div>
-        : <>{pending.map((date, index) => <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-3" key={date}><div><p className="text-sm font-medium text-ink">{formatDate(date)}</p><p className="text-xs text-storm">{index === 0 ? "Sin confirmar · la más antigua" : `Sin confirmar · después del ${formatDate(pending[index - 1])}`}</p></div>{canWrite && index === 0 ? <Button disabled={isPending} onClick={() => onConfirm(date)} variant="secondary">Anotar llegada</Button> : null}</div>)}{occurrences.length === 0 && pending.length === 0 ? <p className="py-6 text-sm text-storm">Aún no hay llegadas para mostrar.</p> : null}{occurrences.map((occurrence) => (
-          <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] py-4 last:border-0" key={occurrence.id}>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-ink">{formatDate(occurrence.expectedDate)}</p>
-              <p className="mt-1 text-xs text-storm">{occurrence.actualDate ? "Recibido el " + formatDate(occurrence.actualDate) : "Sin fecha de llegada"} · {getOccurrenceStatusLabel(occurrence.status)}</p>
-              {occurrence.notes ? <p className="mt-1 truncate text-xs text-storm">{occurrence.notes}</p> : null}
-              {occurrence.movementId ? <button className="mt-1 text-xs text-ink underline underline-offset-4" onClick={() => onOpenMovement(occurrence.movementId!)} type="button">Ver movimiento</button> : null}
-            </div>
-            <p className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatCurrency(occurrence.amount, occurrence.currencyCode)}</p>
-          </div>
-        ))}</>}
-      </div>
     </Modal>
   );
 }
@@ -1182,7 +1099,10 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
       ) : null}
 
       {historyIncome && activeWorkspace ? (
-        <HistoryDialog
+        <IncomeHistoryDialog
+          sourceReady={ready}
+          baseCurrencyCode={baseCurrencyCode}
+          exchangeRates={snapshot?.exchangeRates ?? []}
           canWrite={canAct}
           isPending={isActionPending || !ready}
           userId={user?.id}
