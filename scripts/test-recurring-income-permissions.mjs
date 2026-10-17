@@ -46,6 +46,8 @@ const oldClick = dom.window.HTMLAnchorElement.prototype.click, oldUrl = URL.crea
 dom.window.HTMLAnchorElement.prototype.click = () => { exported++; }; URL.createObjectURL = blob => { blob.text().then(value => { csv = value; }); return "blob:test"; }; URL.revokeObjectURL = () => {};
 
 await render({ role: "viewer" }); assert.equal(newButton().disabled, true); assert.match(container.textContent, /solo lectura/); assert.doesNotMatch(container.textContent, /Ingreso ajeno/);
+await render({}, { data: { ...data(), recurringIncome: [{ ...fixtures[0], intervalCount: 2, amountInBaseCurrency: null }, fixtures[1], income(4, { currencyCode: "USD", amountInBaseCurrency: null })] } }); assert.match(container.querySelector('[aria-label="Resumen de ingresos filtrados"]').textContent, /50\.00/); assert.match(container.textContent, /1 sin datos comparables no suma/);
+await render({}, { data: { ...data(), recurringIncome: [{ ...fixtures[0], frequency: "custom", intervalCount: 10 }, fixtures[1]] } }); assert.match(container.querySelector('[aria-label="Resumen de ingresos filtrados"]').textContent, /304\.17/); await render({}, { data: data() });
 await menu(); for (const label of ["Editar", "Eliminar", "Fijar", "Confirmar llegada"]) assert.equal(find(label), undefined);
 await click("Ver historial"); assert.equal(find("Anotar llegada"), undefined); assert.deepEqual(globalThis.riReads.at(-1), { workspaceId: 8, id: 1, userId: "A" }); await closeArrival();
 await act(async () => aria("Más acciones").click()); await click("Exportar los 2"); assert.equal(exported, 1); assert.doesNotMatch(csv, /Ingreso ajeno/);

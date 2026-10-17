@@ -45,11 +45,39 @@ export function pendingArrivalDates(income: RecurringIncomeSummary, today: strin
 export function monthlyEquivalent(income: RecurringIncomeSummary): number {
   const amount = income.amountInBaseCurrency;
   if (amount == null) return 0;
-  switch (income.frequency) {
-    case "daily": return amount * 30;
-    case "weekly": return amount * 52 / 12;
-    case "quarterly": return amount / 3;
-    case "yearly": return amount / 12;
+  return monthlyRecurringIncomeEquivalent(amount, income.frequency, income.intervalCount);
+}
+
+/** Same annualized cadence as mobile; custom is an interval measured in days. */
+export function monthlyRecurringIncomeEquivalent(amount: number, frequency: RecurringIncomeSummary["frequency"], intervalCount: number) {
+  const interval = Math.max(1, Math.floor(intervalCount) || 1);
+  switch (frequency) {
+    case "daily":
+    case "custom": return amount * 365 / (12 * interval);
+    case "weekly": return amount * 52 / (12 * interval);
+    case "quarterly": return amount / (3 * interval);
+    case "yearly": return amount / (12 * interval);
+    case "monthly": return amount / interval;
     default: return amount;
   }
+}
+
+export function summarizeRecurringIncomeMonthly(items: RecurringIncomeSummary[], baseCurrencyCode: string) {
+  const summary = { monthlyTotal: 0, activeCount: 0, pausedCount: 0, comparableActiveCount: 0, excludedActiveCount: 0 };
+  const base = baseCurrencyCode.toUpperCase();
+  for (const item of items) {
+    if (item.status === "paused") summary.pausedCount += 1;
+    if (item.status !== "active") continue;
+    summary.activeCount += 1;
+    const converted = item.amountInBaseCurrency;
+    const amount = item.currencyCode.toUpperCase() === base ? item.amount
+      : converted != null && Number.isFinite(converted) && (converted > 0 || (converted === 0 && item.amount === 0)) ? converted : null;
+    if (amount === null || !Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(Math.round(amount * 100)) ||
+      !Number.isFinite(item.intervalCount) || !["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(item.frequency)) {
+      summary.excludedActiveCount += 1; continue;
+    }
+    summary.monthlyTotal += monthlyRecurringIncomeEquivalent(amount, item.frequency, item.intervalCount);
+    summary.comparableActiveCount += 1;
+  }
+  return summary;
 }

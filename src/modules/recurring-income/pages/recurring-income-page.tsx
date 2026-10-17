@@ -56,7 +56,7 @@ import {
   getStatusOption,
   statusOptions,
 } from "../lib/recurring-income-presenters";
-import { advanceNextExpectedDate, monthlyEquivalent, pendingArrivalDates } from "../lib/recurring-income-parity";
+import { advanceNextExpectedDate, summarizeRecurringIncomeMonthly, pendingArrivalDates } from "../lib/recurring-income-parity";
 import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
 import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
@@ -676,8 +676,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     .filter((item) => item.status === "active" && item.nextExpectedDate >= todayDate)
     .sort((left, right) => left.nextExpectedDate.localeCompare(right.nextExpectedDate))[0] ?? null;
   const activeInFilter = filteredIncome.filter((item) => item.status === "active").length;
-  const monthlyTotal = filteredIncome.filter((item) => item.status === "active").reduce((sum, item) => sum + monthlyEquivalent(item), 0);
-  const unconvertedCount = filteredIncome.filter((item) => item.status === "active" && item.amountInBaseCurrency == null).length;
+  const monthlySummary = summarizeRecurringIncomeMonthly(filteredIncome, baseCurrencyCode);
   const missedArrivals = recurringIncome.reduce((sum, item) => sum + pendingArrivalDates(item, todayDate).length, 0);
   const recurringIncomePayers = useMemo(
     () =>
@@ -1101,7 +1100,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
 
       <section aria-label="Resumen de ingresos filtrados" className="module-summary">
         <span><span className="font-semibold text-ink">{filteredIncome.length}</span> {filteredIncome.length === 1 ? "ingreso" : "ingresos"} en esta vista{activeInFilter !== filteredIncome.length ? ` · ${activeInFilter} activos` : ""}</span>
-        <span>{unconvertedCount ? "Esperado al mes: conversión pendiente" : <>Esperado al mes <strong className="text-ink">{formatCurrency(monthlyTotal, baseCurrencyCode)}</strong></>}</span>
+        <span>{monthlySummary.comparableActiveCount ? <>Esperado al mes <strong className="text-ink">{formatCurrency(monthlySummary.monthlyTotal, baseCurrencyCode)}</strong></> : monthlySummary.activeCount ? "Esperado al mes: sin importes comparables" : "Sin ingresos activos"}{monthlySummary.excludedActiveCount ? <span className="ml-2 text-xs">· {monthlySummary.excludedActiveCount} sin datos comparables no {monthlySummary.excludedActiveCount === 1 ? "suma" : "suman"}</span> : null}</span>
       </section>
 
       {!permitted ? <p className="text-sm text-storm" role="status">{activeWorkspace.isArchived ? "Este espacio está archivado." : "Tu acceso es de solo lectura."} Puedes consultar y exportar, pero no modificar ingresos fijos.</p> : null}
