@@ -60,6 +60,7 @@ import { advanceNextExpectedDate, summarizeRecurringIncomeMonthly, pendingArriva
 import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
 import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
+import { confirmIncomeWrite, isIncomeWriteRejected } from "../lib/income-write-result";
 
 const RECURRING_INCOME_PAGE_SIZE = 50;
 
@@ -851,7 +852,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
           ...payload,
         }));
         if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
-        if (!Number.isSafeInteger(result?.id) || result.id <= 0) throw new Error("No se confirmó el identificador del ingreso fijo.");
+        confirmIncomeWrite(result && { id: result.id, workspace_id: result.workspaceId }, { workspaceId: activeWorkspace.id });
         editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
@@ -859,13 +860,14 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
           description: "Ya aparece en la lista de ingresos fijos.",
         });
       } else if (selectedIncome) {
-        await runWrite(() => updateMutation.mutateAsync({
+        const result = await runWrite(() => updateMutation.mutateAsync({
           recurringIncomeId: selectedIncome.id,
           workspaceId: activeWorkspace.id,
           userId: user.id,
           ...payload,
         }));
         if (!responseScope.isCurrent() || !editorWrite.isCurrent(attempt)) return;
+        confirmIncomeWrite(result && { id: result.id, workspace_id: result.workspaceId }, { workspaceId: activeWorkspace.id, recurringIncomeId: selectedIncome.id });
         editorWrite.confirm(attempt);
         setFeedback({
           tone: "success",
@@ -878,8 +880,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
       setSelectedIncomeId(null);
     } catch (error) {
       if (!responseScope.isCurrent() || (attempt && !editorWrite.isCurrent(attempt))) return;
-      const code = error && typeof error === "object" && "code" in error ? error.code : null;
-      const rejected = typeof code === "string" && /^(22|23|42)[A-Z0-9]{3}$/.test(code);
+      const rejected = isIncomeWriteRejected(error);
       if (attempt) { if (rejected) editorWrite.reject(attempt); else editorWrite.fail(attempt); }
       setFeedback({
         tone: "error",
@@ -906,7 +907,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
         if (!access.isCurrent()) { restore(); return; }
         try {
           currentIncome(targetId);
-          await runWrite(() => deleteMutation.mutateAsync({ recurringIncomeId: targetId, workspaceId: activeWorkspace.id }));
+          await runWrite(() => deleteMutation.mutateAsync({ recurringIncomeId: targetId, workspaceId: activeWorkspace.id, userId: user!.id, isCurrent: responseScope.isCurrent }));
         } catch (error) {
           restore();
           if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "Eliminación por comprobar", description: `${getQueryErrorMessage(error)} Actualiza antes de repetir.` });
@@ -928,7 +929,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     try {
       await runWrite(async () => { for (const id of Array.from(selectedIds)) {
         responseScope.assertCurrent(); latestAccess.current.assertCurrent(); currentIncome(id);
-        await deleteMutation.mutateAsync({ recurringIncomeId: id, workspaceId: activeWorkspace.id });
+        await deleteMutation.mutateAsync({ recurringIncomeId: id, workspaceId: activeWorkspace.id, userId: user!.id, isCurrent: responseScope.isCurrent });
       } });
       if (!responseScope.isCurrent()) return;
       clearAll();
@@ -978,7 +979,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
       await runWrite(async () => { for (const item of active) {
         responseScope.assertCurrent(); latestAccess.current.assertCurrent();
         const current = currentIncome(item.id); if (current.status !== "active") continue;
-        await flagsMutation.mutateAsync({ recurringIncomeId: item.id, patch: { status: "paused" } });
+        await flagsMutation.mutateAsync({ recurringIncomeId: item.id, workspaceId: activeWorkspace!.id, userId: user!.id, expectedStatus: current.status, expectedIsPinned: Boolean(current.isPinned), patch: { status: "paused" } });
       } });
       if (!responseScope.isCurrent()) return;
       clearAll();
@@ -996,7 +997,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
       const current = currentIncome(income.id);
       if (patch.status && (!["active", "paused"].includes(patch.status) || current.status === "cancelled")) throw new Error("Revisa el estado actual antes de cambiarlo.");
       if (patch.status === current.status || (patch.is_pinned !== undefined && patch.is_pinned === current.isPinned)) return;
-      await runWrite(() => flagsMutation.mutateAsync({ recurringIncomeId: current.id, patch }));
+      await runWrite(() => flagsMutation.mutateAsync({ recurringIncomeId: current.id, workspaceId: activeWorkspace!.id, userId: user!.id, expectedStatus: current.status, expectedIsPinned: Boolean(current.isPinned), patch }));
     } catch (error) {
       if (responseScope.isCurrent()) setFeedback({ tone: "error", title: "No se pudo actualizar el ingreso", description: getQueryErrorMessage(error) });
     }
@@ -1151,7 +1152,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
 
       {deleteTarget ? (
         <Modal className="!max-w-md !bg-[#1a1917]" disableOutsideClose={isDeleting} labelledBy="income-delete-title" onClose={() => { if (!isDeleting) setDeleteTargetId(null); }}>
-          <ModalHeader description="Podrás deshacerlo durante unos segundos." onClose={() => setDeleteTargetId(null)} title="¿Eliminar ingreso fijo?" titleId="income-delete-title" />
+          <ModalHeader description="Se elimina la programación y su historial de llegadas; los movimientos registrados se conservan. Puedes deshacer antes del envío." onClose={() => setDeleteTargetId(null)} title="¿Eliminar ingreso fijo?" titleId="income-delete-title" />
           <div className="px-6 py-5"><p className="font-semibold text-ink">{deleteTarget.name}</p><p className="mt-1 text-sm text-storm">{formatCurrency(deleteTarget.amount, deleteTarget.currencyCode)} · {getFrequencyOption(deleteTarget.frequency).label}</p></div>
           <div className="flex justify-end gap-2 border-t border-white/[0.08] px-6 py-4"><Button disabled={isDeleting} onClick={() => setDeleteTargetId(null)} variant="ghost">Cancelar</Button><Button className="!bg-[#3a2423] !text-[#f0b0ab] hover:!bg-[#4a2d2b]" disabled={isDeleting} onClick={handleDelete}>Eliminar</Button></div>
         </Modal>
@@ -1195,7 +1196,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
 
       {showBulkDeleteConfirm ? (
         <Modal className="!max-w-md !bg-[#1a1917]" disableOutsideClose={isBulkDeleting} labelledBy="income-bulk-delete-title" onClose={() => { if (!isBulkDeleting) setShowBulkDeleteConfirm(false); }}>
-          <ModalHeader description="Esta acción elimina los registros seleccionados de forma permanente." onClose={() => setShowBulkDeleteConfirm(false)} title={`¿Eliminar ${selectedCount} ingreso${selectedCount === 1 ? "" : "s"}?`} titleId="income-bulk-delete-title" />
+          <ModalHeader description="Se eliminan las programaciones y sus historiales de llegadas. Los movimientos registrados se conservan." onClose={() => setShowBulkDeleteConfirm(false)} title={`¿Eliminar ${selectedCount} ingreso${selectedCount === 1 ? "" : "s"}?`} titleId="income-bulk-delete-title" />
           <div className="flex justify-end gap-2 border-t border-white/[0.08] px-6 py-4"><Button disabled={isBulkDeleting} onClick={() => setShowBulkDeleteConfirm(false)} variant="ghost">Cancelar</Button><Button className="!bg-[#3a2423] !text-[#f0b0ab] hover:!bg-[#4a2d2b]" disabled={isBulkDeleting} onClick={() => void confirmBulkDelete()}>{isBulkDeleting ? "Eliminando..." : `Eliminar ${selectedCount}`}</Button></div>
         </Modal>
       ) : null}

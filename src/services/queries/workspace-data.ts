@@ -49,6 +49,7 @@ import { runIdempotentInsert } from "../../lib/idempotent-write";
 import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout } from "../../modules/accounts/lib/account-write-result";
 import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptionWriteTimeout } from "../../modules/subscriptions/lib/subscription-write-result";
 import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recurring-income/lib/arrival-write";
+import { assertIncomeWriteScope, confirmIncomeWrite, IncomeWritePreflightError, withIncomeWriteTimeout } from "../../modules/recurring-income/lib/income-write-result";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -910,6 +911,17 @@ type RecurringIncomeUpdateInput = RecurringIncomeFormInput & {
 type RecurringIncomeDeleteInput = {
   recurringIncomeId: number;
   workspaceId: number;
+  userId: string;
+  isCurrent: () => boolean;
+};
+
+type RecurringIncomeFlagsInput = {
+  recurringIncomeId: number;
+  workspaceId: number;
+  userId: string;
+  expectedStatus: RecurringIncomeSummary["status"];
+  expectedIsPinned: boolean;
+  patch: { is_pinned?: boolean; status?: RecurringIncomeSummary["status"] };
 };
 
 type CounterpartyMutationInput = CounterpartyFormInput & {
@@ -7637,96 +7649,102 @@ export function useDeleteSubscriptionMutation(workspaceId?: number, userId?: str
   });
 }
 
+async function invalidateIncomeData(queryClient: ReturnType<typeof useQueryClient>, workspaceId: number, userId?: string) {
+  await Promise.all([
+    invalidateWorkspaceSnapshot(queryClient, workspaceId, userId),
+    queryClient.invalidateQueries({ queryKey: ["recurring_income_occurrences", workspaceId, userId] }),
+  ]);
+}
+
 export function useCreateRecurringIncomeMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
-
   return useMutation({
+    retry: false,
     mutationFn: async (input: RecurringIncomeMutationInput) => {
-      const client = getClient();
-      const { data, error } = await client
-        .from("recurring_income")
-        .insert({
-          workspace_id: input.workspaceId,
-          created_by_user_id: input.userId,
-          ...buildRecurringIncomeMutationPayload(input, input.userId),
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        throw error;
-      }
-      return { id: data.id as number };
+      assertIncomeWriteScope(input, workspaceId, userId);
+      const payload = buildRecurringIncomeMutationPayload(input, input.userId);
+      const { data, error } = await withIncomeWriteTimeout(signal => getClient().from("recurring_income")
+        .insert({ workspace_id: input.workspaceId, created_by_user_id: input.userId, ...payload })
+        .select(["id", "workspace_id", ...Object.keys(payload)].join(", ")).abortSignal(signal).single());
+      if (error) throw error;
+      return confirmIncomeWrite(data, input, payload);
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    onSettled: async () => { if (workspaceId) await invalidateIncomeData(queryClient, workspaceId, userId); },
   });
 }
 
 export function useUpdateRecurringIncomeMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
-
   return useMutation({
+    retry: false,
     mutationFn: async (input: RecurringIncomeUpdateInput) => {
-      const client = getClient();
-      const { error } = await client
-        .from("recurring_income")
-        .update(buildRecurringIncomeMutationPayload(input, input.userId))
-        .eq("id", input.recurringIncomeId)
-        .eq("workspace_id", input.workspaceId);
-
-      if (error) {
-        throw error;
-      }
+      assertIncomeWriteScope(input, workspaceId, userId, true);
+      const payload = buildRecurringIncomeMutationPayload(input, input.userId);
+      const { data, error } = await withIncomeWriteTimeout(signal => getClient().from("recurring_income")
+        .update(payload).eq("id", input.recurringIncomeId).eq("workspace_id", input.workspaceId)
+        .select(["id", "workspace_id", ...Object.keys(payload)].join(", ")).abortSignal(signal).single());
+      if (error) throw error;
+      return confirmIncomeWrite(data, input, payload);
     },
-    onSuccess: async () => {
-      if (workspaceId) {
-        await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-      }
-    },
+    onSettled: async () => { if (workspaceId) await invalidateIncomeData(queryClient, workspaceId, userId); },
   });
 }
 
 export function useSetRecurringIncomeFlagsMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { recurringIncomeId: number; patch: { is_pinned?: boolean; status?: RecurringIncomeSummary["status"] } }) => {
-      if (!workspaceId || !userId) throw new Error("No hay un espacio activo.");
-      const { error } = await getClient().from("recurring_income")
-        .update({ ...input.patch, updated_by_user_id: userId })
-        .eq("workspace_id", workspaceId)
-        .eq("id", input.recurringIncomeId);
+    retry: false,
+    mutationFn: async (input: RecurringIncomeFlagsInput) => {
+      assertIncomeWriteScope(input, workspaceId, userId, true);
+      const patch = input.patch;
+      if (!patch || !Object.keys(patch).length || Object.keys(patch).some(key => !["status", "is_pinned"].includes(key)) ||
+        !["active", "paused", "cancelled"].includes(input.expectedStatus) || typeof input.expectedIsPinned !== "boolean" ||
+        (patch.status !== undefined && !["active", "paused", "cancelled"].includes(patch.status)) ||
+        (patch.is_pinned !== undefined && typeof patch.is_pinned !== "boolean") ||
+        Object.values(patch).some(value => value === undefined)) throw new IncomeWritePreflightError("Revisa el estado o la posición antes de actualizar.");
+      const { data, error } = await withIncomeWriteTimeout(signal => {
+        let query = getClient().from("recurring_income").update({ ...patch, updated_by_user_id: input.userId })
+          .eq("workspace_id", input.workspaceId).eq("id", input.recurringIncomeId).eq("status", input.expectedStatus);
+        if (patch.is_pinned !== undefined) query = query.eq("is_pinned", input.expectedIsPinned);
+        return query.select("id, workspace_id, status, is_pinned").abortSignal(signal).single();
+      });
       if (error) throw error;
+      return confirmIncomeWrite(data, input, patch);
     },
-    onSuccess: async () => {
-      if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
-    },
+    onSettled: async () => { if (workspaceId) await invalidateIncomeData(queryClient, workspaceId, userId); },
   });
 }
 
 export function useDeleteRecurringIncomeMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
-
   return useMutation({
+    retry: false,
     mutationFn: async (input: RecurringIncomeDeleteInput) => {
-      const client = getClient();
-      const { error } = await client
-        .from("recurring_income")
-        .delete()
-        .eq("id", input.recurringIncomeId)
-        .eq("workspace_id", input.workspaceId);
-
-      if (error) {
-        throw error;
-      }
+      assertIncomeWriteScope(input, workspaceId, userId, true);
+      if (typeof input.isCurrent !== "function" || !input.isCurrent()) throw new IncomeWritePreflightError("El acceso cambió antes de eliminar.");
+      return withIncomeWriteTimeout(async signal => {
+        const assertCurrent = () => { signal.throwIfAborted(); if (!input.isCurrent()) throw new Error("El acceso cambió. Comprueba el ingreso y su historial antes de repetir."); };
+        assertCurrent();
+        const client = getClient();
+        const parent = await client.from("recurring_income").select("id, workspace_id")
+          .eq("id", input.recurringIncomeId).eq("workspace_id", input.workspaceId).abortSignal(signal).single();
+        if (parent.error) throw parent.error;
+        confirmIncomeWrite(parent.data, input);
+        assertCurrent();
+        // Same native deletion semantics: remove the schedule/history, never its financial movements.
+        const history = await client.from("recurring_income_occurrences").delete({ count: "exact" })
+          .eq("workspace_id", input.workspaceId).eq("recurring_income_id", input.recurringIncomeId).abortSignal(signal);
+        if (history.error) throw history.error;
+        if (!Number.isSafeInteger(history.count) || history.count! < 0) throw new Error("La eliminación del historial está por comprobar. No se envió la eliminación del ingreso.");
+        assertCurrent();
+        const { data, error } = await client.from("recurring_income").delete()
+          .eq("id", input.recurringIncomeId).eq("workspace_id", input.workspaceId).select("id, workspace_id").abortSignal(signal).single();
+        if (error) throw error;
+        return confirmIncomeWrite(data, input);
+      });
     },
-    ...optimisticDelete<RecurringIncomeDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
-      ...snap,
-      recurringIncome: snap.recurringIncome.filter((r) => r.id !== input.recurringIncomeId),
-    })),
+    // No whole-snapshot rollback can undo a partially committed history deletion.
+    onSettled: async () => { if (workspaceId) await invalidateIncomeData(queryClient, workspaceId, userId); },
   });
 }
 

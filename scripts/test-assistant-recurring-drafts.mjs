@@ -89,9 +89,12 @@ for (const proposal of [draft, incomeDraft]) {
   await ask("¿Qué pasó?"); assert.match(globalThis.recCalls.at(-1).history.at(-1).content, /RESULTADO INCIERTO; no repetir/); await close(); window.localStorage.clear();
 }
 let outcomes = [], unconfirmed = [];
+const { IncomeWritePreflightError } = await import(load("src/modules/recurring-income/lib/income-write-result.ts"));
 const props = { draft, userId: "u", workspaceId: 8, session: {}, onClose: () => {}, onSaved: note => outcomes.push(note), onUnconfirmed: note => unconfirmed.push(note) };
 let fail = true; globalThis.recWrite = async () => { if (fail) throw { code: "23514", message: "Fixture SQL rejection" }; return { id: 302 }; };
 await render(React.createElement(AssistantRecurringReview, props)); await submit(); assert.match(container.textContent, /Fixture SQL rejection/); assert.equal(unconfirmed.length, 0); await change(amount(), "95"); fail = false; await submit(); assert.match(outcomes.at(-1), /95[.,]00/); await close();
+globalThis.recWrite = async () => { throw new IncomeWritePreflightError("Nothing sent: correct the amount"); }; const beforePreflight = unconfirmed.length;
+await render(React.createElement(AssistantRecurringReview, { ...props, draft: incomeDraft, session: {} })); await submit(); assert.match(container.textContent, /Nothing sent/); assert.equal(unconfirmed.length, beforePreflight); globalThis.recWrite = async () => ({ id: 304 }); await change(amount(), "96"); await submit(); assert.match(outcomes.at(-1), /96[.,]00/); await close();
 // An ambiguous income account is mandatory, so saving waits for an explicit choice.
 const ambiguous = { ...incomeDraft, accountName: "No existe" }; globalThis.recWrite = async () => ({ id: 303 });
 await render(React.createElement(AssistantRecurringReview, { ...props, draft: ambiguous, session: {} })); const beforeAccount = globalThis.recWrites.length; await submit(); assert.equal(globalThis.recWrites.length, beforeAccount); assert.match(container.textContent, /cuenta/);

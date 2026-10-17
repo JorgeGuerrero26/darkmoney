@@ -12,6 +12,8 @@ import { SubscriptionEditorDialog } from "../../subscriptions/components/subscri
 import { RecurringIncomeEditorDialog } from "../../recurring-income/components/recurring-income-editor-dialog";
 import { prepareRecurringProposal, type AssistantRecurringDraft, type RecurringEditorDraft } from "../lib/recurring-proposal";
 import { createAssistantResourceSaver } from "../lib/resource-proposal-save";
+import { isIncomeWriteRejected } from "../../recurring-income/lib/income-write-result";
+import { isSubscriptionWriteRejected } from "../../subscriptions/lib/subscription-write-result";
 
 type Scope = { userId: string; workspaceId: number };
 type Input = { kind: "subscription"; value: SubscriptionFormInput & Scope } | { kind: "recurring_income"; value: RecurringIncomeFormInput & Scope };
@@ -39,6 +41,7 @@ export function AssistantRecurringReview({ draft, userId, workspaceId, session, 
     session.createdId = result.id;
   } };
   if (!session.saver) session.saver = createAssistantResourceSaver<Input>({ isCurrent: () => session.live?.current() ?? false,
+    isDefiniteRejection: (error, input) => input.kind === "subscription" ? isSubscriptionWriteRejected(error) : isIncomeWriteRejected(error),
     insert: input => { if (!session.live) throw new Error("El formulario ya no está disponible."); return session.live.insert(input); } });
   function close() { if (lock.current) return; if (dirty.current) setUnsaved(true); else onClose(); }
   function update(field: string, value: unknown) {
