@@ -6,6 +6,7 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { RecurringIncomeSummary } from "../../../types/domain";
 import { getFrequencyOption, getStatusOption } from "../lib/recurring-income-presenters";
+import { validIncomeCalendarDay } from "../lib/recurring-income-parity";
 
 type RecurringIncomeListProps = {
   income: RecurringIncomeSummary[];
@@ -73,7 +74,7 @@ export function RecurringIncomeList({
           </button>
           <div className="shrink-0 text-right">
             <p className="text-sm font-semibold tabular-nums text-ink">{formatCurrency(item.amount, item.currencyCode)}</p>
-            <p className="mt-0.5 text-xs text-storm">{item.status === "active" && item.nextExpectedDate < todayDate ? "Sin confirmar · " : ""}{formatDate(item.nextExpectedDate)}</p>
+            <p className="mt-0.5 text-xs text-storm">{validIncomeCalendarDay(item.nextExpectedDate) ? <>{item.status === "active" && item.nextExpectedDate < todayDate ? "Sin confirmar · " : ""}{formatDate(item.nextExpectedDate)}</> : "Fecha por comprobar"}</p>
           </div>
           <button aria-expanded={openMenuId === item.id} aria-label={`Acciones de ${item.name}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-storm transition hover:bg-white/[0.05] hover:text-ink" onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>
           {openMenuId === item.id ? (

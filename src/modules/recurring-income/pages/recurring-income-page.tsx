@@ -50,7 +50,7 @@ import {
   getFrequencyOption,
   getStatusOption,
 } from "../lib/recurring-income-presenters";
-import { advanceNextExpectedDate, summarizeRecurringIncomeMonthly, pendingArrivalDates } from "../lib/recurring-income-parity";
+import { advanceNextExpectedDate, summarizeRecurringIncomeMonthly, summarizePendingIncome, validIncomeCalendarDay } from "../lib/recurring-income-parity";
 import { canWriteWorkspaceCatalog, useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
 import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
@@ -171,7 +171,7 @@ function ConfirmArrivalDialog({
   const accountOptions = accounts.filter(item => item.workspaceId === income.workspaceId && !item.isArchived && item.currencyCode === income.currencyCode).map<PickerOption>((item) => ({
     value: String(item.id), label: item.name, description: item.currencyCode, leadingLabel: item.currencyCode,
   }));
-  const nextExpectedDate = advanceNextExpectedDate(income);
+  const nextExpectedDate = advanceNextExpectedDate(initialIncome.current);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -233,7 +233,7 @@ function ConfirmArrivalDialog({
             <div className="space-y-5">
               <div>
                 <p className="text-sm font-semibold text-ink">{income.name}</p>
-                <p className="mt-1 text-sm text-storm">Esperado el {formatDate(income.nextExpectedDate)} · {formatCurrency(income.amount, income.currencyCode)}</p>
+                <p className="mt-1 text-sm text-storm">Esperado el {validIncomeCalendarDay(income.nextExpectedDate) ? formatDate(income.nextExpectedDate) : "fecha por comprobar"} · {formatCurrency(income.amount, income.currencyCode)}</p>
               </div>
               <Field label="Fecha real de llegada"><DatePickerField appearance="compact" onChange={setActualDate} value={actualDate} /></Field>
               <Field label="Cuenta donde llegó"><SearchablePicker appearance="compact" emptyMessage="No hay cuentas disponibles." onChange={setAccountId} options={accountOptions} placeholderDescription="El ingreso afectará el saldo de esta cuenta." placeholderLabel="Elige una cuenta" queryPlaceholder="Buscar cuenta..." value={accountId} /></Field>
@@ -407,6 +407,8 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     if (!canAct || !access.isCurrent()) return;
     const item = rows.current.find(item => item.id === id);
     if (!item || item.status !== "active" || (date && date !== item.nextExpectedDate)) return;
+    try { advanceNextExpectedDate(item); }
+    catch { setFeedback({ tone: "error", title: "Calendario por comprobar", description: "Revisa la fecha, frecuencia e intervalo del ingreso antes de confirmar una llegada. No se registró dinero." }); return; }
     setHistoryIncomeId(null); setConfirmDate(date); setConfirmIncomeId(id);
   }
   function openDelete(id: number) { if (canAct && access.isCurrent() && rows.current.some(item => item.id === id)) setDeleteTargetId(id); }
@@ -501,18 +503,17 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
   const [isBulkPausing, setIsBulkPausing] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const todayDate = todayDateInputValue();
-  const overdueCount = recurringIncome.filter((item) => item.status === "active" && item.nextExpectedDate < todayDate).length;
   const dueSoonCount = recurringIncome.filter((r) => {
-    if (r.status !== "active") return false;
+    if (r.status !== "active" || !validIncomeCalendarDay(r.nextExpectedDate)) return false;
     const differenceInDays = (Date.parse(r.nextExpectedDate) - Date.parse(todayDate)) / 86_400_000;
     return differenceInDays >= 0 && differenceInDays <= 30;
   }).length;
   const nextIncome = [...recurringIncome]
-    .filter((item) => item.status === "active" && item.nextExpectedDate >= todayDate)
+    .filter((item) => item.status === "active" && validIncomeCalendarDay(item.nextExpectedDate) && item.nextExpectedDate >= todayDate)
     .sort((left, right) => left.nextExpectedDate.localeCompare(right.nextExpectedDate))[0] ?? null;
   const activeInFilter = filteredIncome.filter((item) => item.status === "active").length;
   const monthlySummary = summarizeRecurringIncomeMonthly(filteredIncome, baseCurrencyCode);
-  const missedArrivals = recurringIncome.reduce((sum, item) => sum + pendingArrivalDates(item, todayDate).length, 0);
+  const pendingIncome = summarizePendingIncome(recurringIncome, todayDate);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -865,8 +866,9 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
         <div className="min-w-0 flex-1 basis-[15rem]">
           <h1 className="module-heading">Ingresos fijos</h1>
           <p className="mt-1.5 text-sm leading-6 text-storm">
-            {recurringIncome.length} {recurringIncome.length === 1 ? "registrado" : "registrados"} · {missedArrivals > 0 ? `${missedArrivals} ${missedArrivals === 1 ? "llegada sin confirmar" : "llegadas sin confirmar"} en ${overdueCount} ${overdueCount === 1 ? "ingreso" : "ingresos"}` : dueSoonCount > 0 ? `${dueSoonCount} ${dueSoonCount === 1 ? "llega" : "llegan"} en los próximos 30 días` : nextIncome ? `siguiente llegada el ${formatDate(nextIncome.nextExpectedDate)}` : "sin llegadas próximas"}.
+            {recurringIncome.length} {recurringIncome.length === 1 ? "registrado" : "registrados"} · {pendingIncome.count > 0 ? `${pendingIncome.hasMore || pendingIncome.unavailableCount ? "al menos " : ""}${pendingIncome.count} ${pendingIncome.count === 1 ? "llegada sin confirmar" : "llegadas sin confirmar"} en ${pendingIncome.incomeCount} ${pendingIncome.incomeCount === 1 ? "ingreso" : "ingresos"}` : pendingIncome.unavailableCount ? "llegadas pendientes por comprobar" : dueSoonCount > 0 ? `${dueSoonCount} ${dueSoonCount === 1 ? "llega" : "llegan"} en los próximos 30 días` : nextIncome ? `siguiente llegada el ${formatDate(nextIncome.nextExpectedDate)}` : "sin llegadas próximas"}.
           </p>
+          {pendingIncome.unavailableCount ? <p className="mt-1 text-xs text-storm" role="status">{pendingIncome.unavailableCount} {pendingIncome.unavailableCount === 1 ? "calendario sin verificar no se incluye" : "calendarios sin verificar no se incluyen"} en ese recuento.</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button disabled={!canAct} data-tour="create-recurring-income" onClick={openCreateEditor}><Plus className="mr-2 h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo ingreso</span></Button>

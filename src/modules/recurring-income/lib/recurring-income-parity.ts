@@ -1,18 +1,33 @@
 import type { RecurringIncomeSummary } from "../../../types/domain";
 
+export const INCOME_PENDING_DATE_LIMIT = 400;
+
+export function validIncomeCalendarDay(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function validIncomeCadence(income: RecurringIncomeSummary) {
+  return validIncomeCalendarDay(income.nextExpectedDate) && Number.isSafeInteger(income.intervalCount) && income.intervalCount > 0 &&
+    ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"].includes(income.frequency) &&
+    (income.dayOfMonth == null || (Number.isSafeInteger(income.dayOfMonth) && income.dayOfMonth >= 1 && income.dayOfMonth <= 31));
+}
+
 function addMonthsClamped(date: Date, months: number) {
   const day = date.getUTCDate();
   const result = new Date(date.getTime());
   result.setUTCDate(1);
   result.setUTCMonth(result.getUTCMonth() + months);
-  const last = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
+  const end = new Date(result); end.setUTCMonth(end.getUTCMonth() + 1, 0);
+  const last = end.getUTCDate();
   result.setUTCDate(Math.min(day, last));
   return result;
 }
 
 export function advanceNextExpectedDate(income: RecurringIncomeSummary): string {
-  const [year, month, day] = income.nextExpectedDate.split("-").map(Number);
-  let date = new Date(Date.UTC(year, month - 1, day, 12));
+  if (!validIncomeCadence(income)) throw new Error("El calendario del ingreso está por comprobar. Revisa fecha, frecuencia, intervalo y día del mes.");
+  let date = new Date(`${income.nextExpectedDate}T12:00:00Z`);
   const { frequency, intervalCount } = income;
   switch (frequency) {
     case "daily": date.setUTCDate(date.getUTCDate() + intervalCount); break;
@@ -23,23 +38,43 @@ export function advanceNextExpectedDate(income: RecurringIncomeSummary): string 
     default: date.setUTCDate(date.getUTCDate() + intervalCount);
   }
   if (["monthly", "quarterly", "yearly"].includes(frequency) && income.dayOfMonth) {
-    const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    const end = new Date(date); end.setUTCDate(1); end.setUTCMonth(end.getUTCMonth() + 1, 0);
+    const last = end.getUTCDate();
     date.setUTCDate(Math.min(income.dayOfMonth, last));
   }
-  return date.toISOString().slice(0, 10);
+  const next = Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+  if (!validIncomeCalendarDay(next) || next <= income.nextExpectedDate) throw new Error("El calendario del ingreso no puede avanzar a una fecha válida.");
+  return next;
 }
 
-export function pendingArrivalDates(income: RecurringIncomeSummary, today: string): string[] {
-  if (income.status !== "active") return [];
+export function pendingArrivalCalendar(income: RecurringIncomeSummary, today: string) {
+  const empty = { dates: [] as string[], hasMore: false, unavailable: false };
+  if (income.status === "paused" || income.status === "cancelled") return empty;
+  if (income.status !== "active" || !validIncomeCadence(income) || !validIncomeCalendarDay(today)) return { ...empty, unavailable: true };
   const dates: string[] = [];
   let cursor = income.nextExpectedDate;
-  while (cursor < today && dates.length < 400) {
+  while (cursor < today && dates.length < INCOME_PENDING_DATE_LIMIT) {
     dates.push(cursor);
-    const next = advanceNextExpectedDate({ ...income, nextExpectedDate: cursor });
-    if (next <= cursor) break;
-    cursor = next;
+    try { cursor = advanceNextExpectedDate({ ...income, nextExpectedDate: cursor }); }
+    catch { return { ...empty, unavailable: true }; }
   }
-  return dates;
+  return { dates, hasMore: cursor < today, unavailable: false };
+}
+
+/** Compatibility for date-only consumers; UI counts must also inspect hasMore/unavailable. */
+export function pendingArrivalDates(income: RecurringIncomeSummary, today: string): string[] {
+  return pendingArrivalCalendar(income, today).dates;
+}
+
+export function summarizePendingIncome(items: RecurringIncomeSummary[], today: string) {
+  return items.reduce((result, item) => {
+    const calendar = pendingArrivalCalendar(item, today);
+    result.count += calendar.dates.length;
+    if (calendar.dates.length) result.incomeCount++;
+    if (calendar.unavailable) result.unavailableCount++;
+    result.hasMore ||= calendar.hasMore;
+    return result;
+  }, { count: 0, incomeCount: 0, unavailableCount: 0, hasMore: false });
 }
 
 export function monthlyEquivalent(income: RecurringIncomeSummary): number {
