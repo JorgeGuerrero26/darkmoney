@@ -452,6 +452,7 @@ export type RecurringIncomeSummary = {
   amount: number;
   grossAmount?: number | null;
   deductions?: { name: string; amount: number }[];
+  scheduledChanges?: { effectiveDate: string; amount: number }[];
   isPinned?: boolean;
   amountInBaseCurrency?: number | null;
   currencyCode: string;

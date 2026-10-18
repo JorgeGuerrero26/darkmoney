@@ -1,6 +1,7 @@
 import type { WorkspaceSnapshot, SubscriptionFormInput, RecurringIncomeFormInput } from "../../services/queries/workspace-data";
 import type { SubscriptionFormState } from "../subscriptions/components/subscription-editor-dialog";
 import type { RecurringIncomeFormState } from "../recurring-income/components/recurring-income-editor-dialog";
+import { collectIncomeScheduledChanges } from "../recurring-income/lib/scheduled-changes";
 
 const optionalNumber = (value: string) => value.trim() ? Number(value.replace(",", ".")) : null;
 function integer(value: string, label: string, min: number, max = Number.MAX_SAFE_INTEGER, optional = false) {
@@ -57,5 +58,5 @@ export function buildRecurringIncomeEditorInput(value: RecurringIncomeFormState,
     if (!Number.isFinite(amount)) throw new Error("Revisa el monto de los descuentos.");
     return [{ name: row.name.trim().slice(0, 60), amount: Number(amount.toFixed(2)) }];
   });
-  return { ...base, payerPartyId: partyId, grossAmount, deductions, nextExpectedDate: value.nextExpectedDate };
+  return { ...base, payerPartyId: partyId, grossAmount, deductions, scheduledChanges: collectIncomeScheduledChanges(value.scheduledChanges), nextExpectedDate: value.nextExpectedDate };
 }

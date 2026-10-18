@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { dom, load } from "./lib/web-ui-harness.mjs";
 const rules = await import(load("src/modules/recurring-income/lib/income-write-result.ts"));
+const { incomeScheduledChangeRows } = await import(load("src/modules/recurring-income/lib/scheduled-changes.ts"));
 const source = readFileSync(new URL("../src/services/queries/workspace-data.ts", import.meta.url), "utf8"), ast = ts.createSourceFile("workspace.ts", source, ts.ScriptTarget.Latest, true);
 const names = ["useCreateRecurringIncomeMutation", "useUpdateRecurringIncomeMutation", "useSetRecurringIncomeFlagsMutation", "useDeleteRecurringIncomeMutation"], declarations = [...names, "buildRecurringIncomeMutationPayload", "normalizeOptionalText", "invalidateIncomeData"];
 const nodes = ast.statements.filter(node => ts.isFunctionDeclaration(node) && declarations.includes(node.name?.text)); assert.equal(nodes.length, declarations.length);
@@ -22,8 +23,8 @@ const client = { from(table) {
     },
   };
 } };
-const hooks = new Function("useQueryClient", "useMutation", "getClient", "invalidateWorkspaceSnapshot", ...Object.keys(rules), `${code};return {${names.join(",")}};`)(() => queryClient, options => options, () => client, async (_client, ws, user) => invalidations.push({ ws, user }), ...Object.values(rules));
-const input = { workspaceId: 8, userId: "A", recurringIncomeId: 9, name: " Sueldo ", currencyCode: "pen", amount: 100, grossAmount: 120, deductions: [{ name: "Descuento", amount: 20 }], frequency: "monthly", intervalCount: 1, startDate: "2026-01-01", nextExpectedDate: "2026-11-01", status: "active", remindDaysBefore: 3, isCurrent: () => current, expectedStatus: "active", expectedIsPinned: false, patch: { status: "paused", is_pinned: true } };
+const hooks = new Function("useQueryClient", "useMutation", "getClient", "invalidateWorkspaceSnapshot", "incomeScheduledChangeRows", ...Object.keys(rules), `${code};return {${names.join(",")}};`)(() => queryClient, options => options, () => client, async (_client, ws, user) => invalidations.push({ ws, user }), incomeScheduledChangeRows, ...Object.values(rules));
+const input = { workspaceId: 8, userId: "A", recurringIncomeId: 9, name: " Sueldo ", currencyCode: "pen", amount: 100, grossAmount: 120, deductions: [{ name: "Descuento", amount: 20 }], scheduledChanges: [{ effectiveDate: "2027-01-01", amount: 150 }], frequency: "monthly", intervalCount: 1, startDate: "2026-01-01", nextExpectedDate: "2026-11-01", status: "active", remindDaysBefore: 3, isCurrent: () => current, expectedStatus: "active", expectedIsPinned: false, patch: { status: "paused", is_pinned: true } };
 function reset() { operations = []; overrides = new Map(); current = true; afterReply = null; gateAt = -1; release = null; invalidations.length = 0; }
 for (const name of names) {
   const hook = hooks[name](8, "A"), deleting = name.includes("Delete"), flags = name.includes("Flags"), last = deleting ? 2 : 0;
@@ -33,7 +34,7 @@ for (const name of names) {
   if (!name.includes("Create")) for (const pair of [["id", 9], ["workspace_id", 8]]) assert.ok(target.filters.some(filter => JSON.stringify(filter) === JSON.stringify(pair)));
   if (deleting) { assert.deepEqual(operations.map(op => `${op.table}:${op.kind}`), ["recurring_income:read", "recurring_income_occurrences:delete", "recurring_income:delete"]); assert.deepEqual(operations[1].options, { count: "exact" }); assert.deepEqual(operations[1].filters, [["workspace_id", 8], ["recurring_income_id", 9]]); }
   if (flags) for (const pair of [["status", "active"], ["is_pinned", false]]) assert.ok(target.filters.some(filter => JSON.stringify(filter) === JSON.stringify(pair)));
-  if (!deleting && !flags) { assert.equal(target.payload.name, "Sueldo"); assert.equal(target.payload.currency_code, "PEN"); assert.equal(target.payload.gross_amount, 120); assert.deepEqual(target.payload.deductions, input.deductions); }
+  if (!deleting && !flags) { assert.equal(target.payload.name, "Sueldo"); assert.equal(target.payload.currency_code, "PEN"); assert.equal(target.payload.gross_amount, 120); assert.deepEqual(target.payload.deductions, input.deductions); assert.deepEqual(target.payload.scheduled_changes, [{ effective_date: "2027-01-01", amount: 150 }]); }
   await hook.onSettled(); assert.ok(invalidations.some(args => args.ws === 8 && args.user === "A")); assert.ok(invalidations.some(args => JSON.stringify(args.queryKey) === '["recurring_income_occurrences",8,"A"]'));
   for (const data of [null, {}, [], { id: 0, workspace_id: 8 }, { id: "9", workspace_id: 8 }, { id: 9, workspace_id: 99 }, ...(!name.includes("Create") ? [{ id: 10, workspace_id: 8 }] : [])]) {
     reset(); overrides.set(last, { data, error: null }); await assert.rejects(hook.mutationFn(input), /No se confirmó/); assert.equal(operations.length, last + 1);
@@ -43,6 +44,11 @@ for (const name of names) {
   }
   if (!deleting && !flags) {
     reset(); overrides.set(0, normal => ({ ...normal, data: { ...normal.data, amount: "100.00", gross_amount: "120.00", deductions: [{ amount: 20, name: "Descuento" }] } })); assert.equal((await hook.mutationFn(input)).id, 9); // JSONB may reorder object keys; numeric SQL columns may be strings.
+    for (const scheduled_changes of [null, [], [{ effective_date: "2027-01-01", amount: 151 }], [{ effective_date: "2027-01-02", amount: 150 }]]) { reset(); overrides.set(0, normal => ({ ...normal, data: { ...normal.data, scheduled_changes } })); await assert.rejects(hook.mutationFn(input), /No se confirmó/); }
+    reset(); overrides.set(0, normal => ({ ...normal, data: { ...normal.data, scheduled_changes: [{ amount: 150, effective_date: "2027-01-01" }] } })); assert.equal((await hook.mutationFn(input)).id, 9);
+    reset(); await hook.mutationFn({ ...input, scheduledChanges: [] }); assert.deepEqual(operations[0].payload.scheduled_changes, []);
+    reset(); await hook.mutationFn({ ...input, scheduledChanges: undefined }); assert.equal(Object.hasOwn(operations[0].payload, "scheduled_changes"), false, "Unspecified changes must not erase existing JSONB");
+    for (const scheduledChanges of [[{ effectiveDate: "2027-02-30", amount: 150 }], [{ effectiveDate: "2027-01-01", amount: 0 }], [{ effectiveDate: "2027-01-01", amount: 1.001 }], {}]) { reset(); await assert.rejects(hook.mutationFn({ ...input, scheduledChanges }), rules.IncomeWritePreflightError); assert.equal(operations.length, 0); }
   }
   for (const patch of [{ workspaceId: 99 }, { userId: "B" }, { recurringIncomeId: 0 }, { recurringIncomeId: NaN }, { amount: 0 }, { amount: 1.001 }, { grossAmount: Infinity }]) {
     reset(); await assert.rejects(hook.mutationFn({ ...input, ...patch }), rules.IncomeWritePreflightError); assert.equal(operations.length, 0);

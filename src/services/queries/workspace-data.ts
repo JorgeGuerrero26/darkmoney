@@ -50,6 +50,7 @@ import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptio
 import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recurring-income/lib/arrival-write";
 import { assertIncomeWriteScope, confirmIncomeWrite, IncomeWritePreflightError, withIncomeWriteTimeout } from "../../modules/recurring-income/lib/income-write-result";
 import { readIncomeHistory } from "../../modules/recurring-income/lib/income-history";
+import { incomeScheduledChangeRows, readIncomeScheduledChanges } from "../../modules/recurring-income/lib/scheduled-changes";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -338,6 +339,7 @@ type RecurringIncomeRow = {
   amount: NumericLike;
   gross_amount: NumericLike | null;
   deductions: { name: string; amount: number }[] | null;
+  scheduled_changes?: unknown;
   is_pinned: boolean | null;
   frequency: RecurringIncomeFrequency;
   interval_count: number;
@@ -719,6 +721,7 @@ export type RecurringIncomeFormInput = {
   amount: number;
   grossAmount?: number | null;
   deductions?: { name: string; amount: number }[];
+  scheduledChanges?: { effectiveDate: string; amount: number }[];
   frequency: RecurringIncomeFrequency;
   intervalCount: number;
   dayOfMonth?: number | null;
@@ -1748,7 +1751,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     client
       .from("recurring_income")
       .select(
-        "id, workspace_id, name, payer_party_id, account_id, category_id, currency_code, amount, gross_amount, deductions, is_pinned, frequency, interval_count, day_of_month, day_of_week, start_date, next_expected_date, end_date, status, remind_days_before, description, notes",
+        "id, workspace_id, name, payer_party_id, account_id, category_id, currency_code, amount, gross_amount, deductions, scheduled_changes, is_pinned, frequency, interval_count, day_of_month, day_of_week, start_date, next_expected_date, end_date, status, remind_days_before, description, notes",
       )
       .eq("workspace_id", workspace.id)
       .order("next_expected_date", { ascending: true }),
@@ -1783,7 +1786,8 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
 
   let recurringIncomeRows: RecurringIncomeRow[] = [];
   if (recurringIncomeResult.error) {
-    if (!isMissingRelationError(recurringIncomeResult.error, "recurring_income")) {
+    // A missing column or permission failure must not masquerade as an empty income module.
+    if (recurringIncomeResult.error.code !== "42P01") {
       throw recurringIncomeResult.error;
     }
   } else {
@@ -2186,6 +2190,7 @@ async function fetchWorkspaceSnapshot(workspace: Workspace, userId: string, prof
     amount: toNumber(row.amount),
     grossAmount: row.gross_amount == null ? null : toNumber(row.gross_amount),
     deductions: Array.isArray(row.deductions) ? row.deductions : [],
+    scheduledChanges: readIncomeScheduledChanges(row.scheduled_changes),
     isPinned: row.is_pinned ?? false,
     amountInBaseCurrency: convertAmountToCurrency(toNumber(row.amount), row.currency_code, baseCurrencyCode, exchangeRateMap),
     currencyCode: row.currency_code,
@@ -4937,6 +4942,7 @@ function buildRecurringIncomeMutationPayload(input: RecurringIncomeFormInput, us
     amount: input.amount,
     gross_amount: input.grossAmount ?? null,
     deductions: input.deductions ?? [],
+    ...(input.scheduledChanges === undefined ? {} : { scheduled_changes: incomeScheduledChangeRows(input.scheduledChanges) }),
     frequency: input.frequency,
     interval_count: input.intervalCount,
     day_of_month: input.dayOfMonth ?? null,

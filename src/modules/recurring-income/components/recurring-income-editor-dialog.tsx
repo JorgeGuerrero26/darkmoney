@@ -9,6 +9,7 @@ import { SearchablePicker, type PickerOption } from "../../../components/ui/sear
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, CategorySummary, CounterpartySummary, MovementRecord, RecurringIncomeFrequency, RecurringIncomeStatus } from "../../../types/domain";
 import { frequencyOptions, statusOptions } from "../lib/recurring-income-presenters";
+import type { IncomeScheduledChangeDraft } from "../lib/scheduled-changes";
 
 export type RecurringIncomeFormState = {
   name: string;
@@ -19,6 +20,7 @@ export type RecurringIncomeFormState = {
   amount: string;
   grossAmount: string;
   deductions: { key: string; name: string; amount: string }[];
+  scheduledChanges: IncomeScheduledChangeDraft[];
   frequency: RecurringIncomeFrequency;
   intervalCount: string;
   dayOfMonth: string;
@@ -154,12 +156,12 @@ export function RecurringIncomeEditorDialog({
     value: RecurringIncomeFormState[Field],
   ) => void;
 }) {
-  const [panel, setPanel] = useState<"main" | "details" | "breakdown">("main");
+  const [panel, setPanel] = useState<"main" | "details" | "breakdown" | "changes">("main");
 
   useEffect(() => {
     if (!invalidFields.size) return;
     const firstField = [...invalidFields][0];
-    setPanel(firstField === "startDate" ? "details" : "main");
+    setPanel(firstField === "scheduledChanges" ? "changes" : firstField === "startDate" ? "details" : "main");
     const timer = window.setTimeout(() => {
       const field = document.querySelector<HTMLElement>('[data-field="' + firstField + '"]');
       field?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -196,7 +198,7 @@ export function RecurringIncomeEditorDialog({
   return (
     <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={isSaving} labelledBy="income-editor-title" onClose={closeEditor}>
       <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={onSubmit}>
-        <ResourceEditorHeader disabled={isSaving} onBack={panel === "breakdown" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo ingreso fijo" : "Editar ingreso fijo") : panel === "breakdown" ? "Desglose" : "Detalles"} titleId="income-editor-title" />
+        <ResourceEditorHeader disabled={isSaving} onBack={panel === "breakdown" || panel === "changes" ? () => setPanel("details") : panel === "details" ? () => setPanel("main") : undefined} onClose={closeEditor} title={panel === "main" ? (isCreateMode ? "Nuevo ingreso fijo" : "Editar ingreso fijo") : panel === "breakdown" ? "Desglose" : panel === "changes" ? "Cambios de monto" : "Detalles"} titleId="income-editor-title" />
         <fieldset className="min-h-0 overflow-y-auto px-5 py-3 sm:px-7" disabled={isSaving || saveBlocked}>
           {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {feedback?.tone === "error" ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone="error" /> : null}
@@ -224,6 +226,7 @@ export function RecurringIncomeEditorDialog({
               <Field label="Categoría"><SearchablePicker appearance="compact" emptyMessage="No hay categorías de ingreso." onChange={(value) => updateFormState("categoryId", value)} options={categoryOptions} placeholderDescription="Categoría de ingreso." placeholderLabel="Sin categoría" queryPlaceholder="Buscar categoría..." value={formState.categoryId} /></Field>
               {suggestedCategory ? <button className="text-left text-xs text-storm underline underline-offset-4 hover:text-ink" onClick={() => updateFormState("categoryId", suggestedCategory.value)} type="button">Categoría sugerida por tus movimientos: {suggestedCategory.label}</button> : null}
               <ResourceEditorDestination label="Desglose" onClick={() => setPanel("breakdown")} summary={formState.grossAmount ? `Bruto ${formatCurrency(Number(formState.grossAmount) || 0, formState.currencyCode)}` : "Bruto y descuentos, si tienes boleta"} />
+              <ResourceEditorDestination label="Cambios de monto" onClick={() => setPanel("changes")} summary={formState.scheduledChanges?.length ? `${formState.scheduledChanges.length} con fecha` : "Por ejemplo, un aumento futuro"} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Moneda"><SearchablePicker appearance="compact" emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda del ingreso." placeholderLabel="Moneda" queryPlaceholder="Buscar moneda..." value={formState.currencyCode} /></Field>
                 <Field label="Cada cuántos ciclos"><Input inputMode="numeric" min="1" onChange={(event) => updateFormState("intervalCount", event.target.value)} placeholder="1" type="number" value={formState.intervalCount} /></Field>
@@ -238,6 +241,17 @@ export function RecurringIncomeEditorDialog({
               </div>
               <Field label="Descripción"><Textarea onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible" value={formState.description} /></Field>
               <Field label="Notas"><Textarea onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Solo para este espacio" value={formState.notes} /></Field>
+            </div>
+          ) : panel === "changes" ? (
+            <div className="space-y-4" data-field="scheduledChanges">
+              <p className="text-sm leading-6 text-storm">Desde cada fecha, la proyección usa el nuevo monto neto en la moneda del ingreso. No confirma llegadas ni modifica movimientos anteriores. Si repites una fecha, se guarda el último monto de esa fecha.</p>
+              {(formState.scheduledChanges ?? []).map((row, index) => <div className="space-y-2 border-b border-white/[0.08] pb-4" key={row.key}>
+                <div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-ink">Cambio {index + 1}</p><button aria-label={`Quitar cambio ${index + 1}`} className="min-h-10 px-2 text-sm text-storm hover:text-ink" onClick={() => { clearFieldError("scheduledChanges"); updateFormState("scheduledChanges", formState.scheduledChanges.filter(item => item.key !== row.key)); }} type="button">Quitar</button></div>
+                <Field label="Desde"><DatePickerField appearance="compact" disabled={isSaving || saveBlocked} onChange={date => { clearFieldError("scheduledChanges"); updateFormState("scheduledChanges", formState.scheduledChanges.map(item => item.key === row.key ? { ...item, date } : item)); }} placeholder="Elegir fecha del cambio" value={row.date} /></Field>
+                <Field label={`Neto que llegará (${getCurrencyLabel(formState.currencyCode).symbol})`}><Input aria-label={`Monto del cambio ${index + 1}`} inputMode="decimal" onChange={event => { clearFieldError("scheduledChanges"); updateFormState("scheduledChanges", formState.scheduledChanges.map(item => item.key === row.key ? { ...item, amount: event.target.value } : item)); }} placeholder="0.00" value={row.amount} /></Field>
+              </div>)}
+              <button className="min-h-10 text-sm text-ink underline underline-offset-4" onClick={() => { clearFieldError("scheduledChanges"); updateFormState("scheduledChanges", [...(formState.scheduledChanges ?? []), { key: crypto.randomUUID(), date: "", amount: "" }]); }} type="button">Añadir cambio de monto</button>
+              <p className="text-xs leading-5 text-storm">Completa la fecha y el neto de cada cambio, o quita la fila antes de guardar. Guardar conserva los cambios pasados y futuros que aparecen aquí.</p>
             </div>
           ) : (
             <div className="space-y-5">

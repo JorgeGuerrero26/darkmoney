@@ -1,19 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../supabase/client";
 import type { ProjectionSupplement } from "../../modules/dashboard/lib/projection/build-dashboard-cashflow";
+import { readIncomeScheduledChanges } from "../../modules/recurring-income/lib/scheduled-changes";
 
-/** Local normalization mirrors mobile scheduledChanges; invalid rows never become amounts. */
+/** Same checked model as editing; invalid changes make the projection unavailable, never silently smaller. */
 export function parseProjectionChanges(raw: unknown) {
-  const byDate = new Map<string, { effectiveDate: string; amount: number }>();
-  for (const row of Array.isArray(raw) ? raw : []) {
-    if (!row || typeof row !== "object") continue;
-    const effectiveDate = String(row.effective_date ?? "");
-    const amount = Number(row.amount);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) && Number.isFinite(amount) && amount > 0) {
-      byDate.set(effectiveDate, { effectiveDate, amount });
-    }
-  }
-  return [...byDate.values()].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  return readIncomeScheduledChanges(raw);
 }
 
 export async function readProjectionSupplement(

@@ -31,6 +31,9 @@ assert.equal(subInput.amount, 80); assert.equal(subInput.nextDueDate, raw.nextDa
 const incomeDraft = parseRecurringProposal({ ...raw, kind: "recurring_income", name: "Sueldo", categoryName: "sueldo" });
 const income = prepareRecurringProposal(incomeDraft, snapshot, "2026-10-15"), incomeInput = buildRecurringIncomeEditorInput(income.value, snapshot);
 assert.equal(incomeInput.accountId, 1); assert.equal(incomeInput.categoryId, 20); assert.equal(incomeInput.nextExpectedDate, raw.nextDate); assert.equal(incomeInput.grossAmount, null); assert.deepEqual(incomeInput.deductions, []);
+assert.deepEqual(incomeInput.scheduledChanges, [], "The AI proposal never invents future salary changes");
+assert.deepEqual(prepareRecurringProposal({ ...incomeDraft, scheduledChanges: [{ effectiveDate: "2099-11-01", amount: 999 }] }, snapshot).value.scheduledChanges, []);
+assert.deepEqual(buildRecurringIncomeEditorInput({ ...income.value, scheduledChanges: [{ key: "manual", date: "2099-11-01", amount: "150,50" }] }, snapshot).scheduledChanges, [{ effectiveDate: "2099-11-01", amount: 150.5 }], "Only an explicit shared-editor change is saved");
 for (const accounts of [[], [...snapshot.accounts, { ...snapshot.accounts[0], id: 4 }], [{ ...snapshot.accounts[0], isArchived: true }], [{ ...snapshot.accounts[0], workspaceId: 9 }], [{ ...snapshot.accounts[0], currencyCode: "USD" }]]) {
   const prepared = prepareRecurringProposal(incomeDraft, { ...snapshot, accounts }, "2026-10-15"); assert.equal(prepared.value.accountId, "");
   assert.throws(() => buildRecurringIncomeEditorInput(prepared.value, snapshot), /cuenta/);

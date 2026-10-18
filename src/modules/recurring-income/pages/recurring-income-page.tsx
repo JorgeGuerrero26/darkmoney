@@ -56,6 +56,7 @@ import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { validateArrivalInput } from "../lib/arrival-input";
 import { confirmIncomeWrite, isIncomeWriteRejected } from "../lib/income-write-result";
 import { IncomeHistoryDialog } from "../components/income-history-dialog";
+import { collectIncomeScheduledChanges, incomeScheduledChangeDrafts } from "../lib/scheduled-changes";
 import { IncomeFiltersToolbar } from "../components/income-filters-toolbar";
 import { defaultRecurringIncomeTableFilters, filterRecurringIncome, isRecurringIncomeTableFilterActive, type RecurringIncomeTableFilterField } from "../lib/recurring-income-filters";
 
@@ -99,6 +100,7 @@ function createDefaultFormState(baseCurrencyCode: string): RecurringIncomeFormSt
     amount: "",
     grossAmount: "",
     deductions: [],
+    scheduledChanges: [],
     frequency: "monthly",
     intervalCount: "1",
     dayOfMonth: "",
@@ -123,6 +125,7 @@ function buildFormStateFromRecurringIncome(income: RecurringIncomeSummary): Recu
     amount: String(income.amount),
     grossAmount: income.grossAmount == null ? "" : String(income.grossAmount),
     deductions: (income.deductions ?? []).map((row, index) => ({ key: String(index), name: row.name, amount: String(row.amount) })),
+    scheduledChanges: incomeScheduledChangeDrafts(income.scheduledChanges),
     frequency: income.frequency,
     intervalCount: String(income.intervalCount),
     dayOfMonth:
@@ -357,6 +360,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
   const [formState, setFormState] = useState<RecurringIncomeFormState>(
     createDefaultFormState(activeWorkspace?.baseCurrencyCode ?? "USD"),
   );
+  const initialIncomeSchedule = useRef("[]");
 
   const recurringIncome = useMemo(() => (snapshot?.recurringIncome ?? []).filter(item => item.workspaceId === activeWorkspace?.id), [snapshot?.recurringIncome, activeWorkspace?.id]);
   const rows = useRef(recurringIncome); rows.current = recurringIncome;
@@ -483,6 +487,7 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     setInvalidFields(new Set());
     setEditorMode("edit");
     setSelectedIncomeId(income.id);
+    initialIncomeSchedule.current = JSON.stringify(income.scheduledChanges ?? []);
     setFormState(buildFormStateFromRecurringIncome(income));
     setIsDirty(false);
     setIsEditorOpen(true);
@@ -545,6 +550,13 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
         title: "Revisa los campos requeridos",
         description: "Completa los campos indicados antes de guardar.",
       });
+      return;
+    }
+
+    try { collectIncomeScheduledChanges(formState.scheduledChanges); }
+    catch (error) {
+      setInvalidFields(new Set(["scheduledChanges"]));
+      setFeedback({ tone: "error", title: "Revisa los cambios de monto", description: getQueryErrorMessage(error) });
       return;
     }
 
@@ -639,7 +651,10 @@ function ScopedRecurringIncomePage({ auth, workspace }: { auth: ReturnType<typeo
     try {
       if (!snapshot) throw new Error("Espera la lectura del espacio actual.");
       const payload = buildRecurringIncomeEditorInput(formState, snapshot, editorMode === "create");
-      if (editorMode === "edit") currentIncome(selectedIncomeId ?? 0);
+      if (editorMode === "edit") {
+        const current = currentIncome(selectedIncomeId ?? 0);
+        if (JSON.stringify(current.scheduledChanges ?? []) !== initialIncomeSchedule.current) throw new Error("Los cambios de monto guardados cambiaron mientras editabas. Conserva tus notas, cierra y vuelve a abrir el ingreso antes de guardar; no se envió esta edición.");
+      }
       attempt = editorWrite.begin(); if (!attempt) return;
       if (editorMode === "create") {
         const result = await runWrite(() => createMutation.mutateAsync({

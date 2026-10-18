@@ -33,5 +33,5 @@ export function prepareRecurringProposal(draft: AssistantRecurringDraft, snapsho
     frequency: draft.frequency, intervalCount: "1", dayOfMonth: draft.dayOfMonth ? String(draft.dayOfMonth) : "", dayOfWeek: "",
     startDate: today, endDate: "", status: "active" as const, remindDaysBefore: "1", description: draft.description ?? "", notes: "" };
   return draft.kind === "subscription" ? { kind: "subscription", value: { ...base, vendorPartyId: "", nextDueDate: draft.nextDate, autoCreateMovement: false } }
-    : { kind: "recurring_income", value: { ...base, payerPartyId: "", nextExpectedDate: draft.nextDate, grossAmount: "", deductions: [] } };
+    : { kind: "recurring_income", value: { ...base, payerPartyId: "", nextExpectedDate: draft.nextDate, grossAmount: "", deductions: [], scheduledChanges: [] } };
 }

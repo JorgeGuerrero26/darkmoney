@@ -149,7 +149,8 @@ await act(async () => mobileRenderer.unmount()); mobileContainer.remove();
 // Real read service, bounded pages and no monetary writes. Errors never become empty metadata.
 mock("src/services/supabase/client.ts", "export const supabase=null;");
 const { readProjectionSupplement, parseProjectionChanges } = await import(load("src/services/queries/dashboard-projection.ts"));
-assert.deepEqual(parseProjectionChanges([{ effective_date: "2027-01-01", amount: 5 }, { effective_date: "2027-01-01", amount: 6 }, { effective_date: "x", amount: 9 }, { effective_date: "2026-01-01", amount: -1 }]), [{ effectiveDate: "2027-01-01", amount: 6 }]);
+assert.deepEqual(parseProjectionChanges([{ effective_date: "2027-01-01", amount: 5 }, { effective_date: "2027-01-01", amount: 6 }]), [{ effectiveDate: "2027-01-01", amount: 6 }]);
+assert.throws(() => parseProjectionChanges([{ effective_date: "x", amount: 9 }, { effective_date: "2026-01-01", amount: -1 }]), /cambios de monto/);
 const calls = [];
 let readError = false, foreign = false;
 const client = { from(table) { const entry = { table }; calls.push(entry); return {
