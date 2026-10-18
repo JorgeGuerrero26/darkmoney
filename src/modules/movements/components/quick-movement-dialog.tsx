@@ -353,7 +353,7 @@ export function QuickMovementDialog({
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
   const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
   const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
-  const spendTypes = useBudgetSpendTypesQuery(workspaceId).data ?? [];
+  const spendTypes = useBudgetSpendTypesQuery(workspaceId, userId).data ?? [];
   const persistLearningFeedbackMutation = usePersistLearningFeedbackMutation(workspaceId, userId);
   const visibleAccounts = useMemo(
     () => snapshot.accounts.filter((account) => !account.isArchived),

@@ -247,7 +247,7 @@ export function MovementEditorDialog({
   const createCounterpartyMutation = useCreateCounterpartyMutation(workspaceId, userId);
   const createSubscriptionMutation = useCreateSubscriptionMutation(workspaceId, userId);
   const createRecurringIncomeMutation = useCreateRecurringIncomeMutation(workspaceId, userId);
-  const spendTypes = useBudgetSpendTypesQuery(workspaceId).data ?? [];
+  const spendTypes = useBudgetSpendTypesQuery(workspaceId, userId).data ?? [];
   const isCreatingRecurrence = createSubscriptionMutation.isPending || createRecurringIncomeMutation.isPending;
   const isBusy = isSaving || isCreatingRecurrence;
 

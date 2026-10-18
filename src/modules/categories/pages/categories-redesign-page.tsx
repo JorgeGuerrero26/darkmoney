@@ -54,7 +54,7 @@ function ScopedCategoriesPage({ auth, workspace }: { auth: ReturnType<typeof use
   const { activeWorkspace, isLoading: workspaceLoading, error: workspaceError } = workspace;
   const overview = useCategoriesOverviewQuery(activeWorkspace?.id, user?.id);
   const snapshot = useWorkspaceSnapshotQuery(activeWorkspace, user?.id, profile);
-  const spendTypes = useBudgetSpendTypesQuery(activeWorkspace?.id);
+  const spendTypes = useBudgetSpendTypesQuery(activeWorkspace?.id, user?.id);
   const create = useCreateCategoryMutation(activeWorkspace?.id, user?.id);
   const update = useUpdateCategoryMutation(activeWorkspace?.id, user?.id);
   const toggle = useToggleCategoryMutation(activeWorkspace?.id, user?.id);

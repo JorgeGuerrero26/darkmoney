@@ -1208,7 +1208,7 @@ export function BudgetsPage() {
     setHiddenIds((prev) => new Set([...prev, targetId]));
     schedule({
       label: "Presupuesto eliminado",
-      onCommit: () => deleteMutation.mutateAsync({ budgetId: targetId, workspaceId: activeWorkspace.id }),
+      onCommit: async () => { await deleteMutation.mutateAsync({ budgetId: targetId, workspaceId: activeWorkspace.id }); },
       onUndo: () => {
         setHiddenIds((prev) => {
           const next = new Set(prev);

@@ -2,6 +2,7 @@ import type { BudgetFormInput, WorkspaceSnapshot } from "../../../services/queri
 import type { BudgetEditorValue } from "../components/budget-editor-dialog";
 import { validBudgetDay } from "./budget-date";
 import { firstBudgetPeriod, recurrenceOptions } from "./budget-periods";
+import { validBudgetMoney } from "./budget-write-result";
 
 export function budgetEditorCurrencies(snapshot: WorkspaceSnapshot) {
   return [...new Set([snapshot.workspace.baseCurrencyCode, "PEN", "USD", "EUR", ...snapshot.accounts.map(a => a.currencyCode)])];
@@ -12,10 +13,10 @@ export function buildBudgetEditorInput(value: BudgetEditorValue, snapshot: Works
   spendTypes: Array<{ id: number; name: string }>, today: string, isCreate: boolean): BudgetFormInput {
   if (!value.scopeChosen) throw new Error("Elige qué gasto limita este presupuesto. También puedes elegir todo el gasto.");
   const limitAmount = Number(value.limitAmount);
-  if (!Number.isFinite(limitAmount) || limitAmount <= 0) throw new Error("Ingresa un límite mayor a cero.");
+  if (!validBudgetMoney(limitAmount)) throw new Error("Ingresa un límite mayor a cero, con máximo dos decimales.");
   if (!validBudgetDay(value.periodStart) || !validBudgetDay(value.periodEnd) || value.periodEnd < value.periodStart) throw new Error("Revisa las fechas del período: el final no puede ser anterior al inicio.");
   if (!recurrenceOptions.some(r => r.value === value.recurrence)) throw new Error("Revisa la renovación del presupuesto.");
-  if (!Number.isFinite(value.alertPercent) || value.alertPercent < 1 || value.alertPercent > 100) throw new Error("El aviso debe estar entre 1% y 100%.");
+  if (!Number.isInteger(value.alertPercent) || value.alertPercent < 1 || value.alertPercent > 100) throw new Error("El aviso debe ser un porcentaje entero entre 1% y 100%.");
   if (!budgetEditorCurrencies(snapshot).includes(value.currencyCode)) throw new Error("Selecciona una moneda disponible en Opcionales.");
   const category = snapshot.catalogs.categories.find(c => c.id === value.categoryId && c.isActive && (c.kind === "expense" || c.kind === "both"));
   const account = snapshot.accounts.find(a => a.id === value.accountId && !a.isArchived && a.workspaceId === snapshot.workspace.id);

@@ -61,6 +61,7 @@ type Props = {
   currencies: string[];
   isCreate: boolean;
   isSaving: boolean;
+  saveBlocked?: boolean;
   error: string | null;
 };
 
@@ -84,10 +85,10 @@ function RowSelect({ label, value, onChange, options, allLabel }: {
   );
 }
 
-export function BudgetEditorDialog({ context, value, onChange, onClose, onSubmit, categories, accounts, spendTypes, currencies, isCreate, isSaving, error }: Props) {
+export function BudgetEditorDialog({ context, value, onChange, onClose, onSubmit, categories, accounts, spendTypes, currencies, isCreate, isSaving, saveBlocked = false, error }: Props) {
   const [panel, setPanel] = useState<"main" | "scope" | "recurrence" | "alert" | "details">("main");
   useEffect(() => setPanel("main"), [isCreate]);
-  function patch(update: Partial<BudgetEditorValue>) { onChange({ ...value, ...update }); }
+  function patch(update: Partial<BudgetEditorValue>) { if (!isSaving && !saveBlocked) onChange({ ...value, ...update }); }
   const scope = [
     categories.find((item) => item.id === value.categoryId)?.name,
     spendTypes.find((item) => item.id === value.spendTypeId)?.name,
@@ -102,6 +103,7 @@ export function BudgetEditorDialog({ context, value, onChange, onClose, onSubmit
         <ModalBody className="!px-5 !py-5 sm:!px-6">
           {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {error ? <p className="mb-4 text-sm text-[#e6b7aa]" role="alert">{error}</p> : null}
+          <fieldset className="min-w-0 border-0 p-0" disabled={isSaving || saveBlocked}>
           {panel === "main" ? (
             <div className="space-y-5">
               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#141311]">
@@ -144,8 +146,9 @@ export function BudgetEditorDialog({ context, value, onChange, onClose, onSubmit
               <FormField label="Notas"><textarea className={`${field} !min-h-[88px] resize-y py-3`} onChange={(event) => patch({ notes: event.target.value })} placeholder="Contexto para este presupuesto" value={value.notes} /></FormField>
             </div>
           )}
+          </fieldset>
         </ModalBody>
-        {panel !== "scope" && panel !== "recurrence" && panel !== "alert" ? <ModalFooter><Button className="w-full" disabled={isSaving} type="submit">{isSaving ? "Guardando..." : isCreate ? "Crear presupuesto" : "Guardar cambios"}</Button></ModalFooter> : null}
+        {panel !== "scope" && panel !== "recurrence" && panel !== "alert" ? <ModalFooter><Button className="w-full" disabled={isSaving || saveBlocked} type="submit">{isSaving ? "Guardando..." : isCreate ? "Crear presupuesto" : "Guardar cambios"}</Button></ModalFooter> : null}
       </form>
     </Modal>
   );

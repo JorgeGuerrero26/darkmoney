@@ -52,14 +52,14 @@ const annotated = assistantHistoryTurn({ role: "assistant", content: "x".repeat(
 assert.ok(annotated.content.length <= 3000); assert.match(assistantRequest("otra", [annotated], 8).history[0].content, /#23: RESULTADO INCIERTO; no repetir/);
 
 // Real page, proposal row, budget review and shared editor. Only I/O and calendar control are substituted.
-globalThis.budgetScope = { userId: "u", workspaceId: 8, pro: true };
-globalThis.budgetQuery = { data: snapshot, isFetching: false, isError: false, isPlaceholderData: false, refetch: async () => {} };
-globalThis.budgetSpend = { data: [], isFetching: false, isError: false };
+globalThis.budgetScope = { userId: "u", workspaceId: 8, pro: true, role: "owner", archived: false };
+globalThis.budgetQuery = { data: snapshot, isSuccess: true, isFetching: false, isError: false, isPlaceholderData: false, refetch: async () => {} };
+globalThis.budgetSpend = { data: [], isSuccess: true, isFetching: false, isError: false };
 globalThis.budgetWrites = []; globalThis.budgetWrite = async () => {}; globalThis.budgetCalls = []; globalThis.budgetReply = reply;
 mock("src/services/queries/workspace-data.ts", `export const useWorkspaceSnapshotQuery=()=>globalThis.budgetQuery,useBudgetSpendTypesQuery=()=>globalThis.budgetSpend;
-export const useCreateBudgetMutation=()=>({mutateAsync:async input=>{globalThis.budgetWrites.push(input);await globalThis.budgetWrite(input);}});export const getQueryErrorMessage=e=>e.message??'SQL rejected';`);
+export const useCreateBudgetMutation=()=>({mutateAsync:async input=>{globalThis.budgetWrites.push(input);await globalThis.budgetWrite(input);return globalThis.budgetResult??{id:77,workspaceId:input.workspaceId};}});export const getQueryErrorMessage=e=>e.message??'SQL rejected';`);
 mock("src/modules/auth/auth-context.tsx", "export const useAuth=()=>({user:{id:globalThis.budgetScope.userId}});");
-mock("src/modules/workspaces/use-active-workspace.ts", "const workspaces=[{id:8,name:'Personal'},{id:9,name:'Otro'}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:workspaces.find(w=>w.id===globalThis.budgetScope.workspaceId),setActiveWorkspaceId:id=>{globalThis.budgetScope.workspaceId=id},isFetching:false,isError:false});");
+mock("src/modules/workspaces/use-active-workspace.ts", "const workspaces=[{id:8,name:'Personal'},{id:9,name:'Otro'}];export const useActiveWorkspace=()=>({workspaces,activeWorkspace:{...workspaces.find(w=>w.id===globalThis.budgetScope.workspaceId),role:globalThis.budgetScope.role,isArchived:globalThis.budgetScope.archived},setActiveWorkspaceId:id=>{globalThis.budgetScope.workspaceId=id},isFetching:false,isError:false});");
 mock("src/modules/shared/use-pro-feature-access.ts", "export const useProFeatureAccess=()=>({canAccessProFeatures:globalThis.budgetScope.pro});");
 mock("src/services/queries/assistant.ts", "export const useAssistantInsight=()=>({data:null});export const askAssistant=async(message,history)=>{globalThis.budgetCalls.push({message,history});return globalThis.budgetReply;};");
 mock("src/modules/assistant/components/assistant-payment-review.tsx", "export const AssistantPaymentReview=()=>null;");
@@ -99,9 +99,9 @@ globalThis.budgetWrite = async () => {}; const ambiguous = { ...draft, categoryN
 await render(React.createElement(AssistantBudgetReview, { ...props, draft: ambiguous, session: {} })); const beforeScope = globalThis.budgetWrites.length; await submit(); assert.equal(globalThis.budgetWrites.length, beforeScope); assert.match(container.textContent, /Elige qué gasto/);
 const scopeButton = [...container.querySelectorAll("button")].find(b => b.querySelector("span")?.textContent === "Qué limitas"); assert.ok(scopeButton); await act(async () => scopeButton.click()); await click("Usar este alcance"); await submit(); assert.equal(globalThis.budgetWrites.at(-1).categoryId, null); await close();
 // Scope, entitlement and in-progress/failed reads are rechecked when saving.
-for (const setBoundary of [() => { globalThis.budgetScope.pro = false; }, () => { globalThis.budgetQuery.isFetching = true; }, () => { globalThis.budgetQuery.isError = true; }, () => { globalThis.budgetSpend.isError = true; }]) {
-  setBoundary(); await render(React.createElement(AssistantBudgetReview, { ...props, session: {} })); const before = globalThis.budgetWrites.length; await submit(); assert.equal(globalThis.budgetWrites.length, before); await close();
-  globalThis.budgetScope.pro = true; globalThis.budgetQuery.isFetching = false; globalThis.budgetQuery.isError = false; globalThis.budgetSpend.isError = false;
+for (const setBoundary of [() => { globalThis.budgetScope.pro = false; }, () => { globalThis.budgetQuery.isFetching = true; }, () => { globalThis.budgetQuery.isError = true; }, () => { globalThis.budgetSpend.isError = true; }, () => { globalThis.budgetScope.role = "viewer"; }, () => { globalThis.budgetScope.archived = true; }, () => { globalThis.budgetSpend.isPlaceholderData = true; }, () => { globalThis.budgetQuery.isSuccess = false; }]) {
+  setBoundary(); await render(React.createElement(AssistantBudgetReview, { ...props, session: {} })); const before = globalThis.budgetWrites.length; if (container.querySelector('form')) await submit(); assert.equal(globalThis.budgetWrites.length, before); await close();
+  globalThis.budgetScope.pro = true; globalThis.budgetScope.role = "owner"; globalThis.budgetScope.archived = false; globalThis.budgetQuery.isFetching = false; globalThis.budgetQuery.isError = false; globalThis.budgetQuery.isSuccess = true; globalThis.budgetSpend.isError = false; globalThis.budgetSpend.isPlaceholderData = false;
 }
 for (const setBoundary of [() => { globalThis.budgetScope.workspaceId = 9; }, () => { globalThis.budgetScope.userId = "other"; }, () => { globalThis.budgetQuery.isPlaceholderData = true; }]) {
   setBoundary(); await render(React.createElement(AssistantBudgetReview, { ...props, session: {} })); assert.equal(container.querySelector('[role="dialog"]'), null); await close();
@@ -117,4 +117,22 @@ for (const field of ["userId", "workspaceId"]) {
 const session = {}; await render(React.createElement(AssistantBudgetReview, { ...props, session })); await change(amount(), "600");
 await act(async () => container.querySelector('button[aria-label="Cerrar formulario"]').click()); assert.match(container.textContent, /Salir sin guardar/); await click("Sí, descartar"); assert.equal(session.value, undefined); await close();
 await render(React.createElement(AssistantBudgetReview, { ...props, session })); assert.equal(amount().value, "400"); await close();
+// A transport resolving without a confirmed row is not a saved proposal.
+globalThis.budgetWrite = async () => {};
+for (const result of [{}, { id: 77, workspaceId: 99 }, { id: "77", workspaceId: 8 }]) {
+  globalThis.budgetResult = result; const before = outcomes.length, beforeUncertain = uncertain.length, beforeWrites = globalThis.budgetWrites.length;
+  const session = {}; await render(React.createElement(AssistantBudgetReview, { ...props, session })); await submit();
+  assert.equal(outcomes.length, before); assert.equal(uncertain.length, beforeUncertain + 1); assert.equal(session.saver.uncertain(), true);
+  await submit(); assert.equal(globalThis.budgetWrites.length, beforeWrites + 1); await close();
+}
+globalThis.budgetResult = undefined;
+// Restored permission does not revive the original pending callback (ABA).
+{
+  const session = {}, before = outcomes.length; globalThis.budgetWrite = () => new Promise(resolve => { finish = resolve; });
+  await render(React.createElement(AssistantBudgetReview, { ...props, session })); await submit();
+  globalThis.budgetScope.role = "viewer"; await render(React.createElement(AssistantBudgetReview, { ...props, session }));
+  globalThis.budgetScope.role = "owner"; await render(React.createElement(AssistantBudgetReview, { ...props, session }));
+  await act(async () => finish()); await settle(); assert.equal(outcomes.length, before); assert.equal(session.saver.uncertain(), true);
+  assert.match(container.textContent, /Resultado por comprobar/); assert.equal(button(container, "Crear presupuesto").disabled, true); await close();
+}
 dom.window.close(); console.log("assistant-budget-drafts: OK (actual mobile parser, strict dates/scoped category, shared payload/editor, explicit creation and outcome history, double submit, definitive SQL retry, uncertain result without replay, read/Pro/user/workspace boundaries, discard; fixture I/O only)");

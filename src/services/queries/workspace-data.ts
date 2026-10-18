@@ -51,6 +51,7 @@ import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recur
 import { assertIncomeWriteScope, confirmIncomeWrite, IncomeWritePreflightError, withIncomeWriteTimeout } from "../../modules/recurring-income/lib/income-write-result";
 import { readIncomeHistory } from "../../modules/recurring-income/lib/income-history";
 import { incomeScheduledChangeRows, readIncomeScheduledChanges } from "../../modules/recurring-income/lib/scheduled-changes";
+import { assertBudgetForm, assertBudgetWriteScope, BudgetWritePreflightError, validBudgetMoney, verifyBudgetWrite } from "../../modules/budgets/lib/budget-write-result";
 import {
   buildEventDeletePayload,
   buildEventEditPayload,
@@ -4351,19 +4352,14 @@ export function useCreateBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: BudgetMutationInput) => {
-      const client = getClient();
-      const { error } = await client.from("budgets").insert({
-        workspace_id: input.workspaceId,
-        created_by_user_id: input.userId,
-        ...buildBudgetMutationPayload(input, input.userId),
-      });
-
-      if (error) {
-        throw error;
-      }
+      assertBudgetWriteScope(input, workspaceId, userId); assertBudgetForm(input);
+      const payload = { created_by_user_id: input.userId, ...buildBudgetMutationPayload(input, input.userId) };
+      return verifyBudgetWrite(signal => getClient().from("budgets").insert({ workspace_id: input.workspaceId, ...payload })
+        .select(["id", "workspace_id", ...Object.keys(payload)].join(", ")).abortSignal(signal).single(), input, payload);
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       if (workspaceId) {
         await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
       }
@@ -4371,16 +4367,17 @@ export function useCreateBudgetMutation(workspaceId?: number, userId?: string) {
   });
 }
 
-export function useBudgetSpendTypesQuery(workspaceId?: number) {
+export function useBudgetSpendTypesQuery(workspaceId?: number, userId?: string) {
   return useQuery({
-    queryKey: ["budget-spend-types", workspaceId],
-    enabled: Boolean(workspaceId),
-    queryFn: async () => {
+    queryKey: ["budget-spend-types", workspaceId, userId],
+    enabled: Boolean(workspaceId && userId),
+    queryFn: async ({ signal }) => {
+      if (!workspaceId || !userId) throw new Error("No hay un espacio o sesión activos.");
       const { data, error } = await getClient()
         .from("spend_types")
         .select("id, name, is_active")
         .eq("workspace_id", workspaceId as number)
-        .order("name", { ascending: true });
+        .order("name", { ascending: true }).abortSignal(signal);
       if (error) throw error;
       return (data ?? []).filter((row) => row.is_active).map((row) => ({ id: Number(row.id), name: String(row.name) }));
     },
@@ -4390,19 +4387,27 @@ export function useBudgetSpendTypesQuery(workspaceId?: number) {
 export function usePinBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
     mutationFn: async ({ budgetId, isPinned }: { budgetId: number; isPinned: boolean }) => {
-      const { error } = await getClient().from("budgets").update({ is_pinned: isPinned }).eq("id", budgetId).eq("workspace_id", workspaceId as number);
-      if (error) throw error;
+      assertBudgetWriteScope({ workspaceId, userId, budgetId }, workspaceId, userId, true);
+      if (typeof isPinned !== "boolean") throw new BudgetWritePreflightError("Revisa el estado fijado del presupuesto.");
+      const payload = { is_pinned: isPinned };
+      return verifyBudgetWrite(signal => getClient().from("budgets").update(payload).eq("id", budgetId).eq("workspace_id", workspaceId!)
+        .select("id, workspace_id, is_pinned").abortSignal(signal).single(), { workspaceId: workspaceId!, budgetId }, payload);
     },
-    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+    onSettled: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 
 export function useDuplicateBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
     mutationFn: async ({ budget, periodStart, periodEnd }: { budget: BudgetOverview; periodStart: string; periodEnd: string }) => {
-      const { error } = await getClient().from("budgets").insert({
+      assertBudgetWriteScope({ workspaceId: budget.workspaceId, userId, budgetId: budget.id }, workspaceId, userId, true);
+      const input = { ...budget, periodStart, periodEnd, isActive: true };
+      assertBudgetForm(input);
+      const payload = {
         workspace_id: workspaceId as number,
         created_by_user_id: userId,
         name: budget.name,
@@ -4417,10 +4422,10 @@ export function useDuplicateBudgetMutation(workspaceId?: number, userId?: string
         rollover_enabled: budget.rolloverEnabled,
         recurrence: budget.recurrence ?? "none",
         notes: budget.notes ?? null,
-      });
-      if (error) throw error;
+      };
+      return verifyBudgetWrite(signal => getClient().from("budgets").insert(payload).select([...new Set(["id", "workspace_id", ...Object.keys(payload)])].join(", ")).abortSignal(signal).single(), { workspaceId: workspaceId! }, payload);
     },
-    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+    onSettled: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 
@@ -4428,19 +4433,14 @@ export function useUpdateBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: BudgetUpdateInput) => {
-      const client = getClient();
-      const { error } = await client
-        .from("budgets")
-        .update(buildBudgetMutationPayload(input, input.userId))
-        .eq("id", input.budgetId)
-        .eq("workspace_id", input.workspaceId);
-
-      if (error) {
-        throw error;
-      }
+      assertBudgetWriteScope(input, workspaceId, userId, true); assertBudgetForm(input);
+      const payload = buildBudgetMutationPayload(input, input.userId);
+      return verifyBudgetWrite(signal => getClient().from("budgets").update(payload).eq("id", input.budgetId).eq("workspace_id", input.workspaceId)
+        .select(["id", "workspace_id", ...Object.keys(payload)].join(", ")).abortSignal(signal).single(), input, payload);
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       if (workspaceId) {
         await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
       }
@@ -4452,13 +4452,15 @@ export function useUpdateBudgetMutation(workspaceId?: number, userId?: string) {
 export function useAdjustBudgetLimitMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
+    retry: false,
     mutationFn: async ({ budgetId, limitAmount, alertPercent }: { budgetId: number; limitAmount: number; alertPercent: number }) => {
-      const { error } = await getClient().from("budgets")
-        .update({ limit_amount: limitAmount, alert_percent: alertPercent, updated_by_user_id: userId })
-        .eq("id", budgetId).eq("workspace_id", workspaceId as number);
-      if (error) throw error;
+      assertBudgetWriteScope({ workspaceId, userId, budgetId }, workspaceId, userId, true);
+      if (!validBudgetMoney(limitAmount) || !Number.isInteger(alertPercent) || alertPercent < 1 || alertPercent > 100) throw new BudgetWritePreflightError("Revisa el límite y el porcentaje de aviso.");
+      const payload = { limit_amount: limitAmount, alert_percent: alertPercent, updated_by_user_id: userId };
+      return verifyBudgetWrite(signal => getClient().from("budgets").update(payload).eq("id", budgetId).eq("workspace_id", workspaceId!)
+        .select("id, workspace_id, limit_amount, alert_percent, updated_by_user_id").abortSignal(signal).single(), { workspaceId: workspaceId!, budgetId }, payload);
     },
-    onSuccess: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
+    onSettled: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 
@@ -4466,22 +4468,15 @@ export function useToggleBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: BudgetToggleInput) => {
-      const client = getClient();
-      const { error } = await client
-        .from("budgets")
-        .update({
-          updated_by_user_id: input.userId,
-          is_active: input.isActive,
-        })
-        .eq("id", input.budgetId)
-        .eq("workspace_id", input.workspaceId);
-
-      if (error) {
-        throw error;
-      }
+      assertBudgetWriteScope(input, workspaceId, userId, true);
+      if (typeof input.isActive !== "boolean") throw new BudgetWritePreflightError("Revisa el estado del presupuesto.");
+      const payload = { updated_by_user_id: input.userId, is_active: input.isActive };
+      return verifyBudgetWrite(signal => getClient().from("budgets").update(payload).eq("id", input.budgetId).eq("workspace_id", input.workspaceId)
+        .select("id, workspace_id, updated_by_user_id, is_active").abortSignal(signal).single(), input, payload);
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       if (workspaceId) {
         await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
       }
@@ -4493,22 +4488,13 @@ export function useDeleteBudgetMutation(workspaceId?: number, userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    retry: false,
     mutationFn: async (input: BudgetDeleteInput) => {
-      const client = getClient();
-      const { error } = await client
-        .from("budgets")
-        .delete()
-        .eq("id", input.budgetId)
-        .eq("workspace_id", input.workspaceId);
-
-      if (error) {
-        throw error;
-      }
+      assertBudgetWriteScope({ ...input, userId }, workspaceId, userId, true);
+      return verifyBudgetWrite(signal => getClient().from("budgets").delete().eq("id", input.budgetId).eq("workspace_id", input.workspaceId)
+        .select("id, workspace_id").abortSignal(signal).single(), input);
     },
-    ...optimisticDelete<BudgetDeleteInput>(queryClient, workspaceId, userId, (snap, input) => ({
-      ...snap,
-      budgets: snap.budgets.filter((b) => b.id !== input.budgetId),
-    })),
+    onSettled: async () => { if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId); },
   });
 }
 

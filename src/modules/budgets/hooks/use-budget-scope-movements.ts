@@ -21,8 +21,9 @@ type ScopeRow = {
   destination_amount: number | string | null;
 };
 
-export function useBudgetScopeMovements({ workspaceId, budgets, accounts, categories, refreshKey }: {
+export function useBudgetScopeMovements({ workspaceId, userId, budgets, accounts, categories, refreshKey }: {
   workspaceId?: number;
+  userId?: string;
   budgets: BudgetOverview[];
   accounts: AccountSummary[];
   categories: CategorySummary[];
@@ -34,10 +35,10 @@ export function useBudgetScopeMovements({ workspaceId, budgets, accounts, catego
   } : null, [budgets]);
 
   return useQuery({
-    queryKey: ["budget-scope-movements", workspaceId, bounds?.start, bounds?.end, refreshKey],
-    enabled: Boolean(supabase && workspaceId && bounds && accounts),
-    queryFn: async (): Promise<MovementRecord[]> => {
-      if (!supabase || !workspaceId || !bounds) return [];
+    queryKey: ["budget-scope-movements", workspaceId, userId, bounds?.start, bounds?.end, refreshKey],
+    enabled: Boolean(supabase && workspaceId && userId && bounds),
+    queryFn: async ({ signal }): Promise<MovementRecord[]> => {
+      if (!supabase || !workspaceId || !userId || !bounds) throw new Error("No hay un espacio o sesión activos.");
       const accountMap = new Map(accounts.map((account) => [account.id, account]));
       const categoryMap = new Map(categories.map((category) => [category.id, category]));
       const rows: MovementRecord[] = [];
@@ -50,7 +51,7 @@ export function useBudgetScopeMovements({ workspaceId, budgets, accounts, catego
           .lte("occurred_at", budgetDateTo(bounds.end))
           .order("occurred_at", { ascending: false })
           .order("id", { ascending: false })
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1).abortSignal(signal);
         if (error) throw error;
         const pageRows = (data ?? []) as unknown as ScopeRow[];
         for (const row of pageRows) {

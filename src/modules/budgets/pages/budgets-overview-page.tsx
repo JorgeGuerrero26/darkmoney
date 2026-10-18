@@ -30,6 +30,8 @@ import { applyBudgetComputedMetrics, buildBudgetMetricsMap } from "../lib/budget
 import { buildBudgetCSV } from "../lib/budget-csv";
 import { buildBudgetEditorInput, budgetEditorCurrencies } from "../lib/budget-editor-input";
 import { budgetRowNote, duplicateBudgetPeriod, groupBudgetRules, nextBudgetPeriod } from "../lib/budget-periods";
+import { useCatalogWriteScope } from "../../shared/use-catalog-write-scope";
+import { confirmBudgetWrite, isBudgetWriteRejected } from "../lib/budget-write-result";
 
 function todayPeru() {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Lima", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -39,9 +41,9 @@ function todayPeru() {
 
 function rateToBase(from: string, base: string, rates: ExchangeRateSummary[]): number | null {
   if (from === base) return 1;
-  const direct = rates.find((rate) => rate.fromCurrencyCode === from && rate.toCurrencyCode === base && rate.rate > 0);
+  const direct = rates.find((rate) => rate.fromCurrencyCode === from && rate.toCurrencyCode === base && Number.isFinite(rate.rate) && rate.rate > 0);
   if (direct) return direct.rate;
-  const inverse = rates.find((rate) => rate.fromCurrencyCode === base && rate.toCurrencyCode === from && rate.rate > 0);
+  const inverse = rates.find((rate) => rate.fromCurrencyCode === base && rate.toCurrencyCode === from && Number.isFinite(rate.rate) && rate.rate > 0);
   return inverse ? 1 / inverse.rate : null;
 }
 
@@ -63,18 +65,30 @@ function ruleSummary(closed: BudgetOverview[]) {
   return exceeded ? `Te pasaste en ${exceeded} de ${withData.length} períodos con datos` : `Dentro del límite los ${withData.length} períodos con datos`;
 }
 
+function sameBudget(left: BudgetOverview, right: BudgetOverview) {
+  const fields = ["id", "workspaceId", "name", "categoryId", "accountId", "spendTypeId", "limitAmount", "alertPercent", "periodStart", "periodEnd", "currencyCode", "recurrence", "rolloverEnabled", "notes", "isActive", "isPinned"] as const;
+  return fields.every(key => left[key] === right[key]);
+}
+
 export function BudgetsPage() {
   const { user } = useAuth();
-  const { activeWorkspace, error: workspaceError, isLoading: workspaceLoading } = useActiveWorkspace();
+  const { activeWorkspace } = useActiveWorkspace();
+  return <BudgetWorkspacePage key={`${user?.id ?? "none"}:${activeWorkspace?.id ?? "none"}`} />;
+}
+
+function BudgetWorkspacePage() {
+  const { user } = useAuth();
+  const workspaceQuery = useActiveWorkspace();
+  const { activeWorkspace, error: workspaceError, isLoading: workspaceLoading } = workspaceQuery;
   const snapshotQuery = useWorkspaceSnapshotQuery(activeWorkspace, user?.id);
-  const spendTypesQuery = useBudgetSpendTypesQuery(activeWorkspace?.id);
+  const spendTypesQuery = useBudgetSpendTypesQuery(activeWorkspace?.id, user?.id);
   const createMutation = useCreateBudgetMutation(activeWorkspace?.id, user?.id);
   const updateMutation = useUpdateBudgetMutation(activeWorkspace?.id, user?.id);
   const adjustMutation = useAdjustBudgetLimitMutation(activeWorkspace?.id, user?.id);
   const deleteMutation = useDeleteBudgetMutation(activeWorkspace?.id, user?.id);
   const pinMutation = usePinBudgetMutation(activeWorkspace?.id, user?.id);
   const duplicateMutation = useDuplicateBudgetMutation(activeWorkspace?.id, user?.id);
-  const { schedule } = useUndoQueue();
+  const { schedule, cancel } = useUndoQueue();
 
   const [search, setSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
@@ -93,24 +107,66 @@ export function BudgetsPage() {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [bulkDelete, setBulkDelete] = useState(false);
   const ensureStarted = useRef(new Set<string>());
+  const queued = useRef(new Set<string>());
+  const lane = useRef<"idle" | "pending" | "uncertain">("idle");
+  const [busy, setBusy] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
 
-  const snapshot = snapshotQuery.data;
+  const snapshot = user && !snapshotQuery.isPlaceholderData && snapshotQuery.data?.workspace.id === activeWorkspace?.id ? snapshotQuery.data : undefined;
+  const scopedBudgets = useMemo(() => (snapshot?.budgets ?? []).filter(item => item.workspaceId === activeWorkspace?.id), [snapshot?.budgets, activeWorkspace?.id]);
+  const scopedAccounts = useMemo(() => (snapshot?.accounts ?? []).filter(item => item.workspaceId === activeWorkspace?.id), [snapshot?.accounts, activeWorkspace?.id]);
   const today = todayPeru();
-  const scopeMovementsQuery = useBudgetScopeMovements({ workspaceId: activeWorkspace?.id, budgets: snapshot?.budgets ?? [], accounts: snapshot?.accounts ?? [], categories: snapshot?.catalogs.categories ?? [], refreshKey: snapshotQuery.dataUpdatedAt });
+  const scopeMovementsQuery = useBudgetScopeMovements({ workspaceId: activeWorkspace?.id, userId: user?.id, budgets: scopedBudgets, accounts: scopedAccounts, categories: snapshot?.catalogs.categories ?? [], refreshKey: snapshotQuery.dataUpdatedAt });
+  const ready = Boolean(snapshot && snapshotQuery.isSuccess && !snapshotQuery.isFetching && !snapshotQuery.error && !workspaceLoading && !workspaceError && !workspaceQuery.isFetching && !workspaceQuery.isPlaceholderData && spendTypesQuery.isSuccess && !spendTypesQuery.isFetching && !spendTypesQuery.isPlaceholderData && !spendTypesQuery.error && (!scopedBudgets.length || (scopeMovementsQuery.isSuccess && !scopeMovementsQuery.isFetching && !scopeMovementsQuery.isPlaceholderData && !scopeMovementsQuery.error)));
+  const writeScope = useCatalogWriteScope(activeWorkspace, user?.id, ready);
+  const responseScope = useCatalogWriteScope(activeWorkspace, user?.id, !workspaceLoading && !workspaceError && !workspaceQuery.isFetching && !workspaceQuery.isPlaceholderData);
+  const live = useRef({ ready, budgets: scopedBudgets }); live.current = { ready, budgets: scopedBudgets };
+  const canWrite = writeScope.writable && !busy && !uncertain;
+  useEffect(() => {
+    if (!responseScope.writable) { queued.current.forEach(cancel); queued.current.clear(); }
+  }, [responseScope.writable, cancel]);
+  useEffect(() => () => { queued.current.forEach(cancel); queued.current.clear(); }, [cancel]);
+
+  function currentBudget(id: number, expected?: BudgetOverview) {
+    writeScope.assertCurrent();
+    const current = live.current.budgets.find(item => item.id === id);
+    if (!current || (expected && !sameBudget(current, expected))) throw new Error("El presupuesto cambió. Cierra y vuelve a abrir el formulario antes de guardar.");
+    return current;
+  }
+
+  async function runWrite(send: () => Promise<{ id: number; workspaceId: number }>, targetId?: number) {
+    responseScope.assertCurrent();
+    if (!live.current.ready) throw new Error("Espera la lectura actual antes de guardar.");
+    if (lane.current !== "idle") throw new Error("Hay una operación pendiente o sin confirmar. Comprueba Presupuestos antes de repetir.");
+    lane.current = "pending"; setBusy(true);
+    try {
+      const result = await send();
+      confirmBudgetWrite(result && { id: result.id, workspace_id: result.workspaceId }, { workspaceId: activeWorkspace!.id, budgetId: targetId });
+      if (!responseScope.isCurrent()) throw new Error("El contexto cambió durante el guardado. Comprueba Presupuestos antes de repetir.");
+      lane.current = "idle";
+      return result;
+    } catch (error) {
+      lane.current = isBudgetWriteRejected(error) ? "idle" : "uncertain";
+      setUncertain(lane.current === "uncertain");
+      if (responseScope.isCurrent()) setPageError(getQueryErrorMessage(error, "No se confirmó la operación. Comprueba Presupuestos antes de repetir."));
+      throw error;
+    } finally { setBusy(false); }
+  }
   const budgets = useMemo(() => {
     if (!snapshot || !activeWorkspace) return [];
-    const map = buildBudgetMetricsMap(snapshot.budgets, scopeMovementsQuery.data ?? [], {
+    const map = buildBudgetMetricsMap(scopedBudgets, scopeMovementsQuery.data ?? [], {
       workspaceBaseCurrencyCode: activeWorkspace.baseCurrencyCode,
       exchangeRates: snapshot.exchangeRates,
     });
-    return snapshot.budgets.map((budget) => {
+    return scopedBudgets.map((budget) => {
       const metrics = map.get(budget.id);
       return metrics ? applyBudgetComputedMetrics(budget, metrics) : budget;
     });
-  }, [snapshot, activeWorkspace, scopeMovementsQuery.data]);
-  const metricMap = useMemo(() => snapshot && activeWorkspace && scopeMovementsQuery.data ? buildBudgetMetricsMap(snapshot.budgets, scopeMovementsQuery.data, { workspaceBaseCurrencyCode: activeWorkspace.baseCurrencyCode, exchangeRates: snapshot.exchangeRates }) : new Map(), [snapshot, activeWorkspace, scopeMovementsQuery.data]);
+  }, [snapshot, scopedBudgets, activeWorkspace, scopeMovementsQuery.data]);
+  const metricMap = useMemo(() => snapshot && activeWorkspace && scopeMovementsQuery.data ? buildBudgetMetricsMap(scopedBudgets, scopeMovementsQuery.data, { workspaceBaseCurrencyCode: activeWorkspace.baseCurrencyCode, exchangeRates: snapshot.exchangeRates }) : new Map(), [snapshot, scopedBudgets, activeWorkspace, scopeMovementsQuery.data]);
   useResourceLink(budgets, setAnalyticsId);
   useResourceLink(budgets, (id) => {
+    if (!canWrite) return;
     const source = budgets.find((budget) => budget.id === id);
     if (!source) return;
     const period = duplicateBudgetPeriod(source);
@@ -133,27 +189,29 @@ export function BudgetsPage() {
   const over = active.filter((budget) => budget.spentAmount > budget.limitAmount);
   const monthLabel = new Intl.DateTimeFormat("es-PE", { month: "long", year: "numeric", timeZone: "America/Lima" }).format(new Date());
 
-  // Solo se abre el período que corre hoy. El índice único del servidor evita duplicados entre dispositivos.
+  // Only writers may renew; one attempt per rule and period in this mounted scope.
+  // This is not a cross-device idempotency guarantee.
   useEffect(() => {
-    if (!snapshot || !activeWorkspace || !user?.id) return;
-    for (const rule of groupBudgetRules(snapshot.budgets, today)) {
+    if (!canWrite || !snapshot || !activeWorkspace || !user?.id || lane.current !== "idle") return;
+    for (const rule of groupBudgetRules(scopedBudgets, today)) {
       if (rule.current || rule.closed.length === 0) continue;
       const last = rule.closed[0];
       if (!last.recurrence || last.recurrence === "none") continue;
       let period = nextBudgetPeriod(last, last.recurrence);
       let loops = 0;
       while (period && period.periodEnd < today && loops++ < 400) period = nextBudgetPeriod(period, last.recurrence);
-      if (!period || period.periodStart > today) continue;
+      if (!period || period.periodStart > today || period.periodEnd < today) continue;
       const key = `${activeWorkspace.id}:${rule.key}:${period.periodStart}`;
       if (ensureStarted.current.has(key)) continue;
       ensureStarted.current.add(key);
-      void duplicateMutation.mutateAsync({ budget: last, ...period }).catch((error: unknown) => {
-        if ((error as { code?: string }).code !== "23505") setPageError(getQueryErrorMessage(error, "No se pudo abrir el siguiente período."));
-      });
+      const source = currentBudget(last.id);
+      void runWrite(() => duplicateMutation.mutateAsync({ budget: source, ...period })).catch(() => {});
+      break; // Read the refreshed snapshot before starting another rule.
     }
-  }, [snapshot, activeWorkspace, user?.id, today, duplicateMutation]);
+  }, [snapshot, scopedBudgets, activeWorkspace, user?.id, today, canWrite, duplicateMutation]);
 
   function openCreate() {
+    if (!canWrite || !writeScope.isCurrent()) return;
     setEditing(null);
     setEditorValue(initialBudgetEditorValue(today, baseCurrency));
     setEditorDirty(false);
@@ -161,6 +219,7 @@ export function BudgetsPage() {
   }
 
   function openEdit(budget: BudgetOverview) {
+    if (!canWrite || !writeScope.isCurrent()) return;
     setEditing(budget);
     setEditorValue(initialBudgetEditorValue(today, baseCurrency, budget));
     setEditorDirty(false);
@@ -176,39 +235,81 @@ export function BudgetsPage() {
   }
 
   function requestCloseEditor() {
+    if (lane.current === "pending") return;
     if (editorDirty) setUnsavedOpen(true);
     else closeEditor();
   }
 
   async function submitEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editorValue || !activeWorkspace || !user?.id || !snapshot) return;
+    if (!canWrite || !writeScope.isCurrent() || lane.current !== "idle" || !editorValue || !activeWorkspace || !user?.id || !snapshot) return;
     setEditorError(null);
     try {
       const payload = buildBudgetEditorInput(editorValue, snapshot, spendTypesQuery.data ?? [], todayPeru(), !editing);
-      if (editing) await updateMutation.mutateAsync({ ...payload, budgetId: editing.id, workspaceId: activeWorkspace.id, userId: user.id });
-      else await createMutation.mutateAsync({ ...payload, workspaceId: activeWorkspace.id, userId: user.id });
-      closeEditor();
-    } catch (error) { setEditorError(getQueryErrorMessage(error, "No se pudo guardar el presupuesto.")); }
+      if (editing) { currentBudget(editing.id, editing); await runWrite(() => updateMutation.mutateAsync({ ...payload, budgetId: editing.id, workspaceId: activeWorkspace.id, userId: user.id }), editing.id); }
+      else await runWrite(() => createMutation.mutateAsync({ ...payload, workspaceId: activeWorkspace.id, userId: user.id }));
+      if (responseScope.isCurrent()) closeEditor();
+    } catch (error) { if (responseScope.isCurrent()) setEditorError(getQueryErrorMessage(error, "No se pudo guardar el presupuesto.")); }
   }
 
-  function deleteWithUndo(budget: BudgetOverview) {
-    if (!activeWorkspace) return;
-    setHiddenIds((previous) => new Set(previous).add(budget.id));
+  function deleteWithUndo(targets: BudgetOverview[]) {
+    if (!canWrite || !writeScope.isCurrent() || !activeWorkspace || lane.current !== "idle") return;
+    const ids = targets.map(item => item.id);
+    if (!ids.length) return;
+    try { for (const item of targets) currentBudget(item.id, item); }
+    catch (error) { setPageError(getQueryErrorMessage(error)); return; }
+    setHiddenIds((previous) => new Set([...previous, ...ids]));
     setDeleteTarget(null);
     setRowMenuId(null);
-    schedule({
-      label: `${budget.name} eliminado`,
-      onCommit: () => deleteMutation.mutateAsync({ budgetId: budget.id, workspaceId: activeWorkspace.id }).catch((error: unknown) => setPageError(getQueryErrorMessage(error))),
-      onUndo: () => setHiddenIds((previous) => { const next = new Set(previous); next.delete(budget.id); return next; }),
+    let consumed = false;
+    const confirmed = new Set<number>();
+    const restore = () => setHiddenIds(previous => new Set([...previous].filter(id => !ids.includes(id) || confirmed.has(id))));
+    const token = responseScope.isCurrent;
+    const queueId = schedule({
+      label: `${ids.length} ${ids.length === 1 ? "presupuesto pendiente de eliminar" : "presupuestos pendientes de eliminar"}`,
+      onCommit: async () => {
+        if (consumed) return; consumed = true; queued.current.delete(queueId);
+        try {
+          for (const item of targets) {
+            if (!token() || !live.current.ready || lane.current !== "idle") throw new Error("Los datos o permisos cambiaron. Revisa los presupuestos antes de eliminar.");
+            const row = live.current.budgets.find(budget => budget.id === item.id);
+            if (!row || !sameBudget(row, item)) throw new Error("El presupuesto cambió. Revisa el período antes de eliminar.");
+            // Capture the original permission token but use the refreshed read gate for each item.
+            await runWrite(() => deleteMutation.mutateAsync({ budgetId: item.id, workspaceId: activeWorkspace.id }), item.id);
+            confirmed.add(item.id);
+          }
+        } catch (error) { restore(); if (token()) setPageError(getQueryErrorMessage(error)); }
+      },
+      onUndo: () => { if (consumed) return; consumed = true; queued.current.delete(queueId); restore(); },
     });
+    queued.current.add(queueId);
   }
 
   async function duplicate(budget: BudgetOverview) {
-    const period = duplicateBudgetPeriod(budget);
-    try { await duplicateMutation.mutateAsync({ budget, ...period }); }
-    catch (error) { setPageError(getQueryErrorMessage(error, "No se pudo duplicar el presupuesto.")); }
-    setRowMenuId(null);
+    if (!canWrite || !writeScope.isCurrent() || lane.current !== "idle") return;
+    try { const current = currentBudget(budget.id, budget); await runWrite(() => duplicateMutation.mutateAsync({ budget: current, ...duplicateBudgetPeriod(current) })); }
+    catch (error) { if (responseScope.isCurrent()) setPageError(getQueryErrorMessage(error, "No se pudo duplicar el presupuesto.")); }
+    if (responseScope.isCurrent()) setRowMenuId(null);
+  }
+
+  async function pin(budget: BudgetOverview) {
+    if (!canWrite || lane.current !== "idle") return;
+    try { const current = currentBudget(budget.id, budget); await runWrite(() => pinMutation.mutateAsync({ budgetId: current.id, isPinned: !current.isPinned }), current.id); }
+    catch (error) { if (responseScope.isCurrent()) setPageError(getQueryErrorMessage(error)); }
+    if (responseScope.isCurrent()) setRowMenuId(null);
+  }
+
+  async function duplicateSelected(targets: BudgetOverview[]) {
+    if (!canWrite || !writeScope.isCurrent() || lane.current !== "idle") return;
+    try {
+      for (const target of targets) {
+        responseScope.assertCurrent();
+        if (!live.current.ready) throw new Error("La lectura cambió. Revisa qué períodos se duplicaron antes de continuar.");
+        const current = live.current.budgets.find(item => item.id === target.id);
+        if (!current || !sameBudget(current, target)) throw new Error("Un presupuesto cambió. Revisa los períodos antes de continuar.");
+        await runWrite(() => duplicateMutation.mutateAsync({ budget: current, ...duplicateBudgetPeriod(current) }));
+      }
+    } catch (error) { if (responseScope.isCurrent()) setPageError(getQueryErrorMessage(error)); }
   }
 
   function budgetRow(budget: BudgetOverview) {
@@ -222,41 +323,45 @@ export function BudgetsPage() {
           {note ? <span className="mt-1 block text-xs text-storm">{note}</span> : null}
         </button>
         <div className="w-40 shrink-0 text-right sm:w-52"><p className="text-sm font-semibold text-ink">{formatCurrency(budget.spentAmount, budget.currencyCode)} <span className="font-normal text-storm">de {formatCurrency(budget.limitAmount, budget.currencyCode)}</span></p><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#e9e3d9]" style={{ width: `${Math.min(100, Math.max(0, budget.usedPercent))}%` }} /></div></div>
-        {!selectionMode ? <div className="relative"><button aria-label={`Acciones de ${budget.name}`} aria-expanded={rowMenuId === budget.id} className="grid h-9 w-9 place-items-center rounded-lg text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => setRowMenuId(rowMenuId === budget.id ? null : budget.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>{rowMenuId === budget.id ? <div className="absolute right-0 top-10 z-20 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#211f1c] p-1 shadow-none">{[["Ver detalle", () => { setAnalyticsId(budget.id); setRowMenuId(null); }], ["Editar", () => openEdit(budget)], [budget.isPinned ? "Desfijar" : "Fijar", () => { void pinMutation.mutateAsync({ budgetId: budget.id, isPinned: !budget.isPinned }).catch((error: unknown) => setPageError(getQueryErrorMessage(error))); setRowMenuId(null); }], ["Duplicar período", () => void duplicate(budget)], ["Eliminar", () => { setDeleteTarget(budget); setRowMenuId(null); }]].map(([label, action]) => <button className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" key={label as string} onClick={action as () => void} type="button">{label as string}</button>)}</div> : null}</div> : null}
+        {!selectionMode ? <div className="relative"><button aria-label={`Acciones de ${budget.name}`} aria-expanded={rowMenuId === budget.id} className="grid h-9 w-9 place-items-center rounded-lg text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => setRowMenuId(rowMenuId === budget.id ? null : budget.id)} type="button"><MoreHorizontal className="h-4 w-4" /></button>{rowMenuId === budget.id ? <div className="absolute right-0 top-10 z-20 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#211f1c] p-1 shadow-none">{[["Ver detalle", () => { setAnalyticsId(budget.id); setRowMenuId(null); }], ["Editar", () => openEdit(budget)], [budget.isPinned ? "Desfijar" : "Fijar", () => void pin(budget)], ["Duplicar período", () => void duplicate(budget)], ["Eliminar", () => { setDeleteTarget(budget); setRowMenuId(null); }]].filter(([label]) => label === "Ver detalle" || canWrite).map(([label, action]) => <button className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" key={label as string} onClick={action as () => void} type="button">{label as string}</button>)}</div> : null}</div> : null}
       </div>
     </div>;
   }
 
   if (workspaceLoading || snapshotQuery.isLoading) return <DataState description="Cargando límites y movimientos..." title="Presupuestos" />;
-  if (workspaceError || snapshotQuery.error) return <DataState description={getQueryErrorMessage(workspaceError ?? snapshotQuery.error)} title="No se pudieron cargar los presupuestos" tone="error" />;
+  if ((workspaceError || snapshotQuery.error) && !editorValue && analyticsId === null) return <DataState description={getQueryErrorMessage(workspaceError ?? snapshotQuery.error)} title="No se pudieron cargar los presupuestos" tone="error" />;
   if (!activeWorkspace || !snapshot) return <DataState description="Activa un espacio para crear presupuestos." title="Sin espacio activo" />;
-  if (scopeMovementsQuery.isLoading && snapshot.budgets.length) return <DataState description="Calculando el gasto de todos los períodos..." title="Presupuestos" />;
-  if (scopeMovementsQuery.error) return <DataState description={getQueryErrorMessage(scopeMovementsQuery.error, "No se pudieron calcular los límites con todos los movimientos.")} title="No se pudo calcular el consumo" tone="error" />;
+  if (scopeMovementsQuery.isLoading && scopedBudgets.length && !editorValue && analyticsId === null) return <DataState description="Calculando el gasto de todos los períodos..." title="Presupuestos" />;
+  if (scopeMovementsQuery.error && !editorValue && analyticsId === null) return <DataState description={getQueryErrorMessage(scopeMovementsQuery.error, "No se pudieron calcular los límites con todos los movimientos.")} title="No se pudo calcular el consumo" tone="error" />;
+  if (spendTypesQuery.error && !editorValue && analyticsId === null) return <DataState description={getQueryErrorMessage(spendTypesQuery.error)} title="No se pudieron leer los tipos de gasto" tone="error" />;
+  if ((!snapshotQuery.isSuccess || (scopedBudgets.length > 0 && !scopeMovementsQuery.isSuccess)) && !editorValue && analyticsId === null) return <DataState description="Esperando una lectura válida del espacio y sus movimientos." title="Comprobando presupuestos" />;
 
   return <div className="pb-10">
     <header className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-6">
       <div><h1 className="font-display text-[1.75rem] font-semibold tracking-[-0.03em] text-ink">Presupuestos</h1><p className="mt-1 text-sm text-storm">{budgets.length} períodos registrados · {active.length} vigentes en {monthLabel}</p></div>
-      <div className="flex items-center gap-2"><Button className="whitespace-nowrap" onClick={openCreate}><Plus className="h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo presupuesto</span></Button><div className="relative"><button aria-label="Más acciones" aria-expanded={pageMenuOpen} className="grid h-11 w-11 place-items-center rounded-[10px] border border-white/10 text-storm hover:text-ink" onClick={() => setPageMenuOpen(!pageMenuOpen)} type="button"><MoreHorizontal className="h-4 w-4" /></button>{pageMenuOpen ? <div className="absolute right-0 top-12 z-20 w-52 rounded-xl border border-white/10 bg-[#211f1c] p-1"><button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => { saveCSV(visibleBudgets); setPageMenuOpen(false); }} type="button"><Download className="h-4 w-4" />Exportar CSV</button><button className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => { setSelectionMode(true); setPageMenuOpen(false); }} type="button">Seleccionar varios</button></div> : null}</div></div>
+      <div className="flex items-center gap-2"><Button className="whitespace-nowrap" disabled={!canWrite} onClick={openCreate}><Plus className="h-4 w-4" /><span className="sm:hidden">Nuevo</span><span className="hidden sm:inline">Nuevo presupuesto</span></Button><div className="relative"><button aria-label="Más acciones" aria-expanded={pageMenuOpen} className="grid h-11 w-11 place-items-center rounded-[10px] border border-white/10 text-storm hover:text-ink" onClick={() => setPageMenuOpen(!pageMenuOpen)} type="button"><MoreHorizontal className="h-4 w-4" /></button>{pageMenuOpen ? <div className="absolute right-0 top-12 z-20 w-52 rounded-xl border border-white/10 bg-[#211f1c] p-1"><button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => { saveCSV(visibleBudgets); setPageMenuOpen(false); }} type="button"><Download className="h-4 w-4" />Exportar CSV</button><button className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-storm hover:bg-white/[0.06] hover:text-ink" onClick={() => { setSelectionMode(true); setPageMenuOpen(false); }} type="button">Seleccionar varios</button></div> : null}</div></div>
     </header>
 
+    {!writeScope.writable ? <p className="mt-4 text-sm text-storm">Solo lectura mientras se comprueban los datos o si no tienes permisos de edición.</p> : null}
+    {uncertain ? <p className="mt-4 text-sm text-storm" role="alert">Hay una operación sin confirmar. Comprueba el resultado en Presupuestos antes de iniciar otra.</p> : null}
     {pageError ? <p className="mt-4 rounded-xl border border-white/10 bg-[#211b19] p-3 text-sm text-[#e6b7aa]" role="alert">{pageError} <button className="ml-2 underline" onClick={() => setPageError(null)} type="button">Cerrar</button></p> : null}
 
     {budgets.length >= 8 ? <label className="mt-6 flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-[#1a1917] px-4 text-storm"><Search className="h-4 w-4" /><input className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-storm/70" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar presupuestos..." value={search} /></label> : null}
 
     {active.length > 0 ? <section className="mt-6 flex flex-wrap items-baseline justify-between gap-3 border-y border-white/[0.08] py-4" aria-label="Resumen de presupuestos vigentes"><p className="text-sm text-storm">{hasMissingRate ? "No se suman monedas sin tipo de cambio. Revisa cada presupuesto abajo." : <><strong className="font-display text-2xl font-semibold text-ink">{formatCurrency(totalSpent, baseCurrency)}</strong> de {formatCurrency(totalLimit, baseCurrency)}</>}</p><p className="text-xs text-storm">{over.length ? `Te pasaste en ${over.map((budget) => budget.name).join(", ")}.` : "Ninguno ha superado su límite."}</p></section> : null}
 
-    {selectionMode ? <div className="mt-5 flex flex-wrap items-center gap-3 border-y border-white/10 py-3 text-sm"><button className="text-storm hover:text-ink" onClick={() => { setSelectionMode(false); setSelected(new Set()); }} type="button">Cancelar</button><span className="text-ink">{selected.size} seleccionados</span><button className="text-storm hover:text-ink" onClick={() => setSelected(new Set(visibleBudgets.map((budget) => budget.id)))} type="button">Seleccionar todos</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!selected.size} onClick={() => saveCSV(visibleBudgets.filter((budget) => selected.has(budget.id)))} type="button">CSV</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!selected.size} onClick={() => { void Promise.all(visibleBudgets.filter((budget) => selected.has(budget.id)).map(duplicate)); setSelectionMode(false); setSelected(new Set()); }} type="button">Duplicar</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!selected.size} onClick={() => setBulkDelete(true)} type="button">Eliminar</button></div> : null}
+    {selectionMode ? <div className="mt-5 flex flex-wrap items-center gap-3 border-y border-white/10 py-3 text-sm"><button className="text-storm hover:text-ink" onClick={() => { setSelectionMode(false); setSelected(new Set()); }} type="button">Cancelar</button><span className="text-ink">{selected.size} seleccionados</span><button className="text-storm hover:text-ink" onClick={() => setSelected(new Set(visibleBudgets.map((budget) => budget.id)))} type="button">Seleccionar todos</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!selected.size} onClick={() => saveCSV(visibleBudgets.filter((budget) => selected.has(budget.id)))} type="button">CSV</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!canWrite || !selected.size} onClick={() => { void duplicateSelected(visibleBudgets.filter(budget => selected.has(budget.id))); setSelectionMode(false); setSelected(new Set()); }} type="button">Duplicar</button><button className="text-storm hover:text-ink disabled:opacity-40" disabled={!canWrite || !selected.size} onClick={() => setBulkDelete(true)} type="button">Eliminar</button></div> : null}
 
     {active.length ? <section className="mt-6"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Este período</h2>{active.map(budgetRow)}</section> : null}
     {upcoming.length ? <section className="mt-8"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Próximos períodos</h2>{upcoming.map(budgetRow)}</section> : null}
     {inactive.length ? <section className="mt-8"><h2 className="mb-2 font-public-mono text-xs uppercase tracking-[0.16em] text-storm">Inactivos</h2>{inactive.map(budgetRow)}</section> : null}
     {closed.length ? <section className="mt-8"><button aria-expanded={showClosed || selectionMode} className="flex w-full items-center justify-between border-b border-white/10 py-3 text-left font-public-mono text-xs uppercase tracking-[0.16em] text-storm hover:text-ink" onClick={() => setShowClosed(!showClosed)} type="button"><span>Períodos cerrados · {closed.length} {closed.length === 1 ? "regla" : "reglas"}</span>{showClosed || selectionMode ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</button>{selectionMode ? closed.flatMap((rule) => rule.closed).map(budgetRow) : showClosed ? closed.map((rule) => <button className="flex min-h-[60px] w-full items-center justify-between border-b border-white/[0.08] py-3 text-left hover:bg-white/[0.02]" key={rule.key} onClick={() => setAnalyticsId(rule.closed[0].id)} type="button"><span><span className="block text-sm font-semibold text-ink">{rule.closed[0].name}</span><span className="mt-1 block text-xs text-storm">{ruleSummary(rule.closed)}</span></span><ChevronRight className="h-4 w-4 text-storm" /></button>) : null}</section> : null}
-    {!visibleBudgets.length ? <div className="mt-8"><DataState action={<Button onClick={search ? () => setSearch("") : openCreate}>{search ? "Limpiar búsqueda" : "Crear presupuesto"}</Button>} description={search ? "Prueba con otro nombre, categoría o cuenta." : "Pon un límite a una categoría, un tipo de gasto, una cuenta o a todo tu gasto."} title={search ? "No hay coincidencias" : "Aún no tienes presupuestos"} /></div> : null}
+    {!visibleBudgets.length ? <div className="mt-8"><DataState action={<Button disabled={!search && !canWrite} onClick={search ? () => setSearch("") : openCreate}>{search ? "Limpiar búsqueda" : "Crear presupuesto"}</Button>} description={search ? "Prueba con otro nombre, categoría o cuenta." : "Pon un límite a una categoría, un tipo de gasto, una cuenta o a todo tu gasto."} title={search ? "No hay coincidencias" : "Aún no tienes presupuestos"} /></div> : null}
 
-    {editorValue ? <BudgetEditorDialog accounts={snapshot.accounts.filter((account) => !account.isArchived).map((account) => ({ id: account.id, name: account.name }))} categories={snapshot.catalogs.categories} currencies={budgetEditorCurrencies(snapshot)} error={editorError} isCreate={!editing} isSaving={createMutation.isPending || updateMutation.isPending} onChange={(value) => { setEditorValue(value); setEditorDirty(true); setEditorError(null); }} onClose={requestCloseEditor} onSubmit={(event) => void submitEditor(event)} spendTypes={spendTypesQuery.data ?? []} value={editorValue} /> : null}
+    {editorValue ? <BudgetEditorDialog accounts={scopedAccounts.filter((account) => !account.isArchived).map((account) => ({ id: account.id, name: account.name }))} categories={snapshot.catalogs.categories} currencies={budgetEditorCurrencies(snapshot)} error={editorError} isCreate={!editing} isSaving={busy} saveBlocked={!canWrite} onChange={(value) => { if (!canWrite) return; setEditorValue(value); setEditorDirty(true); setEditorError(null); }} onClose={requestCloseEditor} onSubmit={(event) => void submitEditor(event)} spendTypes={spendTypesQuery.data ?? []} value={editorValue} /> : null}
     {unsavedOpen ? <UnsavedChangesDialog onDiscard={closeEditor} onKeepEditing={() => setUnsavedOpen(false)} /> : null}
-    {analyticsId !== null ? (() => { const budget = budgets.find((item) => item.id === analyticsId); return budget ? <BudgetDetailDialog allBudgets={budgets} budget={budget} metrics={metricMap.get(budget.id) ?? null} onClose={() => setAnalyticsId(null)} onEdit={() => { setAnalyticsId(null); openEdit(budget); }} onQuickSave={async (limitAmount, alertPercent) => { if (!user?.id) throw new Error("No hay sesión activa."); await adjustMutation.mutateAsync({ budgetId: budget.id, limitAmount, alertPercent }); }} /> : null; })() : null}
-    {deleteTarget ? <DeleteConfirmDialog badge="Eliminar presupuesto" description="Se elimina este período, no sus movimientos. Puedes deshacer la acción durante unos segundos." isDeleting={deleteMutation.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => deleteWithUndo(deleteTarget)}><p className="text-lg font-semibold text-ink">{deleteTarget.name}</p></DeleteConfirmDialog> : null}
-    {bulkDelete ? <DeleteConfirmDialog badge="Eliminar presupuestos" description={`Se eliminarán ${selected.size} períodos. Tus movimientos no se borrarán.`} isDeleting={false} onCancel={() => setBulkDelete(false)} onConfirm={() => { visibleBudgets.filter((budget) => selected.has(budget.id)).forEach(deleteWithUndo); setBulkDelete(false); setSelectionMode(false); setSelected(new Set()); }}><p className="text-lg font-semibold text-ink">{selected.size} seleccionados</p></DeleteConfirmDialog> : null}
+    {analyticsId !== null ? (() => { const budget = budgets.find((item) => item.id === analyticsId); return budget ? <BudgetDetailDialog key={budget.id} sourceReady={ready} canWrite={canWrite} isCurrent={responseScope.isCurrent} allBudgets={budgets} budget={budget} metrics={metricMap.get(budget.id) ?? null} onClose={() => setAnalyticsId(null)} onEdit={() => { setAnalyticsId(null); openEdit(budget); }} onQuickSave={async (limitAmount, alertPercent) => { currentBudget(budget.id, budget); await runWrite(() => adjustMutation.mutateAsync({ budgetId: budget.id, limitAmount, alertPercent }), budget.id); }} /> : null; })() : null}
+    {deleteTarget && canWrite ? <DeleteConfirmDialog badge="Eliminar presupuesto" description="Se elimina este período, no sus movimientos. Puedes deshacer la acción durante unos segundos." isDeleting={deleteMutation.isPending} onCancel={() => setDeleteTarget(null)} onConfirm={() => deleteWithUndo([deleteTarget])}><p className="text-lg font-semibold text-ink">{deleteTarget.name}</p></DeleteConfirmDialog> : null}
+    {bulkDelete && canWrite ? <DeleteConfirmDialog badge="Eliminar presupuestos" description={`Se eliminarán ${selected.size} períodos. Tus movimientos no se borrarán.`} isDeleting={false} onCancel={() => setBulkDelete(false)} onConfirm={() => { deleteWithUndo(visibleBudgets.filter((budget) => selected.has(budget.id))); setBulkDelete(false); setSelectionMode(false); setSelected(new Set()); }}><p className="text-lg font-semibold text-ink">{selected.size} seleccionados</p></DeleteConfirmDialog> : null}
   </div>;
 }

@@ -1,8 +1,9 @@
 import { ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "../../../components/ui/button";
+import { DataState } from "../../../components/ui/data-state";
 import { Modal, ModalFooter } from "../../../components/ui/modal";
 import { ModalBody } from "../../../components/ui/modal-body";
 import { ResourceEditorHeader, resourceEditorSurfaceClassName } from "../../../components/ui/resource-editor";
@@ -13,6 +14,8 @@ import { budgetLimaDate, budgetTodayLima } from "../lib/budget-date";
 import { budgetHeadState, budgetMovementDays, budgetSeriesReading } from "../lib/budget-detail";
 import type { BudgetComputedMetrics } from "../lib/budget-metrics";
 import { budgetRuleKey } from "../lib/budget-periods";
+import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
+import { isBudgetWriteRejected, validBudgetMoney } from "../lib/budget-write-result";
 
 type Props = {
   budget: BudgetOverview;
@@ -21,6 +24,9 @@ type Props = {
   onClose: () => void;
   onEdit: () => void;
   onQuickSave: (amount: number, alertPercent: number) => Promise<void>;
+  canWrite?: boolean;
+  isCurrent?: () => boolean;
+  sourceReady?: boolean;
 };
 
 function monthName(ymd: string) {
@@ -29,15 +35,37 @@ function monthName(ymd: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-export function BudgetDetailDialog({ budget, allBudgets, metrics, onClose, onEdit, onQuickSave }: Props) {
+export function BudgetDetailDialog({ budget, allBudgets, metrics, onClose, onEdit, onQuickSave, canWrite = false, isCurrent = () => false, sourceReady = false }: Props) {
   const navigate = useNavigate();
   const [panel, setPanel] = useState<"detail" | "quick" | "movements">("detail");
   const [visibleCount, setVisibleCount] = useState(50);
   const [amount, setAmount] = useState(String(budget.limitAmount));
   const [alert, setAlert] = useState(budget.alertPercent);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { setAmount(String(budget.limitAmount)); setAlert(budget.alertPercent); }, [budget.limitAmount, budget.alertPercent]);
+  const write = useFinancialWriteGuard(`${budget.workspaceId}:${budget.id}:${panel}`);
+  const initial = useRef({ limitAmount: budget.limitAmount, alertPercent: budget.alertPercent });
+  const stale = useRef(false);
+  if (panel === "quick" && (budget.limitAmount !== initial.current.limitAmount || budget.alertPercent !== initial.current.alertPercent)) stale.current = true;
+  const blocked = !canWrite || write.blocked || stale.current;
+  const close = () => { if (!write.pending) onClose(); };
+  function openQuick() {
+    if (!canWrite || !isCurrent()) return;
+    initial.current = { limitAmount: budget.limitAmount, alertPercent: budget.alertPercent }; stale.current = false;
+    setAmount(String(budget.limitAmount)); setAlert(budget.alertPercent); setError(null); setPanel("quick");
+  }
+  async function saveQuick() {
+    if (blocked || !isCurrent()) return;
+    const parsed = Number(amount);
+    if (!validBudgetMoney(parsed)) { setError("Ingresa un monto mayor a cero, con máximo dos decimales."); return; }
+    const attempt = write.begin(); if (!attempt) return;
+    const stillCurrent = isCurrent;
+    try { await onQuickSave(parsed, alert); if (write.isCurrent(attempt) && stillCurrent()) { write.confirm(attempt); setPanel("detail"); } }
+    catch (cause) {
+      if (!write.isCurrent(attempt)) return;
+      if (isBudgetWriteRejected(cause)) write.reject(attempt); else write.fail(attempt);
+      if (stillCurrent()) setError(cause instanceof Error ? cause.message : "No se confirmó el ajuste. Comprueba Presupuestos antes de repetir.");
+    }
+  }
 
   const today = useMemo(() => budgetTodayLima(), []);
   const money = (value: number) => formatCurrency(value, budget.currencyCode);
@@ -52,15 +80,19 @@ export function BudgetDetailDialog({ budget, allBudgets, metrics, onClose, onEdi
     <span className="shrink-0 text-sm font-semibold text-ink">{money(item.amountInBudgetCurrency)}</span>
   </button>;
 
-  return <Modal className={resourceEditorSurfaceClassName} labelledBy="budget-detail-title" onClose={onClose}>
-    <ResourceEditorHeader onBack={panel !== "detail" ? () => setPanel("detail") : undefined} onClose={onClose} title={panel === "quick" ? "Ajustar límite" : panel === "movements" ? `Movimientos de ${periodLabel.toLowerCase()}` : budget.name} titleId="budget-detail-title" />
+  return <Modal className={resourceEditorSurfaceClassName} disableOutsideClose={write.pending} labelledBy="budget-detail-title" onClose={close}>
+    <ResourceEditorHeader disabled={write.pending} onBack={panel !== "detail" ? () => setPanel("detail") : undefined} onClose={close} title={panel === "quick" ? "Ajustar límite" : panel === "movements" ? `Movimientos de ${periodLabel.toLowerCase()}` : budget.name} titleId="budget-detail-title" />
     <ModalBody className="!px-5 !py-5 sm:!px-6">
       {panel === "quick" ? <div className="space-y-5">
+        {!sourceReady ? <p className="text-sm text-storm" role="status">Esperando una lectura actual. Tu ajuste se conserva, sin enviarlo.</p> : null}
+        {stale.current ? <p className="text-sm text-storm" role="alert">El presupuesto cambió. Vuelve al detalle y abre el ajuste otra vez.</p> : null}
+        <fieldset className="min-w-0 space-y-5 border-0 p-0" disabled={blocked}>
         <p className="text-sm text-storm">{budget.name} · {budget.scopeLabel}</p>
         <label className="block text-sm text-storm">Monto límite ({budget.currencyCode})<input autoFocus className="mt-2 h-16 w-full rounded-xl border border-white/10 bg-[#141311] px-4 font-display text-3xl font-semibold text-ink outline-none focus:border-white/40" inputMode="decimal" min="0" onChange={(event) => { setAmount(event.target.value); setError(null); }} step="0.01" type="number" value={amount} /></label>
         <div><p className="mb-2 text-sm text-storm">Avisarme al</p><div className="flex gap-2">{[70, 80, 90, 100].map((value) => <button aria-pressed={alert === value} className={`min-h-10 flex-1 rounded-lg border text-sm ${alert === value ? "border-white/40 bg-white/10 text-ink" : "border-white/10 text-storm"}`} key={value} onClick={() => setAlert(value)} type="button">{value}%</button>)}</div></div>
+        </fieldset>
         {error ? <p className="text-sm text-[#e6b7aa]" role="alert">{error}</p> : null}
-      </div> : panel === "movements" ? <>
+      </div> : !sourceReady ? <DataState title="Comprobando el consumo" description="No se muestran totales ni movimientos sin una lectura actual." /> : panel === "movements" ? <>
         <p className="text-sm text-storm">{contributions.length} movimientos · {money(budget.spentAmount)} de {money(budget.limitAmount)}</p>
         <div className="mt-5">{grouped.days.map((group) => <section key={group.date}>
           <div className="flex items-center justify-between border-b border-white/10 py-2 font-public-mono text-xs uppercase tracking-[0.12em] text-storm"><span>{formatDate(group.date)}</span><span>{money(group.subtotal)}</span></div>
@@ -79,6 +111,6 @@ export function BudgetDetailDialog({ budget, allBudgets, metrics, onClose, onEdi
         {budget.notes ? <section className="mt-8"><h3 className="mb-2 font-public-mono text-xs uppercase tracking-[0.12em] text-storm">Notas</h3><p className="whitespace-pre-wrap text-sm text-storm">{budget.notes}</p></section> : null}
       </>}
     </ModalBody>
-    <ModalFooter>{panel === "detail" ? <div className="flex w-full gap-2"><Button className="flex-1" onClick={() => setPanel("quick")} variant="secondary">Ajustar límite</Button><Button className="flex-1" onClick={onEdit}>Editar</Button></div> : panel === "quick" ? <Button className="w-full" disabled={saving} onClick={() => { const parsed = Number(amount); if (!Number.isFinite(parsed) || parsed <= 0) { setError("Ingresa un monto mayor a cero."); return; } setSaving(true); void onQuickSave(parsed, alert).then(() => setPanel("detail")).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "No se pudo guardar.")).finally(() => setSaving(false)); }}>{saving ? "Guardando..." : "Guardar"}</Button> : <Button className="w-full" onClick={() => setPanel("detail")} variant="secondary">Volver al presupuesto</Button>}</ModalFooter>
+    <ModalFooter>{panel === "detail" ? <div className="flex w-full gap-2"><Button className="flex-1" disabled={!canWrite} onClick={openQuick} variant="secondary">Ajustar límite</Button><Button className="flex-1" disabled={!canWrite} onClick={() => { if (canWrite && isCurrent()) onEdit(); }}>Editar</Button></div> : panel === "quick" ? <Button className="w-full" disabled={blocked} onClick={() => void saveQuick()}>{write.pending ? "Guardando..." : "Guardar"}</Button> : <Button className="w-full" onClick={() => setPanel("detail")} variant="secondary">Volver al presupuesto</Button>}</ModalFooter>
   </Modal>;
 }
