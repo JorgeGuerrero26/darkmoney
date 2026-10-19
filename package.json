@@ -51,6 +51,7 @@
     "test:budget-parity": "node --experimental-strip-types scripts/test-budget-parity.mjs",
     "test:budget-write-results": "node scripts/test-budget-write-results.mjs",
     "test:budget-permissions": "node scripts/test-budget-permissions.mjs",
+    "test:budget-scope-ledger": "node scripts/test-budget-scope-ledger.mjs",
     "test:catalog-parity": "node scripts/test-catalog-parity.mjs",
     "test:category-permissions": "node scripts/test-category-permissions.mjs",
     "test:contact-permissions": "node scripts/test-contact-permissions.mjs",

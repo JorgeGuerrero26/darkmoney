@@ -258,7 +258,7 @@ export function buildBudgetComputedMetrics(
       movementId: movement.id,
       occurredAt: movement.occurredAt,
       movementType: movement.movementType,
-      description: movement.description?.trim() || "Sin descripcion",
+      description: movement.description?.trim() || "Sin descripción",
       categoryName: movement.categoryId ? movement.category : null,
       accountName: expenseSide.accountName,
       nativeAmount: round2(expenseSide.amount),

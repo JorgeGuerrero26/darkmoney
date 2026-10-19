@@ -80,9 +80,9 @@ assert.deepEqual(await query.queryFn({ signal }), [{ id: 3, name: "Fijo" }]); as
 const scopeSource = readFileSync(new URL("../src/modules/budgets/hooks/use-budget-scope-movements.ts", import.meta.url), "utf8");
 const scopeAst = ts.createSourceFile("scope.ts", scopeSource, ts.ScriptTarget.Latest, true), scopeNode = scopeAst.statements.find(node => ts.isFunctionDeclaration(node)); assert.ok(scopeNode);
 const scopeCode = ts.transpileModule(scopeNode.getText(scopeAst).replace(/^export /, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const dates = await import(load("src/modules/budgets/lib/budget-date.ts"));
-const ledger = { from(table) { read = { table, filters: [] }; return { select() { return this; }, eq(key, value) { read.filters.push([key, value]); return this; }, gte() { return this; }, lte() { return this; }, order() { return this; }, range() { return this; }, abortSignal(signal) { read.signal = signal; return Promise.resolve({ data: [], error: null }); } }; } };
-const scopeHook = new Function("useQuery", "useMemo", "supabase", "PAGE_SIZE", "budgetDateFrom", "budgetDateTo", `${scopeCode};return useBudgetScopeMovements;`)(options => options, fn => fn(), ledger, 500, dates.budgetDateFrom, dates.budgetDateTo);
+const { readBudgetScopeMovements } = await import(load("src/modules/budgets/lib/budget-scope-reader.ts"));
+const ledger = { from(table) { read = { table, filters: [] }; return { select() { return this; }, eq(key, value) { read.filters.push([key, value]); return this; }, gte() { return this; }, lt() { return this; }, order() { return this; }, range() { return this; }, abortSignal(signal) { read.signal = signal; return Promise.resolve({ data: [], count: 0, error: null }); } }; } };
+const scopeHook = new Function("useQuery", "useMemo", "supabase", "readBudgetScopeMovements", `${scopeCode};return useBudgetScopeMovements;`)(options => options, fn => fn(), ledger, readBudgetScopeMovements);
 const scopeInput = { workspaceId: 8, userId: "A", budgets: [input.budget], accounts: [], categories: [], refreshKey: 1 }, scopeQuery = scopeHook(scopeInput);
 assert.notDeepEqual(scopeHook({ ...scopeInput, userId: "B" }).queryKey, scopeQuery.queryKey); assert.equal(scopeHook({ ...scopeInput, userId: undefined }).enabled, false);
 assert.deepEqual(await scopeQuery.queryFn({ signal }), []); assert.equal(read.signal, signal); assert.deepEqual(read.filters, [["workspace_id", 8], ["status", "posted"]]);
