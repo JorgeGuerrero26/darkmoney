@@ -2,12 +2,14 @@ import { parseMovementProposal, type AssistantMovementDraft } from "./movement-p
 import { parseBudgetProposal, type AssistantBudgetDraft } from "./budget-proposal";
 import { parseRecurringProposal, type AssistantRecurringDraft } from "./recurring-proposal";
 import { parseObligationProposal, type AssistantObligationDraft } from "./obligation-proposal";
+import { parseMovementChange, type AssistantMovementChange } from "./movement-change";
 
 export type AssistantMessage = { role: "user" | "assistant"; content: string };
 export type AssistantEvidence = { label: string; movementIds: number[] };
 export type ProposalStatus = "pending" | "saved" | "discarded" | "unconfirmed";
-export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; recurringDraft?: AssistantRecurringDraft; obligationDraft?: AssistantObligationDraft; status?: ProposalStatus; statusNote?: string };
-export type AssistantReply = { reply: string; evidence: AssistantEvidence[]; proposals: AssistantProposal[]; remainingToday: number | null };
+export type AssistantProposal = { label: string; amount: number; currency: string; href: string; movementDraft?: AssistantMovementDraft; budgetDraft?: AssistantBudgetDraft; recurringDraft?: AssistantRecurringDraft; obligationDraft?: AssistantObligationDraft; movementChange?: AssistantMovementChange; status?: ProposalStatus; statusNote?: string };
+/** `suggestions`: preguntas de seguimiento que propone el servidor (máximo 3, como móvil). */
+export type AssistantReply = { reply: string; evidence: AssistantEvidence[]; proposals: AssistantProposal[]; remainingToday: number | null; suggestions?: string[] };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const id = (value: unknown) => (typeof value==="number"||typeof value==="string")&&Number.isSafeInteger(Number(value))&&Number(value)>0;
 
@@ -53,7 +55,14 @@ export function parseAssistantReply(value: unknown): AssistantReply {
   if(object(raw.recurringDraft).kind==="recurring_income")add(raw.recurringDraft,"Ingreso fijo","/app/recurring-income");
   const recurringDraft=parseRecurringProposal(raw.recurringDraft);
   if(recurringDraft&&proposals.length>recurringIndex)proposals[recurringIndex].recurringDraft=recurringDraft;
-  return {reply:raw.reply.trim(),evidence,proposals,remainingToday:typeof raw.remainingToday==="number"&&Number.isSafeInteger(raw.remainingToday)&&raw.remainingToday>=0?raw.remainingToday:null};
+  // Correcciones o borrados de movimientos ya registrados: cada uno con su tarjeta para confirmar (móvil).
+  for(const value of (Array.isArray(raw.movementChanges)?raw.movementChanges:[]).slice(0,10)){
+    const change=parseMovementChange(value);if(!change)continue;
+    const kind=change.movementType==="expense"?"gasto":"ingreso";
+    proposals.push({label:`${change.action==="delete"?"Borrar":"Corregir"} ${kind} #${change.movementId}${change.before.description?` "${change.before.description.slice(0,80)}"`:""}`,href:`/app/movements?period=all&movement=${change.movementId}`,amount:change.after.amount??change.before.amount,currency:change.currency,movementChange:change});
+  }
+  const suggestions=Array.isArray(raw.suggestions)?raw.suggestions.filter((item):item is string=>typeof item==="string"&&item.trim().length>0).map(item=>item.trim().slice(0,200)).slice(0,3):[];
+  return {reply:raw.reply.trim(),evidence,proposals,suggestions,remainingToday:typeof raw.remainingToday==="number"&&Number.isSafeInteger(raw.remainingToday)&&raw.remainingToday>=0?raw.remainingToday:null};
 }
 
 export function assistantRequest(message: string, history: AssistantMessage[], workspaceId: number) {

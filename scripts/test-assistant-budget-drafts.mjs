@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { React, act, dom, root, load, mock, h, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 const { parseBudgetProposal, prepareBudgetProposal } = await import(load("src/modules/assistant/lib/budget-proposal.ts"));
 const { buildBudgetEditorInput } = await import(load("src/modules/budgets/lib/budget-editor-input.ts"));

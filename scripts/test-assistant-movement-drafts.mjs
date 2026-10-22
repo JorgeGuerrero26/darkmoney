@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { React, act, dom, load, mock, h, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 // Real parsers, resolver and save controller. All financial writes below are in-memory fixtures.
 const { parseAssistantReply, assistantRequest } = await import(load("src/modules/assistant/lib/assistant-contract.ts"));

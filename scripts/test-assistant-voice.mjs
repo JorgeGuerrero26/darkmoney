@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { React, act, dom, load, mock, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 const recognitions = [], spoken = []; let cancelled = 0;
 class Recognition {

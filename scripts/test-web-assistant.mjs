@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {React,act,dom,load,mock,createRoot,MemoryRouter,QueryClient,QueryClientProvider,change,button,settle} from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 globalThis.assistantUser="u";globalThis.assistantWorkspace=8;globalThis.assistantCalls=[];globalThis.assistantGate=null;
 const notice={id:90,user_id:"u",kind:"assistant_insight",title:"Revisa tus gastos",body:"Hay una señal por revisar.",payload:{assistantPrompt:"¿Qué cambió en mis gastos?",url:"https://malicious.invalid"}};
 const reads=[];

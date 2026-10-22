@@ -9,6 +9,7 @@ import { AssistantBudgetReview, type AssistantBudgetSession } from "./assistant-
 import { AssistantRecurringReview, type AssistantRecurringSession } from "./assistant-recurring-review";
 import { AssistantObligationReview, type AssistantObligationSession } from "./assistant-obligation-review";
 import { AssistantPaymentReview, type AssistantPaymentSession } from "./assistant-payment-review";
+import { AssistantMovementChangeReview } from "./assistant-movement-change-review";
 
 export function AssistantProposalRow({ proposal, intentKey, workspaceId, userId, busy, onOutcome }: {
   proposal: AssistantProposal; intentKey: string; workspaceId: number; userId: string; busy: boolean;
@@ -25,11 +26,15 @@ export function AssistantProposalRow({ proposal, intentKey, workspaceId, userId,
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink">
       <span>{proposal.label} · {formatCurrency(proposal.amount, proposal.currency)}</span>
       {pending ? <div className="flex items-center gap-3">
-        {proposalCanReview(proposal) ? <Button variant="ghost" disabled={busy} onClick={() => setOpen(true)}>Revisar y registrar</Button> : <Link className="underline underline-offset-4" to={proposal.href}>Revisar en el módulo</Link>}
+        {proposalCanReview(proposal) ? <Button variant="ghost" disabled={busy} onClick={() => setOpen(true)}>{proposal.movementChange ? (proposal.movementChange.action === "delete" ? "Revisar y borrar" : "Revisar y aplicar") : "Revisar y registrar"}</Button> : <Link className="underline underline-offset-4" to={proposal.href}>Revisar en el módulo</Link>}
         <Button variant="ghost" disabled={busy} onClick={() => onOutcome("discarded")}>Descartar</Button>
       </div> : proposal.status === "unconfirmed" ? <Link className="underline underline-offset-4" to={proposal.href}>Comprobar en el módulo</Link> : <span className="text-xs text-storm">{proposal.status === "saved" ? "Guardado" : "Descartado"}</span>}
     </div>
     {proposal.statusNote ? <p className="mt-2 text-xs text-storm">{proposal.statusNote}</p> : null}
+    {open && pending && proposal.movementChange ? <AssistantMovementChangeReview change={proposal.movementChange}
+      workspaceId={workspaceId} userId={userId} onClose={() => setOpen(false)}
+      onSaved={note => { onOutcome("saved", note); setOpen(false); }}
+      onUnconfirmed={note => { onOutcome("unconfirmed", note); setOpen(false); }} /> : null}
     {open && pending && proposal.movementDraft && !isPayment ? <AssistantMovementReview draft={proposal.movementDraft} intentKey={intentKey}
       workspaceId={workspaceId} userId={userId} session={session.current} onClose={() => setOpen(false)}
       onSaved={note => { onOutcome("saved", note); setOpen(false); }} /> : null}

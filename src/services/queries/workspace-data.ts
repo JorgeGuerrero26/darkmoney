@@ -45,6 +45,7 @@ import type {
 } from "../../types/domain";
 import { supabase } from "../supabase/client";
 import { runIdempotentInsert } from "../../lib/idempotent-write";
+import { applyMovementChange, type AssistantMovementChange } from "../../modules/assistant/lib/movement-change";
 import { assertAccountWriteScope, confirmAccountWrite, withAccountWriteTimeout } from "../../modules/accounts/lib/account-write-result";
 import { assertSubscriptionWriteScope, confirmSubscriptionWrite, withSubscriptionWriteTimeout } from "../../modules/subscriptions/lib/subscription-write-result";
 import { confirmArrivalWrite, type ArrivalWriteInput } from "../../modules/recurring-income/lib/arrival-write";
@@ -5243,6 +5244,19 @@ export function useUpdateMovementMutation(workspaceId?: number, userId?: string)
       if (workspaceId) {
         await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId);
       }
+    },
+  });
+}
+
+/** Corrección o borrado propuesto por el Asistente y confirmado por el usuario (sin reintentos). */
+export function useAssistantMovementChangeMutation(workspaceId?: number, userId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: async (input: { change: AssistantMovementChange; workspaceId: number; isCurrent: () => boolean }) =>
+      applyMovementChange(getClient(), input.change, input.workspaceId, input.isCurrent),
+    onSettled: async () => {
+      if (workspaceId) await invalidateWorkspaceSnapshot(queryClient, workspaceId, userId).catch(() => undefined);
     },
   });
 }

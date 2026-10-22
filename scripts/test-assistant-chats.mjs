@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { React, act, dom, load, mock, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 const web = await import(load("src/modules/assistant/lib/chat-store.ts"));
 const phone = await import(load("../DarkMoneyApp/features/assistant/lib/chat-store.ts"));

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { React, act, dom, load, mock, h, createRoot, MemoryRouter, QueryClient, QueryClientProvider, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 const { parseAssistantReply } = await import(load("src/modules/assistant/lib/assistant-contract.ts"));
 const { paymentTargets, resolvePaymentTarget, resolvePaymentAccount, validateObligationPayment } = await import(load("src/modules/assistant/lib/payment-proposal.ts"));
