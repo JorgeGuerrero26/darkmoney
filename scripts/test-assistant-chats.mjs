@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { React, act, dom, load, mock, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
 mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
+mock("src/components/ui/searchable-picker.tsx", `import { createElement as h } from "${new URL("../node_modules/react/index.js", import.meta.url).href}"; export const SearchablePicker=p=>h("select",{"aria-label":p.placeholderLabel,value:p.value,disabled:p.disabled,onChange:e=>p.onChange(e.target.value)},h("option",{value:""},p.placeholderLabel),...p.options.map(o=>h("option",{key:o.value,value:o.value},o.label)));`);
 
 const web = await import(load("src/modules/assistant/lib/chat-store.ts"));
 const phone = await import(load("../DarkMoneyApp/features/assistant/lib/chat-store.ts"));

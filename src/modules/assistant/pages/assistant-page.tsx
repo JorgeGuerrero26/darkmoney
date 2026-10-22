@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { DataState } from "../../../components/ui/data-state";
+import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { askAssistant, useAssistantInsight } from "../../../services/queries/assistant";
 import { useAuth } from "../../auth/auth-context";
 import { useActiveWorkspace } from "../../workspaces/use-active-workspace";
@@ -69,8 +70,10 @@ function AssistantConversation({userId,noticeId}:{userId?:string;noticeId:number
   return <section className="mx-auto w-full max-w-3xl space-y-6">
     <header className="border-b border-white/10 pb-5"><h1 className="font-display text-3xl font-semibold text-ink">Asistente</h1><p className="mt-2 text-sm text-storm">Consulta tus datos. Ninguna sugerencia registra, cobra o paga por sí sola.</p></header>
     {insight.data?<div className="border-b border-white/10 pb-5"><h2 className="text-lg font-semibold text-ink">{insight.data.title}</h2><p className="mt-2 whitespace-pre-line text-sm text-storm">{insight.data.body}</p><p className="mt-3 text-xs text-storm">El aviso no identifica su espacio original. Elige dónde consultar y revisa la pregunta antes de enviarla.</p></div>:null}
-    <label className="block text-sm text-storm">Espacio de consulta<select aria-label="Espacio de consulta" className="mt-2 h-12 w-full rounded-lg border border-white/10 bg-[#1a1917] px-3 text-ink" disabled={busy||isFetching||isError}
-      value={workspaceId} onChange={event=>{const value=event.target.value;setWorkspaceId(value);if(workspaces.some(row=>String(row.id)===value&&!row.isArchived))setActiveWorkspaceId(Number(value));setError("");}}><option value="">Elige un espacio</option>{workspaces.filter(row=>!row.isArchived).map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+    <div className="space-y-2"><p className="text-[0.8125rem] font-medium tracking-[0.01em] text-storm">Espacio de consulta</p>
+      <SearchablePicker appearance="default" disabled={busy||isFetching||isError} emptyMessage="No tienes espacios activos." placeholderDescription="Dónde consulta el Asistente." placeholderLabel="Elige un espacio" queryPlaceholder="Buscar espacio..."
+        options={workspaces.filter(row=>!row.isArchived).map(row=>({value:String(row.id),label:row.name,description:row.id===activeWorkspace?.id?"Espacio activo":"Espacio",leadingLabel:row.name.trim().slice(0,2).toUpperCase()||"ES",leadingColor:"#6b6459"}))}
+        value={workspaceId} onChange={value=>{setWorkspaceId(value);if(workspaces.some(row=>String(row.id)===value&&!row.isArchived))setActiveWorkspaceId(Number(value));setError("");}}/></div>
     {isError?<p role="alert" className="text-sm text-ink">No se pudo comprobar tus espacios. La consulta no se enviará.</p>:null}
     <AssistantChatsPanel key={workspaceId} chats={chats.chats} activeId={chats.activeId} busy={busy||!chats.ready}
       onSelect={id=>{chats.select(id);setQuestion("");setError("");}} onRename={chats.rename}
