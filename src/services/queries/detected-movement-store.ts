@@ -8,6 +8,8 @@ import { detectionObject, detectionPending, detectedWriteInput, validateDetected
   type DetectedMovement, type DetectionMovementInput, type DetectionStatus } from "../../modules/notifications/lib/detected-movement.ts";
 
 type Scope = { userId: string; workspaceId: number };
+/** Usuarios con acceso PRO por correo confirmado en esta sesión (un "no" explícito lo retira). */
+const confirmedEmailProAccess = new Set<string>();
 const TABLE = "notification_detected_movement_suggestions";
 
 export function mapDetectedMovement(value: unknown): DetectedMovement {
@@ -50,8 +52,17 @@ export function createDetectedMovementStore(client: SupabaseClient, scope: Scope
   async function pro(suggestion: DetectedMovement) {
     if (suggestion.packageName !== "email:inbound") return;
     const { data, error } = await client.rpc("has_email_detection_pro_access");
-    if (error) throw new Error("No se pudo verificar el acceso PRO. Reintenta.");
-    if (data !== true) throw new Error("La detección por correo requiere DarkMoney PRO activo.");
+    if (error) {
+      // Como móvil: un fallo de red al volver a verificar no bloquea si el acceso ya se confirmó en esta
+      // sesión; el servidor vuelve a exigir PRO al registrar. Sin confirmación previa, se pide reintentar.
+      if (confirmedEmailProAccess.has(scope.userId)) return;
+      throw new Error("No se pudo verificar el acceso PRO. Revisa tu conexión y reintenta.");
+    }
+    if (data !== true) {
+      confirmedEmailProAccess.delete(scope.userId);
+      throw new Error("La detección por correo requiere DarkMoney PRO activo.");
+    }
+    confirmedEmailProAccess.add(scope.userId);
   }
   async function reconcile(suggestionId?: number) {
     const { data, error } = await client.rpc("reconcile_detected_movements", {

@@ -135,6 +135,7 @@ function fixture(rows = [structuredClone(raw)]) {
   const client = { from: (table) => new Query(table), async rpc(name) {
     state.rpcCalls++;
     if (state.rpcFail) return { data: null, error: new Error("RPC missing") };
+    if (state.proFail && name === "has_email_detection_pro_access") return { data: null, error: new Error("network down") };
     return { data: name === "has_email_detection_pro_access" ? state.pro : { resolvedIds: state.resolvedIds, candidates: state.candidates }, error: null };
   } };
   return { db, state, client, store: createDetectedMovementStore(client, { userId: "u", workspaceId: 8 }) };
@@ -190,6 +191,21 @@ function fixture(rows = [structuredClone(raw)]) {
   const { store } = fixture([{ ...raw, user_id: "other" }]);
   assert.equal((await store.review(90)).suggestion, null);
   await assert.rejects(store.register(90, input, accounts, async () => assert.fail("must not insert")), /disponible/);
+}
+// Como móvil: un fallo pasajero al verificar PRO no bloquea si el acceso ya se confirmó; sin confirmación previa, sí.
+{
+  const { client, state } = fixture([{ ...raw, user_id: "pro-user", package_name: "email:inbound" }]);
+  const store = createDetectedMovementStore(client, { userId: "pro-user", workspaceId: 8 });
+  state.proFail = true;
+  await assert.rejects(store.review(90), /conexión/);
+  state.proFail = false; state.pro = true;
+  await store.review(90);
+  state.proFail = true;
+  await store.review(90);
+  state.proFail = false; state.pro = false;
+  await assert.rejects(store.review(90), /PRO activo/);
+  state.proFail = true;
+  await assert.rejects(store.review(90), /conexión/);
 }
 {
   const { store, state } = fixture([{ ...raw, package_name: "email:inbound" }]);
