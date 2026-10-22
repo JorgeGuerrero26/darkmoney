@@ -57,18 +57,45 @@ La comparación con los módulos móviles actuales cerró estas diferencias en l
 
 Verificación: `npx tsc -b`, `npm run build`, `npm run test:notification-parity`, `npm run test:subscription-parity` y `npm run test:parity` pasan. Las escrituras de lectura se probaron con cliente simulado, incluyendo alcance por usuario e IDs, duplicados, selección vacía e indisponibilidad de red. En el navegador se comprobaron búsqueda + tipo, selección sin ejecutar acciones, diseño del detalle de Suscripciones y apertura del registro Sergio Teclado desde una notificación ya leída. No se marcaron nuevas lecturas ni se eliminaron registros reales.
 
-La comparación detectó problemas adicionales que **no se consideran cerrados** por estas correcciones visuales:
+## Cierre del 9 de octubre de 2026
 
-- El estado de Suscripciones se deriva del historial de ocurrencias cuando está cargado: puede decir Al día y a la vez mostrar una fecha de cobro anterior a hoy como Próximo cobro. Se observó en web y la regla existe también en `DarkMoneyApp/features/subscriptions/lib/subscriptionStanding.ts`. Deben concordar estado, fecha y acción, sin fabricar atrasos cuando el historial indica pagos.
-- La normalización mensual de Suscripciones debe auditar `intervalCount` y el caso de moneda extranjera sin conversión. Cambiar la frase de cadencia no prueba la suma mensual: los caminos existentes que usan monto base o monto nativo como fallback no certifican equivalencia de moneda.
+- **Estado de Suscripciones:** cuando el historial no deja cobros pendientes y el puntero de próximo cobro quedó atrás, ambos clientes anuncian la siguiente fecha real (la cadencia rodada hasta hoy) y sus días; ya no dicen "Al día" con una fecha pasada. Web: `subscription-standing.ts`; móvil: `subscriptionStanding.ts`.
+- **Total mensual:** ambos clientes aplican `intervalCount` (cada 2 meses = la mitad), tratan la cadencia personalizada como días y solo suman suscripciones activas con conversión válida o ya en moneda base. Las demás se cuentan aparte ("N sin conversión no suman"). El menú Más móvil dejó de sumar montos nativos de distintas monedas. El costo anual móvil de cadencia personalizada pasó de ×12 a días.
+- **Invitaciones:** el móvil clasificaba `obligation_share_invite` como Obligaciones; ahora es Invitaciones, igual que web.
+- Pruebas: `npm run test:subscription-parity`, `test:notification-parity`, `test:parity`, `npx tsc -b`, `npm run build` (web); jest de `features/subscriptions` y `features/notifications` y `npm run typecheck` (móvil). Sin cambios en registros reales.
+
+Pendiente de esta revisión:
+
 - Los enlaces avanzados de Notificaciones aún no reproducen todos los destinos móviles: solicitud/evento concreto de una obligación, formulario de movimiento detectado, filtros de fecha/categoría de alertas y día concreto del resumen. Abrir el recurso correcto es solo el primer nivel.
-- El móvil clasifica `obligation_share_invite` como Obligaciones antes de comprobar Invitaciones; la web corregida prioriza Invitaciones. Hay que corregir y probar la clasificación móvil, no copiar el defecto para hacerlos coincidir.
 - El indicador de la campana web cuenta solicitudes que piden acción, mientras la bandeja muestra lectura de guardadas. No se certificó equivalencia de ese indicador con el móvil ni se cambió su regla en esta unidad.
+
+## Auditoría web contra el móvil actual — 22 de octubre de 2026
+
+Se revisaron los commits móviles del 14 al 21 de octubre y el estado del formulario de obligaciones. Solo se modificó la web; el móvil se usó como referencia de solo lectura.
+
+**Cerrado en web:**
+
+- **Plan de pagos: día de cobro.** El móvil guarda `payDay` (1–31 o fin de mes) en el plan. La web lo ignoraba al calcular cuotas, y al guardar una deuda desde web lo borraba. Ahora la web lo lee, calcula las mismas fechas y lo conserva al guardar; uno inválido se rechaza. El editor del plan tiene el selector «Día de cobro». Afecta detalle, cobertura, proyección y calendario del dashboard.
+- **Plan al editar una deuda que creció.** El editor muestra y valida el calendario sobre la deuda de hoy (`effectivePlanSchedule`), igual que el detalle y la proyección; antes usaba el monto de apertura.
+- **Crear obligación como el móvil.** «Cómo nació» es obligatorio y sale vacío; se ofrecen los mismos orígenes del móvil, incluido «Pagué por alguien» (`paid_for_other`, saca dinero al crear), y ya no «Manual» ni el impacto inicial elegible. «Total que te devolverán / devolverás» reemplaza la tasa escrita: la diferencia se registra como aumento «Interés pactado» sin mover cuentas, la tasa resulta informativa y el plan reparte el total. El estado no se elige al crear. «Cuenta de abonos» pasa a «Cuenta habitual».
+- **Origen `paid_for_other` en lectura.** Las deudas compartidas con ese origen hacían fallar la lectura web, y las propias se rotulaban con otro origen. Ahora se leen y se nombran bien; un origen desconocido se muestra como tal.
+- **Pago de suscripción.** Se paga el cobro más antiguo sin pagar (no una fecha por delante del historial), la fecha propuesta es hoy si el cobro ya venció, y el movimiento lleva la misma `client_dedupe_key` del móvil, así que un reenvío no lo duplica.
+- **Asistente.** Las tarjetas para corregir o borrar un gasto o ingreso (`movementChanges`) ya se muestran y solo se aplican tras confirmar. Antes de escribir se relee el movimiento y se exige el mismo «antes»; se escribe solo lo que cambia y se verifica la respuesta. También se añadieron las negritas, Copiar sin asteriscos, las preguntas iniciales, las sugerencias de seguimiento y Reintentar.
+- **Detecciones por correo.** Un fallo de red al volver a verificar PRO no bloquea si el acceso ya se confirmó en la sesión (el servidor vuelve a exigir PRO al registrar).
+- **Pendientes anteriores revisados.** Los destinos de Notificaciones ya cubren solicitud/evento de obligación, detección, filtros y día del resumen. La campana web cuenta todas las notificaciones no leídas del usuario con la misma regla que el móvil.
+
+**Diferencias que se dejan a propósito:**
+
+- Modo sin conexión, cifrado local y avisos de «necesita internet»: son propios del teléfono.
+- Respuesta en vivo y lectura en voz alta frase por frase: dependen del modo `stream` del servidor. La web usa la respuesta completa, que el servidor mantiene; ya tenía «Cancelar consulta».
+- Rediseño visual de la hoja de cambios de capital del móvil: no cambia reglas.
+
+**Evidencia:** `npx tsc -b`, `npm run build` y todas las suites `test:*`. Nuevas o ampliadas: `test:obligation-plan` (144 comparaciones de `payDay`, 35 de interés pactado y 9 del calendario efectivo contra el código móvil real), `test:obligation-write-guards` (interés tras crear, fallo sin recrear, total menor y origen vacío), `test:subscription-parity`, `test:subscription-permissions`, `test:assistant-movement-change` (nueva), `test:assistant-drafts` y `test:detected-movement-parity`. Clientes simulados; no se tocaron registros reales.
 
 ## Pendientes; no declarar paridad total
 
 1. **Integración en dispositivos:** no se ejecutó guardar/cobrar/pagar con dos clientes reales ni pruebas multiusuario. El usuario no dispone de un espacio de pruebas. Las pruebas locales no certifican esas operaciones contra RLS, Storage o una red real.
 2. **Distribución:** la corrección del código móvil no fue publicada por OTA ni instalada en el teléfono. No se modificaron publicaciones de Realtime ni migraciones del servidor; el respaldo web cubre publicaciones incompletas, pero no demuestra entrega instantánea de todos los eventos.
-3. **Reglas y destinos adicionales:** resolver y probar los casos de Suscripciones y Notificaciones enumerados arriba. La revisión visual principal ya se realizó, pero no certifica esos comportamientos. Las modificaciones móviles simultáneas en otros módulos se preservaron fuera de estos commits.
+3. **Cambios futuros del móvil:** esta auditoría cubre el checkout móvil al 21 de octubre. Lo que se agregue después requiere otra comparación.
 
 La equivalencia de fuentes se comprobó en el código local, no contra el estado de una versión móvil instalada. Los cambios preexistentes de configuración local, archivos temporales de Supabase y respaldos móviles se conservaron fuera de los commits.
