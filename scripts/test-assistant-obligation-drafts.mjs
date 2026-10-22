@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { React, act, dom, root, load, mock, h, createRoot, MemoryRouter, change, button, settle } from "./lib/web-ui-harness.mjs";
+mock("src/modules/assistant/components/assistant-movement-change-review.tsx","export const AssistantMovementChangeReview=()=>null;");
 
 const { parseObligationProposal, prepareObligationProposal } = await import(load("src/modules/assistant/lib/obligation-proposal.ts"));
 const { buildObligationEditorInput, validateObligationPlan } = await import(load("src/modules/obligations/lib/obligation-editor-input.ts"));
@@ -30,7 +31,11 @@ assert.deepEqual(payload.paymentPlan, equal);
 for (const counterparties of [[], [...snapshot.catalogs.counterparties, { ...snapshot.catalogs.counterparties[0], id: 31 }], [{ ...snapshot.catalogs.counterparties[0], isArchived: true }]]) {
   const prepared = prepareObligationProposal(draft, { ...snapshot, catalogs: { ...snapshot.catalogs, counterparties } }); assert.equal(prepared.counterpartyId, ""); assert.throws(() => buildObligationEditorInput(prepared, snapshot), /contraparte/);
 }
-for (const patch of [{ counterpartyId: "99" }, { principalAmount: "0" }, { principalAmount: "1.001" }, { dueDate: "2026-09-30" }, { currencyCode: "XYZ" }, { settlementAccountId: "99" }, { interestRate: "Infinity" }, { paymentPlan: { mode: "equal", count: 2.5 } }, { originType: "cash_loan", openingAccountId: "2" }]) assert.throws(() => buildObligationEditorInput({ ...form, ...patch }, snapshot));
+for (const patch of [{ counterpartyId: "99" }, { principalAmount: "0" }, { principalAmount: "1.001" }, { dueDate: "2026-09-30" }, { currencyCode: "XYZ" }, { settlementAccountId: "99" }, { returnTotal: "400" }, { originType: "" }, { paymentPlan: { mode: "equal", count: 2.5 } }, { originType: "cash_loan", openingAccountId: "2" }]) assert.throws(() => buildObligationEditorInput({ ...form, ...patch }, snapshot));
+// Al crear la tasa no se escribe: sale del total a devolver (móvil). Al editar, una tasa inválida sigue rechazándose.
+assert.equal(buildObligationEditorInput({ ...form, interestRate: "Infinity" }, snapshot).interestRate, null);
+assert.throws(() => buildObligationEditorInput({ ...form, interestRate: "Infinity" }, snapshot, false));
+{ const withInterest = buildObligationEditorInput({ ...form, returnTotal: String(Number(form.principalAmount) + 50) }, snapshot); assert.equal(withInterest.principalAmount, Number(form.principalAmount)); assert.ok(withInterest.interestRate > 0); }
 assert.equal(buildObligationEditorInput({ ...form, originType: "cash_loan", openingAccountId: "1" }, snapshot).openingImpact, "outflow");
 assert.equal(buildObligationEditorInput({ ...form, direction: "payable", originType: "cash_loan", openingAccountId: "1" }, snapshot).openingImpact, "inflow");
 const parsed = parseAssistantReply({ reply: "Revisa este crédito", obligationDraft: { ...raw, href: "https://evil.invalid", status: "paid", openingImpact: "outflow", openingAccountId: 1 } });
@@ -81,7 +86,7 @@ globalThis.obWrite = async () => 402;
 await render(React.createElement(AssistantObligationReview, { ...props, draft: { ...draft, counterpartyName: "No existe" }, session: {} })); const beforeParty = globalThis.obWrites.length; await submit(); assert.equal(globalThis.obWrites.length, beforeParty); assert.match(container.textContent, /Elige una contraparte/);
 await change(container.querySelector('select[aria-label="Selecciona una contraparte"]'), "30"); await submit(); assert.equal(globalThis.obWrites.length, beforeParty + 1); await close();
 // Opening cash impact only follows an explicit change and a valid same-currency account.
-await render(React.createElement(AssistantObligationReview, { ...props, session: {} })); await destination("Detalles"); await change(container.querySelector('select[aria-label="Selecciona el origen"]'), "cash_loan"); assert.match(container.textContent, /Elegiste una apertura con salida/); const beforeOpening = globalThis.obWrites.length; await submit(); assert.equal(globalThis.obWrites.length, beforeOpening); await change(container.querySelector('select[aria-label="Selecciona una cuenta"]'), "1"); await submit(); assert.equal(globalThis.obWrites.at(-1).openingImpact, "outflow"); assert.equal(globalThis.obWrites.at(-1).openingAccountId, 1); await close();
+await render(React.createElement(AssistantObligationReview, { ...props, session: {} })); await change(container.querySelector('select[aria-label="Elegir cómo nació"]'), "cash_loan"); await destination("Detalles"); assert.match(container.textContent, /Elegiste una apertura con salida/); const beforeOpening = globalThis.obWrites.length; await submit(); assert.equal(globalThis.obWrites.length, beforeOpening); await change(container.querySelector('select[aria-label="Selecciona una cuenta"]'), "1"); await submit(); assert.equal(globalThis.obWrites.at(-1).openingImpact, "outflow"); assert.equal(globalThis.obWrites.at(-1).openingAccountId, 1); await close();
 // A plan that would contain a zero-valued installment cannot be saved in the actual plan editor.
 await render(React.createElement(AssistantObligationReview, { ...props, session: {} })); await change(amount(), "0.01"); await destination("Detalles"); await destination("Plan de pagos"); await change(container.querySelector('input[aria-label="Número de cuotas"]'), "2"); assert.equal(button(container, "Guardar plan").disabled, true); assert.match(container.textContent, /cuotas positivas/); await close();
 // Original custom schedule keeps mobile month ordering, and the shared plan editor declares shifted dates.

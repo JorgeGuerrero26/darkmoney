@@ -33,5 +33,5 @@ export function prepareObligationProposal(draft: AssistantObligationDraft, snaps
     counterpartyId: counterparties.length === 1 ? String(counterparties[0].id) : "", openingAccountId: "", settlementAccountId: "",
     currencyCode: draft.currency, principalAmount: String(draft.principalAmount), startDate: draft.startDate, dueDate: draft.dueDate ?? "",
     installmentAmount: rows.length ? String(rows[0].amount) : "", installmentCount: rows.length ? String(rows.length) : "",
-    paymentPlan: draft.paymentPlan, interestRate: "", description: draft.description ?? "", notes: "" };
+    paymentPlan: draft.paymentPlan, interestRate: "", returnTotal: "", description: draft.description ?? "", notes: "" };
 }

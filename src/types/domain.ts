@@ -12,7 +12,8 @@ export type MovementType =
   | "refund"
   | "adjustment";
 export type ObligationDirection = "receivable" | "payable";
-export type ObligationOriginType = "cash_loan" | "sale_financed" | "purchase_financed" | "manual";
+/** `manual` solo se lee (registros antiguos); `paid_for_other` = "Pagué por alguien" (móvil). */
+export type ObligationOriginType = "cash_loan" | "sale_financed" | "purchase_financed" | "paid_for_other" | "manual";
 export type ObligationStatus = "draft" | "active" | "paid" | "cancelled" | "defaulted";
 export type ObligationEventType =
   | "opening"

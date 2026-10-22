@@ -1,4 +1,4 @@
-import { buildObligationEditorInput } from "../lib/obligation-editor-input";
+import { buildObligationEditorInput, obligationCreateInterest, obligationPlanBasis, obligationPlanDebtContext } from "../lib/obligation-editor-input";
 import { useFinancialWriteGuard } from "../../shared/use-financial-write-guard";
 import { ObligationEditorDialog as EditorDialog, Picker, Field, Input, Textarea, labelClassName } from "../components/obligation-editor-dialog";
 import { statusOptions, getOriginTypeOptions, getOpeningImpact, applyObligationFormRules, getCurrencyLabel, type ObligationFormState, type ShareInviteFormState, type FeedbackState } from "../lib/obligation-editor-model";
@@ -170,7 +170,8 @@ function parseOptionalNumber(value: string) {
 function createDefaultFormState(baseCurrencyCode: string): ObligationFormState {
   return {
     direction: "payable",
-    originType: "cash_loan",
+    // Sin elegir: el origen se pide antes de guardar (móvil).
+    originType: "",
     manualOpeningImpact: "none",
     status: "active",
     title: "",
@@ -185,6 +186,7 @@ function createDefaultFormState(baseCurrencyCode: string): ObligationFormState {
     installmentCount: "",
     paymentPlan: null,
     interestRate: "",
+    returnTotal: "",
     description: "",
     notes: "",
   };
@@ -338,6 +340,7 @@ function buildFormStateFromObligation(obligation: ObligationSummary): Obligation
       obligation.interestRate === null || obligation.interestRate === undefined
         ? ""
         : String(obligation.interestRate),
+    returnTotal: "",
     description: obligation.description ?? "",
     notes: obligation.notes ?? "",
   };
@@ -2743,8 +2746,13 @@ export function ObligationsPage() {
     const settlementAccountId = parseOptionalInteger(formState.settlementAccountId);
     const principalAmount = parseOptionalNumber(formState.principalAmount);
     const paymentPlan = normalizePaymentPlan(formState.paymentPlan);
-    const scheduledPayments = paymentPlan && principalAmount && principalAmount > 0
-      ? expandPaymentPlan(paymentPlan, principalAmount, formState.startDate)
+    // Al crear con interés pactado el plan reparte el total a devolver (móvil).
+    const createInterest = editorMode === "create" ? obligationCreateInterest(formState) : null;
+    // Al editar, sobre la deuda de hoy (móvil), la misma base que muestra el editor del plan.
+    const planDebtContext = editorMode === "edit" && selectedObligation && principalAmount ? obligationPlanDebtContext(selectedObligation, principalAmount) : null;
+    const planBasis = createInterest ? createInterest.planBasis : principalAmount ? obligationPlanBasis(paymentPlan, principalAmount, formState.startDate, planDebtContext) : principalAmount;
+    const scheduledPayments = paymentPlan && planBasis && planBasis > 0
+      ? expandPaymentPlan(paymentPlan, planBasis, formState.startDate)
       : [];
     const interestRate = parseOptionalNumber(formState.interestRate);
     const openingImpact = getOpeningImpact(
@@ -2758,6 +2766,8 @@ export function ObligationsPage() {
     if (counterpartyId === null || !Number.isInteger(counterpartyId) || counterpartyId <= 0) oblErrors.push("counterpartyId");
     if (principalAmount === null || Number.isNaN(principalAmount) || principalAmount <= 0) oblErrors.push("principalAmount");
     if (!formState.startDate) oblErrors.push("startDate");
+    if (editorMode === "create" && !formState.originType) oblErrors.push("originType");
+    if (createInterest?.belowPrincipal) oblErrors.push("returnTotal");
     if (oblErrors.length > 0) {
       setInvalidFields(new Set(oblErrors));
       setEditorFeedback({ tone: "error", title: "Revisa los campos requeridos", description: "Completa los campos marcados en rojo antes de guardar." });
@@ -2773,7 +2783,7 @@ export function ObligationsPage() {
       return;
     }
 
-    if (paymentPlan && (!scheduledPayments.length || planDifference(principalAmount ?? 0, scheduledPayments) !== 0)) {
+    if (paymentPlan && (!scheduledPayments.length || planDifference(planBasis ?? 0, scheduledPayments) !== 0)) {
       setEditorFeedback({
         tone: "error",
         title: "El plan no cubre el monto",
@@ -2795,7 +2805,7 @@ export function ObligationsPage() {
       setEditorFeedback({
         tone: "error",
         title: "La cuenta seleccionada no es valida",
-        description: "Vuelve a elegir la cuenta de liquidacion.",
+        description: "Vuelve a elegir la cuenta habitual.",
       });
       return;
     }
@@ -2832,7 +2842,7 @@ export function ObligationsPage() {
     let attempt: ReturnType<typeof editorWrite.begin> = null;
     try {
       if (!snapshot) throw new Error("Espera la lectura del espacio actual.");
-      const payload = buildObligationEditorInput(formState, snapshot, editorMode === "create");
+      const payload = buildObligationEditorInput(formState, snapshot, editorMode === "create", planDebtContext);
       attempt = editorWrite.begin();
       if (!attempt) return;
       if (editorMode === "create") {
@@ -2843,6 +2853,29 @@ export function ObligationsPage() {
         });
         if (!editorWrite.isCurrent(attempt)) return;
         if (!Number.isSafeInteger(createdObligationId) || createdObligationId <= 0) throw new Error("El servidor no confirmó el identificador del registro.");
+        // Interés pactado: aumento del monto sin mover cuentas, como móvil. Si falla, el registro ya existe:
+        // se avisa para agregarlo con «Ajustar monto» y nunca se vuelve a crear la deuda.
+        let interestNote: string | null = null;
+        if (createInterest && createInterest.interestAmount > 0 && payload.principalAmount) {
+          try {
+            await principalAdjustmentMutation.mutateAsync({
+              workspaceId: activeWorkspace.id,
+              userId: user.id,
+              obligationId: createdObligationId,
+              eventType: "principal_increase",
+              eventDate: payload.startDate,
+              amount: createInterest.interestAmount,
+              reason: "Interés pactado",
+              registerAccountMovement: false,
+              accountId: null,
+              currentPrincipalAmount: payload.principalAmount,
+              currentPendingAmount: payload.principalAmount,
+            });
+          } catch {
+            interestNote = `No se pudo registrar el interés de ${formatCurrency(createInterest.interestAmount, payload.currencyCode)}: agrégalo con «Ajustar monto».`;
+          }
+          if (!editorWrite.isCurrent(attempt)) return;
+        }
         let receiptUploaded = false;
         let shareInviteResult: Awaited<ReturnType<typeof sendShareInvite>> = null;
         let shareInviteErrorMessage: string | null = null;
@@ -2873,6 +2906,10 @@ export function ObligationsPage() {
             ? "Ya aparece en tu cartera sin mover una cuenta al inicio."
             : "Ya aparece en tu cartera y la apertura inicial tambien quedo reflejada en la cuenta elegida.",
         ];
+
+        if (createInterest && createInterest.interestAmount > 0) {
+          descriptionParts.push(interestNote ?? `El interés pactado de ${formatCurrency(createInterest.interestAmount, payload.currencyCode)} se sumó al monto sin mover tus cuentas.`);
+        }
 
         if (pendingReceiptFile && canUploadReceipts) {
           descriptionParts.push(

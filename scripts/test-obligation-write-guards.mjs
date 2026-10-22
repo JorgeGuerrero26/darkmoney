@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { React, act, dom, root, load, createRoot, settle } from "./lib/web-ui-harness.mjs";
 const { useFinancialWriteGuard } = await import(load("src/modules/shared/use-financial-write-guard.ts"));
-const { buildObligationEditorInput } = await import(load("src/modules/obligations/lib/obligation-editor-input.ts"));
+const { buildObligationEditorInput, obligationCreateInterest, obligationPlanBasis, obligationPlanDebtContext } = await import(load("src/modules/obligations/lib/obligation-editor-input.ts"));
 const { prepareObligationProposal } = await import(load("src/modules/assistant/lib/obligation-proposal.ts"));
 const model = await import(load("src/modules/obligations/lib/obligation-editor-model.ts"));
 const plan = await import(load("src/modules/obligations/lib/payment-plan.ts"));
@@ -25,7 +25,7 @@ function environment() {
     formState: prepareObligationProposal({ direction: "payable", title: "Préstamo", principalAmount: 500, currency: "PEN", counterpartyName: "Lucía", startDate: "2026-01-01", dueDate: null, description: null, paymentPlan: null }, snapshot),
     paymentTarget: target, paymentFormState: { amount: "80", eventDate: "2026-10-15", installmentNo: "", description: "", notes: "", accountId: "1", registerAccountMovement: true }, paymentEditEventId: null,
     pendingReceiptFile: null, pendingPaymentReceiptFile: null, canUploadReceipts: true, editorMode: "create", selectedObligation: null, shareByObligationId: new Map(), createShareFormState: { invitedEmail: "", message: "" },
-    shouldResendShareInvite: () => false, buildObligationEditorInput, ...model, ...plan, parseOptionalInteger: value => value ? Number(value) : null, parseOptionalNumber: value => value ? Number(value.replace(",", ".")) : null,
+    shouldResendShareInvite: () => false, buildObligationEditorInput, obligationCreateInterest, obligationPlanBasis, obligationPlanDebtContext, principalAdjustmentMutation: mutation("principal-adjustment"), ...model, ...plan, parseOptionalInteger: value => value ? Number(value) : null, parseOptionalNumber: value => value ? Number(value.replace(",", ".")) : null,
     getQueryErrorMessage: error => error.message, describeShareInviteOutcome: () => "Compartido", createDefaultShareInviteFormState: () => ({ invitedEmail: "", message: "" }),
     createMutation: mutation("create"), updateMutation: mutation("update"), paymentMutation: mutation("payment"), eventUpdateMutation: mutation("event-update"),
     uploadReceiptForObligation: async (...input) => state.receipt.push(input), uploadReceiptForEvent: async (...input) => state.receipt.push(input), sendShareInvite: async (...input) => { state.invites.push(input); return {}; },
@@ -44,6 +44,22 @@ for (const name of names) {
 }
 for (const name of names) {
   const { env, state } = environment(); state.fail = true; await render(env, "scope" + index++); await act(async () => handlers[name](event)); assert.match(state.feedback.at(-1).description, /No repitas el envío/); const before = state.calls.length; await act(async () => handlers[name](event)); assert.equal(state.calls.length, before); assert.match(container.textContent, /uncertain/);
+}
+// Interés pactado (móvil): total a devolver mayor que el monto → aumento sin movimiento de cuenta, después de crear; un fallo no repite la creación.
+{
+  const { env, state } = environment(); env.formatCurrency = (amount, code) => code + " " + amount.toFixed(2); env.formState = { ...env.formState, returnTotal: "550" }; await render(env, "scope" + index++); await act(async () => handlers.handleSubmitObligation(event));
+  const kinds = state.calls.map(call => call.kind); assert.deepEqual(kinds, ["create", "principal-adjustment"]);
+  const adjustment = state.calls[1].input; assert.equal(adjustment.obligationId, 401); assert.equal(adjustment.amount, 50); assert.equal(adjustment.eventType, "principal_increase"); assert.equal(adjustment.registerAccountMovement, false); assert.equal(adjustment.reason, "Interés pactado"); assert.equal(adjustment.eventDate, env.formState.startDate);
+  assert.equal(state.calls[0].input.principalAmount, 500); assert.equal(state.calls[0].input.interestRate, 10);
+}
+{
+  const { env, state } = environment(); env.formatCurrency = (amount, code) => code + " " + amount.toFixed(2); env.formState = { ...env.formState, returnTotal: "550" };
+  const original = env.principalAdjustmentMutation; env.principalAdjustmentMutation = { mutateAsync: async input => { state.calls.push({ kind: "principal-adjustment", input }); throw new Error("red"); } }; void original;
+  await render(env, "scope" + index++); await act(async () => handlers.handleSubmitObligation(event)); assert.equal(state.calls.filter(call => call.kind === "create").length, 1); assert.match(state.feedback.at(-1).description, /Ajustar monto/);
+}
+{
+  const { env, state } = environment(); env.formState = { ...env.formState, returnTotal: "400" }; await render(env, "scope" + index++); await act(async () => handlers.handleSubmitObligation(event)); assert.equal(state.calls.length, 0);
+  const { env: env2, state: state2 } = environment(); env2.formState = { ...env2.formState, originType: "" }; await render(env2, "scope" + index++); await act(async () => handlers.handleSubmitObligation(event)); assert.equal(state2.calls.length, 0);
 }
 // Late writes cannot start receipt uploads/invitations or close a new user's editor.
 for (const name of names) {

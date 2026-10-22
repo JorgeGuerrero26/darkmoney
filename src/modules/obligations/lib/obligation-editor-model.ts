@@ -5,7 +5,8 @@ export type OpeningImpact = "none" | "outflow" | "inflow";
 
 export type ObligationFormState = {
   direction: ObligationDirection;
-  originType: ObligationOriginType;
+  /** Vacío al crear hasta que se elige (móvil lo exige). */
+  originType: ObligationOriginType | "";
   manualOpeningImpact: OpeningImpact;
   status: ObligationStatus;
   title: string;
@@ -20,6 +21,8 @@ export type ObligationFormState = {
   installmentCount: string;
   paymentPlan: PaymentPlan | null;
   interestRate: string;
+  /** Solo al crear: lo que se devolverá en total. Vacío = igual al monto (sin interés). */
+  returnTotal: string;
   description: string;
   notes: string;
 };
@@ -50,13 +53,6 @@ export const receivableOriginTypeOptions = [
     leadingLabel: "VF",
     leadingColor: "#1b6a58",
   },
-  {
-    value: "manual" as const,
-    label: "Manual",
-    description: "Define el caso manualmente si no encaja en los escenarios comunes.",
-    leadingLabel: "MN",
-    leadingColor: "#6b7280",
-  },
 ] as const;
 
 export const payableOriginTypeOptions = [
@@ -75,9 +71,20 @@ export const payableOriginTypeOptions = [
     leadingColor: "#c46a31",
   },
   {
+    value: "paid_for_other" as const,
+    label: "Pagué por alguien",
+    description: "Sale dinero de tu cuenta al crearla.",
+    leadingLabel: "PA",
+    leadingColor: "#8f3e3e",
+  },
+] as const;
+
+/** Orígenes que ya no se ofrecen al crear, pero que tienen registros guardados (como móvil). */
+export const legacyOriginTypeOptions = [
+  {
     value: "manual" as const,
     label: "Manual",
-    description: "Define el caso manualmente si no encaja en los escenarios comunes.",
+    description: "Origen antiguo: no mueve cuentas al crearse.",
     leadingLabel: "MN",
     leadingColor: "#6b7280",
   },
@@ -158,10 +165,15 @@ export function getOriginTypeOptions(direction: ObligationDirection) {
   return direction === "receivable" ? receivableOriginTypeOptions : payableOriginTypeOptions;
 }
 
-export function normalizeOriginTypeForDirection(
+/** Los orígenes que se pueden elegir al crear en esa dirección. */
+export function isCreatableOrigin(direction: ObligationDirection, originType: string): originType is ObligationOriginType {
+  return getOriginTypeOptions(direction).some((option) => option.value === originType);
+}
+
+export function normalizeOriginTypeForDirection<T extends ObligationOriginType | "">(
   direction: ObligationDirection,
-  originType: ObligationOriginType,
-): ObligationOriginType {
+  originType: T,
+): T | ObligationOriginType {
   if (direction === "receivable" && originType === "purchase_financed") {
     return "sale_financed";
   }
@@ -175,9 +187,12 @@ export function normalizeOriginTypeForDirection(
 
 export function getOpeningImpact(
   direction: ObligationDirection,
-  originType: ObligationOriginType,
+  originType: ObligationOriginType | "",
   manualOpeningImpact: OpeningImpact,
 ): OpeningImpact {
+  if (originType === "") return "none";
+  // El origen decide el impacto: pagar por alguien saca dinero de tu cuenta al crearla.
+  if (originType === "paid_for_other") return "outflow";
   if (originType === "cash_loan") {
     return direction === "receivable" ? "outflow" : "inflow";
   }
@@ -191,10 +206,23 @@ export function getOpeningImpact(
 
 export function getOpeningImpactMeta(
   direction: ObligationDirection,
-  originType: ObligationOriginType,
+  originType: ObligationOriginType | "",
   manualOpeningImpact: OpeningImpact,
 ) {
   const openingImpact = getOpeningImpact(direction, originType, manualOpeningImpact);
+
+  if (originType === "paid_for_other") {
+    return {
+      impact: openingImpact,
+      label: "Sale dinero al crear",
+      description: "Se registrara una salida inicial desde tu cuenta en la fecha de inicio.",
+      requiresAccount: true,
+    };
+  }
+
+  if (originType === "") {
+    return { impact: openingImpact, label: "Elige cómo nació", description: "El origen decide si se mueve una cuenta al crearla.", requiresAccount: false };
+  }
 
   if (originType === "cash_loan") {
     return direction === "receivable"

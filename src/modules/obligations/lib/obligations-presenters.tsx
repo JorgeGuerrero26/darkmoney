@@ -41,13 +41,6 @@ export const receivableOriginTypeOptions = [
     leadingLabel: "VF",
     leadingColor: "#1b6a58",
   },
-  {
-    value: "manual" as const,
-    label: "Manual",
-    description: "Define el caso manualmente si no encaja en los escenarios comunes.",
-    leadingLabel: "MN",
-    leadingColor: "#6b7280",
-  },
 ] as const;
 
 export const payableOriginTypeOptions = [
@@ -66,9 +59,20 @@ export const payableOriginTypeOptions = [
     leadingColor: "#c46a31",
   },
   {
+    value: "paid_for_other" as const,
+    label: "Pagué por alguien",
+    description: "Sale dinero de tu cuenta al crearla.",
+    leadingLabel: "PA",
+    leadingColor: "#8f3e3e",
+  },
+] as const;
+
+/** Orígenes que ya no se ofrecen al crear, pero que tienen registros guardados (como móvil). */
+export const legacyOriginTypeOptions = [
+  {
     value: "manual" as const,
     label: "Manual",
-    description: "Define el caso manualmente si no encaja en los escenarios comunes.",
+    description: "Origen antiguo: no mueve cuentas al crearse.",
     leadingLabel: "MN",
     leadingColor: "#6b7280",
   },
@@ -118,7 +122,10 @@ export function getOriginTypeOptions(direction: ObligationDirection) {
 
 export function getOriginOption(originType: ObligationOriginType, direction: ObligationDirection) {
   const originTypeOptions = getOriginTypeOptions(direction);
-  return originTypeOptions.find((option) => option.value === originType) ?? originTypeOptions[0];
+  // Nunca se presta la etiqueta de otro origen: un origen desconocido se dice como tal.
+  return originTypeOptions.find((option) => option.value === originType)
+    ?? [...receivableOriginTypeOptions, ...payableOriginTypeOptions, ...legacyOriginTypeOptions].find((option) => option.value === originType)
+    ?? { value: originType, label: "Sin origen", description: "Origen no reconocido.", leadingLabel: "--", leadingColor: "#6b7280" };
 }
 
 export function getStatusOption(status: ObligationStatus) {

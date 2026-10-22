@@ -7,11 +7,13 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { ResourceEditorDestination, ResourceEditorHeader } from "../../../components/ui/resource-editor";
 import { SearchablePicker, type PickerOption } from "../../../components/ui/searchable-picker";
 import { formatCurrency } from "../../../lib/formatting/money";
-import type { AccountSummary, AttachmentSummary, CounterpartySummary, ObligationEventSummary, ObligationShareSummary, ObligationSummary, ObligationOriginType, ObligationStatus } from "../../../types/domain";
+import type { AccountSummary, AttachmentSummary, CounterpartySummary, ObligationEventSummary, ObligationShareSummary, ObligationSummary, ObligationStatus } from "../../../types/domain";
 import { CompactAttachmentField, CompactPendingAttachmentField } from "../../attachments/components/compact-attachment-field";
 import { PaymentPlanEditor } from "./payment-plan-editor";
 import { describePlan, expandPaymentPlan, type PaymentPlan } from "../lib/payment-plan";
-import { currencyOptions, manualOpeningImpactOptions, statusOptions, getOriginTypeOptions, getOpeningImpactMeta, getCurrencyLabel, type ObligationFormState, type OpeningImpact, type FeedbackState, type ShareInviteFormState } from "../lib/obligation-editor-model";
+import { currencyOptions, statusOptions, getOriginTypeOptions, getOpeningImpactMeta, getCurrencyLabel, isCreatableOrigin, type ObligationFormState, type FeedbackState, type ShareInviteFormState } from "../lib/obligation-editor-model";
+import { obligationCreateInterest, obligationPlanBasis, obligationPlanDebtContext } from "../lib/obligation-editor-input";
+import { getOriginOption } from "../lib/obligations-presenters";
 
 export type PickerProps = {
   value: string;
@@ -174,7 +176,12 @@ export function ObligationEditorDialog(props: ObligationEditorProps) {
   } = props;
   const [panel, setPanel] = useState<"main" | "details" | "plan">("main");
   const currencyCode = formState.currencyCode || baseCurrencyCode;
-  const principalForPlan = Number(formState.principalAmount) || 0;
+  // Al crear con interés pactado, el plan reparte el total a devolver (móvil); al editar, el monto.
+  const createInterest = isCreateMode ? obligationCreateInterest(formState) : null;
+  // Al editar, el plan se muestra y valida sobre la deuda de hoy, igual que el detalle y la proyección (móvil).
+  const planDebtContext = !isCreateMode && selectedObligation ? obligationPlanDebtContext(selectedObligation, Number(formState.principalAmount) || 0) : null;
+  const principalForPlan = (createInterest ? createInterest.planBasis : obligationPlanBasis(formState.paymentPlan, Number(formState.principalAmount) || 0, formState.startDate, planDebtContext)) || 0;
+  const returnTotalText = formState.returnTotal.trim() ? formState.returnTotal : formState.principalAmount;
   const planLabel = describePlan(formState.paymentPlan, principalForPlan, formState.startDate, (amount) => formatCurrency(amount, currencyCode));
   const savePlan = (plan: PaymentPlan | null) => {
     updateFormState("paymentPlan", plan);
@@ -184,13 +191,23 @@ export function ObligationEditorDialog(props: ObligationEditorProps) {
     setPanel("details");
   };
   const openingImpact = getOpeningImpactMeta(formState.direction, formState.originType, formState.manualOpeningImpact);
-  const originOptions = getOriginTypeOptions(formState.direction);
+  const neutralize = (options: ReadonlyArray<{ value: string; label: string; description: string; leadingLabel: string }>): PickerOption[] => options.map((item) => ({ ...item, leadingColor: "#6b6459" }));
+  // Al crear se ofrecen los orígenes de móvil; uno guardado o prellenado que ya no se ofrece se muestra igual.
+  const originOptions: PickerOption[] = neutralize(getOriginTypeOptions(formState.direction));
+  if (formState.originType && !originOptions.some((item) => item.value === formState.originType)) {
+    const current = getOriginOption(formState.originType, formState.direction);
+    originOptions.push({ value: formState.originType, label: current.label, description: current.description, leadingLabel: current.leadingLabel, leadingColor: "#6b6459" });
+  }
+  const changeDirection = (direction: "receivable" | "payable") => {
+    updateFormState("direction", direction);
+    // Un origen que no corresponde a la nueva dirección se vacía y se vuelve a pedir (móvil).
+    if (formState.originType && formState.originType !== "manual" && !isCreatableOrigin(direction, formState.originType)) updateFormState("originType", "");
+  };
   const counterpartyOptions = counterparties.filter((item) => !item.isArchived || String(item.id) === formState.counterpartyId).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: item.type, leadingLabel: item.name.slice(0, 2).toUpperCase(), leadingColor: "#6b6459" }));
   const accountOptions = accounts.filter((item) => !item.isArchived || String(item.id) === formState.settlementAccountId).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: `${item.type} · ${item.currencyCode}`, leadingLabel: item.currencyCode, leadingColor: "#6b6459" }));
   const openingAccountOptions = accounts.filter((item) => (!item.isArchived || String(item.id) === formState.openingAccountId) && item.currencyCode === currencyCode).map<PickerOption>((item) => ({ value: String(item.id), label: item.name, description: `${item.type} · ${item.currencyCode}`, leadingLabel: item.currencyCode, leadingColor: "#6b6459" }));
   const currencyPickerOptions: PickerOption[] = currencyOptions.map(item => ({ value: item.code, label: item.code, description: item.label, leadingLabel: item.symbol, leadingColor: "#6b6459" }));
   if (!currencyPickerOptions.some(item => item.value === currencyCode)) currencyPickerOptions.push({ value: currencyCode, label: currencyCode, description: "Moneda registrada.", leadingLabel: currencyCode });
-  const neutralize = (options: ReadonlyArray<{ value: string; label: string; description: string; leadingLabel: string }>): PickerOption[] => options.map((item) => ({ ...item, leadingColor: "#6b6459" }));
 
   useEffect(() => {
     if (!invalidFields.size) return;
@@ -207,34 +224,39 @@ export function ObligationEditorDialog(props: ObligationEditorProps) {
           {context ? <div className="mb-4 text-xs leading-5 text-storm">{context}</div> : null}
           {feedback ? <FormFeedbackBanner className="mb-5" description={feedback.description} title={feedback.title} tone={feedback.tone} /> : null}
 
-          {panel === "plan" ? <PaymentPlanEditor currencyCode={currencyCode} onSave={savePlan} plan={formState.paymentPlan} principal={principalForPlan} startDate={formState.startDate} /> : panel === "main" ? <div className="space-y-5">
+          {panel === "plan" ? <PaymentPlanEditor currencyCode={currencyCode} debtContext={planDebtContext ?? undefined} onSave={savePlan} plan={formState.paymentPlan} principal={createInterest ? principalForPlan : Number(formState.principalAmount) || 0} startDate={formState.startDate} /> : panel === "main" ? <div className="space-y-5">
             <div data-field="principalAmount">
               <Field errorKey="principalAmount" invalidFields={invalidFields} label={`Monto (${getCurrencyLabel(currencyCode).symbol})`}><Input autoFocus className="h-16 font-display text-[2rem] font-semibold" data-modal-initial-focus={isCreateMode ? "" : undefined} disabled={!isCreateMode} id="obligation-principal" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("principalAmount"); updateFormState("principalAmount", event.target.value); }} placeholder="0.00" step="0.01" type="number" value={formState.principalAmount} /></Field>
               {invalidFields.has("principalAmount") ? <p className="mt-2 text-xs text-rose-300">Ingresa un monto válido.</p> : null}
             </div>
 
+            {isCreateMode && createInterest ? <div data-field="returnTotal">
+              {/* Sigue al monto hasta que se cambia; la diferencia es el interés pactado (móvil). */}
+              <Field errorKey="returnTotal" invalidFields={invalidFields} label={formState.direction === "receivable" ? "Total que te devolverán" : "Total que devolverás"}><Input id="obligation-return-total" inputMode="decimal" min="0" onChange={(event) => { clearFieldError("returnTotal"); updateFormState("returnTotal", event.target.value.trim() ? event.target.value : ""); }} placeholder="0.00" step="0.01" type="number" value={returnTotalText} /></Field>
+              <p className={`mt-2 text-xs ${createInterest.belowPrincipal ? "text-rose-300" : "text-storm"}`}>{createInterest.belowPrincipal ? "No puede ser menor que el monto." : createInterest.interestAmount > 0 ? `Incluye ${formatCurrency(createInterest.interestAmount, currencyCode)} de interés (${createInterest.interestPercent}%). Se suma al monto de la deuda sin mover tus cuentas.` : "Se llena solo con el monto. Cámbialo si te van a devolver más."}</p>
+            </div> : null}
+
             <div data-field="title"><Field errorKey="title" invalidFields={invalidFields} label="Título"><Input maxLength={120} onChange={(event) => { clearFieldError("title"); updateFormState("title", event.target.value); }} placeholder="Préstamo familiar" value={formState.title} /></Field></div>
 
             <div className="grid grid-cols-2 rounded-xl border border-white/10 bg-[#141311] p-1">
-              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "receivable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "receivable")} type="button"><span className="block text-sm font-semibold">Crédito</span><span className="text-xs opacity-75">Me deben</span></button>
-              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "payable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => updateFormState("direction", "payable")} type="button"><span className="block text-sm font-semibold">Deuda</span><span className="text-xs opacity-75">Yo debo</span></button>
+              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "receivable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => changeDirection("receivable")} type="button"><span className="block text-sm font-semibold">Crédito</span><span className="text-xs opacity-75">Me deben</span></button>
+              <button className={`min-h-14 rounded-lg px-4 text-left transition ${formState.direction === "payable" ? "bg-ink text-void" : "text-storm hover:text-ink"}`} disabled={!isCreateMode} onClick={() => changeDirection("payable")} type="button"><span className="block text-sm font-semibold">Deuda</span><span className="text-xs opacity-75">Yo debo</span></button>
             </div>
 
             <div data-field="counterpartyId"><Field errorKey="counterpartyId" invalidFields={invalidFields} label="Contraparte"><Picker disabled={!counterpartyOptions.length} emptyMessage="No tienes contrapartes disponibles." onChange={(value) => { clearFieldError("counterpartyId"); updateFormState("counterpartyId", value); }} options={counterpartyOptions} placeholderDescription="Persona o entidad relacionada." placeholderLabel="Selecciona una contraparte" queryPlaceholder="Buscar contraparte..." value={formState.counterpartyId} /></Field></div>
 
+            <div data-field="originType"><Field errorKey="originType" invalidFields={invalidFields} label="Cómo nació"><Picker disabled={!isCreateMode} emptyMessage="No hay orígenes." onChange={(value) => { clearFieldError("originType"); updateFormState("originType", value as ObligationFormState["originType"]); }} options={originOptions} placeholderDescription="El origen decide si se mueve una cuenta al crearla." placeholderLabel="Elegir cómo nació" queryPlaceholder="Buscar origen..." value={formState.originType} /></Field>{invalidFields.has("originType") ? <p className="mt-2 text-xs text-rose-300">Elige cómo nació: presté dinero, vendí a cuotas…</p> : null}</div>
+
             <ResourceEditorDestination onClick={() => setPanel("details")} summary="Plan, cuentas, notas y comprobante" />
-            <p className="text-xs leading-5 text-storm">Con monto, título, tipo y contraparte ya puedes guardar. El resto es opcional salvo que el origen mueva una cuenta.</p>
+            <p className="text-xs leading-5 text-storm">Con monto, título, tipo, contraparte y cómo nació ya puedes guardar. El resto es opcional salvo que el origen mueva una cuenta.</p>
           </div> : <div className="space-y-5">
-            <Field label="Origen"><Picker disabled={!isCreateMode} emptyMessage="No hay orígenes." onChange={(value) => updateFormState("originType", value as ObligationOriginType)} options={neutralize(originOptions)} placeholderDescription="Cómo nació el registro." placeholderLabel="Selecciona el origen" queryPlaceholder="Buscar origen..." value={formState.originType} /></Field>
             <Field label="Moneda"><Picker disabled={!isCreateMode} emptyMessage="No hay monedas." onChange={(value) => updateFormState("currencyCode", value)} options={currencyPickerOptions} placeholderDescription="Moneda principal." placeholderLabel="Selecciona moneda" queryPlaceholder="Buscar moneda..." value={currencyCode} /></Field>
             <div className="grid gap-4 sm:grid-cols-2"><div data-field="startDate"><Field errorKey="startDate" invalidFields={invalidFields} label="Inicio"><DatePickerField appearance="compact" disabled={!isCreateMode} onChange={(value) => { clearFieldError("startDate"); updateFormState("startDate", value); }} value={formState.startDate} /></Field></div><Field label="Vencimiento"><DatePickerField appearance="compact" onChange={(value) => updateFormState("dueDate", value)} value={formState.dueDate} /></Field></div>
-            {isCreateMode && formState.originType === "manual" ? <Field label="Impacto inicial"><Picker emptyMessage="No hay opciones." onChange={(value) => updateFormState("manualOpeningImpact", value as OpeningImpact)} options={neutralize(manualOpeningImpactOptions)} placeholderDescription="Movimiento al crear." placeholderLabel="Selecciona impacto" queryPlaceholder="Buscar..." value={formState.manualOpeningImpact} /></Field> : null}
             {isCreateMode && openingImpact.requiresAccount ? <div data-field="openingAccountId"><Field errorKey="openingAccountId" invalidFields={invalidFields} label="Cuenta de apertura"><Picker emptyMessage="No hay cuentas compatibles." onChange={(value) => { clearFieldError("openingAccountId"); updateFormState("openingAccountId", value); }} options={openingAccountOptions} placeholderDescription={openingImpact.description} placeholderLabel="Selecciona una cuenta" queryPlaceholder="Buscar cuenta..." value={formState.openingAccountId} /></Field></div> : null}
-            <Field label="Cuenta de abonos"><Picker emptyMessage="No hay cuentas." onChange={(value) => updateFormState("settlementAccountId", value)} options={accountOptions} placeholderDescription="Cuenta usada por defecto." placeholderLabel="Sin asignar" queryPlaceholder="Buscar cuenta..." value={formState.settlementAccountId} /></Field>
-            <Field label="Estado"><Picker emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as ObligationStatus)} options={neutralize(statusOptions)} placeholderDescription="Estado del registro." placeholderLabel="Selecciona estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field>
+            <div><Field label="Cuenta habitual"><Picker emptyMessage="No hay cuentas." onChange={(value) => updateFormState("settlementAccountId", value)} options={accountOptions} placeholderDescription="Opcional." placeholderLabel="Sin asignar" queryPlaceholder="Buscar cuenta..." value={formState.settlementAccountId} /></Field><p className="mt-2 text-xs leading-5 text-storm">La cuenta habitual es la que aparece elegida al registrar un cobro o un pago de esta deuda. Es opcional y se puede cambiar cada vez.</p></div>
+            {!isCreateMode ? <Field label="Estado"><Picker emptyMessage="No hay estados." onChange={(value) => updateFormState("status", value as ObligationStatus)} options={neutralize(statusOptions)} placeholderDescription="Estado del registro." placeholderLabel="Selecciona estado" queryPlaceholder="Buscar estado..." value={formState.status} /></Field> : null}
 
             <section><p className={labelClassName}>Cómo se paga</p><button className="mt-3 flex min-h-14 w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#141311] px-4 text-left text-sm" onClick={() => setPanel("plan")} type="button"><span className="font-medium text-ink">Plan de pagos</span><span className="text-right text-storm">{planLabel ?? "Sin plan"} ›</span></button>{formState.paymentPlan?.mode === "equal" && planLabel ? <p className="mt-2 text-xs text-storm">La cuota se calcula a partir del monto y se recalcula si cambia.</p> : null}</section>
-            <Field label="Interés %"><Input inputMode="decimal" min="0" onChange={(event) => updateFormState("interestRate", event.target.value)} placeholder="0" step="0.0001" type="number" value={formState.interestRate} /></Field>
             <Field label="Descripción"><Textarea className="min-h-20" onChange={(event) => updateFormState("description", event.target.value)} placeholder="Contexto visible del registro" value={formState.description} /></Field>
             <Field label="Notas"><Textarea className="min-h-20" onChange={(event) => updateFormState("notes", event.target.value)} placeholder="Notas internas" value={formState.notes} /></Field>
 

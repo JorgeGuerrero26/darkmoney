@@ -110,7 +110,7 @@ function mapItem(item: unknown, viewer: { userId: string; email?: string | null 
   return {
     id: obligationId, workspaceId, title: text(obligation.title),
     direction: choice(obligation.direction, ["receivable", "payable"]),
-    originType: choice(field(obligation, "origin_type", "originType") ?? "manual", ["cash_loan", "sale_financed", "purchase_financed", "manual"]),
+    originType: choice(field(obligation, "origin_type", "originType") ?? "manual", ["cash_loan", "sale_financed", "purchase_financed", "paid_for_other", "manual"]),
     status: choice(obligation.status, ["draft", "active", "paid", "cancelled", "defaulted"]), currencyCode,
     counterparty: text(obligation.counterparty ?? obligation.counterparty_name ?? obligation.counterpartyName, "Sin contraparte"),
     counterpartyId: id(field(obligation, "counterparty_id", "counterpartyId"), true),

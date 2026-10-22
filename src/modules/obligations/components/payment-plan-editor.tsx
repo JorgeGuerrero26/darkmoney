@@ -3,14 +3,18 @@ import { useMemo, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
+import { SearchablePicker } from "../../../components/ui/searchable-picker";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { validateObligationPlan } from "../lib/obligation-editor-input";
 import {
   addMonthsIso,
   defaultFirstDueDate,
+  effectivePlanSchedule,
   expandPaymentPlan,
   planDifference,
+  type PayDay,
   type PaymentPlan,
+  type PlanDebtContext,
 } from "../lib/payment-plan";
 
 type DraftPayment = { key: number; amount: string; dueDate: string };
@@ -22,13 +26,16 @@ const monthLabel = (isoDate: string) => {
 
 export function PaymentPlanEditor({
   plan,
-  principal,
+  principal: openingInput,
   currencyCode,
   startDate,
   onSave,
+  debtContext,
 }: {
   plan: PaymentPlan | null;
   principal: number;
+  /** Solo al editar: la deuda real, para mostrar y validar el calendario que rige hoy (móvil). */
+  debtContext?: PlanDebtContext;
   currencyCode: string;
   startDate: string;
   onSave: (plan: PaymentPlan | null) => void;
@@ -41,6 +48,8 @@ export function PaymentPlanEditor({
       ? plan.agreed.map((item, index) => ({ key: ++nextKey, amount: String(item.amount), dueDate: item.dueDate ?? addMonthsIso(plan.firstDueDate ?? defaultFirstDueDate(startDate), index) }))
       : [],
   );
+  /** Día del mes de cada cuota. Vacío = el día de la fecha de inicio, como en móvil. */
+  const [payDay, setPayDay] = useState<PayDay | null>(plan?.payDay ?? null);
   const [tail, setTail] = useState(plan?.mode === "custom" && plan.tail ? String(plan.tail) : "");
   const formatAmount = (amount: number) => formatCurrency(amount, currencyCode);
 
@@ -48,7 +57,7 @@ export function PaymentPlanEditor({
     if (mode === "equal") {
       const value = Number(count);
       return Number.isInteger(value) && value >= 1 && value <= 600
-        ? { mode, count: value, firstDueDate }
+        ? { mode, count: value, firstDueDate, ...(payDay != null ? { payDay } : {}) }
         : null;
     }
     const payments = agreed.map((item) => ({ amount: Number(item.amount), dueDate: item.dueDate }));
@@ -56,10 +65,19 @@ export function PaymentPlanEditor({
     const tailAmount = tail.trim() ? Number(tail) : null;
     if (tailAmount !== null && (!Number.isFinite(tailAmount) || tailAmount <= 0)) return null;
     return payments.length || tailAmount !== null
-      ? { mode, agreed: payments, tail: tailAmount, firstDueDate }
+      ? { mode, agreed: payments, tail: tailAmount, firstDueDate, ...(payDay != null ? { payDay } : {}) }
       : null;
-  }, [agreed, count, firstDueDate, mode, tail]);
-  const rows = useMemo(() => draft ? expandPaymentPlan(draft, principal, startDate) : [], [draft, principal, startDate]);
+  }, [agreed, count, firstDueDate, mode, payDay, tail]);
+  const startDay = Number(startDate.slice(8, 10)) || 1;
+  const payDayOptions = [
+    { value: "start", label: `Día ${startDay}`, description: "El de la fecha de inicio.", leadingLabel: String(startDay), leadingColor: "#6b6459" },
+    { value: "last", label: "Fin de mes", description: "El último día de cada mes.", leadingLabel: "FM", leadingColor: "#6b6459" },
+    ...Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `Día ${index + 1}`, description: index + 1 > 28 ? "En meses más cortos, cae en el último día." : "Cada mes.", leadingLabel: String(index + 1), leadingColor: "#6b6459" })),
+  ];
+  const payDayControl = <div className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm"><span className="text-ink">Día de cobro</span><div className="w-48"><SearchablePicker appearance="compact" emptyMessage="Sin opciones." onChange={(value) => setPayDay(value === "start" ? null : value === "last" ? "last" : Number(value))} options={payDayOptions} placeholderDescription="El de la fecha de inicio." placeholderLabel={`Día ${startDay}`} queryPlaceholder="Buscar día..." value={payDay == null ? "start" : String(payDay)} /></div></div>;
+  const effective = useMemo(() => draft && debtContext ? effectivePlanSchedule(draft, debtContext, startDate) : null, [debtContext, draft, startDate]);
+  const principal = effective ? effective.basis : openingInput;
+  const rows = useMemo(() => effective ? effective.payments : draft ? expandPaymentPlan(draft, openingInput, startDate) : [], [draft, effective, openingInput, startDate]);
   const difference = planDifference(principal, rows);
   const complete = principal > 0 && rows.length > 0 && rows.length <= 600 && difference === 0;
   const first = rows[0];
@@ -95,6 +113,7 @@ export function PaymentPlanEditor({
             <input aria-label="Número de cuotas" className="w-24 rounded-lg border border-white/10 bg-[#1a1917] px-3 py-2 text-right tabular-nums text-ink outline-none focus:border-white/40" inputMode="numeric" max="600" min="1" onChange={(event) => setCount(event.target.value)} type="number" value={count} />
           </label>
           <div className="flex min-h-14 items-center justify-between gap-4 py-2 text-sm"><span className="text-ink">Primer pago</span><div className="w-48"><DatePickerField appearance="compact" onChange={setFirstDueDate} value={firstDueDate} /></div></div>
+          {payDayControl}
           <p className="py-3 text-sm leading-5 text-storm">{first ? `${formatAmount(principal)} ÷ ${rows.length} = ${formatAmount(first.amount)} por cuota. Se recalcula si cambias el monto.` : "Indica el número de cuotas para calcular el importe."}</p>
         </div>
       ) : (
@@ -102,6 +121,7 @@ export function PaymentPlanEditor({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-ink">Lo que acordaron</h3><span className="text-xs text-storm">Monto y fecha de cada pago distinto</span></div>
             <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#141311] px-4 py-2 text-sm"><span className="text-ink">Primer pago</span><div className="w-48"><DatePickerField appearance="compact" onChange={setFirstDueDate} value={firstDueDate} /></div></div>
+            <div className="rounded-xl border border-white/10 bg-[#141311] px-4">{payDayControl}</div>
             {agreed.map((item, index) => (
               <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] py-2" key={item.key}>
                 <span className="w-5 text-xs tabular-nums text-storm">{index + 1}</span>
