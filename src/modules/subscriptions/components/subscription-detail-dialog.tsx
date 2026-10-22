@@ -28,7 +28,7 @@ type Props = {
   onStatus: (status: SubscriptionSummary["status"]) => void;
   onPin: () => void;
   onDelete: () => void;
-  onPay: (input: { paidDate: string; amount: number; accountId: number }) => Promise<void>;
+  onPay: (input: { paidDate: string; amount: number; accountId: number; dueDate?: string }) => Promise<void>;
   onOpenMovement: (movementId: number) => void;
   onAssignAccount: (accountId: number | null) => void;
   onAssignCategory: (categoryId: number | null) => void;
@@ -57,7 +57,7 @@ export function SubscriptionDetailDialog({ subscription, initialPanel = "detail"
     occurrences: calendarReady ? occurrencesQuery.data : undefined,
   });
 
-  if (panel === "pay" && canWrite) return <SubscriptionPaymentDialog subscription={subscription} accounts={accounts} isPending={isPending} onClose={onClose} onBack={() => setPanel("detail")} onPay={onPay} />;
+  if (panel === "pay" && canWrite) return <SubscriptionPaymentDialog subscription={subscription} accounts={accounts} isPending={isPending} occurrences={calendarReady ? occurrencesQuery.data : undefined} onClose={onClose} onBack={() => setPanel("detail")} onPay={onPay} />;
 
   return <Modal className="!max-w-[640px]" labelledBy="subscription-detail-title" onClose={onClose} size="lg">
       <ResourceEditorHeader disabled={isPending} accessory={panel === "detail" ? <div className="relative"><button aria-label="Más acciones de suscripción" aria-expanded={menuOpen} className="grid h-9 w-9 place-items-center rounded-lg text-storm hover:bg-white/[0.04]" onClick={() => setMenuOpen((open) => !open)} type="button"><MoreVertical className="h-4 w-4" /></button>{menuOpen ? <><button aria-label="Cerrar acciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setMenuOpen(false)} type="button" /><div className="absolute left-0 top-10 z-50 w-52 rounded-xl border border-white/10 bg-[#1b1a18] py-1 text-sm">{[

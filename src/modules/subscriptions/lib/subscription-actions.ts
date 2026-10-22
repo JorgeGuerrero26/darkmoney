@@ -111,16 +111,19 @@ export async function assignSubscriptionField(subscription: SubscriptionSummary,
 
 export async function markSubscriptionPaid(
   subscription: SubscriptionSummary,
-  input: { paidDate: string; amount: number; accountId: number },
+  input: { paidDate: string; amount: number; accountId: number; dueDate?: string },
   options: { isCurrent?: () => boolean } = {},
 ) {
+  // El cobro que se paga: el más antiguo sin pagar puede ir detrás del puntero guardado (igual que móvil).
+  const paidDueDate = input.dueDate ?? subscription.nextDueDate;
   const date = new Date(`${input.paidDate}T12:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paidDate) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== input.paidDate || !Number.isFinite(input.amount) || input.amount <= 0 ||
     !Number.isSafeInteger(Math.round(input.amount * 100)) || Math.abs(input.amount * 100 - Math.round(input.amount * 100)) > 1e-6 || !Number.isSafeInteger(input.accountId) || input.accountId <= 0 || subscription.status !== "active") {
     throw new Error("Revisa la fecha y el monto del pago.");
   }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDueDate) || paidDueDate > subscription.nextDueDate) throw new Error("Revisa qué cobro estás pagando.");
   const nextDueDate = computeNextRecurringDate(
-    subscription.nextDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth,
+    paidDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth,
   );
   // Misma secuencia que móvil: avanzar primero para evitar duplicar el vencimiento
   // si la inserción del movimiento falla. El error explica el estado parcial.
@@ -157,9 +160,12 @@ export async function markSubscriptionPaid(
     counterparty_id: subscription.vendorPartyId ?? null,
     obligation_id: null,
     subscription_id: subscription.id,
-    metadata: { manual_subscription_payment: true, paid_for_due_date: subscription.nextDueDate },
+    metadata: { manual_subscription_payment: true, paid_for_due_date: paidDueDate },
+    // Misma clave que móvil: identifica ESTE cobro y evita registrarlo dos veces.
+    client_dedupe_key: `subscription-payment:${subscription.id}:${paidDueDate}`,
   }).select("id, workspace_id, subscription_id, source_account_id, source_amount, status").single();
   if (insertError) {
+    if ((insertError as { code?: string }).code === "23505") throw new Error(`El próximo cobro se confirmó en ${nextDueDate}, pero el pago del cobro del ${paidDueDate} ya estaba registrado. Revisa el historial; no se creó otro movimiento.`);
     throw new Error(`El próximo cobro se confirmó en ${nextDueDate}, pero el movimiento quedó por comprobar: ${insertError.message}. No repitas el pago ni registres otro gasto sin revisar Movimientos y el calendario.`);
   }
   const amountType = typeof inserted?.source_amount;

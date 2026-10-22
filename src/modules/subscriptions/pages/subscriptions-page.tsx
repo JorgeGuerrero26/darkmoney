@@ -771,7 +771,7 @@ function ScopedSubscriptionsPage({ auth, workspace }: { auth: ReturnType<typeof 
     }
   }
 
-  async function handleMarkPaid(subscription: SubscriptionSummary, input: { paidDate: string; amount: number; accountId: number }) {
+  async function handleMarkPaid(subscription: SubscriptionSummary, input: { paidDate: string; amount: number; accountId: number; dueDate?: string }) {
     const current = currentSubscription(subscription.id);
     if (current.nextDueDate !== subscription.nextDueDate || current.currencyCode !== subscription.currencyCode || current.amount !== subscription.amount || current.frequency !== subscription.frequency || current.intervalCount !== subscription.intervalCount || current.dayOfMonth !== subscription.dayOfMonth) throw new Error("El calendario de la suscripción cambió. Cierra y revisa el próximo cobro antes de confirmar.");
     validateSubscriptionPayment(current, accounts, input);

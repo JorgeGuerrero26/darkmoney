@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../../components/ui/button";
 import { DatePickerField } from "../../../components/ui/date-picker-field";
 import { SearchablePicker } from "../../../components/ui/searchable-picker";
@@ -9,15 +9,25 @@ import { formatDate } from "../../../lib/formatting/dates";
 import { formatCurrency } from "../../../lib/formatting/money";
 import type { AccountSummary, SubscriptionSummary } from "../../../types/domain";
 import { computeNextRecurringDate } from "../lib/subscriptions-presenters";
+import { todayPeru } from "../lib/subscription-actions";
+import { defaultPaymentDate, oldestUnpaidDueDate } from "../lib/subscription-payment-dates";
 import { validateSubscriptionPayment, type SubscriptionPaymentInput } from "../lib/subscription-payment-input";
 
-export function SubscriptionPaymentDialog({ subscription, accounts, isPending, onClose, onBack, onPay, initialInput, onInputChange, context }: {
+export function SubscriptionPaymentDialog({ subscription, accounts, isPending, onClose, onBack, onPay, initialInput, onInputChange, context, occurrences }: {
   subscription: SubscriptionSummary; accounts: AccountSummary[]; isPending: boolean;
   onClose: () => void; onBack?: () => void; onPay: (input: SubscriptionPaymentInput) => Promise<void>;
   initialInput?: Partial<SubscriptionPaymentInput>; onInputChange?: (input: SubscriptionPaymentInput) => void; context?: ReactNode;
+  /** Historial verificado: decide qué cobro se paga (el más antiguo sin pagar), como móvil. */
+  occurrences?: ReadonlyArray<{ dueDate: string; status: string }> | null;
 }) {
+  const payingDueDate = initialInput?.dueDate ?? oldestUnpaidDueDate(subscription.nextDueDate, occurrences);
   const [amount, setAmount] = useState(String(initialInput?.amount ?? subscription.amount));
-  const [paidDate, setPaidDate] = useState(initialInput?.paidDate ?? subscription.nextDueDate);
+  // Cobro que aún no vence: su fecha. Vencido: hoy, para que el gasto se vea en el mes en que se paga.
+  const [paidDate, setPaidDate] = useState(initialInput?.paidDate ?? defaultPaymentDate(payingDueDate, todayPeru()));
+  const paidDateTouched = useRef(Boolean(initialInput?.paidDate));
+  useEffect(() => {
+    if (!paidDateTouched.current) setPaidDate(defaultPaymentDate(payingDueDate, todayPeru()));
+  }, [payingDueDate]);
   const [accountId, setAccountId] = useState(String(initialInput?.accountId ?? subscription.accountId ?? ""));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -29,22 +39,22 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
   const stale = staleLatch.current;
   const eligibleAccounts = accounts.filter(account => account.workspaceId === subscription.workspaceId && !account.isArchived && account.currencyCode === subscription.currencyCode);
   const selectedAccount = eligibleAccounts.find(account => String(account.id) === accountId);
-  const nextDueDate = computeNextRecurringDate(subscription.nextDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth);
+  const nextDueDate = computeNextRecurringDate(payingDueDate, subscription.frequency, subscription.intervalCount, subscription.dayOfMonth);
   const busy = isPending || saving;
   function update(field: "amount" | "paidDate" | "accountId", value: string) {
     if (lock.current || busy || unconfirmed || stale) return;
     if (field === "amount") setAmount(value);
-    if (field === "paidDate") setPaidDate(value);
+    if (field === "paidDate") { paidDateTouched.current = true; setPaidDate(value); }
     if (field === "accountId") setAccountId(value);
     setError("");
-    onInputChange?.({ amount: Number((field === "amount" ? value : amount).replace(",", ".")), paidDate: field === "paidDate" ? value : paidDate, accountId: Number(field === "accountId" ? value : accountId) });
+    onInputChange?.({ amount: Number((field === "amount" ? value : amount).replace(",", ".")), paidDate: field === "paidDate" ? value : paidDate, accountId: Number(field === "accountId" ? value : accountId), dueDate: payingDueDate });
   }
   async function confirmPayment() {
     if (lock.current || busy || unconfirmed || stale) return;
     setError("");
     let sent = false;
     try {
-      const input = validateSubscriptionPayment(subscription, accounts, { paidDate, amount: Number(amount.replace(",", ".")), accountId: Number(accountId) });
+      const input = validateSubscriptionPayment(subscription, accounts, { paidDate, amount: Number(amount.replace(",", ".")), accountId: Number(accountId), dueDate: payingDueDate });
       lock.current = true; setSaving(true);
       sent = true;
       await onPay(input);
@@ -66,7 +76,7 @@ export function SubscriptionPaymentDialog({ subscription, accounts, isPending, o
         <div className="flex min-h-[54px] items-center justify-between gap-3"><span className="text-sm text-ink">Se pagó con</span><div className="w-1/2"><SearchablePicker appearance="compact" disabled={busy} emptyMessage={`No hay cuentas activas en ${subscription.currencyCode}.`} onChange={value => update("accountId", value)} options={eligibleAccounts.map(account => ({ value: String(account.id), label: account.name, description: account.currencyCode, leadingLabel: account.name.slice(0, 2) }))} placeholderDescription="Cuenta del gasto" placeholderLabel="Elegir cuenta" queryPlaceholder="Buscar cuenta..." value={accountId} /></div></div>
         <div className="flex min-h-[54px] items-center justify-between gap-3"><span className="text-sm text-ink">Cuándo</span><div className="w-1/2"><DatePickerField appearance="compact" onChange={value => update("paidDate", value)} value={paidDate} /></div></div>
       </div>
-      <div className="space-y-2 border-y border-white/[0.08] py-3 text-sm"><div className="flex justify-between gap-3"><span className="text-storm">Estaba programado</span><span className="text-ink">{formatDate(subscription.nextDueDate)} · {formatCurrency(subscription.amount, subscription.currencyCode)}</span></div><div className="flex justify-between gap-3"><span className="text-storm">Siguiente cobro</span><span className="font-semibold text-ink">{formatDate(nextDueDate)}</span></div></div>
+      <div className="space-y-2 border-y border-white/[0.08] py-3 text-sm"><div className="flex justify-between gap-3"><span className="text-storm">Estaba programado</span><span className="text-ink">{formatDate(payingDueDate)} · {formatCurrency(subscription.amount, subscription.currencyCode)}</span></div><div className="flex justify-between gap-3"><span className="text-storm">Siguiente cobro</span><span className="font-semibold text-ink">{formatDate(nextDueDate)}</span></div></div>
       {!eligibleAccounts.length ? <p className="text-sm text-storm">Necesitas una cuenta activa en {subscription.currencyCode} para registrar el pago sin conversión.</p> : null}
       {error ? <p className="text-sm text-red-300" role="alert">{error}</p> : null}
     </ModalBody>

@@ -90,4 +90,27 @@ for (const frequency of ["daily", "weekly", "monthly", "quarterly", "yearly", "c
     assert.deepEqual(summarizeSubscriptionsMonthly(rows,"PEN"), phone.summarizeSubscriptionsMonthly(rows,"PEN"));
   }
 }
+
+// Qué cobro se paga y con qué fecha: mismas reglas que el oldestUnpaidDueDate.ts móvil actual.
+{
+  const { oldestUnpaidDueDate, defaultPaymentDate } = await import("../src/modules/subscriptions/lib/subscription-payment-dates.ts");
+  const source = readFileSync(new URL("../../DarkMoneyApp/features/subscriptions/lib/oldestUnpaidDueDate.ts", import.meta.url), "utf8");
+  const phone = {};
+  new Function("exports", ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(phone);
+  const histories = [
+    undefined, null, [],
+    [{ dueDate: "2026-09-04", status: "scheduled" }, { dueDate: "2026-08-04", status: "paid" }],
+    [{ dueDate: "2026-10-04", status: "scheduled" }, { dueDate: "2026-09-04", status: "scheduled" }, { dueDate: "2026-07-04", status: "skipped" }],
+    [{ dueDate: "2026-11-04", status: "scheduled" }],
+  ];
+  for (const nextDueDate of ["2026-10-04", "2026-09-04", "2026-12-04"]) for (const history of histories) {
+    const due = oldestUnpaidDueDate(nextDueDate, history);
+    assert.equal(due, phone.oldestUnpaidDueDate(nextDueDate, history));
+    assert.ok(due <= nextDueDate);
+    for (const today of ["2026-08-01", "2026-09-04", "2026-10-22"]) assert.equal(defaultPaymentDate(due, today), phone.defaultPaymentDate(due, today));
+  }
+  assert.equal(oldestUnpaidDueDate("2026-10-04", histories[3]), "2026-09-04");
+  assert.equal(defaultPaymentDate("2026-09-04", "2026-10-22"), "2026-10-22");
+  assert.equal(defaultPaymentDate("2026-11-04", "2026-10-22"), "2026-11-04");
+}
 console.log("subscription-parity: OK");
