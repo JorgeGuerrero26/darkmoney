@@ -25,15 +25,15 @@
     <text x="30" y="105" fill="#f4f1ec" font-family="Archivo, Arial, sans-serif" font-size="43" font-weight="600" letter-spacing="-1.3">S/ 4,226.92</text>
     <text x="30" y="136" fill="#8e877c" font-family="IBM Plex Sans, Arial, sans-serif" font-size="14">En 3 cuentas · comprometido: S/ 1,180</text>
     <path d="M30 168h308" stroke="#f4f1ec" stroke-opacity=".08"/>
-    <text x="30" y="203" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Yape a Lucía</text>
+    <text x="30" y="203" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Transferencia enviada</text>
     <text x="30" y="226" fill="#8e877c" font-family="IBM Plex Sans, Arial, sans-serif" font-size="13">Hoy · Cuenta Principal</text>
     <text x="338" y="213" fill="#f4f1ec" text-anchor="end" font-family="Archivo, Arial, sans-serif" font-size="17" font-weight="600">− 45.00</text>
     <path d="M30 250h308" stroke="#f4f1ec" stroke-opacity=".08"/>
-    <text x="30" y="285" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Sueldo AGV</text>
+    <text x="30" y="285" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Pago de sueldo</text>
     <text x="30" y="308" fill="#8e877c" font-family="IBM Plex Sans, Arial, sans-serif" font-size="13">Ayer · Cuenta Sueldo</text>
     <text x="338" y="295" fill="#86ce96" text-anchor="end" font-family="Archivo, Arial, sans-serif" font-size="17" font-weight="600">+ 2,630.50</text>
     <path d="M30 332h308" stroke="#f4f1ec" stroke-opacity=".08"/>
-    <text x="30" y="367" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Rappi</text>
+    <text x="30" y="367" fill="#f4f1ec" font-family="IBM Plex Sans, Arial, sans-serif" font-size="17" font-weight="500">Compra de alimentos</text>
     <text x="30" y="390" fill="#8e877c" font-family="IBM Plex Sans, Arial, sans-serif" font-size="13">Ayer · Alimentación</text>
     <text x="338" y="377" fill="#f4f1ec" text-anchor="end" font-family="Archivo, Arial, sans-serif" font-size="17" font-weight="600">− 32.90</text>
   </g>

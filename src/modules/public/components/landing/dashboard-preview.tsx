@@ -4,30 +4,31 @@ import {
   House,
   LayoutGrid,
   Scale,
+  UserRound,
 } from "lucide-react";
 
 const movements = [
   {
     amount: "− 45.00",
-    label: "Yape a Lucía",
+    label: "Transferencia enviada",
     meta: "Hoy · Cuenta Principal",
     positive: false,
   },
   {
     amount: "+ 2,630.50",
-    label: "Sueldo AGV",
+    label: "Pago de sueldo",
     meta: "Ayer · Cuenta Sueldo",
     positive: true,
   },
   {
     amount: "− 32.90",
-    label: "Rappi",
+    label: "Compra de alimentos",
     meta: "Ayer · Alimentación",
     positive: false,
   },
   {
     amount: "− 4.00",
-    label: "Moto",
+    label: "Transporte",
     meta: "Ayer · Transporte",
     positive: false,
   },
@@ -62,8 +63,8 @@ export function DashboardPreview() {
           <span className="font-public-display text-[15px] font-semibold tracking-[-0.015em]">
             Inicio
           </span>
-          <span className="font-public-display flex h-[26px] w-[26px] items-center justify-center rounded-lg bg-[#f4f1ec] text-[10px] font-semibold text-[#141312]">
-            AG
+          <span aria-label="Perfil de ejemplo" className="font-public-display flex h-[26px] w-[26px] items-center justify-center rounded-lg bg-[#f4f1ec] text-[10px] font-semibold text-[#141312]" role="img">
+            <UserRound aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.8} />
           </span>
         </div>
 

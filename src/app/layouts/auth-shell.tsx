@@ -4,9 +4,9 @@ import { Link, Outlet } from "react-router-dom";
 import { BrandLogo } from "../../components/ui/brand-logo";
 
 const movements = [
-  { label: "Yape a Lucía", meta: "Hoy · Cuenta Principal", amount: "− 45.00" },
-  { label: "Sueldo AGV", meta: "Ayer · Cuenta Sueldo", amount: "+ 2,630.50", income: true },
-  { label: "Rappi", meta: "Ayer · Alimentación", amount: "− 32.90" },
+  { label: "Transferencia enviada", meta: "Hoy · Cuenta Principal", amount: "− 45.00" },
+  { label: "Pago de sueldo", meta: "Ayer · Cuenta Sueldo", amount: "+ 2,630.50", income: true },
+  { label: "Compra de alimentos", meta: "Ayer · Alimentación", amount: "− 32.90" },
 ];
 
 export function AuthShell() {
