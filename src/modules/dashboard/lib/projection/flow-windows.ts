@@ -1,4 +1,4 @@
-import { addDays, parseISO } from "date-fns";
+import { addDays, endOfDay, parseISO } from "date-fns";
 import type { ProjectedMonth, ProjectionLine } from "./cashflow-calendar";
 
 export type ProjectionFlowItem = {
@@ -33,7 +33,7 @@ export function projectionFlowItems(months: readonly ProjectedMonth[], fallbackD
 /** Overdue installments remain due and enter all windows, exactly as in mobile. */
 export function windowsFromFlowItems(items: readonly ProjectionFlowItem[], currentVisibleBalance: number, now = new Date()) {
   return [7, 15, 30].map(days => {
-    const windowItems = items.filter(item => item.date <= addDays(now, days));
+    const windowItems = items.filter(item => item.date <= endOfDay(addDays(now, days)));
     const expectedInflow = windowItems.filter(item => item.direction === "inflow").reduce((sum, item) => sum + (item.amount ?? 0), 0);
     const expectedOutflow = windowItems.filter(item => item.direction === "outflow").reduce((sum, item) => sum + (item.amount ?? 0), 0);
     return {

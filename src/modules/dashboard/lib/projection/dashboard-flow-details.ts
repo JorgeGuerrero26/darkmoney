@@ -90,7 +90,7 @@ export function buildDashboardFlowDetails(snapshot: WorkspaceSnapshot, shared: S
     const missingMonth = cashflow.projection.months.some(month => month.monthKey <= endDay.slice(0, 7) && month.unconvertedCount > 0);
     const missingCharge = charges.some(row => row.day <= endDay && row.amount === null);
     return { ...window, endDay, complete: windowsBaseComplete && !missingMonth && !missingCharge && [window.estimatedBalance, window.expectedInflow, window.expectedOutflow].every(Number.isFinite),
-      commitments: commitments.filter(line => parseISO(line.dueDate ?? today) <= addDays(localNow, window.days)),
+      commitments: commitments.filter(line => parseISO(line.dueDate ?? today) <= endOfDay(addDays(localNow, window.days))),
     };
   });
   return { today, endDay, routeFrom: isoToDateStr(new Date(fromTime).toISOString()), receivables, receivablesMissing,
