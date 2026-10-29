@@ -77,6 +77,10 @@ const missingMovement={...snapshot,movements:[...snapshot.movements,movement(8,"
 const missingDebt={...snapshot,obligations:[...snapshot.obligations,obligation(80,"payable",{currencyCode:"EUR",dueDate:"2028-01-01"})]};assert.equal(buildDashboardScenarios(missingDebt,[],buildDashboardCashflow(missingDebt,[],supplement,ctx,now,6),ctx,now).available,false);
 const oldMissing={...snapshot,movements:[...snapshot.movements,movement(9,"2026-04-15",30,{sourceAccountId:2})]};const oldMissingFlow=buildDashboardCashflow(oldMissing,[],supplement,ctx,now,6);assert.equal(oldMissingFlow.typicalSpend.unconvertedCount,1);assert.equal(buildDashboardScenarios(oldMissing,[],oldMissingFlow,ctx,now).available,false);
 const correction={...snapshot,movements:[...snapshot.movements,movement(9,"2026-09-15",100000,{description:"Corrección · Principal"})]};assert.equal(buildDashboardCashflow(correction,[],supplement,ctx,now,6).typicalSpend.typical,cashflow.typicalSpend.typical);
+const plannedCorrection={...snapshot,movements:[...snapshot.movements,movement(11,"2026-10-20",1245.83,{status:"planned",description:"Corrección · Impuestos"})]};
+assert.deepEqual(buildDashboardCashflow(plannedCorrection,[],supplement,ctx,now,6).projection,cashflow.projection);
+const plannedExpense={...snapshot,movements:[...snapshot.movements,movement(12,"2026-10-20",1245.83,{status:"planned",description:"Impuestos"})]};
+assert.notDeepEqual(buildDashboardCashflow(plannedExpense,[],supplement,ctx,now,6).projection,cashflow.projection);
 const badBalance={...cashflow,liquid:{...cashflow.liquid,total:NaN}};assert.equal(buildDashboardScenarios(snapshot,[],badBalance,ctx,now).available,false);
 const otherMonth={...cashflow,projection:{...cashflow.projection,months:cashflow.projection.months.map((row,i)=>i?row:{...row,monthKey:"2026-11"})}};assert.equal(buildDashboardScenarios(snapshot,[],otherMonth,ctx,now).available,false);
 // The new adapter retains Lima's local dates even in a UTC browser.
