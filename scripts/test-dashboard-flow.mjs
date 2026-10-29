@@ -7,6 +7,7 @@ import {React,act,dom,root,load,mock,createRoot,MemoryRouter,button} from "./lib
 process.env.TZ="America/Lima";
 mock("src/services/queries/workspace-data.ts",'throw new Error("Flow is read-only and must not load mutations or queries");');
 const {buildDashboardCashflow}=await import(load("src/modules/dashboard/lib/projection/build-dashboard-cashflow.ts"));
+const {windowsFromFlowItems}=await import(load("src/modules/dashboard/lib/projection/flow-windows.ts"));
 const {buildDashboardFlowDetails,upcomingSubscriptionCharges}=await import(load("src/modules/dashboard/lib/projection/dashboard-flow-details.ts"));
 const {projectionLineHref}=await import(load("src/modules/dashboard/lib/projection/projection-links.ts"));
 const mobileView=await import(load("../DarkMoneyApp/features/dashboard/lib/flow-view.ts"));
@@ -20,6 +21,8 @@ const viewerNode=viewerSource.statements.find(node=>ts.isFunctionDeclaration(nod
 const viewerCode=ts.transpileModule(viewerNode.getText(viewerSource).replace("export function","function"),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 const viewer=new Function(`${viewerCode};return obligationViewerDirection;`)();
 const now=new Date("2026-10-16T17:00:00Z");
+const cutoffItems=[{source:"planned",id:1,title:"Día 7",date:dates.addHours(dates.startOfDay(dates.addDays(now,7)),23),direction:"outflow",amount:20},{source:"planned",id:2,title:"Día 8",date:dates.startOfDay(dates.addDays(now,8)),direction:"outflow",amount:30}];
+const cutoffWindows=windowsFromFlowItems(cutoffItems,100,now);assert.equal(cutoffWindows[0].expectedOutflow,20);assert.equal(cutoffWindows[1].expectedOutflow,50);
 const account=(id,name,currencyCode="PEN",extra={})=>({id,workspaceId:8,type:"bank",currencyCode,name,currentBalance:500,isArchived:false,...extra});
 const transfer=(id,sourceAccountId,destinationAccountId,sourceAmount,date="2026-10-14",extra={})=>({id,workspaceId:8,movementType:"transfer",status:"posted",description:`Traspaso ${id}`,occurredAt:`${date}T12:00:00-05:00`,sourceAccountId,destinationAccountId,sourceAmount,destinationAmount:sourceAmount,categoryId:null,counterpartyId:null,...extra});
 const obligation=(id,direction,pendingAmount=1000,extra={})=>({id,workspaceId:8,title:`Acuerdo ${id}`,counterparty:`Persona ${id}`,direction,pendingAmount,principalAmount:pendingAmount,currentPrincipalAmount:pendingAmount,currencyCode:"PEN",status:"active",startDate:"2026-01-01",dueDate:"2026-10-20",events:[],...extra});
