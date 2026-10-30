@@ -30,6 +30,7 @@ const iconChipTone: Record<string, string> = {
 type NotificationCardProps = {
   notification: InboxNotification;
   isUpdatingReadState: boolean;
+  isUpdatingMutedKinds: boolean;
   selected: boolean;
   acceptingId: string | null;
   decliningId: string | null;
@@ -44,6 +45,7 @@ type NotificationCardProps = {
 export function NotificationCard({
   notification,
   isUpdatingReadState,
+  isUpdatingMutedKinds,
   selected,
   acceptingId,
   decliningId,
@@ -161,8 +163,8 @@ export function NotificationCard({
                 Marcar no leída
               </Button>
             ) : null}
-            {!hasInviteAction ? (
-              <Button onClick={() => onMuteKind(notification.kind)} variant="ghost">
+            {!isActionRequiredNotificationKind(notification.kind) ? (
+              <Button disabled={isUpdatingMutedKinds} onClick={() => onMuteKind(notification.kind)} variant="ghost">
                 <BellOff className="mr-2 h-4 w-4" />
                 Silenciar tipo
               </Button>

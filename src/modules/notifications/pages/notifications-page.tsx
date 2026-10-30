@@ -530,7 +530,7 @@ export function NotificationsPage() {
   }
 
   function handleMuteKind(kind: string) {
-    if (!kind || mutedKinds.includes(kind)) {
+    if (!kind || mutedKinds.includes(kind) || saveMutedKindsMutation.isPending) {
       return;
     }
     void saveMutedKindsMutation
@@ -539,7 +539,7 @@ export function NotificationsPage() {
         setFeedback({
           tone: "success",
           title: "Tipo silenciado",
-          description: "Ya no veras notificaciones de este tipo. Puedes reactivarlo desde los chips de silenciados.",
+          description: "Este tipo se ocultará en esta bandeja. Puedes volver a mostrarlo desde Silenciados.",
         }),
       )
       .catch((error) =>
@@ -552,7 +552,12 @@ export function NotificationsPage() {
   }
 
   function handleUnmuteKind(kind: string) {
-    void saveMutedKindsMutation.mutateAsync(mutedKinds.filter((muted) => muted !== kind));
+    if (saveMutedKindsMutation.isPending) return;
+    void saveMutedKindsMutation.mutateAsync(mutedKinds.filter((muted) => muted !== kind)).then(() => {
+      setFeedback({ tone: "success", title: "Tipo reactivado", description: "Las notificaciones de este tipo vuelven a mostrarse en la bandeja." });
+    }).catch((error) => {
+      setFeedback({ tone: "error", title: "No pudimos reactivar el tipo", description: getQueryErrorMessage(error, "Inténtalo de nuevo.") });
+    });
   }
 
   async function handleUndoRead() {
@@ -861,6 +866,7 @@ export function NotificationsPage() {
                     acceptingId={acceptingId}
                     decliningId={decliningId}
                     isUpdatingReadState={isUpdatingReadState}
+                    isUpdatingMutedKinds={saveMutedKindsMutation.isPending}
                     key={notification.id}
                     notification={notification}
                     onAccept={(item) => void handleAcceptInvite(item)}
