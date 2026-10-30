@@ -265,7 +265,10 @@ function WorkspacePicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false), true);
+  const containerRef = useOutsidePointerClose(isOpen, () => setIsOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const showSearch = workspaces.length > 3;
   const selectedWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
     [activeWorkspaceId, workspaces],
@@ -287,18 +290,27 @@ function WorkspacePicker({
   useEffect(() => {
     if (isOpen) {
       setQuery("");
+      menuRef.current?.querySelector<HTMLElement>("input, button")?.focus();
     }
   }, [isOpen]);
 
   return (
-    <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef}>
+    <div className={`relative ${isOpen ? "z-50" : "z-10"}`} ref={containerRef} onKeyDown={(event) => {
+      if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    }}>
       <button
         aria-expanded={isOpen}
-        aria-haspopup="listbox"
+        aria-controls="workspace-picker-menu"
         aria-label="Seleccionar espacio activo"
-        className={`flex h-[52px] w-full items-center justify-between gap-3 rounded-[9px] border border-white/[0.07] bg-[#1a1917] px-3 text-left text-ink transition hover:border-white/15 ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        className={`flex min-h-[52px] w-full items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-[#1a1917] px-3 text-left text-ink transition hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
+        ref={triggerRef}
         type="button"
       >
         <span className="flex min-w-0 items-center gap-2.5">
@@ -322,20 +334,20 @@ function WorkspacePicker({
       </button>
 
       {isOpen ? (
-        <div className="animate-rise-in absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 rounded-[12px] border border-white/10 bg-[#1a1917] p-3 shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 rounded-xl border border-white/10 bg-[#1a1917] p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.45)] motion-safe:animate-rise-in" id="workspace-picker-menu" ref={menuRef}>
+          {showSearch ? <div className="relative mb-1.5">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-storm" />
             <input
-              autoFocus
-              className="w-full rounded-[8px] border border-white/10 bg-[#141312] py-3 pl-11 pr-4 text-sm text-ink outline-none transition placeholder:text-storm/70 focus:border-white/25"
+              aria-label="Buscar espacios"
+              className="w-full rounded-lg border border-white/10 bg-[#141312] py-2.5 pl-9 pr-3 text-sm text-ink outline-none placeholder:text-storm/70 focus:border-pine/60"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar espacio..."
               type="text"
               value={query}
             />
-          </div>
+          </div> : null}
 
-          <div aria-label="Lista de espacios" className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1" role="listbox">
+          <div aria-label="Espacios disponibles" className="max-h-72 space-y-0.5 overflow-y-auto" role="group">
             {filteredWorkspaces.length ? (
               filteredWorkspaces.map((workspace) => {
                 const isSelected = workspace.id === activeWorkspaceId;
@@ -343,14 +355,14 @@ function WorkspacePicker({
 
                 return (
                   <button
-                    aria-selected={isSelected}
-                    className="flex w-full items-center justify-between gap-3 rounded-[16px] border border-white/5 bg-white/[0.03] px-3.5 py-2.5 text-left transition duration-200 hover:border-white/10 hover:bg-white/[0.06]"
+                    aria-current={isSelected ? "true" : undefined}
+                    className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine ${isSelected ? "bg-white/[0.04]" : ""}`}
                     key={workspace.id}
                     onClick={() => {
                       onChange(workspace.id);
                       setIsOpen(false);
+                      triggerRef.current?.focus();
                     }}
-                    role="option"
                     type="button"
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
@@ -367,8 +379,8 @@ function WorkspacePicker({
                         <span className="block truncate text-sm font-medium text-ink">
                           {workspace.name}
                         </span>
-                        <span className="block truncate text-[0.65rem] text-storm">
-                          {getWorkspaceKindLabel(workspace.kind)} · {getWorkspaceRoleLabel(workspace.role)} · {workspace.baseCurrencyCode}
+                        <span className="block text-[0.68rem] leading-4 text-storm">
+                          {getWorkspaceKindLabel(workspace.kind)} · {getWorkspaceRoleLabel(workspace.role)}
                         </span>
                       </span>
                     </span>
@@ -377,8 +389,8 @@ function WorkspacePicker({
                 );
               })
             ) : (
-              <div className="rounded-[22px] border border-white/8 bg-[#0f1826] px-4 py-5 text-sm text-storm">
-                No encontramos workspaces con ese nombre.
+              <div className="px-3 py-4 text-sm text-storm">
+                No encontramos espacios con ese nombre.
               </div>
             )}
           </div>
