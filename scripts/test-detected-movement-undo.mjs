@@ -6,10 +6,11 @@ import { requestDetectedRegistrationUndo } from "../src/modules/notifications/li
 
 // Postgres in memory only. Never reads project credentials or connects to Supabase.
 const migrationPath = "supabase/migrations/202610090002_detected_movement_undo.sql";
-const migration = readFileSync(resolve(migrationPath), "utf8");
-assert.equal(migration, readFileSync(resolve("../DarkMoneyApp", migrationPath), "utf8"), "Both clients must ship the same RPC");
-assert.equal(readFileSync("src/modules/notifications/lib/detection-undo.ts", "utf8"),
-  readFileSync("../DarkMoneyApp/features/detected-movements/lib/detection-undo.ts", "utf8"), "Both clients must use the same Undo contract");
+const readComparable = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+const migration = readComparable(resolve(migrationPath));
+assert.equal(migration, readComparable(resolve("../DarkMoneyApp", migrationPath)), "Both clients must ship the same RPC");
+assert.equal(readComparable("src/modules/notifications/lib/detection-undo.ts"),
+  readComparable("../DarkMoneyApp/features/detected-movements/lib/detection-undo.ts"), "Both clients must use the same Undo contract");
 const db = new PGlite();
 const uid = "11111111-1111-1111-1111-111111111111";
 const other = "22222222-2222-2222-2222-222222222222";
