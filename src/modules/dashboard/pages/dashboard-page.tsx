@@ -30,6 +30,7 @@ import {
 } from "../../../services/queries/workspace-data";
 import type { MovementRecord } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
+import { DashboardDetectedMovements } from "../components/dashboard-detected-movements";
 import {
   DashboardHelpProvider,
   DashboardHelpTrigger,
@@ -1927,6 +1928,7 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
+        <DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />
           </>} />
         {notificationDayDialog}
       </div>
