@@ -24,7 +24,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useOutsidePointerClose } from "../../hooks/use-outside-pointer-close";
@@ -417,10 +417,16 @@ function AppShellContent() {
   const [isProBannerDismissed, setIsProBannerDismissed] = useState(false);
   const [isOpeningProCheckout, setIsOpeningProCheckout] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const { showToast } = useToast();
+  const { showToast, dismissToast } = useToast();
   const navigate = useNavigate();
   const { profile, saveAvatar, signOut, user } = useAuth();
+  const currentUserIdRef = useRef(user?.id);
+  currentUserIdRef.current = user?.id;
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
+  useEffect(() => {
+    document.documentElement.style.setProperty("--toast-content-left", isSidebarCollapsed ? "68px" : "232px");
+    return () => { document.documentElement.style.removeProperty("--toast-content-left"); };
+  }, [isSidebarCollapsed]);
   const toggleSidebarCollapsed = useWorkspaceStore((state) => state.toggleSidebarCollapsed);
   const {
     activeWorkspace,
@@ -541,6 +547,8 @@ function AppShellContent() {
       return;
     }
 
+    const initiatingUserId = user?.id;
+    const progressId = showToast({ title: "Actualizando foto", description: "Actualizando tu foto de perfil…", tone: "progress" });
     try {
       setIsUploadingAvatar(true);
       await saveAvatar(file);
@@ -554,8 +562,13 @@ function AppShellContent() {
         title: "No pudimos actualizar la foto",
         description: getQueryErrorMessage(error, "Intenta de nuevo con otra imagen."),
         tone: "error",
+        action: { label: "Reintentar", onClick: () => {
+          if (initiatingUserId && currentUserIdRef.current === initiatingUserId) void handleAvatarChange(file);
+          else showToast({ title: "La sesión cambió", description: "Selecciona la foto otra vez para la cuenta actual.", tone: "error" });
+        } },
       });
     } finally {
+      dismissToast(progressId);
       setIsUploadingAvatar(false);
     }
   }

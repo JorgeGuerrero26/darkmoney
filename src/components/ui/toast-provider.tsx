@@ -1,20 +1,25 @@
-import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
-import type { CSSProperties, PropsWithChildren } from "react";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Check, Info, LoaderCircle, Trash2, X } from "lucide-react";
+import type { PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { appendToast, visibleStack } from "./toast-stack";
 
-type ToastTone = "success" | "error" | "info";
+type ToastTone = "success" | "error" | "info" | "undo" | "progress";
 
 type ToastInput = {
   title: string;
   description: string;
   tone?: ToastTone;
   duration?: number;
+  action?: { label: string; onClick: () => void };
+  onPause?: () => void;
+  onResume?: () => void;
 };
 
 type ToastRecord = Required<Pick<ToastInput, "duration" | "tone">> &
   Omit<ToastInput, "duration" | "tone"> & {
     id: string;
     isLeaving: boolean;
+    count?: number;
   };
 
 type ToastContextValue = {
@@ -38,40 +43,10 @@ type UseSuccessToastOptions = {
   title?: string;
 };
 
-const DEFAULT_DURATION = 4_600;
-const EXIT_DURATION = 240;
+const DEFAULT_DURATION = 4_000;
+const EXIT_DURATION = 150;
 
 const ToastContext = createContext<ToastContextValue | null>(null);
-
-const toneStyles = {
-  error: {
-    badge: "border-[#f27a86]/22 bg-[#f27a86]/12 text-[#ffb4bc]",
-    container:
-      "border-[#f27a86]/18 bg-[linear-gradient(135deg,rgba(47,18,24,0.95),rgba(16,12,22,0.94))]",
-    glow: "bg-[#f27a86]/18",
-    icon: AlertTriangle,
-    iconContainer: "border-[#f27a86]/24 bg-[#f27a86]/12 text-[#ffb4bc]",
-    progress: "bg-[#ff9ca6]",
-  },
-  info: {
-    badge: "border-[#7aa2ff]/22 bg-[#7aa2ff]/12 text-[#d1dcff]",
-    container:
-      "border-[#7aa2ff]/18 bg-[linear-gradient(135deg,rgba(16,28,54,0.95),rgba(9,13,24,0.94))]",
-    glow: "bg-[#7aa2ff]/18",
-    icon: Info,
-    iconContainer: "border-[#7aa2ff]/24 bg-[#7aa2ff]/12 text-[#d1dcff]",
-    progress: "bg-[#9eb8ff]",
-  },
-  success: {
-    badge: "border-[#6be4c5]/24 bg-[#6be4c5]/12 text-[#9af2dc]",
-    container:
-      "border-[#6be4c5]/18 bg-[linear-gradient(135deg,rgba(14,39,36,0.95),rgba(9,14,22,0.94))]",
-    glow: "bg-[#6be4c5]/18",
-    icon: CheckCircle2,
-    iconContainer: "border-[#6be4c5]/24 bg-[#6be4c5]/12 text-[#9af2dc]",
-    progress: "bg-[#8ef0d6]",
-  },
-} as const;
 
 function createToastId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -122,9 +97,13 @@ export function ToastProvider({ children }: PropsWithChildren) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const dismissTimersRef = useRef(new Map<string, number>());
   const removeTimersRef = useRef(new Map<string, number>());
+  const remainingRef = useRef(new Map<string, { remaining: number; started: number }>());
+  const interactingRef = useRef(new Set<string>());
 
-  function dismissToast(id: string) {
+  const dismissToast = useCallback((id: string) => {
     clearScheduledTimer(dismissTimersRef.current, id);
+    remainingRef.current.delete(id);
+    interactingRef.current.delete(id);
 
     setToasts((currentToasts) =>
       currentToasts.map((toast) =>
@@ -140,40 +119,79 @@ export function ToastProvider({ children }: PropsWithChildren) {
     }, EXIT_DURATION);
 
     removeTimersRef.current.set(id, removeTimer);
-  }
+  }, []);
 
-  function showToast({
+  const resumeToast = useCallback((id: string) => {
+    const timer = remainingRef.current.get(id);
+    if (!timer || dismissTimersRef.current.has(id)) return;
+    timer.started = Date.now();
+    dismissTimersRef.current.set(id, window.setTimeout(() => dismissToast(id), timer.remaining));
+  }, [dismissToast]);
+
+  const pauseToast = useCallback((id: string) => {
+    const timer = remainingRef.current.get(id);
+    if (!timer || !dismissTimersRef.current.has(id)) return;
+    timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.started));
+    clearScheduledTimer(dismissTimersRef.current, id);
+  }, []);
+
+  const showToast = useCallback(({
     description,
-    duration = DEFAULT_DURATION,
+    duration,
     title,
     tone = "success",
-  }: ToastInput) {
+    action,
+    onPause,
+    onResume,
+  }: ToastInput) => {
     const id = createToastId();
+    const effectiveDuration = duration ?? (tone === "error" || tone === "progress" || tone === "undo" ? 0 : DEFAULT_DURATION);
 
-    setToasts((currentToasts) => [
-      ...currentToasts.slice(-3),
-      {
+    setToasts((currentToasts) => appendToast(currentToasts, {
         id,
         title,
         description,
-        duration,
+        duration: effectiveDuration,
         tone,
+        action,
+        onPause,
+        onResume,
         isLeaving: false,
-      },
-    ]);
+      }));
 
-    if (duration > 0) {
-      clearScheduledTimer(dismissTimersRef.current, id);
-
-      const dismissTimer = window.setTimeout(() => {
-        dismissToast(id);
-      }, duration);
-
-      dismissTimersRef.current.set(id, dismissTimer);
+    if (effectiveDuration > 0) {
+      remainingRef.current.set(id, { remaining: effectiveDuration, started: Date.now() });
+      resumeToast(id);
     }
 
     return id;
-  }
+  }, [resumeToast]);
+
+  // Keep actionable messages in the queue. Hidden undo actions must not expire
+  // before the user has had the opportunity to see and cancel them.
+  const visibleToasts = visibleStack(toasts);
+  const visibleIds = visibleToasts.map((toast) => toast.id).join("|");
+  useEffect(() => {
+    const visible = new Set(visibleIds ? visibleIds.split("|") : []);
+    const current = new Set(toasts.map((toast) => toast.id));
+    for (const id of remainingRef.current.keys()) {
+      if (!current.has(id)) {
+        clearScheduledTimer(dismissTimersRef.current, id);
+        remainingRef.current.delete(id);
+      }
+    }
+    for (const toast of toasts) {
+      if (toast.isLeaving) continue;
+      if (visible.has(toast.id) && !interactingRef.current.has(toast.id)) {
+        resumeToast(toast.id);
+        toast.onResume?.();
+      } else if (!visible.has(toast.id)) {
+        interactingRef.current.delete(toast.id);
+        pauseToast(toast.id);
+        toast.onPause?.();
+      }
+    }
+  }, [toasts, visibleIds, pauseToast, resumeToast]);
 
   useEffect(() => {
     return () => {
@@ -181,6 +199,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
       removeTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       dismissTimersRef.current.clear();
       removeTimersRef.current.clear();
+      remainingRef.current.clear();
     };
   }, []);
 
@@ -190,61 +209,25 @@ export function ToastProvider({ children }: PropsWithChildren) {
       <div
         aria-atomic="false"
         aria-live="polite"
-        className="pointer-events-none fixed right-4 top-4 z-[120] flex w-[min(26rem,calc(100vw-2rem))] flex-col gap-3 sm:right-6 sm:top-6"
+        className="pointer-events-none fixed inset-x-4 top-[76px] z-[120] flex flex-col items-center gap-2 lg:left-[var(--toast-content-left,232px)] lg:right-0"
       >
-        {toasts.map((toast) => {
-          const toneStyle = toneStyles[toast.tone];
-          const Icon = toneStyle.icon;
-          const progressStyle = {
-            animationDuration: `${toast.duration}ms`,
-          } satisfies CSSProperties;
+        {visibleToasts.map((toast, index) => {
+          const Icon = toast.tone === "success" ? Check : toast.tone === "undo" ? Trash2 : toast.tone === "progress" ? LoaderCircle : Info;
 
           return (
             <div
-              className={`pointer-events-auto relative overflow-hidden rounded-[28px] border px-4 py-4 shadow-[0_26px_80px_rgba(0,0,0,0.34)] backdrop-blur-2xl sm:px-5 ${toneStyle.container} ${toast.isLeaving ? "animate-toast-out" : "animate-rise-in"}`}
+              className={`pointer-events-auto flex max-w-full items-center gap-3 rounded-[22px] border bg-[#2a2825] px-4 py-2.5 text-sm text-ink shadow-[0_12px_36px_rgba(0,0,0,0.3)] motion-safe:animate-rise-in ${toast.tone === "error" ? "border-[#ea7770]/40" : "border-white/10"} ${toast.isLeaving ? "opacity-0 transition-opacity duration-150" : index === 1 ? "opacity-70" : ""}`}
               key={toast.id}
-              role="status"
+              role={toast.tone === "error" ? "alert" : "status"}
+              onMouseEnter={() => { interactingRef.current.add(toast.id); pauseToast(toast.id); toast.onPause?.(); }}
+              onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) { interactingRef.current.delete(toast.id); resumeToast(toast.id); toast.onResume?.(); } }}
+              onFocus={() => { interactingRef.current.add(toast.id); pauseToast(toast.id); toast.onPause?.(); }}
+              onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(":hover")) { interactingRef.current.delete(toast.id); resumeToast(toast.id); toast.onResume?.(); } }}
             >
-              <div className="pointer-events-none absolute inset-0">
-                <div className={`absolute -left-12 top-0 h-28 w-28 rounded-full blur-3xl ${toneStyle.glow}`} />
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_58%)]" />
-              </div>
-
-              <div className="relative flex items-start gap-4">
-                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[18px] border ${toneStyle.iconContainer}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em] ${toneStyle.badge}`}>
-                      {toast.tone === "error" ? "Atención" : toast.tone === "info" ? "Aviso" : "Confirmado"}
-                    </span>
-                  </div>
-                  <p className="mt-3 font-display text-xl font-semibold text-ink sm:text-2xl">
-                    {toast.title}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-storm">{toast.description}</p>
-                </div>
-
-                <button
-                  aria-label="Cerrar notificación"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-storm transition duration-200 hover:border-white/16 hover:bg-white/[0.08] hover:text-ink"
-                  onClick={() => dismissToast(toast.id)}
-                  type="button"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {toast.duration > 0 ? (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] overflow-hidden">
-                  <div
-                    className={`h-full origin-left ${toneStyle.progress} ${toast.isLeaving ? "" : "animate-toast-progress"}`}
-                    style={progressStyle}
-                  />
-                </div>
-              ) : null}
+              <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${toast.tone === "progress" ? "animate-spin motion-reduce:animate-none" : ""} ${toast.tone === "error" ? "text-[#ee7971]" : toast.tone === "success" ? "text-[#84cba0]" : "text-storm"}`} />
+              <p className="min-w-0 font-semibold">{toast.count && toast.count > 1 ? `${toast.count} veces: ` : ""}{toast.tone === "success" || toast.tone === "undo" || toast.tone === "progress" ? toast.description : <>{toast.title}. <span className="font-normal text-storm">{toast.description}</span></>}</p>
+              {toast.action ? <button className="shrink-0 rounded-full bg-white/[0.08] px-3 py-1 font-semibold hover:bg-white/[0.14]" onClick={() => { toast.action?.onClick(); if (toast.tone !== "undo") dismissToast(toast.id); }} type="button">{toast.action.label}</button> : null}
+              {toast.tone === "error" ? <button aria-label="Cerrar notificación" className="shrink-0 rounded-full p-1 text-storm hover:text-ink" onClick={() => dismissToast(toast.id)} type="button"><X className="h-4 w-4" /></button> : null}
             </div>
           );
         })}
