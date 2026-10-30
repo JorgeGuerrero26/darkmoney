@@ -29,7 +29,7 @@ const expectedHabits = phoneCluster.buildPatternClusters(clusterOptions).map(clu
 assert.deepEqual(model.habits.map(row=>[row.title,row.count,row.total,row.average,row.movementIds]),expectedHabits.map(row=>[row.title,row.count,row.total,row.average,row.movementIds]));
 const weekly = phoneView.weeklySpendPattern(movements,getAmount,now);
 for(let i=0;i<7;i++)for(const key of ["total","average","count"])assert.equal(model.weekdays[i][key],weekly.days[i][key]);
-const env = {...dates,...aggregations,Date:Clock,movements,categoryMap,accountCurrencyMap:ctx.accountCurrencyMap,exchangeRateMap:ctx.exchangeRateMap,activeCurrency:"PEN",baseCurrency:"PEN"};
+const env = {...dates,...aggregations,Date:Clock,movements,patternMovements:movements,categoryMap,accountCurrencyMap:ctx.accountCurrencyMap,exchangeRateMap:ctx.exchangeRateMap,activeCurrency:"PEN",baseCurrency:"PEN"};
 const callback = ts.transpileModule(`const run=${riseCallback};`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 const expectedRises = new Function(...Object.keys(env),`${callback};return run();`)(...Object.values(env));
 assert.deepEqual(model.rises,expectedRises.map(({pct,...row})=>row));

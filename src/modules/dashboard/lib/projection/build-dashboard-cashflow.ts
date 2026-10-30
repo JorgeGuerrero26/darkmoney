@@ -70,7 +70,7 @@ export function buildDashboardCashflow(
   };
   const accountTypes = new Map(snapshot.accounts.map(a => [a.id, a.type]));
   const plannedMovements = snapshot.movements.flatMap(movement => {
-    if (movement.status !== "planned" || new Date(movement.occurredAt) <= actualNow) return [];
+    if (movement.status !== "planned" || isHistoryBalanceCorrection(movement) || new Date(movement.occurredAt) <= actualNow) return [];
     const effect = plannedCashEffect(movement, accountTypes);
     if (!effect) return [];
     return [{

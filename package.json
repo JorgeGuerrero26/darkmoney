@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:google-sign-in": "node --experimental-strip-types scripts/test-google-sign-in.mjs",
     "check:dashboard-help": "node scripts/check-dashboard-help-keys.mjs",
     "test:public-demo-copy": "node scripts/test-public-demo-copy.mjs",
     "test:parity": "tsc -p tsconfig.parity-tests.json && node scripts/run-parity-smoke.mjs",

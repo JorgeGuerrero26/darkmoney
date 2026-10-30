@@ -5,6 +5,7 @@ import type { PropsWithChildren } from "react";
 import { getPublicAppUrl } from "../../lib/app-url";
 import { deleteAvatar, uploadAvatar } from "./avatar-utils";
 import { supabase, isSupabaseConfigured } from "../../services/supabase/client";
+import { buildGoogleRedirectUrl } from "./google-sign-in";
 
 type ProfileRow = {
   id: string;
@@ -43,6 +44,8 @@ type AuthContextValue = {
   user: User | null;
   profile: AppProfile | null;
   signIn: (email: string, password: string) => Promise<void>;
+  /** Va a Google y vuelve a /auth/login (con `next` si lo hay); la sesión la recoge supabase-js al volver. */
+  signInWithGoogle: (nextPath?: string | null) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
@@ -250,6 +253,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setUser(data.user);
   }
 
+  async function signInWithGoogle(nextPath?: string | null) {
+    if (!supabase) {
+      throw new Error("Supabase no esta configurado.");
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: buildGoogleRedirectUrl(window.location.origin, nextPath),
+        // Que Google pregunte siempre qué cuenta usar (quien tiene varias no entra con la equivocada sin darse cuenta).
+        queryParams: { prompt: "select_account" },
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+  }
+
   async function signUp(input: SignUpInput) {
     if (!supabase) {
       throw new Error("Supabase no esta configurado.");
@@ -426,6 +448,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     user,
     profile,
     signIn,
+    signInWithGoogle,
     signUp,
     resetPassword,
     updatePassword,
