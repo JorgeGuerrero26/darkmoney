@@ -8,6 +8,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { InlineFormError } from "../../../components/ui/inline-form-error";
 import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
+import { GoogleSignInButton } from "../components/google-sign-in-button";
 import { isInvitePath, resolvePostAuthPath } from "../invite-resume";
 
 const REMEMBER_EMAIL_KEY = "dm_remembered_email";
@@ -157,6 +158,8 @@ export function LoginPage() {
           )}
         </Button>
       </form>
+
+      <GoogleSignInButton disabled={!isConfigured || isSubmitting} nextPath={nextPath ? resolvedNextPath : null} />
 
       <p className="text-sm text-[#a39c90]">
         ¿No tienes cuenta?{" "}

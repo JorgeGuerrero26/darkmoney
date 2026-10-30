@@ -8,6 +8,7 @@ import { InlineFormError } from "../../../components/ui/inline-form-error";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { translateAuthError } from "../auth-errors";
 import { useAuth } from "../auth-context";
+import { GoogleSignInButton } from "../components/google-sign-in-button";
 import { resolvePostAuthPath } from "../invite-resume";
 
 export function RegisterPage() {
@@ -154,6 +155,8 @@ export function RegisterPage() {
           )}
         </Button>
       </form>
+
+      <GoogleSignInButton disabled={!isConfigured || isSubmitting} nextPath={nextPath ? resolvedNextPath : null} />
 
       <div className="text-sm text-[#a39c90]">
         <span>¿Ya tienes cuenta? </span>
