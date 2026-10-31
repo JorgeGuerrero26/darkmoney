@@ -44,5 +44,21 @@ assert.doesNotMatch(container.textContent, /Disponible hoy/);
 await act(async () => button(container, "Simple").click());
 assert.match(container.textContent, /Disponible hoy · Resumen financiero/);
 await act(async () => integrated.unmount());
+const { DashboardCurrencyControl } = await import(load("src/modules/dashboard/components/dashboard-currency-control.tsx"));
+const currencies = createRoot(container);
+const currencyChanges = [];
+const options = ["PEN", "USD"].map(value => ({ value, label: value }));
+const renderCurrencies = async extra => act(async () => currencies.render(React.createElement(DashboardCurrencyControl, {
+  accountCurrencies: ["PEN", "USD"], options, value: "PEN", onChange: value => currencyChanges.push(value), ...extra,
+})));
+await renderCurrencies({ accountCurrencies: ["pen", "PEN"] });
+assert.equal(container.querySelector('[aria-label="Moneda de visualización"]'), null);
+await renderCurrencies({ options: options.slice(0, 1) });
+assert.equal(container.querySelector('[aria-label="Moneda de visualización"]'), null);
+await renderCurrencies();
+assert.equal(button(container, "PEN").getAttribute("aria-pressed"), "true");
+await act(async () => button(container, "USD").click());
+assert.deepEqual(currencyChanges, ["USD"]);
+await act(async () => currencies.unmount());
 container.remove(); dom.window.close();
 console.log("Dashboard header: greeting, mode switching and Pro access passed.");

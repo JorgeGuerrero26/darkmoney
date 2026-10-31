@@ -17,6 +17,7 @@ import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner"
 import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
 import { SegmentedControl as PillControl } from "../../../components/ui/segmented-control";
+import { DashboardCurrencyControl } from "../components/dashboard-currency-control";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -1662,6 +1663,8 @@ export function DashboardPage() {
       <div className="flex flex-col gap-7 pb-8">
         <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
           canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess} onChange={handleDashboardModeChange} />
+        <DashboardCurrencyControl accountCurrencies={snapshot.accounts.filter(account => !account.isArchived && account.includeInNetWorth).map(account => account.currencyCode)}
+          options={dashboardCurrencyOptions} value={displayCurrencyCode} onChange={setDisplayCurrencyCode} />
 
         <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard && effectiveDashboardMode === "advanced"}
           patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
