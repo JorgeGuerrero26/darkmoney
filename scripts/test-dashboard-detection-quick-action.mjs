@@ -1,0 +1,25 @@
+import assert from "node:assert/strict";
+import { React, act, dom, load, mock, createRoot, button } from "./lib/web-ui-harness.mjs";
+mock("src/services/supabase/client.ts", "export const supabase={};");
+mock("src/services/queries/detection-duplicates.ts", "export const createDetectedDuplicateChecker=()=>({check:()=>globalThis.quickCheck()});");
+mock("src/services/queries/workspace-data.ts", "export const useCreateMovementMutation=()=>({mutateAsync:(value)=>globalThis.quickCreate(value)});");
+mock("src/components/ui/toast-provider.tsx", "export const useToast=()=>({showToast:value=>globalThis.quickToasts.push(value)});");
+mock("src/stores/workspace-store.ts", "export const useWorkspaceStore={getState:()=>({activeWorkspaceId:globalThis.quickWorkspace})};");
+const { DashboardDetectionQuickAction } = await import(load("src/modules/dashboard/components/dashboard-detection-quick-action.tsx"));
+const suggestion = { id: 4, userId: "u", workspaceId: 8, status: "pending", movementType: "expense", amount: 12.5, currencyCode: "PEN", description: "Compra", occurredAt: "2026-10-20T13:40:50Z", updatedAt: "2026-10-20T13:45:00Z", financialAppKey: "bank", metadata: { accountId: 1, categoryId: 2 } };
+const snapshot = { workspace: { id: 8 }, accounts: [{ id: 1, name: "Principal", workspaceId: 8, currencyCode: "PEN", isArchived: false }], catalogs: { categories: [{ id: 2, name: "Comida", kind: "expense", isActive: true }] } };
+globalThis.quickWorkspace = 8; globalThis.quickToasts = []; let writes = 0, saved = [], invalidations = 0, allowed = false;
+globalThis.quickCheck = async () => ({ allowed }); globalThis.quickCreate = async () => { writes++; return 44; };
+const store = { register: async (_id, input, _accounts, create, check) => { await check(suggestion, null); return { movementId: await create(input), readingUpdated: true }; } };
+const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
+const props = { suggestion, snapshot, userId: "u", settings: [], store, enabled: true, proAccessEnabled: true, onSaved: id => saved.push(id), invalidateFinances: async () => { invalidations++; } };
+async function render(extra = {}) { await act(async () => renderer.render(React.createElement(DashboardDetectionQuickAction, { ...props, ...extra }))); }
+await render({ enabled: false }); assert.equal(container.innerHTML, ""); await render(); assert.match(container.textContent, /Principal/); assert.match(container.textContent, /Comida/);
+await act(async () => button(container, "Guardar").click()); assert.equal(writes, 0); assert.match(container.querySelector('[role="alert"]').textContent, /posible coincidencia/); assert.equal(saved.length, 0);
+allowed = true; globalThis.quickWorkspace = 9; await act(async () => button(container, "Reintentar").click()); assert.equal(writes, 0); assert.match(container.querySelector('[role="alert"]').textContent, /Cambió el espacio/);
+globalThis.quickWorkspace = 8; await act(async () => button(container, "Reintentar").click()); assert.equal(writes, 1); assert.deepEqual(saved, [4]); assert.equal(globalThis.quickToasts.at(-1).title, "Movimiento guardado"); assert.ok(invalidations >= 1);
+let finishCheck; globalThis.quickCheck = () => new Promise(resolve => { finishCheck = resolve; });
+await act(async () => { button(container, "Guardar").click(); }); assert.equal(button(container, "Guardando…").disabled, true);
+await act(async () => { button(container, "Guardando…").click(); }); assert.equal(writes, 1);
+await act(async () => { finishCheck({ allowed: true }); }); assert.equal(writes, 2);
+await act(async () => renderer.unmount()); container.remove(); dom.window.close(); console.log("Dashboard detection quick action: duplicate, scope and successful save passed.");
