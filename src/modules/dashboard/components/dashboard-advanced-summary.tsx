@@ -29,7 +29,7 @@ export function DashboardAdvancedSummary({ cashflow, currency, ready, failed, sc
       </button>)}
     </div>
     <div className="grid items-start gap-5 lg:grid-cols-[1.35fr_1fr]">
-      <div>{detections}</div><div className="space-y-4">
+      <div className="empty:hidden">{detections}</div><div className="space-y-4">
         {uncategorized > 0 ? <Link to="/app/movements" className="block rounded-[14px] border border-white/[0.08] bg-[#1a1917] p-5"><span className="text-xs uppercase tracking-wider text-storm">Siguiente paso</span><span className="mt-2 block font-semibold text-ink">Ordenar categorías</span><span className="mt-1 block text-sm text-storm">{uncategorized} movimientos sin categoría.</span></Link> : null}
         {ai ? <details className="rounded-[14px] border border-white/[0.08] bg-[#1a1917] p-5"><summary className="cursor-pointer font-semibold text-ink">Informe con IA</summary><div className="mt-4">{ai}</div></details> : null}
       </div>

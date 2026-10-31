@@ -1705,6 +1705,7 @@ export function DashboardPage() {
             value={comparisonPreset}
           />
         </section>
+        <DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -1935,7 +1936,6 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
-        <DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />
           </>} />
         {notificationDayDialog}
       </div>
