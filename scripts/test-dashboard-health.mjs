@@ -127,7 +127,8 @@ const { DashboardHealthPanel } = await import(load("src/modules/dashboard/compon
 const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
 const render = async m => act(async () => renderer.render(React.createElement(DashboardHealthPanel, { model: m, currency: "PEN" })));
 await render(model); assert.match(container.textContent, /69.0%/); assert.match(container.textContent, /62.5%/); assert.match(container.textContent, /1 de 2/); assert.equal(container.querySelectorAll("tbody tr").length, 7);
-await render(empty); assert.match(container.querySelector('[aria-label="Nota de salud"]').textContent, /—/); assert.doesNotMatch(container.textContent, /Finanzas en buen estado/);
+await render({ ...model, collection: { ...model.collection, rate: 0, resolved: 0 } }); assert.match(container.textContent, /Cobros resueltos/); assert.match(container.textContent, /0%/);
+await render(empty); assert.doesNotMatch(container.textContent, /Cobros resueltos/); assert.match(container.querySelector('[aria-label="Nota de salud"]').textContent, /—/); assert.doesNotMatch(container.textContent, /Finanzas en buen estado/);
 await render(unread); assert.match(container.textContent, /Sin comprobar/); assert.doesNotMatch(container.textContent, /2 de 3/);
 await render(unknownDebt); assert.match(container.querySelector('[role="status"]').textContent, /1 deudas/);
 const page = readFileSync(resolve(root, "src/modules/dashboard/pages/dashboard-page.tsx"), "utf8");
