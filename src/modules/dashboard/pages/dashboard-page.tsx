@@ -1662,25 +1662,6 @@ export function DashboardPage() {
       <div className="flex flex-col gap-7 pb-8">
         <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
           canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess} onChange={handleDashboardModeChange} />
-        <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-medium text-storm">Disponible hoy</p>
-            <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
-              {formatCurrency(cashflow.liquid.total, displayCurrencyCode)}
-            </p>
-            <p className="mt-3 text-sm text-storm">
-              En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. Este período entraron{" "}
-              <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> y salieron{" "}
-              <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>.
-            </p>
-          </div>
-          <PillControl
-            ariaLabel="Período de comparación"
-            onChange={setComparisonPreset}
-            options={comparisonOptions}
-            value={comparisonPreset}
-          />
-        </section>
 
         <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard && effectiveDashboardMode === "advanced"}
           patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
@@ -1700,6 +1681,25 @@ export function DashboardPage() {
               ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
               canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} />}
           summary={<>
+        <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-medium text-storm">Disponible hoy</p>
+            <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
+              {formatCurrency(cashflow.liquid.total, displayCurrencyCode)}
+            </p>
+            <p className="mt-3 text-sm text-storm">
+              En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. Este período entraron{" "}
+              <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> y salieron{" "}
+              <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>.
+            </p>
+          </div>
+          <PillControl
+            ariaLabel="Período de comparación"
+            onChange={setComparisonPreset}
+            options={comparisonOptions}
+            value={comparisonPreset}
+          />
+        </section>
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>

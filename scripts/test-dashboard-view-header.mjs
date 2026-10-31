@@ -31,7 +31,7 @@ function DashboardProbe() {
   return React.createElement(React.Fragment, null,
     React.createElement(DashboardViewHeader, { name: "Adrian", mode, canUseAdvanced: true, checkingAccess: false, onChange: setMode }),
     React.createElement(DashboardAnalysisSections, {
-      enabled: mode === "advanced", summary: "Resumen financiero", patterns: () => "Patrones disponibles",
+      enabled: mode === "advanced", summary: "Disponible hoy · Resumen financiero", patterns: () => "Patrones disponibles",
       flow: () => "Flujo", history: () => "Historial", health: () => "Salud",
     }));
 }
@@ -40,8 +40,9 @@ assert.equal([...container.querySelectorAll("button")].some((node) => node.textC
 await act(async () => button(container, "Avanzado").click());
 await act(async () => button(container, "Patrones").click());
 assert.match(container.textContent, /Patrones disponibles/);
+assert.doesNotMatch(container.textContent, /Disponible hoy/);
 await act(async () => button(container, "Simple").click());
-assert.match(container.textContent, /Resumen financiero/);
+assert.match(container.textContent, /Disponible hoy · Resumen financiero/);
 await act(async () => integrated.unmount());
 container.remove(); dom.window.close();
 console.log("Dashboard header: greeting, mode switching and Pro access passed.");
