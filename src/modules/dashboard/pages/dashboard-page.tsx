@@ -31,6 +31,7 @@ import {
 import type { MovementRecord } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { DashboardDetectedMovements } from "../components/dashboard-detected-movements";
+import { DashboardViewHeader } from "../components/dashboard-view-header";
 import {
   DashboardHelpProvider,
   DashboardHelpTrigger,
@@ -1659,7 +1660,8 @@ export function DashboardPage() {
   if (comparisonOptions.length > 0) {
     return (
       <div className="flex flex-col gap-7 pb-8">
-        <h1 className="sr-only">Inicio</h1>
+        <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
+          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess} onChange={handleDashboardModeChange} />
         <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
@@ -1680,7 +1682,7 @@ export function DashboardPage() {
           />
         </section>
 
-        <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard}
+        <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard && effectiveDashboardMode === "advanced"}
           patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
             userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
             ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
