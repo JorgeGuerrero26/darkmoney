@@ -18,6 +18,7 @@ import { InfoTip } from "../../../components/ui/info-tip";
 import { PageHeader } from "../../../components/ui/page-header";
 import { SegmentedControl as PillControl } from "../../../components/ui/segmented-control";
 import { DashboardCurrencyControl } from "../components/dashboard-currency-control";
+import { DashboardLiquidAmount } from "../components/dashboard-liquid-amount";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -1688,7 +1689,7 @@ export function DashboardPage() {
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
             <p className="mt-2 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.045em] text-ink">
-              {formatCurrency(cashflow.liquid.total, displayCurrencyCode)}
+              <DashboardLiquidAmount amount={cashflow.liquid.total} currency={displayCurrencyCode} unconvertedCount={cashflow.liquid.unconvertedCount} />
             </p>
             <p className="mt-3 text-sm text-storm">
               En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. Este período entraron{" "}
