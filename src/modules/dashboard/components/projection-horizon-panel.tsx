@@ -11,6 +11,7 @@ import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { buildDashboardCashflow, type ProjectionSupplement } from "../lib/projection/build-dashboard-cashflow";
 import { projectionLineHref } from "../lib/projection/projection-links";
+import { DashboardProjectionChart } from "./dashboard-projection-chart";
 import { DashboardScenariosPanel } from "./dashboard-scenarios-panel";
 import { DashboardFlowDetailsPanel } from "./dashboard-flow-details-panel";
 import { buildDashboardScenarios } from "../lib/projection/dashboard-scenarios";
@@ -35,6 +36,7 @@ export function ProjectionHorizonPanel({ snapshot, shared, supplement, ctx, now,
     {!model ? <p className="mt-4 text-sm text-storm" role="status">Falta comprobar el calendario completo. <button className="text-ink underline underline-offset-4" onClick={onRetry} type="button">Reintentar lectura</button></p> : unconvertedCount ? <p className="mt-4 text-sm text-storm" role="status">{unconvertedCount} cuentas, compromisos o gastos históricos sin conversión. No mostramos un saldo final parcial ni afirmamos que la caja esté cubierta.</p> : <>
       <p className="mt-5 text-xs text-storm">Saldo estimado al cerrar {lastMonth?.monthKey}</p><p className="mt-2 font-display text-3xl font-semibold tabular-nums text-ink">{formatCurrency(model.projection.endingBalance, ctx.displayCurrency)}</p>
       <p className="mt-2 text-sm text-storm">{firstNegative ? `El primer cierre mensual negativo aparece en ${firstNegative.monthKey}.` : "No aparece un cierre mensual negativo en este plazo; dentro de un mes todavía puede haber días sin cobertura."}</p>
+      <DashboardProjectionChart months={model.projection.months} currency={ctx.displayCurrency} onSelect={setSelectedMonth} />
       <div className="mt-5 divide-y divide-white/[0.07]">{(expanded ? model.projection.months : model.projection.months.slice(0,3)).map(row => <button className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left" key={row.monthKey} onClick={() => setSelectedMonth(row.monthKey)} type="button"><div><p className="text-sm font-medium text-ink">{row.monthKey}{row.isPartial ? " · desde hoy" : ""}</p><p className="mt-1 text-xs text-storm">Entra {formatCurrency(row.inflowTotal, ctx.displayCurrency)} · sale {formatCurrency(row.outflowTotal, ctx.displayCurrency)} · {Math.round(row.scheduledShare * 100)}% programado</p></div><span className="text-sm tabular-nums text-ink">{formatCurrency(row.closingBalance, ctx.displayCurrency)} ›</span></button>)}</div>
       {!expanded && model.projection.months.length > 3 ? <Button variant="ghost" onClick={() => setExpanded(true)}>Ver los {horizon} meses</Button> : null}
       <DashboardScenariosPanel key={`${snapshot.workspace.id}:${ctx.displayCurrency}`} snapshot={snapshot} shared={shared} cashflow={model} ctx={ctx} now={now} scenarios={scenarios ?? undefined} />
