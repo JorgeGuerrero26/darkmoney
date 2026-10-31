@@ -4,9 +4,9 @@ import type { AccountSummary } from "../../../types/domain";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { convertDashboardAmount } from "../lib/dashboard-format";
 
-export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rates, month, detections }: {
+export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rates, month, detections, budgets, agenda }: {
   accounts: AccountSummary[]; currency: string; baseCurrency: string; rates: Map<string, number>;
-  month: { income: number; expense: number; unconvertedCount: number }; detections: ReactNode;
+  month: { income: number; expense: number; unconvertedCount: number }; detections: ReactNode; budgets?: ReactNode; agenda?: ReactNode;
 }) {
   const visible = accounts.filter(account => !account.isArchived && account.includeInNetWorth).map(account => ({
     account, amount: convertDashboardAmount({ amount: account.currentBalance, currencyCode: account.currencyCode,
@@ -27,6 +27,8 @@ export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rate
     <section aria-label="Este mes">
       <h2 className="font-display text-lg font-semibold text-ink">Este mes</h2>
       {monthComplete ? <><dl className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg border border-white/[0.07] p-4"><dt className="text-sm text-storm">Entró</dt><dd className="mt-2 font-display text-xl font-semibold tabular-nums text-ink">{formatCurrency(month.income, currency)}</dd></div><div className="rounded-lg border border-white/[0.07] p-4"><dt className="text-sm text-storm">Salió</dt><dd className="mt-2 font-display text-xl font-semibold tabular-nums text-ink">{formatCurrency(month.expense, currency)}</dd></div></dl><p className="mt-4 text-sm text-storm">{month.income >= month.expense ? "Te quedaron" : "Te faltaron"} <span className="font-semibold text-ink">{formatCurrency(Math.abs(month.income - month.expense), currency)}</span> este mes.</p></> : <p role="status" className="mt-4 text-sm text-storm">Faltan conversiones para calcular las entradas y salidas del mes.</p>}
+      {budgets}
+      {agenda}
     </section>
   </div>;
 }
