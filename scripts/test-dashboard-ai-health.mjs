@@ -119,5 +119,13 @@ await act(async () => button(container, "Generar explicación").click()); assert
 await render({ userId: "health-quota", isAdmin: false }); await act(async () => button(container, "Generar explicación").click()); await render({ userId: "health-quota", isAdmin: false, ctx: { ...ctx, displayCurrency: "USD" }, health: { ...base.health, currency: "USD" } }); assert.equal(button(container, "Consulta de hoy usada").disabled, true);
 await render({ userId: "health-partial" }); await act(async () => queryClient.setQueryData(["dashboard-category-evidence", "health-partial", 8], { ...evidence, unavailable: ["missing"] })); await settle(); assert.equal(button(container, "Generar explicación").disabled, true);
 await render({ userId: "health-server" }); globalThis.healthAiGate = Promise.resolve({ ok: true, cached: true, reply: "UNSCOPED_HEALTH" }); await act(async () => button(container, "Generar explicación").click()); assert.match(container.querySelector('[role="alert"]').textContent, /caché del servidor/); assert.doesNotMatch(container.textContent, /UNSCOPED_HEALTH/);
+// A complete review with no issues leaves no empty card; malformed dates stay visible.
+const emptySnapshot = { ...snapshot, movements: [], obligations: [], subscriptions: [], recurringIncome: [] };
+await render({ snapshot: emptySnapshot, shared: [], enabled: false });
+assert.doesNotMatch(container.textContent, /Por revisar · 0 señales/);
+await render({ snapshot: badDate, shared: [], enabled: false });
+assert.match(container.textContent, /Hay fechas por comprobar/);
+await render({ snapshot, shared, enabled: false });
+assert.match(container.textContent, /Por revisar · [1-9]/);
 await act(async () => renderer.unmount()); queryClient.clear(); container.remove(); dom.window.close();
 console.log("dashboard-ai-health: OK (original mobile serializer/shared review/readiness; six complete Lima months, real visible suggestions and one evidence query; overlapping totals vs unique duplicate rows, scope/FX/dates/nulls, heuristic labels, explicit AI and category-only confirmation, quotas/stale evidence/write/server-cache guards; fake IO only)");

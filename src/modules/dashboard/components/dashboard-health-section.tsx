@@ -50,10 +50,10 @@ export function DashboardHealthSection(props: Props) {
     <div>{ready && healthReady ? <DashboardHealthPanel model={health} currency={ctx.displayCurrency} /> : <p role="status" className="text-sm text-storm">Comprobando la salud financiera del espacio…</p>}</div>
     <div>
     {ready && healthReady ? <>
-      {review.invalidDates ? <p role="status" className="mt-4 text-sm text-storm">Hay fechas por comprobar. No cerramos el recuento de señales con calendarios inválidos.</p> : <details className="mt-5 border-t border-white/[0.07] pt-4"><summary className="cursor-pointer text-sm font-medium text-ink">Por revisar · {review.review.totalIssues} señales</summary>
+      {review.invalidDates ? <p role="status" className="mt-4 text-sm text-storm">Hay fechas por comprobar. No cerramos el recuento de señales con calendarios inválidos.</p> : review.review.totalIssues > 0 ? <details className="mt-5 border-t border-white/[0.07] pt-4"><summary className="cursor-pointer text-sm font-medium text-ink">Por revisar · {review.review.totalIssues} señales</summary>
         <p className="mt-2 text-xs leading-5 text-storm">Suma de siete comprobaciones, no de registros únicos. Un registro puede tener varias señales; no son errores confirmados.</p>
         <dl className="mt-3 divide-y divide-white/[0.07] text-sm">{[["Sin categoría", review.review.uncategorizedCount], ["Pendientes por aplicar", review.review.pendingMovementsCount], ["Grupos de posibles duplicados", review.review.duplicateExpenseGroups], ["Suscripciones por revisar", review.review.subscriptionsAttentionCount], ["Obligaciones sin plan o fecha", review.review.obligationsWithoutPlanCount], ["Obligaciones sin actividad reciente", review.review.staleObligationsCount], ["Obligaciones vencidas", review.review.overdueObligationsCount]].map(([label, value]) => <div className="flex min-h-11 items-center justify-between gap-4" key={label}><dt className="text-storm">{label}</dt><dd className="tabular-nums text-ink">{value}</dd></div>)}</dl>
-      </details>}</> : null}
+      </details> : null}</> : null}
     <DashboardCategorySuggestionsPanel {...props} canEdit={props.canEdit && props.enabled}
       renderExplanation={reading => <DashboardHealthExplanation {...props} reading={reading} review={review} projectionConfidence={projectionConfidence} />} />
     </div>
