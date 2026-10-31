@@ -35,6 +35,7 @@ import { BrandLogo } from "../../components/ui/brand-logo";
 import { DataState } from "../../components/ui/data-state";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { useToast } from "../../components/ui/toast-provider";
+import { ConnectionNotice } from "../../components/ui/connection-notice";
 import { formatRelativeTime } from "../../lib/formatting/dates";
 import { formatNotificationKindLabel } from "../../lib/formatting/labels";
 import { useAuth } from "../../modules/auth/auth-context";
@@ -1256,6 +1257,7 @@ function AppShellContent() {
                 />
               </div>
             ) : null}
+            <ConnectionNotice />
           </header>
 
           <div className="flex flex-col gap-6 px-4 pb-8 pt-6 sm:px-6 lg:px-[30px]">{shouldShowProBanner ? (

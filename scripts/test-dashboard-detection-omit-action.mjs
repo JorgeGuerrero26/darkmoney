@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { React, act, dom, load, mock, createRoot, button } from "./lib/web-ui-harness.mjs";
+mock("src/components/ui/toast-provider.tsx", "export const useToast=()=>({showToast:value=>globalThis.omitToasts.push(value)});");
+mock("src/components/ui/undo-queue.tsx", "export const useUndoQueue=()=>({schedule:value=>globalThis.omitActions.push(value)});");
+mock("src/stores/workspace-store.ts", "export const useWorkspaceStore={getState:()=>({activeWorkspaceId:globalThis.omitWorkspace})};");
+const { DashboardDetectionOmitAction } = await import(load("src/modules/dashboard/components/dashboard-detection-omit-action.tsx"));
+const suggestion = { id: 1, workspaceId: 8, status: "pending" }; const change = { before: suggestion, after: { ...suggestion, status: "discarded" } };
+globalThis.omitToasts = []; globalThis.omitActions = []; globalThis.omitWorkspace = 8; let calls = [], release, busy = [];
+const omissions = { mutateAsync: async input => { calls.push(input); if (input.action === "omit") return new Promise(resolve => { release = resolve; }); return { changes: [change], failed: 0, skipped: 0, readingUpdated: true }; } };
+const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
+await act(async () => renderer.render(React.createElement(DashboardDetectionOmitAction, { suggestion, workspaceId: 8, omissions, disabled: false, onBusyChange: value => busy.push(value) })));
+await act(async () => { button(container, "Omitir").click(); button(container, "Omitir").click(); }); assert.equal(calls.length, 1); assert.deepEqual(busy, [true]);
+await act(async () => { release({ changes: [change], failed: 0, skipped: 0, readingUpdated: true }); }); assert.deepEqual(busy, [true, false]); assert.equal(globalThis.omitActions.length, 1); assert.equal(globalThis.omitActions[0].duration, 3000);
+await act(async () => renderer.unmount()); globalThis.omitWorkspace = 9; await globalThis.omitActions[0].onUndo(); assert.equal(calls.length, 1); assert.match(globalThis.omitToasts.at(-1).title, /No se deshizo/);
+globalThis.omitWorkspace = 8; await globalThis.omitActions[0].onUndo(); assert.equal(calls[1].action, "restore"); assert.equal(calls[1].changes[0], change); container.remove(); dom.window.close(); console.log("Dashboard detection omission: locking, undo after unmount and workspace isolation passed.");

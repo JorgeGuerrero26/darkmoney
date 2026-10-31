@@ -31,6 +31,11 @@ import {
 import type { MovementRecord } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { DashboardDetectedMovements } from "../components/dashboard-detected-movements";
+import { DashboardViewHeader } from "../components/dashboard-view-header";
+import { DashboardAdvancedSummary } from "../components/dashboard-advanced-summary";
+import { DashboardSimpleOverview } from "../components/dashboard-simple-overview";
+import { DashboardSimpleAgenda } from "../components/dashboard-simple-agenda";
+import { DashboardSimpleBudgets } from "../components/dashboard-simple-budgets";
 import {
   DashboardHelpProvider,
   DashboardHelpTrigger,
@@ -1659,7 +1664,38 @@ export function DashboardPage() {
   if (comparisonOptions.length > 0) {
     return (
       <div className="flex flex-col gap-7 pb-8">
-        <h1 className="sr-only">Inicio</h1>
+        <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
+          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess}
+          updatedAt={snapshotQuery.dataUpdatedAt} refreshing={snapshotQuery.isFetching} onChange={handleDashboardModeChange} />
+
+        <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard && effectiveDashboardMode === "advanced"}
+          patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
+            ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
+          history={() => <DashboardHistorySection key={`history-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
+            ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
+          flow={() => <DashboardFlowSection key={`flow-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
+            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard} health={dashboardHealth}
+            ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isError && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
+            onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
+          health={() => <DashboardHealthSection key={`health-ai:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}
+              shared={sharedObligations} health={dashboardHealth} enabled={canUseAdvancedDashboard} isAdmin={isAdminOverride}
+              healthReady={!sharedObligationsQuery.isPending && !sharedObligationsQuery.isError && !sharedObligationsQuery.isFetching}
+              cashflow={projectionReady && !projectionQuery.isFetching ? cashflow : null}
+              ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
+              canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} />}
+          summary={effectiveDashboardMode === "advanced" && canUseAdvancedDashboard ? <DashboardAdvancedSummary
+            cashflow={cashflow} currency={displayCurrencyCode} ready={projectionReady} failed={projectionQuery.isError || sharedObligationsQuery.isError}
+            score={parityReadiness.readinessScore} issues={reviewInboxTotalIssues} uncategorized={uncategorizedMovements.length}
+            detections={<DashboardDetectedMovements key={`${user?.id}:${snapshot.workspace.id}`} userId={user?.id} workspaceId={snapshot.workspace.id} snapshot={snapshot} canEdit={activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} proAccessEnabled={canUseAdvancedDashboard} />} ai={dashboardAiPanel}
+            onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} /> : <>
+        <DashboardSimpleOverview accounts={snapshot.accounts} currency={displayCurrencyCode} baseCurrency={baseCurrencyCode} rates={exchangeRateMap}
+          month={dashboardHealth.savings.months[6]} detections={<DashboardDetectedMovements key={`${user?.id}:${snapshot.workspace.id}`} userId={user?.id} workspaceId={snapshot.workspace.id} snapshot={snapshot} canEdit={activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} proAccessEnabled={canUseAdvancedDashboard} />}
+          budgets={<DashboardSimpleBudgets budgets={recomputedBudgets} metrics={budgetMetricsMap} baseCurrency={baseCurrencyCode} rates={exchangeRateMap} now={parityNow} />}
+          agenda={<DashboardSimpleAgenda cashflow={cashflow} currency={displayCurrencyCode} now={parityNow} ready={projectionReady}
+            failed={projectionQuery.isError || sharedObligationsQuery.isError} onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />} />
+        <details><summary className="cursor-pointer border-t border-white/[0.07] pt-5 text-sm font-semibold text-ink">Más detalles del resumen</summary><div className="mt-6 flex flex-col gap-7">
         <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
@@ -1679,25 +1715,6 @@ export function DashboardPage() {
             value={comparisonPreset}
           />
         </section>
-
-        <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard}
-          patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
-            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
-            ready={snapshot.workspace.id===activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} />}
-          history={() => <DashboardHistorySection key={`history-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
-            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard}
-            ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError} onRetry={() => void snapshotQuery.refetch()} />}
-          flow={() => <DashboardFlowSection key={`flow-ai:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} shared={sharedObligations} supplement={projectionQuery.data ?? null}
-            userId={user?.id} isAdmin={isAdminOverride} enabled={canUseAdvancedDashboard} health={dashboardHealth}
-            ctx={parityCtx} now={parityNow} ready={projectionReady && !snapshotQuery.isError && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !projectionQuery.isFetching && !sharedObligationsQuery.isFetching}
-            onRetry={() => { void snapshotQuery.refetch(); void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />}
-          health={() => <DashboardHealthSection key={`health-ai:${user?.id}:${snapshot.workspace.id}:${displayCurrencyCode}`} snapshot={snapshot} ctx={parityCtx} now={parityNow} userId={user?.id}
-              shared={sharedObligations} health={dashboardHealth} enabled={canUseAdvancedDashboard} isAdmin={isAdminOverride}
-              healthReady={!sharedObligationsQuery.isPending && !sharedObligationsQuery.isError && !sharedObligationsQuery.isFetching}
-              cashflow={projectionReady && !projectionQuery.isFetching ? cashflow : null}
-              ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
-              canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} />}
-          summary={<>
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -1928,7 +1945,7 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
-        <DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />
+        </div></details>
           </>} />
         {notificationDayDialog}
       </div>
