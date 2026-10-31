@@ -33,6 +33,7 @@ import { useAuth } from "../../auth/auth-context";
 import { DashboardDetectedMovements } from "../components/dashboard-detected-movements";
 import { DashboardViewHeader } from "../components/dashboard-view-header";
 import { DashboardAdvancedSummary } from "../components/dashboard-advanced-summary";
+import { DashboardSimpleOverview } from "../components/dashboard-simple-overview";
 import {
   DashboardHelpProvider,
   DashboardHelpTrigger,
@@ -1686,6 +1687,9 @@ export function DashboardPage() {
             score={parityReadiness.readinessScore} issues={reviewInboxTotalIssues} uncategorized={uncategorizedMovements.length}
             detections={<DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />} ai={dashboardAiPanel}
             onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} /> : <>
+        <DashboardSimpleOverview accounts={snapshot.accounts} currency={displayCurrencyCode} baseCurrency={baseCurrencyCode} rates={exchangeRateMap}
+          month={dashboardHealth.savings.months[6]} detections={<DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />} />
+        <details><summary className="cursor-pointer border-t border-white/[0.07] pt-5 text-sm font-semibold text-ink">Más detalles del resumen</summary><div className="mt-6 flex flex-col gap-7">
         <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
@@ -1705,7 +1709,6 @@ export function DashboardPage() {
             value={comparisonPreset}
           />
         </section>
-        <DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -1936,6 +1939,7 @@ export function DashboardPage() {
             </div>
           </article>
         </section>
+        </div></details>
           </>} />
         {notificationDayDialog}
       </div>
