@@ -19,6 +19,8 @@ import { PageHeader } from "../../../components/ui/page-header";
 import { SegmentedControl as PillControl } from "../../../components/ui/segmented-control";
 import { DashboardCurrencyControl } from "../components/dashboard-currency-control";
 import { DashboardLiquidAmount } from "../components/dashboard-liquid-amount";
+import { DashboardPeriodAmounts } from "../components/dashboard-period-amounts";
+import { buildDashboardPeriodSummary } from "../lib/dashboard-period-summary";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -767,6 +769,7 @@ export function DashboardPage() {
   const previousPeriodMovements = postedMovements.filter((movement) =>
     isInRange(movement.occurredAt, comparison.previous),
   );
+  const summaryPeriod = buildDashboardPeriodSummary(snapshot.movements.filter(movement => movement.workspaceId === snapshot.workspace.id && isInRange(movement.occurredAt, comparison.current)), parityCtx);
   const currentTotals = buildPeriodTotals(currentPeriodMovements);
   const previousTotals = buildPeriodTotals(previousPeriodMovements);
   const savingsSeries = buildSavingsSeries(postedMovements, comparison);
@@ -1692,9 +1695,8 @@ export function DashboardPage() {
               <DashboardLiquidAmount amount={cashflow.liquid.total} currency={displayCurrencyCode} unconvertedCount={cashflow.liquid.unconvertedCount} />
             </p>
             <p className="mt-3 text-sm text-storm">
-              En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. Este período entraron{" "}
-              <span className="text-pine">{formatCurrency(currentTotals.income, displayCurrencyCode)}</span> y salieron{" "}
-              <span className="text-ink">{formatCurrency(currentTotals.expense, displayCurrencyCode)}</span>.
+              En {snapshot.accounts.filter(a => !a.isArchived && ["cash", "bank", "savings"].includes(a.type)).length} cuentas líquidas. {" "}
+              <DashboardPeriodAmounts totals={summaryPeriod} currency={displayCurrencyCode} />
             </p>
           </div>
           <PillControl

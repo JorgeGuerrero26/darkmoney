@@ -1,0 +1,23 @@
+import assert from "node:assert/strict";
+import { React, act, dom, load, createRoot } from "./lib/web-ui-harness.mjs";
+
+const { buildDashboardPeriodSummary } = await import(load("src/modules/dashboard/lib/dashboard-period-summary.ts"));
+const { DashboardPeriodAmounts } = await import(load("src/modules/dashboard/components/dashboard-period-amounts.tsx"));
+const ctx = { baseCurrency: "PEN", displayCurrency: "PEN", exchangeRateMap: new Map([["USD:PEN", 3.7]]), accountCurrencyMap: new Map([[1, "PEN"], [2, "USD"], [3, "EUR"]]) };
+const movement = (type, amount, account, extra = {}) => ({ id: 1, workspaceId: 1, description: "Compra", movementType: type, status: "posted", occurredAt: "2026-10-12T12:00:00Z", sourceAccountId: type === "income" ? null : account, sourceAmount: type === "income" ? null : amount, destinationAccountId: type === "income" ? account : null, destinationAmount: type === "income" ? amount : null, sourceCurrencyCode: null, destinationCurrencyCode: null, categoryId: null, counterpartyId: null, ...extra });
+const normal = [movement("income", 100, 1), movement("expense", 10, 2), movement("adjustment", 1245.83, 1), movement("expense", 1245.83, 1, { description: "Corrección · Impuestos" }), movement("transfer", 500, 1), movement("expense", 40, 1, { status: "pending" })];
+const complete = buildDashboardPeriodSummary(normal, ctx);
+assert.deepEqual(complete, { income: 100, expense: 37, unconvertedCount: 0 });
+const incomplete = buildDashboardPeriodSummary([...normal, movement("expense", 20, 3)], ctx);
+assert.equal(incomplete.unconvertedCount, 1);
+const explicitCurrency = movement("expense", 2, null, { sourceCurrencyCode: "USD" });
+assert.equal(buildDashboardPeriodSummary([explicitCurrency], ctx).expense, 7.4);
+const unknown = movement("expense", 2, null);
+assert.equal(buildDashboardPeriodSummary([unknown], ctx).unconvertedCount, 1);
+const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
+await act(async () => renderer.render(React.createElement(DashboardPeriodAmounts, { totals: incomplete, currency: "PEN" })));
+assert.match(container.textContent, /faltan conversiones de 1 movimiento/); assert.doesNotMatch(container.textContent, /100|37/);
+await act(async () => renderer.render(React.createElement(DashboardPeriodAmounts, { totals: complete, currency: "PEN" })));
+assert.match(container.textContent, /100[.,]00/); assert.match(container.textContent, /37[.,]00/);
+await act(async () => renderer.unmount()); container.remove(); dom.window.close();
+console.log("Dashboard period: corrections, transfers, status, conversion and incomplete totals passed.");
