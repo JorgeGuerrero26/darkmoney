@@ -44,6 +44,8 @@ const { DashboardHistoryPanel } = await import(load("src/modules/dashboard/compo
 const container = document.createElement('div'); document.body.append(container); const renderer = createRoot(container); let retries = 0;
 async function render(value = snapshot, ready = true) { await act(async () => renderer.render(React.createElement(MemoryRouter, null, React.createElement(DashboardHistoryPanel, { snapshot: value, ctx, now, ready, onRetry: () => { retries++; } })))); }
 await render();
+const historyLayout=container.querySelector('[aria-label="Historial anual"] .lg\\:grid-cols-2');assert.ok(historyLayout);
+const calculation=[...container.querySelectorAll('details')].find(node=>node.querySelector('summary')?.textContent==='Cómo se calcula');assert.ok(calculation);assert.equal(calculation.open,false);assert.match(calculation.textContent,/sin traspasos ni correcciones/);
 const chart=container.querySelector('[aria-label="Neto de cada mes"]');assert.ok(chart);assert.equal(chart.querySelectorAll('button').length,12);
 const marchBar=[...chart.querySelectorAll('button')].find(node=>node.getAttribute('aria-label').startsWith(model.months[2].label+':'));assert.equal(marchBar.disabled,false);
 await act(async()=>marchBar.click());assert.match(container.querySelector('[role="dialog"]').textContent,/2 correcciones excluidas/);await act(async()=>container.querySelector('[role="dialog"] button').click());
