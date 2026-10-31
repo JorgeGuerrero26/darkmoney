@@ -32,6 +32,7 @@ import type { MovementRecord } from "../../../types/domain";
 import { useAuth } from "../../auth/auth-context";
 import { DashboardDetectedMovements } from "../components/dashboard-detected-movements";
 import { DashboardViewHeader } from "../components/dashboard-view-header";
+import { DashboardAdvancedSummary } from "../components/dashboard-advanced-summary";
 import {
   DashboardHelpProvider,
   DashboardHelpTrigger,
@@ -1680,7 +1681,11 @@ export function DashboardPage() {
               cashflow={projectionReady && !projectionQuery.isFetching ? cashflow : null}
               ready={snapshot.workspace.id === activeWorkspace?.id && !snapshotQuery.isFetching && !snapshotQuery.isPlaceholderData && !snapshotQuery.isError}
               canEdit={canUseAdvancedDashboard && activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} />}
-          summary={<>
+          summary={effectiveDashboardMode === "advanced" && canUseAdvancedDashboard ? <DashboardAdvancedSummary
+            cashflow={cashflow} currency={displayCurrencyCode} ready={projectionReady} failed={projectionQuery.isError || sharedObligationsQuery.isError}
+            score={parityReadiness.readinessScore} issues={reviewInboxTotalIssues} uncategorized={uncategorizedMovements.length}
+            detections={<DashboardDetectedMovements userId={user?.id} workspaceId={snapshot.workspace.id} />} ai={dashboardAiPanel}
+            onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} /> : <>
         <section className="flex flex-col gap-5 border-b border-white/[0.07] pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-medium text-storm">Disponible hoy</p>
