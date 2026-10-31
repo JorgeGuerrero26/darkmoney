@@ -1670,7 +1670,8 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-7 pb-8">
         <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
-          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess} onChange={handleDashboardModeChange} />
+          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess}
+          updatedAt={snapshotQuery.dataUpdatedAt} refreshing={snapshotQuery.isFetching} onChange={handleDashboardModeChange} />
         <DashboardCurrencyControl accountCurrencies={snapshot.accounts.filter(account => !account.isArchived && account.includeInNetWorth).map(account => account.currencyCode)}
           options={dashboardCurrencyOptions} value={displayCurrencyCode} onChange={setDisplayCurrencyCode} />
 
