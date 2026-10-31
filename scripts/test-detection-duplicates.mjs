@@ -89,7 +89,7 @@ const names = ["normalizeDescription", "findPossibleDuplicateMovement", "mapDupl
 const functions = source.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text));
 assert.equal(functions.length, names.length);
 const extracted = ts.transpileModule(functions.map(node => node.getText(source).replace(/^export /, "")).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-const phone = client => new Function("supabase", "parseDuplicateVerdict", "detectionDuplicateBounds", `const DUPLICATE_AI_TIMEOUT_MS=1;${extracted};return {findPossibleDuplicateMovement,countSameDayDetectionSignals,confirmDuplicateWithAi};`)(client, phoneVerdict.parseDuplicateVerdict, phoneDay.detectionDuplicateBounds);
+const phone = client => new Function("supabase", "parseDuplicateVerdict", "detectionDuplicateBounds", "offlineRuntime", `const DUPLICATE_AI_TIMEOUT_MS=1;${extracted};return {findPossibleDuplicateMovement,countSameDayDetectionSignals,confirmDuplicateWithAi};`)(client, phoneVerdict.parseDuplicateVerdict, phoneDay.detectionDuplicateBounds, { postedMovementsWithAmount: async () => null });
 {
   const f = fixture(); const decision = await check(f, false);
   const reference = await phone(f.client).findPossibleDuplicateMovement({ workspaceId: 8, movementType: "expense", accountId: 1, amount: 20, occurredAt: input.occurredAt, description: input.description });
