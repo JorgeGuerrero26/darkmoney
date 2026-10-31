@@ -1665,7 +1665,8 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col gap-7 pb-8">
         <DashboardViewHeader name={profile?.fullName ?? user?.email?.split("@")[0] ?? "usuario"} mode={effectiveDashboardMode}
-          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess} onChange={handleDashboardModeChange} />
+          canUseAdvanced={canUseAdvancedDashboard} checkingAccess={isCheckingAdvancedDashboardAccess}
+          updatedAt={snapshotQuery.dataUpdatedAt} refreshing={snapshotQuery.isFetching} onChange={handleDashboardModeChange} />
 
         <DashboardAnalysisSections key={`sections:${user?.id}:${snapshot.workspace.id}`} enabled={canUseAdvancedDashboard && effectiveDashboardMode === "advanced"}
           patterns={() => <DashboardPatternsSection key={`patterns:${user?.id}:${snapshot.workspace.id}`} snapshot={snapshot} ctx={parityCtx} now={parityNow}
