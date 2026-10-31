@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { React, act, dom, load, mock, createRoot, MemoryRouter, button } from "./lib/web-ui-harness.mjs";
 mock("src/services/queries/detected-movements.ts", "export const useDetectedMovements=()=>globalThis.dashboardDetectionApi;");
 mock("src/modules/dashboard/components/dashboard-detection-quick-action.tsx", "export const DashboardDetectionQuickAction=()=>null;");
+mock("src/modules/dashboard/components/dashboard-detection-omit-action.tsx", "export const DashboardDetectionOmitAction=()=>null;");
 const { DashboardDetectedMovements } = await import(load("src/modules/dashboard/components/dashboard-detected-movements.tsx"));
 const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
 const row = { id: 12, description: "Compra real", movementType: "expense", amount: 15, currencyCode: "PEN", occurredAt: "2026-10-15T12:00:00Z", appLabel: "BCP" };

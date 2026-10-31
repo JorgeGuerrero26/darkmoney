@@ -8,10 +8,10 @@ import { prepareDetectionQuickSave, savePreparedDetection } from "../../notifica
 import type { DetectedMovement, DetectionSetting } from "../../notifications/lib/detected-movement";
 import type { createDetectedMovementStore } from "../../../services/queries/detected-movement-store";
 
-export function DashboardDetectionQuickAction({ suggestion, snapshot, userId, settings, store, enabled, proAccessEnabled, onSaved, invalidateFinances }: {
+export function DashboardDetectionQuickAction({ suggestion, snapshot, userId, settings, store, enabled, proAccessEnabled, onSaved, invalidateFinances, disabled, onBusyChange }: {
   suggestion: DetectedMovement; snapshot: WorkspaceSnapshot; userId: string; settings: DetectionSetting[];
   store: ReturnType<typeof createDetectedMovementStore> | null; enabled: boolean; proAccessEnabled: boolean;
-  onSaved: (id: number) => void; invalidateFinances: () => Promise<void>;
+  onSaved: (id: number) => void; invalidateFinances: () => Promise<void>; disabled?: boolean; onBusyChange?: (busy: boolean) => void;
 }) {
   const create = useCreateMovementMutation(snapshot.workspace.id, userId);
   const { showToast } = useToast();
@@ -25,8 +25,8 @@ export function DashboardDetectionQuickAction({ suggestion, snapshot, userId, se
   const accountName = snapshot.accounts.find(account => account.id === accountId)?.name;
   const categoryName = snapshot.catalogs.categories.find(category => category.id === input.categoryId)?.name;
   async function save() {
-    if (locked.current || !store || !checker || !input) return;
-    locked.current = true; setBusy(true); setError("");
+    if (locked.current || disabled || !store || !checker || !input) return;
+    locked.current = true; onBusyChange?.(true); setBusy(true); setError("");
     const abort = new AbortController(); controller.current = abort;
     try {
       const result = await savePreparedDetection(suggestion, input, snapshot.accounts, snapshot.catalogs.categories, settings, {
@@ -44,7 +44,7 @@ export function DashboardDetectionQuickAction({ suggestion, snapshot, userId, se
     } catch (reason) {
       if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : "No se pudo guardar. Reintenta o abre la revisión.");
       void invalidateFinances();
-    } finally { if (controller.current === abort) controller.current = null; locked.current = false; if (!abort.signal.aborted) setBusy(false); }
+    } finally { if (controller.current === abort) controller.current = null; locked.current = false; onBusyChange?.(false); if (!abort.signal.aborted) setBusy(false); }
   }
-  return <div className="mt-4 border-t border-white/[0.07] pt-4"><div className="grid grid-cols-2 gap-4 text-sm"><p className="text-storm">Cuenta<span className="mt-1 block font-medium text-ink">{accountName}</span></p><p className="text-storm">Categoría<span className="mt-1 block font-medium text-ink">{categoryName}</span></p></div>{error ? <p role="alert" className="mt-3 text-sm text-storm">{error}</p> : null}<div className="mt-3 flex justify-end"><button type="button" disabled={busy} onClick={() => void save()} className="min-h-11 rounded-lg bg-ink px-4 text-sm font-semibold text-void disabled:opacity-50">{busy ? "Guardando…" : error ? "Reintentar" : "Guardar"}</button></div></div>;
+  return <div className="mt-4 border-t border-white/[0.07] pt-4"><div className="grid grid-cols-2 gap-4 text-sm"><p className="text-storm">Cuenta<span className="mt-1 block font-medium text-ink">{accountName}</span></p><p className="text-storm">Categoría<span className="mt-1 block font-medium text-ink">{categoryName}</span></p></div>{error ? <p role="alert" className="mt-3 text-sm text-storm">{error}</p> : null}<div className="mt-3 flex justify-end"><button type="button" disabled={busy || disabled} onClick={() => void save()} className="min-h-11 rounded-lg bg-ink px-4 text-sm font-semibold text-void disabled:opacity-50">{busy ? "Guardando…" : error ? "Reintentar" : "Guardar"}</button></div></div>;
 }
