@@ -1700,7 +1700,7 @@ export function DashboardPage() {
             value={comparisonPreset}
           />
         </section>
-        <section>
+        {uncategorizedMovements.length + duplicateExpenseMovementGroups + subscriptionsNeedingAttentionCount > 0 ? <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="font-display text-lg font-semibold text-ink">Por revisar</h2>
@@ -1747,7 +1747,7 @@ export function DashboardPage() {
               </Link>
             ))}
           </div>
-        </section>
+        </section> : null}
 
         <section className="grid items-start gap-5 lg:grid-cols-[1.25fr_1fr]">
           <CashflowMonthPanel model={cashflow} currency={displayCurrencyCode} ready={projectionReady}
@@ -1885,7 +1885,7 @@ export function DashboardPage() {
             </div>
           </article>
 
-          <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
+          {currencyExposure.filter((item) => item.amount !== 0).length > 1 ? <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
             <h3 className="font-display text-lg font-semibold text-ink">Exposición por moneda</h3>
             <p className="mt-1 text-sm text-storm">Composición del dinero antes de consolidarlo.</p>
             <div className="mt-5 space-y-4">
@@ -1893,7 +1893,7 @@ export function DashboardPage() {
                 <div key={item.currencyCode}><div className="flex items-center justify-between gap-3 text-xs"><span className="text-storm">{item.currencyCode} · {item.accountCount} cuentas</span><span className="font-medium text-ink">{formatCurrency(item.amount, displayCurrencyCode)}</span></div><div className="mt-2 h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-[#f4f1ec]" style={{ width: `${(item.amount / maxCurrencyExposure) * 100}%` }} /></div></div>
               )) : <p className="text-sm text-storm">Sin exposición visible.</p>}
             </div>
-          </article>
+          </article> : null}
 
           <article className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
             <div className="flex items-center justify-between gap-3">
