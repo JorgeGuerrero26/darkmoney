@@ -19,9 +19,9 @@ export function DashboardHealthPanel({ model, currency }: {
       detail: "Desde tu lado: incluye las compartidas que te corresponde pagar." },
     { title: "Pagos vencidos", value: !model.obligationsReady ? "Sin comprobar" : `${health.overdueCount}`,
       detail: "Obligaciones activas por pagar con fecha vencida." },
-    { title: "Cobros resueltos", value: collection.rate === null ? collection.label : `${collection.rate}%`,
-      detail: collection.rate === null ? "Sin porcentaje hasta tener vencimientos que comprobar." : `${collection.resolved} de ${collection.total} obligaciones por cobrar con vencimiento en los últimos 30 días.`,
-      extra: collection.rate === null ? null : "Cuenta registros pagados, no el porcentaje del dinero cobrado." },
+    ...(collection.rate === null ? [] : [{ title: "Cobros resueltos", value: `${collection.rate}%`,
+      detail: `${collection.resolved} de ${collection.total} obligaciones por cobrar con vencimiento en los últimos 30 días.`,
+      extra: "Cuenta registros pagados, no el porcentaje del dinero cobrado." }]),
   ];
   return <section aria-label="Salud financiera" className="rounded-[9px] border border-white/[0.08] bg-[#1a1917] p-5">
     <div className="flex items-baseline justify-between gap-4">
