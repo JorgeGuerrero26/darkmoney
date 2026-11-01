@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { load, dom } from "./lib/web-ui-harness.mjs";
-const { syncMovementQueue } = await import(load("src/lib/offline/movement-queue-sync.ts"));
+const { syncMovementQueue, QueueInterruptionError } = await import(load("src/lib/offline/movement-queue-sync.ts"));
 const scope = { userId: "u", workspaceId: 8 };
 const ids = { a: "cf342b8d-7711-4b24-93a8-cc436d883241", b: "cf342b8d-7711-4b24-93a8-cc436d883242" };
 const row = (id, extra = {}) => ({ ...scope, dedupeKey: ids[id], createdAt: "2026-10-01", state: "pending", revision: 1, error: null, input: { ...scope, dedupeKey: ids[id], movementType: "expense", status: "posted", description: "Compra", occurredAt: "2026-10-01T12:00:00Z", sourceAccountId: 1, sourceAmount: 10, destinationAccountId: null, destinationAmount: null }, ...extra });
@@ -13,6 +13,7 @@ f = fixture([row("a"), row("b")]); f.state.send = async () => { throw new Error(
 f = fixture([row("a"), row("b")]); f.state.send = async input => { if (input.dedupeKey === ids.a) throw new Error("No autorizado"); return 2; }; result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.needsReview, 1); assert.equal(result.sent, 1);
 f = fixture([row("a", { input: { ...row("a").input, metadata: { source: "notification_detection" } } })]); result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.needsReview, 1); assert.equal(f.state.sent.length, 0);
 f = fixture([row("a")]); f.state.send = async () => { f.state.active = false; throw new Error("sesión cerrada"); }; result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.interrupted, true); assert.equal(f.state.review.length, 0, "logging out must not mark a pending write rejected");
+f = fixture([row("a")]); f.state.send = async () => { throw new QueueInterruptionError("sesión sin verificar"); }; result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.interrupted, true); assert.equal(f.state.review.length, 0);
 f = fixture([row("a")]); f.deps.acknowledge = async () => { throw new Error("storage failed"); }; result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.interrupted, true); assert.equal(f.state.review.length, 0, "a confirmed server write cannot be labelled rejected");
 f = fixture([row("a"), row("b")]); f.state.send = async () => { f.state.active = false; return 5; }; result = await syncMovementQueue(scope, f.deps, lock); assert.equal(result.sent, 1); assert.equal(result.interrupted, true); assert.equal(f.state.ack.length, 1);
 dom.window.close(); console.log("Offline queue replay: locking, scoped sequential writes, conflicts, lost network and confirmed writes passed.");

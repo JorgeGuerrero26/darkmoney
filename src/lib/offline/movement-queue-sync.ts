@@ -1,6 +1,8 @@
 import { isAmbiguousWriteError } from "../idempotent-write";
 import { acknowledgeQueuedMovement, listQueuedMovements, markQueuedMovementForReview, validateQueuedMovement, type QueuedMovement, type QueuedMovementInput } from "./movement-queue";
 
+export class QueueInterruptionError extends Error {}
+
 export type QueueScope = { userId: string; workspaceId: number };
 type Dependencies = {
   list: (userId: string, workspaceId: number) => Promise<QueuedMovement[]>;
@@ -29,7 +31,7 @@ export async function syncMovementQueue(scope: QueueScope, dependencies: Depende
       let id: number;
       try { id = await dependencies.send(row.input); }
       catch (error) {
-        if (!dependencies.isActive(scope) || !dependencies.isOnline() || isAmbiguousWriteError(error)) { interrupted = true; break; }
+        if (error instanceof QueueInterruptionError || !dependencies.isActive(scope) || !dependencies.isOnline() || isAmbiguousWriteError(error)) { interrupted = true; break; }
         if (await dependencies.markReview(row, "No se pudo aplicar el cambio. Revisa sus datos y permisos antes de reintentar.")) { needsReview++; continue; }
         interrupted = true; break;
       }
