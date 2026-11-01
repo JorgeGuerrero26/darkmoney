@@ -29,7 +29,7 @@ export async function syncMovementQueue(scope: QueueScope, dependencies: Depende
       let id: number;
       try { id = await dependencies.send(row.input); }
       catch (error) {
-        if (!dependencies.isOnline() || isAmbiguousWriteError(error)) { interrupted = true; break; }
+        if (!dependencies.isActive(scope) || !dependencies.isOnline() || isAmbiguousWriteError(error)) { interrupted = true; break; }
         if (await dependencies.markReview(row, "No se pudo aplicar el cambio. Revisa sus datos y permisos antes de reintentar.")) { needsReview++; continue; }
         interrupted = true; break;
       }
