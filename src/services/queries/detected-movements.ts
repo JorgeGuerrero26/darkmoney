@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase/client";
 import { createDetectedMovementStore } from "./detected-movement-store";
 import { createDetectedDuplicateChecker } from "./detection-duplicates";
+import { requireDetectionOnline } from "../../modules/notifications/lib/detection-online";
 import { detectionPending, type DetectedMovement, type DetectionSetting } from "../../modules/notifications/lib/detected-movement";
 import type { DetectionOmissionInput } from "../../modules/notifications/lib/detection-omissions";
 
@@ -22,7 +23,9 @@ export function useDetectedMovements(userId: string | undefined, workspaceId: nu
     void queryClient.invalidateQueries({ queryKey: ["detection-learning", userId, workspaceId] });
   }
   const omissions = useMutation({
+    networkMode: "always",
     mutationFn: (input: DetectionOmissionInput) => {
+      requireDetectionOnline();
       if (!store) throw new Error("No hay una sesión disponible.");
       return store.omissions(input);
     },
@@ -52,7 +55,7 @@ export function useDetectedMovementReviewQuery(userId: string, workspaceId: numb
   const { store, key, settings, invalidate, invalidateFinances } = useDetectedMovements(userId, workspaceId, false, true);
   const duplicateChecker = useMemo(() => supabase ? createDetectedDuplicateChecker(supabase, { userId, workspaceId }) : null, [userId, workspaceId]);
   const review = useQuery({ queryKey: [...key, "review", id], enabled: Boolean(store), queryFn: () => store!.review(id), refetchOnWindowFocus: true });
-  const resolve = useMutation({ mutationFn: (input: Parameters<NonNullable<typeof store>["resolve"]>) => store!.resolve(...input), onSuccess: invalidate });
-  const undo = useMutation({ mutationFn: (movementId: number) => store!.undoRegistration(id, movementId), onSettled: invalidateFinances });
+  const resolve = useMutation({ networkMode: "always", mutationFn: (input: Parameters<NonNullable<typeof store>["resolve"]>) => { requireDetectionOnline(); return store!.resolve(...input); }, onSuccess: invalidate });
+  const undo = useMutation({ networkMode: "always", mutationFn: (movementId: number) => { requireDetectionOnline(); return store!.undoRegistration(id, movementId); }, onSettled: invalidateFinances });
   return { store, duplicateChecker, review, settings, resolve, undo, invalidate, invalidateFinances };
 }

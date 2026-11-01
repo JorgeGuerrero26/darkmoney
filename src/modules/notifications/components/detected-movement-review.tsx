@@ -12,6 +12,7 @@ import { useCreateMovementMutation, getQueryErrorMessage, type WorkspaceSnapshot
 import { useDetectedMovementReviewQuery } from "../../../services/queries/detected-movements";
 import { useDetectionLearningQuery } from "../../../services/queries/detection-learning";
 import { QuickMovementDialog } from "../../movements/components/quick-movement-dialog";
+import { requireDetectionOnline } from "../lib/detection-online";
 import { detectedMovementDraft, detectionPending, type DetectionMovementInput } from "../lib/detected-movement";
 import type { DuplicatePermission } from "../../../services/queries/detection-duplicates";
 import type { DuplicateAiResult } from "../lib/duplicate-verdict";
@@ -22,7 +23,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
   id: number; snapshot: WorkspaceSnapshot; userId: string; proAccessEnabled: boolean; onClose: () => void;
 }) {
   const { store, duplicateChecker, review, settings, resolve, undo, invalidate, invalidateFinances } = useDetectedMovementReviewQuery(userId, snapshot.workspace.id, id);
-  const create = useCreateMovementMutation(snapshot.workspace.id, userId);
+  const create = useCreateMovementMutation(snapshot.workspace.id, userId, { networkMode: "always" });
   const { showToast } = useToast();
   const { schedule } = useUndoQueue();
   const registeredMovementId = useRef<number | null>(null);
@@ -51,7 +52,8 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     originalDescription: suggestion.description, movementType: suggestion.movementType,
     financialAppKey: suggestion.financialAppKey, currencyCode: suggestion.currencyCode, metadata: suggestion.metadata,
   } : undefined, [suggestion, draft, learning.data, learning.isError, snapshot.accounts, snapshot.catalogs.categories, settings.data]);
-  const register = useMutation({ mutationFn: async (submission: DetectionMovementInput | DetectionSplitSubmission) => {
+  const register = useMutation({ networkMode: "always", mutationFn: async (submission: DetectionMovementInput | DetectionSplitSubmission) => {
+    requireDetectionOnline();
     const controller = new AbortController(); checking.current = controller;
     let result;
     try {
@@ -60,6 +62,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
         if (!suggestion?.updatedAt) throw new Error("Actualiza la detección antes de dividirla; falta su versión.");
         const assertActive = () => {
           if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
+          requireDetectionOnline();
         };
         result = await store!.registerSplit(id, suggestion.updatedAt, submission, snapshot.accounts, snapshot.catalogs.categories,
           async (fresh, value) => {
@@ -75,6 +78,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
         const input = submission;
         result = await store!.register(id, input, snapshot.accounts, (value) => {
           if (controller.signal.aborted) throw Object.assign(new Error("La comprobación se canceló. Vuelve a revisar antes de guardar."), { name: "AbortError" });
+          requireDetectionOnline();
           return create.mutateAsync(value);
         }, async (fresh, candidate) => {
           if (!duplicateChecker) throw new Error("No se pudo comprobar si ya existe el movimiento.");
@@ -93,7 +97,7 @@ export function DetectedMovementReview({ id, snapshot, userId, proAccessEnabled,
     registeredMovementId.current = result.movementId;
     return result.movementId;
   }, onError: (error) => { if (error.name !== "AbortError") { void review.refetch(); void invalidateFinances(); } } });
-  const restore = useMutation({ mutationFn: () => store!.restoreDiscarded(id), onSuccess: invalidate });
+  const restore = useMutation({ networkMode: "always", mutationFn: () => { requireDetectionOnline(); return store!.restoreDiscarded(id); }, onSuccess: invalidate });
   const busy = register.isPending || resolve.isPending || restore.isPending || undo.isPending;
 
   async function undoRegistered(movementId: number) {
