@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { onlineManager, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/auth-context";
 import { useWorkspaceStore } from "../../stores/workspace-store";
@@ -7,7 +7,7 @@ import { useCreateMovementMutation } from "../../services/queries/workspace-data
 import { enqueueMovement, listQueuedMovements, retryReviewedMovement, type QueuedMovement, type QueuedMovementInput } from "../../lib/offline/movement-queue";
 import { QueueInterruptionError, syncLocalMovementQueue, type QueueScope } from "../../lib/offline/movement-queue-sync";
 
-export function useOfflineMovementQueue() {
+export function useOfflineMovementQueue({ autoSync = false }: { autoSync?: boolean } = {}) {
   const { user } = useAuth();
   const workspaceId = useWorkspaceStore(state => state.activeWorkspaceId);
   const userId = user?.id;
@@ -40,5 +40,22 @@ export function useOfflineMovementQueue() {
       return create.mutateAsync(input);
     }, active, online);
   }, onSettled: refresh });
+  const attempted = useRef<string | null>(null);
+  const [connectionRevision, setConnectionRevision] = useState(0);
+  useEffect(() => {
+    if (!autoSync) return;
+    const onOnline = () => { attempted.current = null; setConnectionRevision(value => value + 1); };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [autoSync]);
+  useEffect(() => {
+    if (!autoSync || !userId || !workspaceId || !query.isSuccess || sync.isPending || !online()) return;
+    const pending = query.data.filter(row => row.state === "pending");
+    if (!pending.length) { attempted.current = null; return; }
+    const signature = JSON.stringify([userId, workspaceId, ...pending.map(row => [row.dedupeKey, row.revision])]);
+    if (attempted.current === signature) return;
+    attempted.current = signature;
+    sync.mutate();
+  }, [autoSync, userId, workspaceId, query.isSuccess, query.data, sync.isPending, connectionRevision]);
   return { userId, workspaceId, query, enqueue, retry, sync };
 }
