@@ -83,3 +83,15 @@ export async function markQueuedMovementForReview(row: QueuedMovement, message: 
     request.onsuccess = () => { const current = request.result as QueuedMovement | undefined; if (!current || current.revision !== row.revision || current.state !== "pending") { set(false); return; } store.put({ ...current, state: "needs_review", revision: current.revision + 1, error: message.slice(0, 300) }); set(true); };
   });
 }
+
+/** A review can only be requeued explicitly and with the revision the user saw. */
+export async function retryReviewedMovement(row: QueuedMovement): Promise<boolean> {
+  const db = await openQueue(); return transact(db, "readwrite", (store, set) => {
+    const request = store.get([row.userId, row.workspaceId, row.dedupeKey]);
+    request.onsuccess = () => {
+      const current = request.result as QueuedMovement | undefined;
+      if (!current || current.revision !== row.revision || current.state !== "needs_review") { set(false); return; }
+      store.put({ ...current, state: "pending", revision: current.revision + 1, error: null }); set(true);
+    };
+  });
+}
