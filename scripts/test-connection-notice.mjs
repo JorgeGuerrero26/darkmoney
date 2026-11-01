@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import { React, act, dom, load, createRoot } from "./lib/web-ui-harness.mjs";
+const { ConnectionNotice } = await import(load("src/components/ui/connection-notice.tsx"));
+let online = true; Object.defineProperty(dom.window.navigator, "onLine", { configurable: true, get: () => online });
+const container = document.createElement("div"); document.body.append(container); const renderer = createRoot(container);
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+await act(async () => renderer.render(React.createElement(ConnectionNotice, { delayMs: 30 }))); assert.equal(container.innerHTML, "");
+await act(async () => { online = false; window.dispatchEvent(new window.Event("offline")); await wait(5); }); assert.equal(container.innerHTML, "");
+await act(async () => { online = true; window.dispatchEvent(new window.Event("online")); await wait(40); }); assert.equal(container.innerHTML, "");
+await act(async () => { online = false; window.dispatchEvent(new window.Event("offline")); await wait(45); }); assert.match(container.textContent, /Sin conexión/); assert.match(container.textContent, /Comprueba que tus cambios se hayan guardado/); assert.doesNotMatch(container.textContent, /por enviar/);
+await act(async () => { online = true; window.dispatchEvent(new window.Event("online")); }); assert.equal(container.innerHTML, "");
+await act(async () => renderer.unmount()); container.remove(); dom.window.close(); console.log("Connection notice: delayed offline, recovery and truthful copy passed.");

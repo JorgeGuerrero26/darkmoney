@@ -89,7 +89,7 @@ export function DashboardFlowDetailsPanel({ snapshot, shared, cashflow, ctx, now
       {!model.routes.length ? <p className="mt-3 text-sm text-storm">No hay transferencias aplicadas en estos 90 días.</p> : null}
     </section>
 
-    {selection?.kind === "window" || route ? <Modal className={resourceEditorSurfaceClassName} labelledBy="flow-detail-title" onClose={() => setSelection(null)}>
+    {selection?.kind === "window" || route ? <Modal presentation="side" className={`${resourceEditorSurfaceClassName} lg:!max-w-[440px] lg:!rounded-none`} labelledBy="flow-detail-title" onClose={() => setSelection(null)}>
       <ResourceEditorHeader onClose={() => setSelection(null)} title={route ? `${route.srcName} → ${route.dstName}` : `Compromisos · ${days} días`} titleId="flow-detail-title" />
       <ModalBody>{route ? <>
         <p className="mb-3 text-xs leading-5 text-storm">{route.transfers.length} {route.transfers.length === 1 ? "transferencia" : "transferencias"} de estos 90 días. {route.total === null ? "El total no se puede comprobar todavía." : `Total desde el origen: ${money(route.total)}.`} Abrir un registro no crea otro traspaso.</p>

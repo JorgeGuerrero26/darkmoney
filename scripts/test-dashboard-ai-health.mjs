@@ -84,7 +84,7 @@ const container = document.createElement("div"); document.body.append(container)
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 const props = { snapshot, shared, ctx, now, userId: "health-ui", ready: true, healthReady: true, enabled: true, isAdmin: true, canEdit: true, health: base.health, cashflow: base.cashflow };
 async function render(extra = {}) { await act(async () => renderer.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter, null, React.createElement(DashboardHealthSection, { ...props, ...extra }))))); await settle(); }
-await render(); assert.equal(globalThis.healthAiCalls.length, 0); assert.equal(globalThis.healthWrites.length, 0); assert.equal(globalThis.healthReads, 1, "AI reuses the category panel's existing read");
+await render(); assert.match(container.firstElementChild.className, /lg:grid-cols-2/); assert.equal(globalThis.healthAiCalls.length, 0); assert.equal(globalThis.healthWrites.length, 0); assert.equal(globalThis.healthReads, 1, "AI reuses the category panel's existing read");
 const details = [...container.querySelectorAll("details")].find(row => row.querySelector("summary")?.textContent === "Explicar mi salud financiera con IA"); assert.ok(details);
 await act(async () => { details.open = true; }); assert.equal(globalThis.healthAiCalls.length, 0);
 await act(async () => button(container, "Generar explicación").click()); assert.equal(globalThis.healthAiCalls.at(-1).section, "health"); assert.deepEqual(globalThis.healthAiCalls.at(-1).summary, payload); assert.equal(details.querySelector("img"), null); assert.equal(globalThis.healthWrites.length, 0); assert.equal(globalThis.healthReads, 1);

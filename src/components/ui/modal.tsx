@@ -21,6 +21,7 @@ type ModalProps = {
   labelledBy?: string;
   disableOutsideClose?: boolean;
   align?: "center" | "top";
+  presentation?: "center" | "side";
   className?: string;
 };
 
@@ -32,6 +33,7 @@ export function Modal({
   labelledBy,
   disableOutsideClose = false,
   align = "center",
+  presentation = "center",
   className = "",
 }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -76,14 +78,14 @@ export function Modal({
       <div
         className={`flex min-h-full justify-center p-4 sm:p-6 ${
           align === "top" ? "items-start pt-[14vh] sm:pt-[18vh]" : "items-center"
-        }`}
+        } ${presentation === "side" ? "lg:items-stretch lg:justify-end lg:p-0" : ""}`}
         onPointerDown={handleOverlayPointerDown}
       >
         <div
           aria-label={ariaLabel}
           aria-labelledby={labelledBy}
           aria-modal="true"
-          className={`animate-fade-in flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[14px] border border-white/10 bg-shell sm:max-h-[calc(100dvh-3rem)] ${sizeClassNames[size]} ${className}`}
+          className={`animate-fade-in flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[14px] border border-white/10 bg-shell sm:max-h-[calc(100dvh-3rem)] ${sizeClassNames[size]} ${presentation === "side" ? "lg:h-dvh lg:max-h-none lg:max-w-[440px] lg:rounded-none" : ""} ${className}`}
           ref={cardRef}
           role="dialog"
         >
