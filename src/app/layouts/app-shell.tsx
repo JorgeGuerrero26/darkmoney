@@ -37,6 +37,7 @@ import { StatusBadge } from "../../components/ui/status-badge";
 import { useToast } from "../../components/ui/toast-provider";
 import { ConnectionNotice } from "../../components/ui/connection-notice";
 import { PendingMovementNotice } from "../../modules/offline/pending-movement-notice";
+import { useOfflineMovementQueue } from "../../modules/offline/use-offline-movement-queue";
 import { formatRelativeTime } from "../../lib/formatting/dates";
 import { formatNotificationKindLabel } from "../../lib/formatting/labels";
 import { useAuth } from "../../modules/auth/auth-context";
@@ -434,6 +435,7 @@ function AppShellContent() {
   const { showToast, dismissToast } = useToast();
   const navigate = useNavigate();
   const { profile, saveAvatar, signOut, user } = useAuth();
+  const offlineQueue = useOfflineMovementQueue({ autoSync: true });
   const currentUserIdRef = useRef(user?.id);
   currentUserIdRef.current = user?.id;
   const isSidebarCollapsed = useWorkspaceStore((state) => state.isSidebarCollapsed);
@@ -1259,7 +1261,7 @@ function AppShellContent() {
               </div>
             ) : null}
             <ConnectionNotice />
-            <PendingMovementNotice />
+            <PendingMovementNotice queue={offlineQueue} />
           </header>
 
           <div className="flex flex-col gap-6 px-4 pb-8 pt-6 sm:px-6 lg:px-[30px]">{shouldShowProBanner ? (
@@ -1323,13 +1325,14 @@ function AppShellContent() {
 
       {isQuickMovementOpen && activeWorkspace && user?.id && workspaceSnapshotQuery.data?.workspace.id === activeWorkspace.id && !workspaceSnapshotQuery.isPlaceholderData ? (
         <QuickMovementDialog
+          enqueueOffline={(input) => offlineQueue.enqueue.mutateAsync(input)}
           initialAccountId={quickMovementAccountId}
           initialKind={quickMovementKind}
           onClose={() => { setIsQuickMovementOpen(false); setQuickMovementAccountId(null); }}
-          onCreated={(message) => {
+          onCreated={(message, result) => {
             setIsQuickMovementOpen(false);
             setQuickMovementAccountId(null);
-            showToast({ title: "Movimiento registrado", description: message, tone: "success" });
+            showToast({ title: result === "queued" ? "Movimiento por enviar" : "Movimiento registrado", description: message, tone: "success" });
           }}
           snapshot={workspaceSnapshotQuery.data}
           userId={user.id}

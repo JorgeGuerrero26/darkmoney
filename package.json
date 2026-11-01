@@ -23,7 +23,7 @@
     "test:assistant-drafts": "node scripts/test-assistant-movement-drafts.mjs && node scripts/test-assistant-budget-drafts.mjs && node scripts/test-assistant-recurring-drafts.mjs && node scripts/test-assistant-obligation-drafts.mjs && node scripts/test-assistant-payment-drafts.mjs",
     "test:assistant-chats": "node scripts/test-assistant-chats.mjs",
     "test:assistant-movement-change": "node scripts/test-assistant-movement-change.mjs",
-    "test:offline-queue": "node scripts/test-offline-movement-queue.mjs && node scripts/test-offline-indexeddb.mjs && node scripts/test-offline-movement-queue-sync.mjs && node scripts/test-offline-movement-queue-hook.mjs && node scripts/test-pending-movement-notice.mjs",
+    "test:offline-queue": "node scripts/test-offline-movement-queue.mjs && node scripts/test-offline-indexeddb.mjs && node scripts/test-offline-movement-queue-sync.mjs && node scripts/test-offline-movement-queue-hook.mjs && node scripts/test-pending-movement-notice.mjs && node scripts/test-quick-movement-offline.mjs",
     "test:dashboard-cashflow": "node scripts/test-dashboard-cashflow.mjs",
     "test:dashboard-health": "node scripts/test-dashboard-health.mjs",
     "test:dashboard-readings": "node scripts/test-dashboard-readings.mjs",

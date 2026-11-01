@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Modal } from "../../components/ui/modal";
 import { ModalBody } from "../../components/ui/modal-body";
 import { ResourceEditorHeader } from "../../components/ui/resource-editor";
-import { useOfflineMovementQueue } from "./use-offline-movement-queue";
+import type { useOfflineMovementQueue } from "./use-offline-movement-queue";
 
 /** Shows only locally persisted records from the active user and workspace. */
-export function PendingMovementNotice() {
-  const { userId, workspaceId, query, retry, sync } = useOfflineMovementQueue({ autoSync: true });
+export function PendingMovementNotice({ queue }: { queue: ReturnType<typeof useOfflineMovementQueue> }) {
+  const { userId, workspaceId, query, retry, sync } = queue;
   const [open, setOpen] = useState(false), [message, setMessage] = useState("");
   const rows = query.data ?? [], pending = rows.filter(row => row.state === "pending").length, review = rows.filter(row => row.state === "needs_review").length;
   if (!userId || !workspaceId) return null;
@@ -26,7 +26,7 @@ export function PendingMovementNotice() {
     </button>
     {open ? <Modal presentation="side" labelledBy="pending-movements-title" onClose={() => setOpen(false)}><ResourceEditorHeader title="Cambios por enviar" titleId="pending-movements-title" onClose={() => setOpen(false)} /><ModalBody>
       <p className="text-sm text-storm">Guardados en este navegador para este usuario y espacio. No se incluyen detecciones.</p>
-      <div className="mt-4 divide-y divide-white/[0.07]">{rows.map(row => <div className="py-4" key={row.dedupeKey}><p className="font-medium text-ink">{row.input.description}</p><p className="mt-1 text-xs text-storm">{row.state === "needs_review" ? "Necesita revisión" : "Por enviar"} · {new Intl.DateTimeFormat("es-PE", { dateStyle: "short", timeStyle: "short" }).format(new Date(row.createdAt))}</p>{row.error ? <p className="mt-2 text-sm text-storm">{row.error}</p> : null}{row.state === "needs_review" ? <button type="button" disabled={busy} className="mt-2 text-sm text-ink underline disabled:opacity-50" onClick={() => void retry.mutateAsync(row).then(() => setMessage("El cambio está listo para intentar enviarse."), error => setMessage(error instanceof Error ? error.message : "No se pudo preparar el reintento."))}>Preparar reintento</button> : null}</div>)}</div>
+      <div className="mt-4 divide-y divide-white/[0.07]">{rows.map(row => <div className="py-4" key={row.dedupeKey}><p className="font-medium text-ink">{row.input.description}</p><p className="mt-1 text-xs text-storm">{row.state === "needs_review" ? "Necesita revisión" : "Por enviar"} · {new Intl.DateTimeFormat("es-PE", { dateStyle: "short", timeStyle: "short" }).format(new Date(row.createdAt))}</p>{row.error ? <p className="mt-2 text-sm text-storm">{row.error}</p> : null}{row.state === "needs_review" ? <button type="button" disabled={busy} className="mt-2 text-sm text-ink underline disabled:opacity-50" onClick={() => void retry.mutateAsync(row).then(() => setMessage("Se intentará enviar el cambio de nuevo."), error => setMessage(error instanceof Error ? error.message : "No se pudo preparar el reintento."))}>Reintentar</button> : null}</div>)}</div>
       {message ? <p role="status" className="mt-4 text-sm text-storm">{message}</p> : null}
       <button type="button" disabled={busy || pending === 0} className="mt-5 min-h-11 rounded-lg border border-white/15 px-4 text-sm font-semibold text-ink disabled:opacity-50" onClick={() => void send()}>{sync.isPending ? "Enviando…" : "Intentar enviar ahora"}</button>
     </ModalBody></Modal> : null}
