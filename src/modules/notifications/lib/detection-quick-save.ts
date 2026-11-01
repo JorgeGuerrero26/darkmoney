@@ -1,3 +1,4 @@
+import { requireDetectionOnline } from "./detection-online";
 import type { AccountSummary, CategorySummary } from "../../../types/domain";
 import { detectedMovementDraft, validateDetectedMovement, type DetectedMovement, type DetectionMovementInput, type DetectionSetting } from "./detected-movement";
 
@@ -25,7 +26,7 @@ export async function savePreparedDetection(suggestion: DetectedMovement, input:
   checker: ReturnType<typeof import("../../../services/queries/detection-duplicates").createDetectedDuplicateChecker>;
   create: (input: DetectionMovementInput) => Promise<number>; signal: AbortSignal; proAccessEnabled: boolean;
 }) {
-  const active = () => { if (dependencies.signal.aborted) throw new Error("La revisión se canceló; vuelve a intentarlo."); };
+  const active = () => { if (dependencies.signal.aborted) throw new Error("La revisión se canceló; vuelve a intentarlo."); requireDetectionOnline(); };
   active();
   return dependencies.store.register(suggestion.id, input, accounts, async value => {
     active();

@@ -5158,10 +5158,11 @@ export function usePersistLearningFeedbackMutation(workspaceId?: number, userId?
   });
 }
 
-export function useCreateMovementMutation(workspaceId?: number, userId?: string) {
+export function useCreateMovementMutation(workspaceId?: number, userId?: string, options?: { networkMode?: "always" }) {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: options?.networkMode,
     mutationFn: async (input: MovementMutationInput) => {
       const client = getClient();
       const { data, created } = await runIdempotentInsert<{ id: number }>({

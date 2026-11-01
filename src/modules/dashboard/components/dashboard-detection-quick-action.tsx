@@ -13,7 +13,7 @@ export function DashboardDetectionQuickAction({ suggestion, snapshot, userId, se
   store: ReturnType<typeof createDetectedMovementStore> | null; enabled: boolean; proAccessEnabled: boolean;
   onSaved: (id: number) => void; invalidateFinances: () => Promise<void>; disabled?: boolean; onBusyChange?: (busy: boolean) => void;
 }) {
-  const create = useCreateMovementMutation(snapshot.workspace.id, userId);
+  const create = useCreateMovementMutation(snapshot.workspace.id, userId, { networkMode: "always" });
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const locked = useRef(false), controller = useRef<AbortController | null>(null);
