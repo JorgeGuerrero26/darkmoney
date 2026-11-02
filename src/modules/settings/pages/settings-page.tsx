@@ -9,6 +9,7 @@ import { DataState } from "../../../components/ui/data-state";
 import { FormFeedbackBanner } from "../../../components/ui/form-feedback-banner";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { SurfaceCard } from "../../../components/ui/surface-card";
+import { DeleteAccountPanel } from "../components/delete-account-panel";
 import { useSuccessToast } from "../../../components/ui/toast-provider";
 import { getPublicAppUrl } from "../../../lib/app-url";
 import { formatDate, formatDateTime } from "../../../lib/formatting/dates";
@@ -1422,6 +1423,7 @@ export function SettingsPage() {
             </Button>
           </div>
         ) : null}
+        {activeSettingsSection === "general" ? <DeleteAccountPanel /> : null}
         {activeSettingsSection === "billing" ? (
         <section className="space-y-5" id="settings-section-billing">
           <SettingsSectionLead

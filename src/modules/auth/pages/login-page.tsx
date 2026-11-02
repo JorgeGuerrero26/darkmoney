@@ -26,6 +26,7 @@ export function LoginPage() {
   const nextPath = searchParams.get("next");
   const resolvedNextPath = resolvePostAuthPath(nextPath);
   const isInviteLogin = isInvitePath(nextPath);
+  const accountDeleted = searchParams.get("cuenta") === "eliminada";
   const registerSearchParams = new URLSearchParams();
   if (nextPath) {
     registerSearchParams.set("next", resolvedNextPath);
@@ -65,6 +66,14 @@ export function LoginPage() {
           Inicia sesión con tu correo y contraseña para entrar a tu espacio personal o compartido.
         </p>
       </div>
+
+      {accountDeleted ? (
+        <FormFeedbackBanner
+          description="Borramos tu cuenta y todos tus datos. Puedes crear una cuenta nueva cuando quieras."
+          title="Eliminamos tu cuenta y tus datos"
+          tone="success"
+        />
+      ) : null}
 
       {isInviteLogin ? (
         <FormFeedbackBanner
