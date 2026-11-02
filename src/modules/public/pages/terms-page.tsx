@@ -42,6 +42,11 @@ const termsSections: LegalSection[] = [
     body: "DarkMoney es una herramienta de software y no constituye asesoramiento financiero, contable, legal o tributario. Cada usuario es responsable de sus decisiones y del uso que haga de la informacion mostrada.",
   },
   {
+    id: "eliminacion-de-cuenta",
+    title: "Eliminacion de cuenta",
+    body: "Puedes eliminar tu cuenta y todos tus datos cuando quieras desde la app o la web (Configuracion → Eliminar mi cuenta), o escribiendonos si no puedes entrar. Si tu plan Pro todavia se cobra, primero debes cancelarlo. Si compartes un espacio con otras personas, el espacio pasa al miembro mas antiguo y lo que registraste ahi se queda para ellos sin tu nombre. Detalle completo en darkmoney.company/eliminar-cuenta.",
+  },
+  {
     id: "terminacion",
     title: "Terminacion",
     body: "Podemos suspender o limitar cuentas que incumplan estas condiciones, representen riesgo para la plataforma o intenten usar el servicio de forma abusiva o fraudulenta.",
@@ -69,7 +74,7 @@ export function TermsPage() {
       intro="Estas condiciones regulan el acceso y uso de DarkMoney, incluyendo la creacion de cuenta y la contratacion de funciones premium."
       sections={termsSections}
       title="Terminos de Servicio"
-      updatedAt="26 de marzo de 2026"
+      updatedAt="2 de noviembre de 2026"
     />
   );
 }

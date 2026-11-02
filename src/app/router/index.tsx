@@ -81,6 +81,10 @@ export const router = createBrowserRouter([
         lazy: lazyRoute(() => import("../../modules/public/pages/privacy-page"), "PrivacyPage"),
       },
       {
+        path: "eliminar-cuenta",
+        lazy: lazyRoute(() => import("../../modules/public/pages/delete-account-page"), "DeleteAccountPage"),
+      },
+      {
         path: "refunds",
         lazy: lazyRoute(() => import("../../modules/public/pages/refunds-page"), "RefundsPage"),
       },

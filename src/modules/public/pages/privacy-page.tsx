@@ -24,12 +24,12 @@ const privacySections: LegalSection[] = [
   {
     id: "pagos",
     title: "Pagos",
-    body: "Los pagos premium son procesados por proveedores externos especializados. DarkMoney no almacena directamente los datos completos de tarjetas de pago del usuario.",
+    body: "Los pagos premium los procesa Paddle, que actua como vendedor y guarda las facturas durante el tiempo que exige la ley. DarkMoney no almacena los datos de tarjetas de pago del usuario.",
   },
   {
     id: "conservacion",
     title: "Conservacion",
-    body: "Conservamos la informacion mientras sea necesaria para operar la cuenta, cumplir obligaciones legales, resolver disputas, prevenir fraude y mantener registros razonables del servicio.",
+    body: "Conservamos la informacion mientras tengas tu cuenta. Al eliminarla borramos tus datos al instante. Solo se conserva, sin tu nombre ni tu correo, lo que forma parte de los datos de otras personas (lo que registraste en un espacio compartido, que pasa al miembro mas antiguo, o un pago tuyo aceptado en la deuda de otra persona) y el registro de tus pagos de Pro; la factura la guarda Paddle.",
   },
   {
     id: "seguridad",
@@ -39,7 +39,7 @@ const privacySections: LegalSection[] = [
   {
     id: "tus-derechos",
     title: "Tus derechos",
-    body: "Puedes solicitar acceso, correccion o eliminacion de ciertos datos conforme a la normativa aplicable y segun lo permita la operacion legitima del servicio.",
+    body: "Puedes solicitar acceso o correccion de tus datos conforme a la normativa aplicable. Puedes eliminar tu cuenta y todos tus datos tu mismo desde la app o la web (Configuracion → Eliminar mi cuenta), o escribiendonos si no puedes entrar: los pasos estan en darkmoney.company/eliminar-cuenta.",
   },
   {
     id: "contacto",
@@ -64,7 +64,7 @@ export function PrivacyPage() {
       intro="Te explicamos que datos usamos, por que los usamos y como protegemos la informacion relacionada con tu cuenta y actividad en DarkMoney."
       sections={privacySections}
       title="Politica de Privacidad"
-      updatedAt="26 de marzo de 2026"
+      updatedAt="2 de noviembre de 2026"
     />
   );
 }

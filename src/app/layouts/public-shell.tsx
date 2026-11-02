@@ -171,6 +171,7 @@ export function PublicShell() {
             <Link to="/terms">Términos</Link>
             <Link to="/privacy">Privacidad</Link>
             <Link to="/refunds">Devoluciones</Link>
+            <Link to="/eliminar-cuenta">Eliminar cuenta</Link>
             <Link className="text-[#f4f1ec]" to={PUBLIC_CONTACT.claimsBookPath}>
               Libro de Reclamaciones
             </Link>
