@@ -2671,18 +2671,6 @@ async function fetchCurrentUserBillingHistory() {
   } satisfies BillingHistoryResult;
 }
 
-type StartProCheckoutInput = {
-  appUrl?: string;
-  workspaceId?: number | null;
-};
-
-type StartProCheckoutResult = {
-  checkoutUrl: string;
-  provider: string;
-  subscriptionId?: string | null;
-  billingStatus?: string | null;
-};
-
 type CancelProSubscriptionResult = {
   provider: string;
   planCode?: UserEntitlementSummary["planCode"];
@@ -3043,9 +3031,7 @@ export function getQueryErrorMessage(
 
     if (
       loweredMessage.includes("app_url publica") ||
-      loweredMessage.includes("paddle") ||
-      loweredMessage.includes("lemon_squeezy") ||
-      loweredMessage.includes("lemon squeezy")
+      loweredMessage.includes("paddle")
     ) {
       return `${error.message} Revisa la configuracion del cobro premium en Supabase Functions y en el frontend.`;
     }
@@ -3318,100 +3304,6 @@ export function useCreatePaddleCustomerPortalMutation() {
         updatePaymentMethodUrl:
           typeof data?.updatePaymentMethodUrl === "string" ? data.updatePaymentMethodUrl : null,
       } satisfies PaddlePortalSessionResult;
-    },
-  });
-}
-
-export function useStartProCheckoutMutation(userId?: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (input: StartProCheckoutInput) => {
-      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
-        "create-pro-checkout",
-        {
-          provider: "lemon_squeezy",
-          appUrl: input.appUrl,
-          workspaceId: input.workspaceId ?? null,
-        },
-      );
-
-      const checkoutUrl =
-        typeof data?.checkoutUrl === "string"
-          ? data.checkoutUrl
-          : typeof data?.initPoint === "string"
-            ? data.initPoint
-            : null;
-
-      if (!checkoutUrl) {
-        throw new Error("No recibimos una URL valida para continuar el cobro premium.");
-      }
-
-      return {
-        checkoutUrl,
-        provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
-        subscriptionId: typeof data?.subscriptionId === "string" ? data.subscriptionId : null,
-        billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
-      } satisfies StartProCheckoutResult;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["user-entitlement", userId ?? null],
-      });
-    },
-  });
-}
-
-export function useCancelProSubscriptionMutation(userId?: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      const data = await invokeAuthenticatedFunction<Record<string, unknown>>(
-        "cancel-pro-subscription",
-        {
-          provider: "lemon_squeezy",
-        },
-      );
-
-      return {
-        provider: typeof data?.provider === "string" ? data.provider : "lemon_squeezy",
-        planCode: data?.planCode === "pro" ? "pro" : "free",
-        billingStatus: typeof data?.billingStatus === "string" ? data.billingStatus : null,
-        billingProvider: typeof data?.billingProvider === "string" ? data.billingProvider : "lemon_squeezy",
-        proAccessEnabled: Boolean(data?.proAccessEnabled),
-        currentPeriodStart: typeof data?.currentPeriodStart === "string" ? data.currentPeriodStart : null,
-        currentPeriodEnd: typeof data?.currentPeriodEnd === "string" ? data.currentPeriodEnd : null,
-        cancelAtPeriodEnd: Boolean(data?.cancelAtPeriodEnd),
-        providerSubscriptionId:
-          typeof data?.providerSubscriptionId === "string" ? data.providerSubscriptionId : null,
-      } satisfies CancelProSubscriptionResult;
-    },
-    onSuccess: async (result) => {
-      queryClient.setQueryData<UserEntitlementSummary | null>(
-        ["user-entitlement", userId ?? null],
-        (previousData) =>
-          previousData
-            ? {
-              ...previousData,
-              planCode: result.planCode ?? previousData.planCode,
-              proAccessEnabled: result.proAccessEnabled,
-              billingStatus: result.billingStatus ?? previousData.billingStatus ?? null,
-              billingProvider: result.billingProvider ?? previousData.billingProvider ?? null,
-              currentPeriodStart: result.currentPeriodStart ?? previousData.currentPeriodStart ?? null,
-              currentPeriodEnd: result.currentPeriodEnd ?? previousData.currentPeriodEnd ?? null,
-              cancelAtPeriodEnd: result.cancelAtPeriodEnd ?? previousData.cancelAtPeriodEnd,
-              providerSubscriptionId:
-                result.providerSubscriptionId ?? previousData.providerSubscriptionId ?? null,
-            }
-            : previousData ?? null,
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ["user-entitlement", userId ?? null],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["billing-history", userId ?? null],
-      });
     },
   });
 }

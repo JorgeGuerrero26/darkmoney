@@ -4,8 +4,6 @@ export function getBillingProviderLabel(provider?: string | null) {
   switch (normalizedProvider) {
     case "paddle":
       return "Paddle";
-    case "lemon_squeezy":
-      return "Lemon Squeezy";
     case "mercado_pago":
       return "Mercado Pago";
     default:

@@ -47,8 +47,5 @@ verify_jwt = false
 [functions.get-obligation-share-invite]
 verify_jwt = false
 
-[functions.lemon-squeezy-webhook]
-verify_jwt = false
-
 [functions.paddle-webhook]
 verify_jwt = false

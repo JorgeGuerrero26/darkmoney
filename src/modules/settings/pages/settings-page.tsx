@@ -22,7 +22,6 @@ import {
   useCreateWorkspaceInvitationMutation,
   useCreatePaddleCustomerPortalMutation,
   useCancelPaddleSubscriptionMutation,
-  useCancelProSubscriptionMutation,
   useCurrentUserBillingHistoryQuery,
   useReactivatePaddleSubscriptionMutation,
   getQueryErrorMessage,
@@ -543,7 +542,6 @@ export function SettingsPage() {
   const entitlementQuery = useCurrentUserEntitlementQuery(user?.id);
   const billingHistoryQuery = useCurrentUserBillingHistoryQuery(user?.id);
   const savePreferencesMutation = useSaveNotificationPreferencesMutation(user?.id);
-  const cancelLegacyProSubscriptionMutation = useCancelProSubscriptionMutation(user?.id);
   const cancelPaddleSubscriptionMutation = useCancelPaddleSubscriptionMutation(user?.id);
   const reactivatePaddleSubscriptionMutation = useReactivatePaddleSubscriptionMutation(user?.id);
   const createPaddleCustomerPortalMutation = useCreatePaddleCustomerPortalMutation();
@@ -684,7 +682,7 @@ export function SettingsPage() {
     const query = new URLSearchParams(location.search);
     const billingStatus = query.get("billing");
 
-    if (billingStatus === "paddle" || billingStatus === "lemonsqueezy") {
+    if (billingStatus === "paddle") {
       setBillingFeedbackMessage(
         "Volviste del cobro premium. Si el pago ya se confirmo, DarkMoney actualizara tu acceso automaticamente en unos segundos.",
       );
@@ -898,12 +896,7 @@ export function SettingsPage() {
     setBillingFeedbackMessage("");
 
     try {
-      const billingProvider = entitlement?.billingProvider?.trim().toLowerCase() ?? null;
-      const mutation =
-        billingProvider === "paddle"
-          ? cancelPaddleSubscriptionMutation
-          : cancelLegacyProSubscriptionMutation;
-      const response = await mutation.mutateAsync();
+      const response = await cancelPaddleSubscriptionMutation.mutateAsync();
       const friendlyStatus = getFriendlyBillingStatus(response.billingStatus);
       await Promise.all([entitlementQuery.refetch(), billingHistoryQuery.refetch()]);
       const cancelFeedbackMessage =
@@ -1082,10 +1075,7 @@ export function SettingsPage() {
       ((normalizedBillingStatus === "cancelled" || normalizedBillingStatus === "canceled") &&
         (daysRemaining === null || daysRemaining >= 0))
     );
-  const activeCancelMutation =
-    normalizedBillingProvider === "paddle"
-      ? cancelPaddleSubscriptionMutation
-      : cancelLegacyProSubscriptionMutation;
+  const activeCancelMutation = cancelPaddleSubscriptionMutation;
   const proStatusLabel = isAdminOverride
     ? "Admin con acceso total"
     : entitlement?.proAccessEnabled
@@ -1115,15 +1105,9 @@ export function SettingsPage() {
   const canCancelProPlan =
     !isAdminOverride &&
     Boolean(entitlement?.providerSubscriptionId) &&
-    (
-      (normalizedBillingProvider === "paddle" &&
-        !hasScheduledCancellation &&
-        ["trialing", "active", "paused"].includes(normalizedBillingStatus ?? "")) ||
-      (normalizedBillingProvider === "lemon_squeezy" &&
-        !hasScheduledCancellation &&
-        (entitlement?.proAccessEnabled ||
-          ["on_trial", "active", "paused", "past_due", "unpaid", "cancelled"].includes(entitlement?.billingStatus ?? "")))
-    );
+    normalizedBillingProvider === "paddle" &&
+    !hasScheduledCancellation &&
+    ["trialing", "active", "paused"].includes(normalizedBillingStatus ?? "");
   const canOpenPaddlePortal =
     !isAdminOverride &&
     normalizedBillingProvider === "paddle" &&
