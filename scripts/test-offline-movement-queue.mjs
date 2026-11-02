@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { dom, load } from "./lib/web-ui-harness.mjs";
+const { validateQueuedMovement, enqueueMovement } = await import(load("src/lib/offline/movement-queue.ts"));
+const input = { userId: "u", workspaceId: 8, dedupeKey: "cf342b8d-7711-4b24-93a8-cc436d883246", movementType: "expense", status: "posted", description: "Compra", occurredAt: "2026-10-20T13:40:50Z", sourceAccountId: 1, sourceAmount: 10, destinationAccountId: null, destinationAmount: null, metadata: { channel: "quick-entry" } };
+assert.doesNotThrow(() => validateQueuedMovement(input));
+for (const extra of [{ userId: "" }, { workspaceId: 0 }, { dedupeKey: "suggestion:4" }, { movementType: "adjustment" }, { status: "voided" }, { description: " " }, { sourceAmount: 0 }, { sourceAccountId: null }, { occurredAt: "invalid" }, { metadata: { source: "notification_detection" } }, { metadata: { suggestionId: 4 } }, { metadata: { split_group: "group" } }, { obligationId: 5 }, { subscriptionId: 8 }]) assert.throws(() => validateQueuedMovement({ ...input, ...extra }), undefined, JSON.stringify(extra));
+assert.throws(() => validateQueuedMovement({ ...input, movementType: "transfer", destinationAccountId: 1, destinationAmount: 10 }), /diferentes/);
+assert.doesNotThrow(() => validateQueuedMovement({ ...input, movementType: "transfer", destinationAccountId: 2, destinationAmount: 10 }));
+await assert.rejects(enqueueMovement(input), /no permite guardar/);
+dom.window.close(); console.log("Offline movement queue: scope, idempotency key, linked records and unavailable storage guards passed.");
