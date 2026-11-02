@@ -15,6 +15,10 @@ interface DeleteConfirmDialogProps {
   /** Label for the confirm button. Defaults to "Eliminar definitivamente" */
   confirmLabel?: string;
   isDeleting?: boolean;
+  /** Apaga el botón de confirmar (p. ej. hasta escribir la palabra de confirmación). */
+  confirmDisabled?: boolean;
+  /** Título del recuadro de `children`. null = sin título (cuando no es un registro). */
+  childrenLabel?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
   /** Preview card shown inside the dialog (item details) */
@@ -27,6 +31,8 @@ export function DeleteConfirmDialog({
   description,
   confirmLabel = "Eliminar definitivamente",
   isDeleting = false,
+  confirmDisabled = false,
+  childrenLabel = "Registro seleccionado",
   onCancel,
   onConfirm,
   children,
@@ -68,10 +74,12 @@ export function DeleteConfirmDialog({
           {/* Preview card */}
           {children ? (
             <div className="mt-7 rounded-[28px] border border-white/10 bg-black/20 p-4 sm:p-5">
-              <p className="text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
-                Registro seleccionado
-              </p>
-              <div className="mt-4">{children}</div>
+              {childrenLabel ? (
+                <p className="mb-4 text-[0.68rem] uppercase tracking-[0.24em] text-storm/75">
+                  {childrenLabel}
+                </p>
+              ) : null}
+              <div>{children}</div>
             </div>
           ) : null}
 
@@ -82,7 +90,7 @@ export function DeleteConfirmDialog({
             </Button>
             <Button
               className="!bg-[#eb766e] !text-[#141312] hover:!bg-[#f58a82] focus-visible:outline-[#f27a86]"
-              disabled={isDeleting}
+              disabled={isDeleting || confirmDisabled}
               onClick={onConfirm}
               type="button"
             >
