@@ -4,9 +4,9 @@ import type { AccountSummary } from "../../../types/domain";
 import { formatCurrency } from "../../../lib/formatting/money";
 import { convertDashboardAmount } from "../lib/dashboard-format";
 
-export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rates, month, detections, budgets, agenda }: {
+export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rates, month, budgets, agenda }: {
   accounts: AccountSummary[]; currency: string; baseCurrency: string; rates: Map<string, number>;
-  month: { income: number; expense: number; unconvertedCount: number }; detections: ReactNode; budgets?: ReactNode; agenda?: ReactNode;
+  month: { income: number; expense: number; unconvertedCount: number }; budgets?: ReactNode; agenda?: ReactNode;
 }) {
   const visible = accounts.filter(account => !account.isArchived && account.includeInNetWorth).map(account => ({
     account, amount: convertDashboardAmount({ amount: account.currentBalance, currencyCode: account.currencyCode,
@@ -22,7 +22,6 @@ export function DashboardSimpleOverview({ accounts, currency, baseCurrency, rate
       {!complete ? <p role="status" className="mt-2 text-sm text-storm">Faltan conversiones para calcular el total de tus cuentas.</p> : null}
       <div className="mt-4 divide-y divide-white/[0.07]">{visible.map(({ account, amount }) => <Link key={account.id} to={`/app/accounts?resource=${account.id}`} className="flex min-h-14 items-center justify-between gap-4 py-3 text-sm"><span className="text-ink">{account.name}</span><span className="tabular-nums text-ink">{amount === null || !Number.isFinite(amount) ? `${formatCurrency(account.currentBalance, account.currencyCode)} · Sin conversión` : formatCurrency(amount, currency)} ›</span></Link>)}</div>
       {!visible.length ? <p className="mt-3 text-sm text-storm">Agrega una cuenta para ver tu saldo aquí.</p> : null}
-      <div className="mt-6 empty:hidden">{detections}</div>
     </div>
     <section aria-label="Este mes">
       <h2 className="font-display text-lg font-semibold text-ink">Este mes</h2>
