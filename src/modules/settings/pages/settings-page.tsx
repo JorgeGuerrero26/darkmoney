@@ -1,4 +1,4 @@
-import { BellDot, Briefcase, Camera, Check, ChevronDown, LoaderCircle, MailPlus, Plus, Search, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
+import { BellDot, Briefcase, Camera, Check, ChevronDown, CreditCard, LoaderCircle, MailPlus, Plus, Search, ShieldCheck, Sparkles, Tag, X } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -504,6 +504,12 @@ const settingsSectionDefinitions: Array<{
     title: "Espacios",
     description: "Equipo y permisos",
     icon: <ShieldCheck className="h-4 w-4" />,
+  },
+  {
+    id: "billing",
+    title: "Plan y pagos",
+    description: "Pro, renovación y cobros",
+    icon: <CreditCard className="h-4 w-4" />,
   },
 ];
 
