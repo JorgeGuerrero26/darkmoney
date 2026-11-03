@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { dom, load } from "./lib/web-ui-harness.mjs";
+const { persistQuickMovement } = await import(load("src/modules/movements/lib/quick-movement-offline.ts"));
+const input = { userId: "u", workspaceId: 8, dedupeKey: "cf342b8d-7711-4b24-93a8-cc436d883246" }; let sent = 0, queued = 0;
+const base = { online: true, customSubmit: false, hasSplit: false, hasReceipt: false, save: async () => { sent++; return 123; }, enqueue: async () => { queued++; } };
+assert.deepEqual(await persistQuickMovement(input, base), { kind: "saved", id: 123 }); assert.equal(sent, 1); assert.equal(queued, 0);
+assert.deepEqual(await persistQuickMovement(input, { ...base, online: false }), { kind: "queued" }); assert.equal(queued, 1); assert.equal(sent, 1);
+for (const extra of [{ customSubmit: true }, { hasSplit: true }, { hasReceipt: true }, { enqueue: undefined }]) await assert.rejects(() => persistQuickMovement(input, { ...base, online: false, ...extra }), /conexión|conectarse/);
+await assert.rejects(() => persistQuickMovement({ ...input, dedupeKey: null }, { ...base, online: false }), /sin conexión/); assert.equal(queued, 1);
+dom.window.close(); console.log("Quick movement offline: explicit local result and unsupported operations preserved.");

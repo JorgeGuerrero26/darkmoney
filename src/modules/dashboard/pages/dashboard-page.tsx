@@ -1698,7 +1698,7 @@ export function DashboardPage() {
             detections={<DashboardDetectedMovements key={`${user?.id}:${snapshot.workspace.id}`} userId={user?.id} workspaceId={snapshot.workspace.id} snapshot={snapshot} canEdit={activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} proAccessEnabled={canUseAdvancedDashboard} />} ai={dashboardAiPanel}
             onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} /> : <>
         <DashboardSimpleOverview accounts={snapshot.accounts} currency={displayCurrencyCode} baseCurrency={baseCurrencyCode} rates={exchangeRateMap}
-          month={dashboardHealth.savings.months[6]} detections={<DashboardDetectedMovements key={`${user?.id}:${snapshot.workspace.id}`} userId={user?.id} workspaceId={snapshot.workspace.id} snapshot={snapshot} canEdit={activeWorkspace?.role !== "viewer" && !activeWorkspace?.isArchived} proAccessEnabled={canUseAdvancedDashboard} />}
+          month={dashboardHealth.savings.months[6]}
           budgets={<DashboardSimpleBudgets budgets={recomputedBudgets} metrics={budgetMetricsMap} baseCurrency={baseCurrencyCode} rates={exchangeRateMap} now={parityNow} />}
           agenda={<DashboardSimpleAgenda cashflow={cashflow} currency={displayCurrencyCode} now={parityNow} ready={projectionReady}
             failed={projectionQuery.isError || sharedObligationsQuery.isError} onRetry={() => { void projectionQuery.refetch(); void sharedObligationsQuery.refetch(); }} />} />

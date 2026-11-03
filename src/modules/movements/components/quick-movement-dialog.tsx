@@ -5,6 +5,9 @@
   LoaderCircle,
 } from "lucide-react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
+import { onlineManager } from "@tanstack/react-query";
+import type { QueuedMovementInput } from "../../../lib/offline/movement-queue";
+import { persistQuickMovement } from "../lib/quick-movement-offline";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
@@ -71,6 +74,7 @@ import {
 export type QuickMovementKind = "expense" | "income" | "transfer";
 
 type QuickMovementDialogProps = {
+  enqueueOffline?: (input: QueuedMovementInput) => Promise<unknown>;
   initialDraft?: Partial<QuickMovementFormState>;
   title?: string;
   context?: ReactNode;
@@ -85,7 +89,7 @@ type QuickMovementDialogProps = {
   initialAccountId?: number | null;
   initialKind: QuickMovementKind;
   onClose: () => void;
-  onCreated: (message: string) => void;
+  onCreated: (message: string, result?: "queued") => void;
   snapshot: WorkspaceSnapshot;
   userId: string;
   workspaceId: number;
@@ -304,6 +308,7 @@ export function QuickMovementDialog({
   allowSplit = true,
   postedOnly = false,
   sourceCurrencyCode,
+  enqueueOffline,
   detectionLearning,
   onDraftChange,
   isSubmitting = false,
@@ -324,6 +329,7 @@ export function QuickMovementDialog({
     ({ ...createDefaultQuickMovementFormState(initialKind, initialAccountId), ...initialDraft }),
   );
   const [isDirty, setIsDirty] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
   const manualLearningFields = useRef(new Set<LearningFields>());
   const appliedLearning = useRef<LearningSelection>({ accountId: null, destinationAccountId: null, categoryId: null });
   const [detectedFxRate, setDetectedFxRate] = useState<number | null>(null);
@@ -346,7 +352,7 @@ export function QuickMovementDialog({
   const [categoryFeedbackIntent, setCategoryFeedbackIntent] = useState<CategoryFeedbackIntent | null>(null);
   const [splitLines, setSplitLines] = useState<MovementSplitLine[] | null>(null);
   useEffect(() => { onDraftChange?.(); }, [splitLines, onDraftChange]);
-  const createMovementMutation = useCreateMovementMutation(workspaceId, userId);
+  const createMovementMutation = useCreateMovementMutation(workspaceId, userId, { networkMode: "always" });
   const saveMovement = submitMovement ?? createMovementMutation.mutateAsync;
   const createAttachmentRecordMutation = useCreateAttachmentRecordMutation(workspaceId, userId);
   const createCategoryMutation = useCreateCategoryMutation(workspaceId, userId);
@@ -400,6 +406,7 @@ export function QuickMovementDialog({
     ) ?? null;
   const selectedMode = getQuickMovementMode(kind);
   const isSaving =
+    isQueueing ||
     isSubmitting ||
     createMovementMutation.isPending ||
     createAttachmentRecordMutation.isPending ||
@@ -807,7 +814,14 @@ export function QuickMovementDialog({
     }
 
     submittingRef.current = true;
+    const online = onlineManager.isOnline() && (typeof navigator === "undefined" || navigator.onLine !== false);
+    if (!online) setIsQueueing(true);
+    const persist = (input: MovementFormInput & { workspaceId: number; userId: string }) => persistQuickMovement(input, {
+      online, customSubmit: Boolean(submitMovement || detectionLearning), hasSplit: Boolean(splitLines),
+      hasReceipt: Boolean(pendingReceiptFile), save: saveMovement, enqueue: enqueueOffline,
+    });
     try {
+      if (!online && splitLines) throw new Error("Los movimientos divididos necesitan conexión. Tus cambios siguen aquí.");
       if (kind === "expense" || kind === "income") {
         const accountId = parseOptionalInteger(formState.accountId);
         const amount = parseOptionalNumber(formState.amount);
@@ -912,7 +926,7 @@ export function QuickMovementDialog({
           return;
         }
 
-        const createdMovementId = await saveMovement({
+        const result = await persist({
           dedupeKey: submitDedupeKeyRef.current,
           categoryId: categoryId !== null && Number.isFinite(categoryId) ? categoryId : null,
           spendTypeId: movementSpendTypeId(kind, parseOptionalInteger(formState.spendTypeId)),
@@ -941,6 +955,13 @@ export function QuickMovementDialog({
           userId,
           workspaceId,
         });
+
+        if (result.kind === "queued") {
+          onCreated("Guardado en este navegador y pendiente de envío.", "queued");
+          onClose();
+          return;
+        }
+        const createdMovementId = result.id;
 
         if (categoryId !== null && Number.isFinite(categoryId)) {
           void persistLearningFeedbackMutation.mutateAsync({
@@ -1015,7 +1036,7 @@ export function QuickMovementDialog({
         accountName: selectedSourceAccount?.name,
       });
 
-      const createdMovementId = await saveMovement({
+      const result = await persist({
         dedupeKey: submitDedupeKeyRef.current,
         categoryId: null,
         counterpartyId: null,
@@ -1041,6 +1062,13 @@ export function QuickMovementDialog({
         workspaceId,
       });
 
+      if (result.kind === "queued") {
+        onCreated("Guardado en este navegador y pendiente de envío.", "queued");
+        onClose();
+        return;
+      }
+      const createdMovementId = result.id;
+
       if (pendingReceiptFile && canUploadReceipts) {
         try {
           await uploadReceiptForMovement(createdMovementId, pendingReceiptFile);
@@ -1065,6 +1093,7 @@ export function QuickMovementDialog({
         getQueryErrorMessage(error, "No pudimos registrar este movimiento rapido."),
       );
     } finally {
+      setIsQueueing(false);
       submittingRef.current = false;
     }
   }
